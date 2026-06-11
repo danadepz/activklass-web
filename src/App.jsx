@@ -1,0 +1,63 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import ProtectedRoute, { RoleHomeRedirect } from './components/ProtectedRoute'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import RolePlaceholder from './pages/RolePlaceholder'
+import TeacherLayout from './pages/teacher/TeacherLayout'
+import TeacherDashboard from './pages/teacher/TeacherDashboard'
+import ClassesPage from './pages/teacher/ClassesPage'
+import ClassDetailPage from './pages/teacher/ClassDetailPage'
+import GradingSetupPage from './pages/teacher/GradingSetupPage'
+import ClassRecordPage from './pages/teacher/ClassRecordPage'
+import RecordIndexPage from './pages/teacher/RecordIndexPage'
+import AttendancePage from './pages/teacher/AttendancePage'
+import AttendanceIndexPage from './pages/teacher/AttendanceIndexPage'
+import SyllabusPage from './pages/teacher/SyllabusPage'
+import SyllabusIndexPage from './pages/teacher/SyllabusIndexPage'
+import QuizzesPage from './pages/teacher/QuizzesPage'
+import QuizBuilderPage from './pages/teacher/QuizBuilderPage'
+import QuizzesIndexPage from './pages/teacher/QuizzesIndexPage'
+import ComingSoon from './pages/teacher/ComingSoon'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/" element={<RoleHomeRedirect />} />
+
+      <Route element={<ProtectedRoute roles={['teacher']} />}>
+        <Route path="/teacher" element={<TeacherLayout />}>
+          <Route index element={<TeacherDashboard />} />
+          <Route path="classes" element={<ClassesPage />} />
+          <Route path="classes/:classId" element={<ClassDetailPage />} />
+          <Route path="classes/:classId/grading" element={<GradingSetupPage />} />
+          <Route path="classes/:classId/record" element={<ClassRecordPage />} />
+          <Route path="classes/:classId/attendance" element={<AttendancePage />} />
+          <Route path="classes/:classId/syllabus" element={<SyllabusPage />} />
+          <Route path="classes/:classId/quizzes" element={<QuizzesPage />} />
+          <Route path="classes/:classId/quizzes/:quizId" element={<QuizBuilderPage />} />
+          <Route path="record" element={<RecordIndexPage />} />
+          <Route path="attendance" element={<AttendanceIndexPage />} />
+          <Route path="syllabus" element={<SyllabusIndexPage />} />
+          <Route path="quizzes" element={<QuizzesIndexPage />} />
+          <Route path="scaffolds" element={<ComingSoon />} />
+          <Route path="announcements" element={<ComingSoon />} />
+          <Route path="reports" element={<ComingSoon />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute roles={['admin']} />}>
+        <Route path="/admin" element={<RolePlaceholder title="Admin" />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={['student']} />}>
+        <Route path="/student" element={<RolePlaceholder title="Student" />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={['parent']} />}>
+        <Route path="/parent" element={<RolePlaceholder title="Parent" />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
