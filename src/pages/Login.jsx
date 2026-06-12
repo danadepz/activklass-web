@@ -23,7 +23,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       await signInWithEmailAndPassword(auth, email, password)
-      navigate('/')
+      navigate('/portal')
     } catch (err) {
       setError(FRIENDLY_ERRORS[err.code] ?? 'Sign in failed. Please try again.')
     } finally {

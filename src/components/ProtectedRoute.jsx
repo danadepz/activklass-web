@@ -23,7 +23,7 @@ export default function ProtectedRoute({ roles }) {
       </FullScreenMessage>
     )
   }
-  if (roles && !roles.includes(profile.role)) return <Navigate to="/" replace />
+  if (roles && !roles.includes(profile.role)) return <Navigate to="/portal" replace />
   return <Outlet />
 }
 

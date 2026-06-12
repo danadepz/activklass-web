@@ -1,63 +1,440 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  arrayRemove,
+  arrayUnion,
+  deleteDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import {
+  STATUS_LABELS,
+  ageFromBirthdate,
+  fetchUsersByIds,
+  findStudentByEmail,
+  parseCsv,
+} from '../../lib/roster'
+
+const STATUS_STYLE = {
+  active: 'bg-green-50 text-green-700',
+  needs_remediation: 'bg-amber-50 text-amber-700',
+  mastered: 'bg-indigo-50 text-indigo-700',
+}
+
+const inputCls =
+  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+
+/* Add a registered student by email; lets the teacher fill in LRN/birthdate. */
+function AddStudentModal({ classId, enrolledIds, onClose, onDone }) {
+  const [email, setEmail] = useState('')
+  const [student, setStudent] = useState(null)
+  const [fields, setFields] = useState({ lrn: '', birthdate: '' })
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function lookup(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    setStudent(null)
+    try {
+      const found = await findStudentByEmail(email)
+      if (!found) {
+        setError(
+          'No registered student account with that email. Ask the student to sign up first (Register → "I am a Student"), then add them here.',
+        )
+      } else if (enrolledIds.includes(found.id)) {
+        setError('That student is already in this class.')
+      } else {
+        setStudent(found)
+        setFields({ lrn: found.lrn ?? '', birthdate: found.birthdate ?? '' })
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function enroll() {
+    setBusy(true)
+    setError(null)
+    try {
+      const patch = { status: student.status ?? 'active' }
+      if (fields.lrn.trim()) patch.lrn = fields.lrn.trim()
+      if (fields.birthdate) {
+        patch.birthdate = fields.birthdate
+        patch.age = ageFromBirthdate(fields.birthdate)
+      }
+      await updateDoc(doc(db, 'users', student.id), patch)
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+        <form onSubmit={lookup} className="flex gap-2">
+          <input
+            type="email"
+            required
+            placeholder="student@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={`${inputCls} flex-1`}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50 disabled:opacity-50"
+          >
+            Find
+          </button>
+        </form>
+
+        {student && (
+          <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+            <p className="font-medium text-slate-800">
+              {student.last_name}, {student.first_name}
+              <span className="text-slate-400 font-normal"> · {student.email}</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">DepEd LRN</span>
+                <input
+                  placeholder="12-digit LRN"
+                  value={fields.lrn}
+                  onChange={(e) => setFields((f) => ({ ...f, lrn: e.target.value }))}
+                  className={`${inputCls} w-full mt-1`}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Birthdate</span>
+                <input
+                  type="date"
+                  value={fields.birthdate}
+                  onChange={(e) => setFields((f) => ({ ...f, birthdate: e.target.value }))}
+                  className={`${inputCls} w-full mt-1`}
+                />
+              </label>
+            </div>
+            <button
+              onClick={enroll}
+              disabled={busy}
+              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {busy ? 'Adding…' : 'Add to class'}
+            </button>
+          </div>
+        )}
+
+        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* Edit roster fields on one student (rules allow teachers to maintain these). */
+function EditStudentModal({ student, classId, onClose, onDone }) {
+  const [fields, setFields] = useState({
+    lrn: student.lrn ?? '',
+    birthdate: student.birthdate ?? '',
+    status: student.status ?? 'active',
+  })
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    setError(null)
+    try {
+      const patch = { status: fields.status }
+      patch.lrn = fields.lrn.trim() || null
+      if (fields.birthdate) {
+        patch.birthdate = fields.birthdate
+        patch.age = ageFromBirthdate(fields.birthdate)
+      }
+      await updateDoc(doc(db, 'users', student.id), patch)
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  async function removeFromClass() {
+    if (!window.confirm(`Remove ${student.first_name} from this class?`)) return
+    setBusy(true)
+    try {
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(student.id) })
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">
+          {student.last_name}, {student.first_name}
+        </h3>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">DepEd LRN</span>
+            <input
+              value={fields.lrn}
+              onChange={(e) => setFields((f) => ({ ...f, lrn: e.target.value }))}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Birthdate</span>
+            <input
+              type="date"
+              value={fields.birthdate}
+              onChange={(e) => setFields((f) => ({ ...f, birthdate: e.target.value }))}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
+        </div>
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">Status</span>
+          <select
+            value={fields.status}
+            onChange={(e) => setFields((f) => ({ ...f, status: e.target.value }))}
+            className={`${inputCls} w-full mt-1 bg-white`}
+          >
+            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-3 justify-between pt-2">
+          <button
+            onClick={removeFromClass}
+            disabled={busy}
+            className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50 disabled:opacity-50"
+          >
+            Remove from class
+          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={busy}
+              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* CSV import: header row first_name,last_name,email,lrn,birthdate.
+   Matches registered students by email; preview before anything is written. */
+function CsvUploadModal({ classId, enrolledIds, onClose, onDone }) {
+  const fileRef = useRef(null)
+  const [preview, setPreview] = useState(null) // { matched: [], unmatched: [] }
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function handleFile(file) {
+    setBusy(true)
+    setError(null)
+    setPreview(null)
+    try {
+      const rows = parseCsv(await file.text())
+      if (rows.length < 2) throw new Error('CSV needs a header row plus at least one student')
+      const header = rows[0].map((h) => h.trim().toLowerCase())
+      const col = (name) => header.indexOf(name)
+      if (col('email') === -1) {
+        throw new Error('CSV must have an "email" column (expected: first_name,last_name,email,lrn,birthdate)')
+      }
+      const matched = []
+      const unmatched = []
+      for (const row of rows.slice(1)) {
+        const entry = {
+          first_name: row[col('first_name')]?.trim() ?? '',
+          last_name: row[col('last_name')]?.trim() ?? '',
+          email: row[col('email')]?.trim().toLowerCase() ?? '',
+          lrn: row[col('lrn')]?.trim() ?? '',
+          birthdate: row[col('birthdate')]?.trim() ?? '',
+        }
+        if (!entry.email) continue
+        const student = await findStudentByEmail(entry.email)
+        if (student) {
+          matched.push({ ...entry, uid: student.id, already: enrolledIds.includes(student.id) })
+        } else {
+          unmatched.push(entry)
+        }
+      }
+      setPreview({ matched, unmatched })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function commit() {
+    setBusy(true)
+    setError(null)
+    try {
+      const batch = writeBatch(db)
+      const newIds = []
+      for (const m of preview.matched) {
+        const patch = {}
+        if (m.lrn) patch.lrn = m.lrn
+        if (m.birthdate) {
+          patch.birthdate = m.birthdate
+          patch.age = ageFromBirthdate(m.birthdate)
+        }
+        if (Object.keys(patch).length) batch.update(doc(db, 'users', m.uid), patch)
+        if (!m.already) newIds.push(m.uid)
+      }
+      if (newIds.length) {
+        batch.update(doc(db, 'classes', classId), { student_ids: arrayUnion(...newIds) })
+      }
+      await batch.commit()
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster (CSV)</h3>
+        <p className="text-sm text-slate-500">
+          Header row: <code className="bg-slate-100 px-1 rounded text-xs">first_name,last_name,email,lrn,birthdate</code>.
+          Students must already have Activklass accounts — rows are matched by email.
+        </p>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:px-4 file:py-2 file:font-medium hover:file:bg-indigo-100"
+        />
+        {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
+
+        {preview && (
+          <>
+            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 text-sm">
+              {preview.matched.map((m) => (
+                <div key={m.uid} className="px-3 py-2 flex justify-between">
+                  <span className="text-slate-700">
+                    {m.last_name || m.first_name ? `${m.last_name}, ${m.first_name}` : m.email}
+                  </span>
+                  <span className={m.already ? 'text-slate-400' : 'text-green-600 font-medium'}>
+                    {m.already ? 'already enrolled — will update info' : 'will enroll'}
+                  </span>
+                </div>
+              ))}
+              {preview.unmatched.map((u, i) => (
+                <div key={`u-${i}`} className="px-3 py-2 flex justify-between">
+                  <span className="text-slate-700">{u.email}</span>
+                  <span className="text-red-500 font-medium">no account — skipped</span>
+                </div>
+              ))}
+            </div>
+            {preview.unmatched.length > 0 && (
+              <p className="text-xs text-amber-600">
+                {preview.unmatched.length} student{preview.unmatched.length === 1 ? '' : 's'} have no
+                Activklass account yet — ask them to register, then re-upload.
+              </p>
+            )}
+            <button
+              onClick={commit}
+              disabled={busy || preview.matched.length === 0}
+              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-40"
+            >
+              {busy ? 'Importing…' : `Import ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'}`}
+            </button>
+          </>
+        )}
+
+        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function ClassDetailPage() {
   const { classId } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [actionError, setActionError] = useState(null)
+  const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
+  const [error, setError] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['class', classId],
-    queryFn: () => api(`/api/classes/${classId}`),
-  })
-
-  const { data: searchData, isFetching: searching } = useQuery({
-    queryKey: ['student-search', search],
-    queryFn: () => api(`/api/students/search?q=${encodeURIComponent(search)}`),
-    enabled: search.trim().length >= 2,
+    queryKey: ['fs-class', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'classes', classId))
+      if (!snap.exists()) throw new Error('Class not found')
+      const clazz = { id: snap.id, ...snap.data() }
+      const students = clazz.student_ids?.length
+        ? await fetchUsersByIds(clazz.student_ids)
+        : []
+      students.sort((a, b) =>
+        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
+      )
+      return { clazz, students }
+    },
   })
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['class', classId] })
-    queryClient.invalidateQueries({ queryKey: ['classes'] })
+    queryClient.invalidateQueries({ queryKey: ['fs-class', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+    setModal(null)
   }
 
-  const enroll = useMutation({
-    mutationFn: (studentId) =>
-      api(`/api/classes/${classId}/students`, { method: 'POST', body: { student_id: studentId } }),
-    onSuccess: () => {
-      refresh()
-      setActionError(null)
-    },
-    onError: (err) => setActionError(err.message),
-  })
-
-  const drop = useMutation({
-    mutationFn: (studentId) =>
-      api(`/api/classes/${classId}/students/${studentId}`, { method: 'DELETE' }),
-    onSuccess: refresh,
-    onError: (err) => setActionError(err.message),
-  })
-
-  const archive = useMutation({
-    mutationFn: () => api(`/api/classes/${classId}/archive`, { method: 'POST' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
+  async function deleteClass() {
+    if (!window.confirm('Delete this class section? The roster list will be lost (student accounts are kept).')) return
+    try {
+      await deleteDoc(doc(db, 'classes', classId))
       navigate('/teacher/classes')
-    },
-    onError: (err) => setActionError(err.message),
-  })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
-  if (isLoading) return <p className="text-slate-400">Loading class…</p>
+  if (isLoading) return <p className="text-slate-400">Loading roster…</p>
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
-  const { class: clazz, students } = data
-  const enrolledIds = new Set(students.map((s) => s.student_id))
-  const results = (searchData?.students ?? []).filter((s) => !enrolledIds.has(s.id))
+  const { clazz, students } = data
 
   return (
     <div>
@@ -67,138 +444,119 @@ export default function ClassDetailPage() {
 
       <div className="flex items-start justify-between mt-2">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">{clazz.name}</h2>
+          <h2 className="text-2xl font-bold text-slate-800">{clazz.section}</h2>
           <p className="text-slate-500 mt-1">
-            {[clazz.subject, clazz.grade_level, clazz.section, clazz.school_year]
-              .filter(Boolean)
-              .join(' · ')}
+            {clazz.subject} · {clazz.academic_year}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-center">
-            <p className="text-xs text-slate-500">Join code</p>
-            <p className="font-mono font-bold text-indigo-700 tracking-widest">{clazz.join_code}</p>
-          </div>
-          <Link
-            to={`/teacher/classes/${classId}/grading`}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setModal('csv')}
             className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
           >
-            Grading Setup
-          </Link>
-          <Link
-            to={`/teacher/classes/${classId}/attendance`}
-            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-          >
-            Attendance
-          </Link>
-          <Link
-            to={`/teacher/classes/${classId}/record`}
+            ⇪ Bulk Upload CSV
+          </button>
+          <button
+            onClick={() => setModal('add')}
             className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
           >
-            Class Record
-          </Link>
+            + Add Student
+          </button>
           <button
-            onClick={() => {
-              if (window.confirm('Archive this class? It will be hidden from your list.')) {
-                archive.mutate()
-              }
-            }}
-            className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50"
+            onClick={deleteClass}
+            title="Delete class"
+            className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
           >
-            Archive
+            Delete
           </button>
         </div>
       </div>
 
-      {actionError && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">
-          {actionError}
-        </p>
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">{error}</p>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800">Roster</h3>
-            <span className="text-sm text-slate-500">{students.length} student{students.length === 1 ? '' : 's'}</span>
-          </div>
-          {students.length === 0 ? (
-            <p className="p-8 text-center text-slate-400">
-              No students yet. Add them from the panel on the right, or share the join code.
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-100">
-                  <th className="px-5 py-2.5 font-medium">Name</th>
-                  <th className="px-5 py-2.5 font-medium">Student #</th>
-                  <th className="px-5 py-2.5 font-medium">Email</th>
-                  <th className="px-5 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((s) => (
-                  <tr key={s.student_id} className="border-b border-slate-50 last:border-0">
-                    <td className="px-5 py-3 font-medium text-slate-700">
-                      {s.last_name}, {s.first_name}
+      <div className="bg-white rounded-xl border border-slate-200 mt-6 overflow-x-auto">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800">Roster</h3>
+          <span className="text-sm text-slate-500">
+            {students.length} student{students.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        {students.length === 0 ? (
+          <p className="p-8 text-center text-slate-400">
+            No students yet. Add them by email or upload a CSV roster.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b border-slate-100">
+                <th className="px-5 py-2.5 font-medium">Name</th>
+                <th className="px-5 py-2.5 font-medium">DepEd LRN</th>
+                <th className="px-5 py-2.5 font-medium text-center">Age</th>
+                <th className="px-5 py-2.5 font-medium">Status</th>
+                <th className="px-5 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((s) => {
+                const age = ageFromBirthdate(s.birthdate) ?? s.age ?? null
+                const status = s.status ?? 'active'
+                return (
+                  <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-slate-700">
+                        {s.last_name}, {s.first_name}
+                      </p>
+                      <p className="text-xs text-slate-400">{s.email}</p>
                     </td>
-                    <td className="px-5 py-3 text-slate-500">{s.student_number ?? '—'}</td>
-                    <td className="px-5 py-3 text-slate-500">{s.email}</td>
+                    <td className="px-5 py-3 text-slate-600 font-mono text-xs">{s.lrn ?? '—'}</td>
+                    <td className="px-5 py-3 text-center text-slate-600">{age ?? '—'}</td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                    </td>
                     <td className="px-5 py-3 text-right">
                       <button
-                        onClick={() => drop.mutate(s.student_id)}
-                        className="text-red-500 hover:text-red-700 text-xs font-medium"
+                        onClick={() => setModal(s)}
+                        className="text-indigo-600 hover:underline text-xs font-medium"
                       >
-                        Remove
+                        Edit
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-5 h-fit">
-          <h3 className="font-semibold text-slate-800">Add students</h3>
-          <input
-            placeholder="Search name, email, or student #"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <div className="mt-3 space-y-2">
-            {search.trim().length < 2 ? (
-              <p className="text-xs text-slate-400">Type at least 2 characters to search.</p>
-            ) : searching ? (
-              <p className="text-xs text-slate-400">Searching…</p>
-            ) : results.length === 0 ? (
-              <p className="text-xs text-slate-400">No matching students to add.</p>
-            ) : (
-              results.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">
-                      {s.last_name}, {s.first_name}
-                    </p>
-                    <p className="text-xs text-slate-400">{s.student_number ?? s.email}</p>
-                  </div>
-                  <button
-                    onClick={() => enroll.mutate(s.id)}
-                    disabled={enroll.isPending}
-                    className="rounded-lg bg-indigo-600 text-white px-3 py-1 text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    Add
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {modal === 'add' && (
+        <AddStudentModal
+          classId={classId}
+          enrolledIds={clazz.student_ids ?? []}
+          onClose={() => setModal(null)}
+          onDone={refresh}
+        />
+      )}
+      {modal === 'csv' && (
+        <CsvUploadModal
+          classId={classId}
+          enrolledIds={clazz.student_ids ?? []}
+          onClose={() => setModal(null)}
+          onDone={refresh}
+        />
+      )}
+      {modal && typeof modal === 'object' && (
+        <EditStudentModal
+          student={modal}
+          classId={classId}
+          onClose={() => setModal(null)}
+          onDone={refresh}
+        />
+      )}
     </div>
   )
 }

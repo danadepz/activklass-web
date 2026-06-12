@@ -1,10 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute, { RoleHomeRedirect } from './components/ProtectedRoute'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import RolePlaceholder from './pages/RolePlaceholder'
 import TeacherLayout from './pages/teacher/TeacherLayout'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
+import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import ClassesPage from './pages/teacher/ClassesPage'
 import ClassDetailPage from './pages/teacher/ClassDetailPage'
 import GradingSetupPage from './pages/teacher/GradingSetupPage'
@@ -22,13 +24,15 @@ import ComingSoon from './pages/teacher/ComingSoon'
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/" element={<RoleHomeRedirect />} />
+      <Route path="/portal" element={<RoleHomeRedirect />} />
 
       <Route element={<ProtectedRoute roles={['teacher']} />}>
         <Route path="/teacher" element={<TeacherLayout />}>
           <Route index element={<TeacherDashboard />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="classes" element={<ClassesPage />} />
           <Route path="classes/:classId" element={<ClassDetailPage />} />
           <Route path="classes/:classId/grading" element={<GradingSetupPage />} />

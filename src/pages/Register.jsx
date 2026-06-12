@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../lib/firebase'
-import { api } from '../lib/api'
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
 import { useAuth } from '../context/useAuth'
 
 const FRIENDLY_ERRORS = {
@@ -39,13 +39,18 @@ export default function Register() {
       if (!auth.currentUser) {
         await createUserWithEmailAndPassword(auth, form.email, form.password)
       }
-      // 2. Activklass profile row (role lives server-side, never in Firebase).
-      await api('/api/auth/register', {
-        method: 'POST',
-        body: { first_name: form.firstName, last_name: form.lastName, role: form.role },
+      // 2. Activklass profile doc in the Firestore 'users' collection.
+      // Role drives routing; security rules block later role changes by
+      // students/parents (escalation guard). Passwords stay in Firebase Auth.
+      await setDoc(doc(db, 'users', auth.currentUser.uid), {
+        first_name: form.firstName,
+        last_name: form.lastName,
+        email: auth.currentUser.email,
+        role: form.role,
+        created_at: serverTimestamp(),
       })
       await refreshProfile()
-      navigate('/')
+      navigate('/portal')
     } catch (err) {
       setError(FRIENDLY_ERRORS[err.code] ?? err.message ?? 'Registration failed.')
     } finally {

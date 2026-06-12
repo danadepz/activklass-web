@@ -1,15 +1,18 @@
 import { useEffect, useState, useCallback } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { auth } from '../lib/firebase'
-import { api } from '../lib/api'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db } from '../lib/firebase'
 import { AuthContext } from './auth-context'
 
 /**
  * Auth state machine:
  *  loading        — waiting for Firebase / profile fetch
  *  signed_out     — no Firebase session
- *  not_registered — Firebase session exists but no Activklass user row (finish registration)
- *  signed_in      — Firebase session + Activklass profile loaded
+ *  not_registered — Firebase session exists but no users/{uid} doc (finish registration)
+ *  signed_in      — Firebase session + Firestore profile loaded
+ *
+ * The profile (including role, which drives routing) lives in the Firestore
+ * 'users' collection — see PREPARE.md §2 and docs/05-prepare-gap-analysis.md.
  */
 export function AuthProvider({ children }) {
   const [firebaseUser, setFirebaseUser] = useState(null)
@@ -19,23 +22,30 @@ export function AuthProvider({ children }) {
 
   const loadProfile = useCallback(async () => {
     try {
-      const { user } = await api('/api/auth/me')
-      setProfile(user)
+      const uid = auth.currentUser?.uid
+      if (!uid) throw new Error('Not signed in')
+      const snap = await getDoc(doc(db, 'users', uid))
+      if (!snap.exists()) {
+        setProfile(null)
+        setStatus('not_registered')
+        return
+      }
+      setProfile({ id: uid, ...snap.data() })
       setStatus('signed_in')
       setErrorDetail(null)
     } catch (err) {
       setProfile(null)
-      if (err.code === 'not_registered') {
-        setStatus('not_registered')
-      } else {
-        setStatus('error')
-        setErrorDetail(
-          err.status
-            ? `The API rejected the request: ${err.message} (HTTP ${err.status}). ` +
-              'If you just changed backend/.env, fully restart "npm run dev".'
-            : 'Could not reach the Activklass server. Is the API running on port 5000?',
-        )
-      }
+      setStatus('error')
+      const hint =
+        {
+          'permission-denied':
+            'Firestore denied the read — deploy the security rules: firebase deploy --only firestore:rules',
+          unavailable:
+            'Firestore is unreachable — check your connection, and disable Brave Shields / ad-blockers for localhost (they block firestore.googleapis.com).',
+          'failed-precondition':
+            'The Firestore database may not be initialized for this project — create it in the Firebase console.',
+        }[err.code] ?? 'Check your connection and Firebase configuration.'
+      setErrorDetail(`Could not load your profile from Firestore (${err.code ?? err.message}). ${hint}`)
     }
   }, [])
 

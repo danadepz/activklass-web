@@ -1,24 +1,32 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { useAuth } from '../../context/useAuth'
-import { api } from '../../lib/api'
 
 export default function TeacherDashboard() {
   const { profile } = useAuth()
-  const { data, isLoading } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => api('/api/classes'),
+  const { data: classes, isLoading } = useQuery({
+    queryKey: ['fs-classes', profile.id],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
+      )
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    },
   })
 
-  const classes = data?.classes ?? []
-  const totalStudents = classes.reduce((sum, c) => sum + c.student_count, 0)
+  const totalStudents = (classes ?? []).reduce(
+    (sum, c) => sum + (c.student_ids?.length ?? 0),
+    0,
+  )
   const show = (value) => (isLoading ? '…' : value)
 
   const stats = [
-    { label: 'Classes', value: show(classes.length) },
+    { label: 'Classes', value: show(classes?.length ?? 0) },
     { label: 'Students', value: show(totalStudents) },
     { label: 'Pending Quizzes', value: '—' },
-    { label: 'At-Risk Topics', value: '—' },
+    { label: 'At-Risk Students', value: '—' },
   ]
 
   return (
@@ -37,7 +45,7 @@ export default function TeacherDashboard() {
         ))}
       </div>
 
-      {!isLoading && classes.length === 0 ? (
+      {!isLoading && (classes?.length ?? 0) === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-8 mt-6 text-center">
           <p className="text-slate-500">You have no classes yet.</p>
           <Link
@@ -56,15 +64,16 @@ export default function TeacherDashboard() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-            {classes.slice(0, 6).map((c) => (
+            {(classes ?? []).slice(0, 6).map((c) => (
               <Link
                 key={c.id}
                 to={`/teacher/classes/${c.id}`}
                 className="bg-white rounded-xl border border-slate-200 p-4 hover:border-indigo-400 transition"
               >
-                <p className="font-medium text-slate-800">{c.name}</p>
+                <p className="font-medium text-slate-800">{c.section}</p>
                 <p className="text-sm text-slate-500 mt-0.5">
-                  {c.subject} · {c.student_count} student{c.student_count === 1 ? '' : 's'}
+                  {c.subject} · {c.student_ids?.length ?? 0} student
+                  {(c.student_ids?.length ?? 0) === 1 ? '' : 's'}
                 </p>
               </Link>
             ))}

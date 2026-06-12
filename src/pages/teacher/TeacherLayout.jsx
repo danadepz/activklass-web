@@ -3,6 +3,7 @@ import { useAuth } from '../../context/useAuth'
 
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
+  { to: '/teacher/analytics', label: 'Overall Analytics' },
   { to: '/teacher/classes', label: 'My Classes' },
   { to: '/teacher/record', label: 'Class Record' },
   { to: '/teacher/attendance', label: 'Attendance' },

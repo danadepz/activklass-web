@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,3 +22,14 @@ export const firebaseConfigured = missingFirebaseKeys.length === 0
 // guard so the app can render setup instructions instead.
 export const firebaseApp = firebaseConfigured ? initializeApp(firebaseConfig) : null
 export const auth = firebaseConfigured ? getAuth(firebaseApp) : null
+// Firestore is the primary database (see docs/05-prepare-gap-analysis.md).
+export const db = firebaseConfigured ? getFirestore(firebaseApp) : null
+
+// Local development against the Firebase emulator suite
+// (firebase emulators:start). Toggle via VITE_FIREBASE_EMULATOR in .env.local.
+export const usingEmulator =
+  firebaseConfigured && import.meta.env.VITE_FIREBASE_EMULATOR === 'true'
+if (usingEmulator) {
+  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
+  connectFirestoreEmulator(db, 'localhost', 8080)
+}

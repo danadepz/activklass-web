@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { api } from '../../lib/api'
+import { db } from '../../lib/firebase'
+import { GRADING_MODES } from '../../lib/grading'
+import { useAuth } from '../../context/useAuth'
 
 function newRow() {
   return { id: null, name: '', weight_percent: '' }
@@ -43,6 +47,15 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
               onChange={(e) => update(i, 'name', e.target.value)}
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={parseFloat(row.weight_percent) || 0}
+              onChange={(e) => update(i, 'weight_percent', e.target.value)}
+              className="w-28 accent-indigo-600"
+            />
             <div className="relative">
               <input
                 type="number"
@@ -76,6 +89,84 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
       >
         + {addLabel}
       </button>
+    </div>
+  )
+}
+
+/**
+ * DepEd K-12 vs CHED tertiary calculation toggle (PREPARE.md §1.7).
+ * Persisted on the Firestore gradebooks/{classId} doc, where the class
+ * record will read it when computing finals via lib/grading.js.
+ */
+function GradingTypeSelector({ classId }) {
+  const { profile } = useAuth()
+  const [mode, setMode] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getDoc(doc(db, 'gradebooks', classId)).then(
+      (snap) => {
+        if (!cancelled) setMode(snap.exists() ? (snap.data().grading_mode ?? 'deped_k12') : 'deped_k12')
+      },
+      () => {
+        if (!cancelled) setMode('deped_k12')
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [classId])
+
+  async function select(value) {
+    const previous = mode
+    setMode(value)
+    setSaving(true)
+    setError(null)
+    try {
+      await setDoc(
+        doc(db, 'gradebooks', classId),
+        { grading_mode: value, teacher_id: profile.id },
+        { merge: true },
+      )
+    } catch {
+      setMode(previous)
+      setError('Could not save the grading type. Check your connection and Firestore rules.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5">
+      <h3 className="font-semibold text-slate-800">Grading Type</h3>
+      <p className="text-xs text-slate-400 mt-0.5">
+        DepEd K-12 transmutes the weighted grade per DepEd Order No. 8, s. 2015; CHED modes
+        report raw percentages or the 1.0–5.0 point scale.
+      </p>
+      <div className="flex flex-wrap gap-2 mt-3">
+        {GRADING_MODES.map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => select(m.value)}
+            disabled={saving || mode === null}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${
+              mode === m.value
+                ? 'bg-indigo-600 border-indigo-600 text-white'
+                : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
@@ -169,6 +260,8 @@ function GradingSetupForm({ classId, setup, className }) {
           Grading setup saved.
         </p>
       )}
+
+      <GradingTypeSelector classId={classId} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         <EditorCard
