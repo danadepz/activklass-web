@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
 import { api } from '../../lib/api'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
+const newId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 function toDraftState(tree, source) {
   return {
@@ -26,12 +30,39 @@ function toDraftState(tree, source) {
   }
 }
 
-function emptyModule() {
-  return { _key: newKey(), id: null, title: '', description: '', topics: [emptyTopic()] }
+/* Map the AI microservice's canned DepEd Grade 10 Math syllabus
+   (GET /api/syllabus) into the editor tree: quarters become modules and each
+   competency module becomes an editable topic. */
+function fromCannedSyllabus(canned) {
+  const byQuarter = new Map()
+  for (const m of canned.modules ?? []) {
+    const q = m.quarter ?? 1
+    if (!byQuarter.has(q)) byQuarter.set(q, [])
+    byQuarter.get(q).push(m)
+  }
+  const modules = [...byQuarter.keys()]
+    .sort((a, b) => a - b)
+    .map((q) => ({
+      title: `Quarter ${q}`,
+      description: '',
+      topics: byQuarter.get(q).map((m) => ({
+        title: m.title,
+        learning_objectives: m.description ? [m.description] : [],
+      })),
+    }))
+  return {
+    title: `${canned.subject ?? ''} — ${canned.grade_level ?? ''}`.trim(),
+    description: canned.curriculum ?? '',
+    modules,
+  }
 }
 
 function emptyTopic() {
   return { _key: newKey(), id: null, title: '', objectivesText: '' }
+}
+
+function emptyModule() {
+  return { _key: newKey(), id: null, title: '', description: '', topics: [emptyTopic()] }
 }
 
 function move(list, index, delta) {
@@ -42,28 +73,16 @@ function move(list, index, delta) {
   return next
 }
 
-function GenerateModal({ classId, clazz, onClose, onDraft }) {
-  const [form, setForm] = useState({
-    subject: clazz?.subject ?? '',
-    grade_level: clazz?.grade_level ?? '',
-    duration_weeks: 10,
-    notes: '',
-  })
+function GenerateModal({ onClose, onDraft }) {
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
-
-  async function generate(e) {
-    e.preventDefault()
+  async function generate() {
     setGenerating(true)
     setError(null)
     try {
-      const { draft } = await api(`/api/classes/${classId}/syllabus/generate`, {
-        method: 'POST',
-        body: form,
-      })
-      onDraft(draft)
+      const canned = await api('/api/syllabus')
+      onDraft(fromCannedSyllabus(canned))
     } catch (err) {
       setError(err.message)
       setGenerating(false)
@@ -72,58 +91,18 @@ function GenerateModal({ classId, clazz, onClose, onDraft }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <form onSubmit={generate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
-          AI drafts the structure — you review and edit everything before saving.
+          Loads the DepEd-aligned <strong>Grade 10 Mathematics</strong> starter (Most Essential
+          Learning Competencies) as an editable draft. Review and adjust everything before saving —
+          nothing is stored until you save.
         </p>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Subject</span>
-            <input
-              required
-              value={form.subject}
-              onChange={set('subject')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Grade level</span>
-            <input
-              value={form.grade_level}
-              onChange={set('grade_level')}
-              placeholder="Grade 7"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-        </div>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Duration (weeks)</span>
-          <input
-            type="number"
-            min="1"
-            max="40"
-            value={form.duration_weeks}
-            onChange={set('duration_weeks')}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Notes for the AI (optional)</span>
-          <textarea
-            rows={2}
-            value={form.notes}
-            onChange={set('notes')}
-            placeholder="e.g. emphasize problem solving; align with DepEd MELCs"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
         <div className="flex gap-3 justify-end pt-2">
           <button
-            type="button"
             onClick={onClose}
             disabled={generating}
             className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -131,14 +110,14 @@ function GenerateModal({ classId, clazz, onClose, onDraft }) {
             Cancel
           </button>
           <button
-            type="submit"
+            onClick={generate}
             disabled={generating}
             className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
           >
-            {generating ? 'Generating… (can take a minute)' : 'Generate draft'}
+            {generating ? 'Loading…' : 'Load starter'}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   )
 }
@@ -160,25 +139,27 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const body = {
+      const modules = tree.modules.map((m) => ({
+        id: m.id || newId(),
+        title: m.title,
+        description: m.description,
+        topics: m.topics.map((t) => ({
+          id: t.id || newId(),
+          title: t.title,
+          learning_objectives: t.objectivesText
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean),
+        })),
+      }))
+      await setDoc(doc(db, 'classes', classId, 'syllabus', 'current'), {
+        class_id: classId,
         title: tree.title,
         description: tree.description,
-        modules: tree.modules.map((m) => ({
-          id: m.id,
-          title: m.title,
-          description: m.description,
-          topics: m.topics.map((t) => ({
-            id: t.id,
-            title: t.title,
-            learning_objectives: t.objectivesText
-              .split('\n')
-              .map((line) => line.trim())
-              .filter(Boolean),
-          })),
-        })),
-      }
-      if (isAiDraft) body.source = 'ai_generated'
-      await api(`/api/classes/${classId}/syllabus`, { method: 'PUT', body })
+        source: isAiDraft ? 'ai_generated' : tree.source || 'manual',
+        modules,
+        updated_at: serverTimestamp(),
+      })
       onSaved()
     } catch (err) {
       setError(err.message)
@@ -320,24 +301,26 @@ export default function SyllabusPage() {
   const [showGenerate, setShowGenerate] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
 
-  const { data: classData } = useQuery({
-    queryKey: ['class', classId],
-    queryFn: () => api(`/api/classes/${classId}`),
+  const { data: clazz } = useQuery({
+    queryKey: ['fs-class-meta', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'classes', classId))
+      return snap.exists() ? { id: snap.id, ...snap.data() } : null
+    },
   })
-  const { data, isLoading } = useQuery({
-    queryKey: ['syllabus', classId],
-    queryFn: () => api(`/api/classes/${classId}/syllabus`),
+  const { data: saved, isLoading } = useQuery({
+    queryKey: ['fs-syllabus', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
+      return snap.exists() ? snap.data() : null
+    },
   })
 
   if (isLoading) return <p className="text-slate-400">Loading syllabus…</p>
 
-  const clazz = classData?.class
-  const saved = data?.syllabus
-  const aiAvailable = data?.ai_available
-
   const onSaved = () => {
     setDraft(null)
-    queryClient.invalidateQueries({ queryKey: ['syllabus', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-syllabus', classId] })
     setEditorKey((k) => k + 1)
   }
 
@@ -349,10 +332,7 @@ export default function SyllabusPage() {
 
   return (
     <div>
-      <Link to={`/teacher/classes/${classId}`} className="text-sm text-indigo-600 hover:underline">
-        ← Back to {clazz?.name ?? 'class'}
-      </Link>
-      <div className="flex items-start justify-between mt-2 max-w-3xl">
+      <div className="flex items-start justify-between max-w-3xl">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Syllabus</h2>
           <p className="text-slate-500 mt-1">
@@ -361,13 +341,22 @@ export default function SyllabusPage() {
         </div>
         <button
           onClick={() => setShowGenerate(true)}
-          disabled={!aiAvailable}
-          title={aiAvailable ? undefined : 'Set ANTHROPIC_API_KEY in backend/.env to enable AI generation'}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
         >
           ✨ Generate with AI
         </button>
       </div>
+
+      {clazz?.syllabus_file && (
+        <a
+          href={clazz.syllabus_file.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:border-indigo-300"
+        >
+          📄 Attached syllabus file: {clazz.syllabus_file.name}
+        </a>
+      )}
 
       {initial ? (
         <SyllabusEditor
@@ -398,9 +387,7 @@ export default function SyllabusPage() {
             </button>
             <button
               onClick={() => setShowGenerate(true)}
-              disabled={!aiAvailable}
-              title={aiAvailable ? undefined : 'Set ANTHROPIC_API_KEY in backend/.env to enable AI generation'}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-40"
+              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
             >
               ✨ Generate with AI
             </button>
@@ -410,8 +397,6 @@ export default function SyllabusPage() {
 
       {showGenerate && (
         <GenerateModal
-          classId={classId}
-          clazz={clazz}
           onClose={() => setShowGenerate(false)}
           onDraft={(d) => {
             setShowGenerate(false)

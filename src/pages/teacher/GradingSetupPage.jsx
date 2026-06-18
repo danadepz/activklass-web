@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { api } from '../../lib/api'
+import { useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
-import { GRADING_MODES } from '../../lib/grading'
+import { GRADING_MODES, GRADING_PRESETS } from '../../lib/grading'
 import { useAuth } from '../../context/useAuth'
+
+const newId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 function newRow() {
   return { id: null, name: '', weight_percent: '' }
@@ -15,9 +17,23 @@ function weightSum(rows) {
   return rows.reduce((sum, r) => sum + (parseFloat(r.weight_percent) || 0), 0)
 }
 
+function balanced(rows) {
+  return Math.abs(weightSum(rows) - 100) < 0.01
+}
+
+function withIds(rows, extraKeys = []) {
+  return rows
+    .filter((r) => r.name.trim())
+    .map((r) => {
+      const out = { id: r.id || newId(), name: r.name.trim(), weight_percent: Number(r.weight_percent) || 0 }
+      for (const k of extraKeys) out[k] = r[k] ?? false
+      return out
+    })
+}
+
 function EditorCard({ title, hint, rows, setRows, addLabel }) {
   const sum = weightSum(rows)
-  const balanced = Math.abs(sum - 100) < 0.001
+  const ok = Math.abs(sum - 100) < 0.01
 
   const update = (index, key, value) =>
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
@@ -31,7 +47,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
         </div>
         <span
           className={`rounded-full px-3 py-1 text-sm font-semibold ${
-            balanced ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+            ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
           }`}
         >
           {sum.toFixed(sum % 1 === 0 ? 0 : 2)}%
@@ -96,7 +112,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
 /**
  * DepEd K-12 vs CHED tertiary calculation toggle (PREPARE.md §1.7).
  * Persisted on the Firestore gradebooks/{classId} doc, where the class
- * record will read it when computing finals via lib/grading.js.
+ * record reads it when computing finals via lib/grading.js.
  */
 function GradingTypeSelector({ classId }) {
   const { profile } = useAuth()
@@ -171,31 +187,44 @@ function GradingTypeSelector({ classId }) {
   )
 }
 
-function GradingSetupForm({ classId, setup, className }) {
+function GradingSetupForm({ classId, setup }) {
+  const { profile } = useAuth()
+  const queryClient = useQueryClient()
   const [periods, setPeriods] = useState(setup.periods.length ? setup.periods : [newRow()])
   const [components, setComponents] = useState(
     setup.components.length ? setup.components : [newRow()],
   )
-  const [configured, setConfigured] = useState(setup.configured)
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(false)
 
-  const afterChange = (body) => {
-    setPeriods(body.periods)
-    setComponents(body.components)
-    setConfigured(body.configured)
+  async function persist(nextPeriods, nextComponents) {
+    if (!balanced(nextPeriods) || !balanced(nextComponents)) {
+      throw new Error('Grading periods and components must each total 100%.')
+    }
+    await setDoc(
+      doc(db, 'gradebooks', classId),
+      {
+        teacher_id: profile.id,
+        periods: withIds(nextPeriods, ['locked']),
+        components: withIds(nextComponents),
+        configured: true,
+        updated_at: serverTimestamp(),
+      },
+      { merge: true },
+    )
+    queryClient.invalidateQueries({ queryKey: ['fs-grading-setup', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
+  }
+
+  const flash = () => {
     setError(null)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
 
   const save = useMutation({
-    mutationFn: () =>
-      api(`/api/classes/${classId}/grading-setup`, {
-        method: 'PUT',
-        body: { periods, components },
-      }),
-    onSuccess: afterChange,
+    mutationFn: () => persist(periods, components),
+    onSuccess: flash,
     onError: (err) => {
       setError(err.message)
       setSaved(false)
@@ -203,18 +232,18 @@ function GradingSetupForm({ classId, setup, className }) {
   })
 
   const applyPreset = useMutation({
-    mutationFn: (preset) =>
-      api(`/api/classes/${classId}/grading-setup/preset`, { method: 'POST', body: { preset } }),
-    onSuccess: afterChange,
+    mutationFn: async (preset) => {
+      setPeriods(preset.periods.map((p) => ({ ...p, id: null })))
+      setComponents(preset.components.map((c) => ({ ...c, id: null })))
+      await persist(preset.periods, preset.components)
+    },
+    onSuccess: flash,
     onError: (err) => setError(err.message),
   })
 
   return (
     <div className="max-w-4xl">
-      <Link to={`/teacher/classes/${classId}`} className="text-sm text-indigo-600 hover:underline">
-        ← Back to {className}
-      </Link>
-      <div className="flex items-start justify-between mt-2">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Grading Setup</h2>
           <p className="text-slate-500 mt-1">
@@ -231,14 +260,14 @@ function GradingSetupForm({ classId, setup, className }) {
       </div>
 
       <div className="mt-4 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-        <p className="text-sm font-medium text-indigo-900">Quick start with a DepEd K-12 preset:</p>
+        <p className="text-sm font-medium text-indigo-900">Quick start with a preset:</p>
         <div className="flex flex-wrap gap-2 mt-2">
-          {setup.presets.map((p) => (
+          {GRADING_PRESETS.map((p) => (
             <button
               key={p.key}
               onClick={() => {
-                if (!configured || window.confirm('Replace your current setup with this preset?')) {
-                  applyPreset.mutate(p.key)
+                if (!setup.configured || window.confirm('Replace your current setup with this preset?')) {
+                  applyPreset.mutate(p)
                 }
               }}
               disabled={applyPreset.isPending}
@@ -287,24 +316,20 @@ export default function GradingSetupPage() {
   const { classId } = useParams()
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['grading-setup', classId],
-    queryFn: () => api(`/api/classes/${classId}/grading-setup`),
-  })
-
-  const { data: classData } = useQuery({
-    queryKey: ['class', classId],
-    queryFn: () => api(`/api/classes/${classId}`),
+    queryKey: ['fs-grading-setup', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'gradebooks', classId))
+      const d = snap.exists() ? snap.data() : {}
+      return {
+        periods: d.periods ?? [],
+        components: d.components ?? [],
+        configured: !!d.configured,
+      }
+    },
   })
 
   if (isLoading) return <p className="text-slate-400">Loading grading setup…</p>
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
-  return (
-    <GradingSetupForm
-      key={classId}
-      classId={classId}
-      setup={data}
-      className={classData?.class?.name ?? 'class'}
-    />
-  )
+  return <GradingSetupForm key={classId} classId={classId} setup={data} />
 }

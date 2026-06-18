@@ -1,7 +1,21 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  getDoc,
+  getDocs,
+  serverTimestamp,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import { fetchUsersByIds } from '../../lib/roster'
+import { computeFinalGrade, finalAcrossPeriods } from '../../lib/grading'
 
 /* Cell text → score entry. Number = graded, M = missing, X = excused, blank = not recorded. */
 function parseCell(text, totalPoints) {
@@ -28,6 +42,105 @@ function fmt(pct) {
 
 const KIND_OPTIONS = ['activity', 'quiz', 'exam', 'contest', 'other']
 
+// ---------------------------------------------------------------- data loading
+
+async function loadBundle(classId) {
+  const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
+  const gb = gbSnap.exists() ? gbSnap.data() : {}
+  const configured = Boolean(gb.configured && gb.periods?.length && gb.components?.length)
+
+  const classSnap = await getDoc(doc(db, 'classes', classId))
+  if (!classSnap.exists()) throw new Error('Class not found')
+  const ids = classSnap.data().student_ids ?? []
+  const users = ids.length ? await fetchUsersByIds(ids) : []
+  const students = users
+    .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
+    .sort((a, b) =>
+      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
+    )
+
+  let assessments = []
+  if (configured) {
+    const aSnap = await getDocs(collection(db, 'gradebooks', classId, 'assessments'))
+    assessments = aSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  }
+
+  return {
+    configured,
+    periods: gb.periods ?? [],
+    components: gb.components ?? [],
+    mode: gb.grading_mode ?? 'deped_k12',
+    overrides: gb.overrides ?? {},
+    students,
+    assessments,
+  }
+}
+
+/* One student's grade for one period: component breakdown + (transmuted) grade,
+   honouring a manual override. */
+function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
+  const studentScores = {}
+  for (const a of periodAssessments) {
+    const sc = a.scores?.[studentId]
+    if (sc) studentScores[a.id] = sc
+  }
+  const componentsWithA = bundle.components.map((c) => ({
+    ...c,
+    assessments: periodAssessments.filter((a) => a.component_id === c.id),
+  }))
+  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode)
+  const override = bundle.overrides?.[periodId]?.[studentId]
+  return {
+    components: breakdown,
+    period_grade: final,
+    override: override ?? null,
+    grade: override != null ? override : final,
+  }
+}
+
+/* Shape one period's view the way RecordGrid expects it. */
+function buildPeriodRecord(bundle, periodId) {
+  const period = bundle.periods.find((p) => p.id === periodId) ?? bundle.periods[0]
+  const periodAssessments = bundle.assessments.filter((a) => a.period_id === period.id)
+  const scores = {}
+  for (const a of periodAssessments) scores[a.id] = a.scores ?? {}
+  const grades = {}
+  for (const s of bundle.students) {
+    grades[s.student_id] = gradeForPeriod(bundle, periodAssessments, s.student_id, period.id)
+  }
+  return {
+    periods: bundle.periods,
+    period,
+    components: bundle.components,
+    assessments: periodAssessments,
+    scores,
+    students: bundle.students,
+    grades,
+  }
+}
+
+/* Shape the cross-period summary the way SummaryView expects it. */
+function buildSummary(bundle) {
+  const grades = {}
+  for (const s of bundle.students) {
+    const perPeriod = {}
+    const values = {}
+    for (const p of bundle.periods) {
+      const periodAssessments = bundle.assessments.filter((a) => a.period_id === p.id)
+      const g = gradeForPeriod(bundle, periodAssessments, s.student_id, p.id)
+      perPeriod[p.id] = { grade: g.grade, computed: g.period_grade, override: g.override }
+      values[p.id] = g.grade
+    }
+    grades[s.student_id] = {
+      periods: perPeriod,
+      final_grade: finalAcrossPeriods(values, bundle.periods, bundle.mode),
+    }
+  }
+  return { periods: bundle.periods, students: bundle.students, grades }
+}
+
+// ---------------------------------------------------------------- components
+
 function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   const [form, setForm] = useState({
     title: '',
@@ -43,12 +156,23 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
 
   async function submit(e) {
     e.preventDefault()
+    const totalPoints = Number(form.total_points)
+    if (!Number.isFinite(totalPoints) || totalPoints <= 0) {
+      setError('Total points must be a positive number')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      await api(`/api/classes/${classId}/assessments`, {
-        method: 'POST',
-        body: { ...form, grading_period_id: record.period.id },
+      await addDoc(collection(db, 'gradebooks', classId, 'assessments'), {
+        title: form.title.trim(),
+        component_id: form.component_id,
+        period_id: record.period.id,
+        kind: form.kind,
+        total_points: totalPoints,
+        date_given: form.date_given || null,
+        scores: {},
+        created_at: serverTimestamp(),
       })
       onSaved()
     } catch (err) {
@@ -180,40 +304,46 @@ function RecordGrid({ classId, record, refetch }) {
     setSaving(true)
     setError(null)
     try {
+      const batch = writeBatch(db)
+
       for (const [assessmentId, cells] of Object.entries(dirty)) {
         const assessment = record.assessments.find((a) => a.id === assessmentId)
-        const scores = []
+        const updates = {}
         for (const [studentId, text] of Object.entries(cells)) {
           const parsed = parseCell(text, assessment.total_points)
-          if (parsed.error) {
-            throw new Error(`${assessment.title}: ${parsed.error}`)
+          if (parsed.error) throw new Error(`${assessment.title}: ${parsed.error}`)
+          if (parsed.status === 'none') {
+            updates[`scores.${studentId}`] = deleteField()
+          } else if (parsed.status === 'graded') {
+            updates[`scores.${studentId}`] = { status: 'graded', raw_score: parsed.raw_score }
+          } else {
+            updates[`scores.${studentId}`] = { status: parsed.status }
           }
-          scores.push({ student_id: studentId, ...parsed })
         }
-        await api(`/api/classes/${classId}/assessments/${assessmentId}/scores`, {
-          method: 'PUT',
-          body: { scores },
-        })
-      }
-      if (Object.keys(dirtyOverrides).length > 0) {
-        const overrides = []
-        for (const [studentId, text] of Object.entries(dirtyOverrides)) {
-          const value = String(text).trim()
-          if (value === '') {
-            overrides.push({ student_id: studentId, grade: null })
-            continue
-          }
-          const num = Number(value)
-          if (Number.isNaN(num) || num < 0 || num > 100) {
-            throw new Error(`Override must be a number between 0 and 100 (got "${value}")`)
-          }
-          overrides.push({ student_id: studentId, grade: num })
+        if (Object.keys(updates).length) {
+          batch.update(doc(db, 'gradebooks', classId, 'assessments', assessmentId), updates)
         }
-        await api(`/api/classes/${classId}/periods/${record.period.id}/overrides`, {
-          method: 'PUT',
-          body: { overrides },
-        })
       }
+
+      const overrideUpdates = {}
+      for (const [studentId, text] of Object.entries(dirtyOverrides)) {
+        const value = String(text).trim()
+        const path = `overrides.${record.period.id}.${studentId}`
+        if (value === '') {
+          overrideUpdates[path] = deleteField()
+          continue
+        }
+        const num = Number(value)
+        if (Number.isNaN(num) || num < 0 || num > 100) {
+          throw new Error(`Override must be a number between 0 and 100 (got "${value}")`)
+        }
+        overrideUpdates[path] = num
+      }
+      if (Object.keys(overrideUpdates).length) {
+        batch.update(doc(db, 'gradebooks', classId), overrideUpdates)
+      }
+
+      await batch.commit()
       setDirty({})
       setDirtyOverrides({})
       refetch()
@@ -227,7 +357,7 @@ function RecordGrid({ classId, record, refetch }) {
   async function deleteAssessment(assessment) {
     if (!window.confirm(`Delete "${assessment.title}" and all its scores?`)) return
     try {
-      await api(`/api/classes/${classId}/assessments/${assessment.id}`, { method: 'DELETE' })
+      await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', assessment.id))
       setDirty((d) => {
         const next = { ...d }
         delete next[assessment.id]
@@ -240,13 +370,15 @@ function RecordGrid({ classId, record, refetch }) {
   }
 
   async function toggleLock() {
-    const action = locked ? 'unlock' : 'lock'
     const warning = locked
       ? 'Unlock this period? Scores and overrides become editable again.'
       : 'Lock this period? Scores, assessments, and overrides become read-only until unlocked.'
     if (!window.confirm(warning)) return
     try {
-      await api(`/api/classes/${classId}/periods/${record.period.id}/${action}`, { method: 'POST' })
+      const periods = record.periods.map((p) =>
+        p.id === record.period.id ? { ...p, locked: !locked } : p,
+      )
+      await updateDoc(doc(db, 'gradebooks', classId), { periods })
       refetch()
     } catch (err) {
       setError(err.message)
@@ -293,7 +425,7 @@ function RecordGrid({ classId, record, refetch }) {
 
       {locked && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-          This period is locked — grades are final and read-only. Unlock to make changes (audit-logged).
+          This period is locked — grades are final and read-only. Unlock to make changes.
         </p>
       )}
       {error && (
@@ -448,22 +580,14 @@ function RecordGrid({ classId, record, refetch }) {
   )
 }
 
-function SummaryView({ classId }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['final-grades', classId],
-    queryFn: () => api(`/api/classes/${classId}/final-grades`),
-  })
-
-  if (isLoading) return <p className="text-slate-400 mt-6">Computing final grades…</p>
-  if (!data?.configured) return <p className="text-slate-400 mt-6">Grading is not configured.</p>
-
+function SummaryView({ summary }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 mt-4 overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-slate-50 text-left text-slate-500 border-b border-slate-200">
             <th className="px-4 py-2.5 font-medium">Student</th>
-            {data.periods.map((p) => (
+            {summary.periods.map((p) => (
               <th key={p.id} className="px-4 py-2.5 font-medium text-center">
                 {p.name} {p.locked && <span title="Locked">🔒</span>}
                 <span className="block text-xs font-normal text-slate-400">{fmt(p.weight_percent)}%</span>
@@ -473,32 +597,40 @@ function SummaryView({ classId }) {
           </tr>
         </thead>
         <tbody>
-          {data.students.map((student) => {
-            const grades = data.grades[student.student_id]
-            return (
-              <tr key={student.student_id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-2 font-medium text-slate-700 whitespace-nowrap">
-                  {student.last_name}, {student.first_name}
-                </td>
-                {data.periods.map((p) => {
-                  const cell = grades?.periods?.[p.id]
-                  return (
-                    <td
-                      key={p.id}
-                      className="px-4 py-2 text-center text-slate-700"
-                      title={cell?.override != null ? `Overridden (computed: ${fmt(cell?.computed)})` : undefined}
-                    >
-                      {fmt(cell?.grade)}
-                      {cell?.override != null && <span className="text-amber-500">*</span>}
-                    </td>
-                  )
-                })}
-                <td className="px-4 py-2 text-center font-bold text-slate-800">
-                  {fmt(grades?.final_grade)}
-                </td>
-              </tr>
-            )
-          })}
+          {summary.students.length === 0 ? (
+            <tr>
+              <td colSpan={99} className="px-4 py-8 text-center text-slate-400">
+                No students enrolled yet.
+              </td>
+            </tr>
+          ) : (
+            summary.students.map((student) => {
+              const grades = summary.grades[student.student_id]
+              return (
+                <tr key={student.student_id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-2 font-medium text-slate-700 whitespace-nowrap">
+                    {student.last_name}, {student.first_name}
+                  </td>
+                  {summary.periods.map((p) => {
+                    const cell = grades?.periods?.[p.id]
+                    return (
+                      <td
+                        key={p.id}
+                        className="px-4 py-2 text-center text-slate-700"
+                        title={cell?.override != null ? `Overridden (computed: ${fmt(cell?.computed)})` : undefined}
+                      >
+                        {fmt(cell?.grade)}
+                        {cell?.override != null && <span className="text-amber-500">*</span>}
+                      </td>
+                    )
+                  })}
+                  <td className="px-4 py-2 text-center font-bold text-slate-800">
+                    {fmt(grades?.final_grade)}
+                  </td>
+                </tr>
+              )
+            })
+          )}
         </tbody>
       </table>
     </div>
@@ -510,34 +642,21 @@ export default function ClassRecordPage() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState(null) // period id, 'summary', or null = first period
 
-  const { data: classData } = useQuery({
-    queryKey: ['class', classId],
-    queryFn: () => api(`/api/classes/${classId}`),
+  const { data: bundle, isLoading, isError } = useQuery({
+    queryKey: ['fs-record', classId],
+    queryFn: () => loadBundle(classId),
   })
 
-  const periodId = tab === 'summary' ? null : tab
-  const { data: record, isLoading, isError } = useQuery({
-    queryKey: ['record', classId, periodId],
-    queryFn: () =>
-      api(`/api/classes/${classId}/record${periodId ? `?period_id=${periodId}` : ''}`),
-  })
-
-  const refetch = () => {
-    queryClient.invalidateQueries({ queryKey: ['record', classId] })
-    queryClient.invalidateQueries({ queryKey: ['final-grades', classId] })
-  }
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
 
   if (isLoading) return <p className="text-slate-400">Loading class record…</p>
-  if (isError || !record) return <p className="text-red-600">Class not found.</p>
+  if (isError || !bundle) return <p className="text-red-600">Class not found.</p>
 
   return (
     <div>
-      <Link to={`/teacher/classes/${classId}`} className="text-sm text-indigo-600 hover:underline">
-        ← Back to {classData?.class?.name ?? 'class'}
-      </Link>
-      <h2 className="text-2xl font-bold text-slate-800 mt-2">Class Record</h2>
+      <h2 className="text-2xl font-bold text-slate-800">Class Record</h2>
 
-      {!record.configured ? (
+      {!bundle.configured ? (
         <div className="bg-white rounded-xl border border-slate-200 p-10 mt-6 text-center">
           <p className="text-slate-500">
             Set up grading periods and components before recording scores.
@@ -550,43 +669,49 @@ export default function ClassRecordPage() {
           </Link>
         </div>
       ) : (
-        <>
-          <div className="flex gap-1 mt-4 border-b border-slate-200">
-            {record.periods.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setTab(p.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ${
-                  tab !== 'summary' && p.id === record.period.id
-                    ? 'bg-white border-slate-200 text-indigo-700'
-                    : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {p.name} {p.locked && '🔒'}
-              </button>
-            ))}
-            <button
-              onClick={() => setTab('summary')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ml-auto ${
-                tab === 'summary'
-                  ? 'bg-white border-slate-200 text-indigo-700'
-                  : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Summary
-            </button>
-          </div>
-          {tab === 'summary' ? (
-            <SummaryView classId={classId} />
-          ) : (
-            <RecordGrid
-              key={`${classId}-${record.period.id}-${record.period.locked}`}
-              classId={classId}
-              record={record}
-              refetch={refetch}
-            />
-          )}
-        </>
+        (() => {
+          const activePeriodId = tab && tab !== 'summary' ? tab : bundle.periods[0]?.id
+          const record = buildPeriodRecord(bundle, activePeriodId)
+          return (
+            <>
+              <div className="flex gap-1 mt-4 border-b border-slate-200">
+                {bundle.periods.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setTab(p.id)}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ${
+                      tab !== 'summary' && p.id === record.period.id
+                        ? 'bg-white border-slate-200 text-indigo-700'
+                        : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {p.name} {p.locked && '🔒'}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setTab('summary')}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ml-auto ${
+                    tab === 'summary'
+                      ? 'bg-white border-slate-200 text-indigo-700'
+                      : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Summary
+                </button>
+              </div>
+              {tab === 'summary' ? (
+                <SummaryView summary={buildSummary(bundle)} />
+              ) : (
+                <RecordGrid
+                  key={`${classId}-${record.period.id}-${record.period.locked}`}
+                  classId={classId}
+                  record={record}
+                  refetch={refetch}
+                />
+              )}
+            </>
+          )
+        })()
       )}
     </div>
   )

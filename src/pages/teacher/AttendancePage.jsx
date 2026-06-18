@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import { fetchUsersByIds } from '../../lib/roster'
+import { useAuth } from '../../context/useAuth'
 
 const STATUSES = [
   { key: 'present', label: 'Present', short: 'P', active: 'bg-green-600 text-white border-green-600', count: 'text-green-700' },
@@ -14,25 +17,56 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function emptyEntry() {
+  return { status: 'none', remarks: '' }
+}
+
+/* Reusable Present/Late/Absent/Excused button group. */
+function StatusButtons({ status, onToggle }) {
+  return (
+    <div className="flex gap-1">
+      {STATUSES.map((s) => (
+        <button
+          key={s.key}
+          onClick={() => onToggle(s.key)}
+          title={s.label}
+          className={`w-9 h-8 rounded-lg border text-sm font-semibold transition ${
+            status === s.key ? s.active : 'border-slate-200 text-slate-400 hover:border-slate-300'
+          }`}
+        >
+          {s.short}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function AttendanceSheet({ classId, day, sheet, refetch }) {
+  const { profile } = useAuth()
   // dirty: {studentId: {status, remarks}} — status 'none' clears the record
   const [dirty, setDirty] = useState({})
+  // Teacher's own attendance for this date.
+  const [teacher, setTeacher] = useState(sheet.teacher ?? emptyEntry())
+  const [teacherDirty, setTeacherDirty] = useState(false)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
   const current = (sid) => {
     if (dirty[sid]) return dirty[sid]
     const record = sheet.records[sid]
-    return record ? { status: record.status, remarks: record.remarks ?? '' } : { status: 'none', remarks: '' }
+    return record ? { status: record.status, remarks: record.remarks ?? '' } : emptyEntry()
   }
 
-  const setEntry = (sid, entry) => {
-    setDirty((d) => ({ ...d, [sid]: entry }))
-  }
+  const setEntry = (sid, entry) => setDirty((d) => ({ ...d, [sid]: entry }))
 
   const toggle = (sid, status) => {
     const entry = current(sid)
     setEntry(sid, { ...entry, status: entry.status === status ? 'none' : status })
+  }
+
+  const toggleTeacher = (status) => {
+    setTeacher((t) => ({ ...t, status: t.status === status ? 'none' : status }))
+    setTeacherDirty(true)
   }
 
   const markAllPresent = () => {
@@ -45,23 +79,36 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   }
 
   const dirtyCount = Object.keys(dirty).length
+  const hasChanges = dirtyCount > 0 || teacherDirty
 
   async function save() {
     setSaving(true)
     setError(null)
     try {
-      await api(`/api/classes/${classId}/attendance`, {
-        method: 'PUT',
-        body: {
-          date: day,
-          entries: Object.entries(dirty).map(([student_id, entry]) => ({
-            student_id,
-            status: entry.status,
-            remarks: entry.remarks,
-          })),
-        },
+      // Build the complete per-student map (omitting cleared rows), so a full
+      // overwrite correctly drops records the teacher unset.
+      const students = {}
+      for (const s of sheet.students) {
+        const entry = current(s.student_id)
+        if (entry.status && entry.status !== 'none') {
+          students[s.student_id] = { status: entry.status, remarks: entry.remarks || '' }
+        }
+      }
+      const teacherEntry =
+        teacher.status && teacher.status !== 'none'
+          ? { status: teacher.status, remarks: teacher.remarks || '' }
+          : null
+
+      await setDoc(doc(db, 'classes', classId, 'attendance', day), {
+        date: day,
+        class_id: classId,
+        teacher_id: profile.id,
+        students,
+        teacher: teacherEntry,
+        updated_at: serverTimestamp(),
       })
       setDirty({})
+      setTeacherDirty(false)
       refetch()
     } catch (err) {
       setError(err.message)
@@ -81,16 +128,41 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
         </button>
         <button
           onClick={save}
-          disabled={dirtyCount === 0 || saving}
+          disabled={!hasChanges || saving}
           className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
         >
-          {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? '' : 's'}` : 'All saved'}
+          {saving ? 'Saving…' : hasChanges ? 'Save attendance' : 'All saved'}
         </button>
       </div>
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{error}</p>
       )}
+
+      {/* Teacher's own attendance for the session */}
+      <div className="bg-white rounded-xl border border-slate-200 mt-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">My attendance (teacher)</p>
+            <p className="text-xs text-slate-400">
+              {profile.first_name} {profile.last_name} · your status for this session
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <StatusButtons status={teacher.status} onToggle={toggleTeacher} />
+            <input
+              value={teacher.remarks ?? ''}
+              onChange={(e) => {
+                setTeacher((t) => ({ ...t, remarks: e.target.value }))
+                setTeacherDirty(true)
+              }}
+              placeholder="Remarks (optional)"
+              disabled={teacher.status === 'none'}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
+            />
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-slate-200 mt-3 overflow-x-auto">
         <table className="w-full text-sm">
@@ -127,22 +199,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
                       {student.last_name}, {student.first_name}
                     </td>
                     <td className="px-4 py-2">
-                      <div className="flex gap-1">
-                        {STATUSES.map((s) => (
-                          <button
-                            key={s.key}
-                            onClick={() => toggle(sid, s.key)}
-                            title={s.label}
-                            className={`w-9 h-8 rounded-lg border text-sm font-semibold transition ${
-                              entry.status === s.key
-                                ? s.active
-                                : 'border-slate-200 text-slate-400 hover:border-slate-300'
-                            }`}
-                          >
-                            {s.short}
-                          </button>
-                        ))}
-                      </div>
+                      <StatusButtons status={entry.status} onToggle={(status) => toggle(sid, status)} />
                     </td>
                     <td className="px-4 py-2">
                       <input
@@ -177,24 +234,46 @@ export default function AttendancePage() {
   const queryClient = useQueryClient()
   const [day, setDay] = useState(todayIso())
 
-  const { data: classData } = useQuery({
-    queryKey: ['class', classId],
-    queryFn: () => api(`/api/classes/${classId}`),
-  })
-
   const { data: sheet, isLoading, isError } = useQuery({
-    queryKey: ['attendance', classId, day],
-    queryFn: () => api(`/api/classes/${classId}/attendance?date=${day}`),
+    queryKey: ['fs-attendance', classId, day],
+    queryFn: async () => {
+      const classSnap = await getDoc(doc(db, 'classes', classId))
+      if (!classSnap.exists()) throw new Error('Class not found')
+      const studentIds = classSnap.data().student_ids ?? []
+
+      const users = studentIds.length ? await fetchUsersByIds(studentIds) : []
+      const students = users
+        .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
+        .sort((a, b) =>
+          `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
+        )
+
+      // The selected day's records (per-student map + teacher entry).
+      const daySnap = await getDoc(doc(db, 'classes', classId, 'attendance', day))
+      const dayData = daySnap.exists() ? daySnap.data() : {}
+      const records = dayData.students ?? {}
+      const teacher = dayData.teacher ?? null
+
+      // All-time P/L/A/E totals per student, across every recorded date.
+      const allSnap = await getDocs(collection(db, 'classes', classId, 'attendance'))
+      const summary = {}
+      allSnap.forEach((d) => {
+        const map = d.data().students ?? {}
+        for (const [sid, rec] of Object.entries(map)) {
+          summary[sid] ??= { present: 0, late: 0, absent: 0, excused: 0 }
+          if (rec.status in summary[sid]) summary[sid][rec.status] += 1
+        }
+      })
+
+      return { students, records, teacher, summary }
+    },
   })
 
-  const refetch = () => queryClient.invalidateQueries({ queryKey: ['attendance', classId] })
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
 
   return (
     <div className="max-w-4xl">
-      <Link to={`/teacher/classes/${classId}`} className="text-sm text-indigo-600 hover:underline">
-        ← Back to {classData?.class?.name ?? 'class'}
-      </Link>
-      <div className="flex items-center justify-between mt-2">
+      <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Attendance</h2>
         <input
           type="date"
@@ -211,7 +290,7 @@ export default function AttendancePage() {
         <p className="text-red-600 mt-6">Class not found.</p>
       ) : (
         <AttendanceSheet
-          key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
+          key={`${classId}-${day}-${JSON.stringify(sheet.records)}-${JSON.stringify(sheet.teacher)}`}
           classId={classId}
           day={day}
           sheet={sheet}

@@ -47,6 +47,22 @@ export const STATUS_LABELS = {
   mastered: 'Mastered',
 }
 
+// Enrollment state (AC/IN) — distinct from the academic STATUS_LABELS above.
+export const ENROLLMENT_STATUS_LABELS = {
+  AC: 'Active',
+  IN: 'Inactive',
+}
+
+// Roster remarks (CHED-style). Empty string = no remark.
+export const REMARKS_OPTIONS = [
+  'Shiftee',
+  'Transferee',
+  'New',
+  'Old',
+  'Cross-Enrollee',
+  'Returnee',
+]
+
 /** Tiny CSV parser (handles quoted fields with commas). Returns array of rows. */
 export function parseCsv(text) {
   const rows = []

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import RolePlaceholder from './pages/RolePlaceholder'
 import TeacherLayout from './pages/teacher/TeacherLayout'
+import ClassLayout from './pages/teacher/ClassLayout'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import ClassesPage from './pages/teacher/ClassesPage'
@@ -34,18 +35,26 @@ export default function App() {
           <Route index element={<TeacherDashboard />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="classes" element={<ClassesPage />} />
-          <Route path="classes/:classId" element={<ClassDetailPage />} />
-          <Route path="classes/:classId/grading" element={<GradingSetupPage />} />
-          <Route path="classes/:classId/record" element={<ClassRecordPage />} />
-          <Route path="classes/:classId/attendance" element={<AttendancePage />} />
-          <Route path="classes/:classId/syllabus" element={<SyllabusPage />} />
-          <Route path="classes/:classId/quizzes" element={<QuizzesPage />} />
-          <Route path="classes/:classId/quizzes/:quizId" element={<QuizBuilderPage />} />
+
+          {/* A specific class: ClassLayout renders the sub-navbar; the tabs
+              below are its children. Overview (index) shows analytics + roster. */}
+          <Route path="classes/:classId" element={<ClassLayout />}>
+            <Route index element={<ClassDetailPage />} />
+            <Route path="record" element={<ClassRecordPage />} />
+            <Route path="performance" element={<ComingSoon />} />
+            <Route path="attendance" element={<AttendancePage />} />
+            <Route path="syllabus" element={<SyllabusPage />} />
+            <Route path="quizzes" element={<QuizzesPage />} />
+            <Route path="quizzes/:quizId" element={<QuizBuilderPage />} />
+            <Route path="scaffolds" element={<ComingSoon />} />
+            <Route path="grading" element={<GradingSetupPage />} />
+            <Route path="history" element={<ComingSoon />} />
+          </Route>
+
           <Route path="record" element={<RecordIndexPage />} />
           <Route path="attendance" element={<AttendanceIndexPage />} />
           <Route path="syllabus" element={<SyllabusIndexPage />} />
           <Route path="quizzes" element={<QuizzesIndexPage />} />
-          <Route path="scaffolds" element={<ComingSoon />} />
           <Route path="announcements" element={<ComingSoon />} />
           <Route path="reports" element={<ComingSoon />} />
         </Route>

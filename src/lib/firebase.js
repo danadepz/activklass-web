@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,6 +25,8 @@ export const firebaseApp = firebaseConfigured ? initializeApp(firebaseConfig) : 
 export const auth = firebaseConfigured ? getAuth(firebaseApp) : null
 // Firestore is the primary database (see docs/05-prepare-gap-analysis.md).
 export const db = firebaseConfigured ? getFirestore(firebaseApp) : null
+// Cloud Storage holds optional file attachments (e.g. class syllabus uploads).
+export const storage = firebaseConfigured ? getStorage(firebaseApp) : null
 
 // Local development against the Firebase emulator suite
 // (firebase emulators:start). Toggle via VITE_FIREBASE_EMULATOR in .env.local.
@@ -32,4 +35,5 @@ export const usingEmulator =
 if (usingEmulator) {
   connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
   connectFirestoreEmulator(db, 'localhost', 8080)
+  connectStorageEmulator(storage, 'localhost', 9199)
 }

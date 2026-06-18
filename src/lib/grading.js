@@ -29,6 +29,34 @@ export const DEPED_COMPONENT_PRESET = [
   { name: 'Quarterly Assessments', weight_percent: 20 },
 ]
 
+// One-click grading-setup presets (periods + components, each summing to 100%).
+export const GRADING_PRESETS = [
+  {
+    key: 'deped_k12',
+    label: 'DepEd K-12 — 4 Quarters',
+    periods: [
+      { name: 'Quarter 1', weight_percent: 25 },
+      { name: 'Quarter 2', weight_percent: 25 },
+      { name: 'Quarter 3', weight_percent: 25 },
+      { name: 'Quarter 4', weight_percent: 25 },
+    ],
+    components: DEPED_COMPONENT_PRESET,
+  },
+  {
+    key: 'college_terms',
+    label: 'College — Prelim / Midterm / Finals',
+    periods: [
+      { name: 'Prelim', weight_percent: 30 },
+      { name: 'Midterm', weight_percent: 30 },
+      { name: 'Finals', weight_percent: 40 },
+    ],
+    components: [
+      { name: 'Class Standing', weight_percent: 60 },
+      { name: 'Major Exam', weight_percent: 40 },
+    ],
+  },
+]
+
 function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
@@ -141,4 +169,24 @@ export function computeFinalGrade(components, studentScores, mode = 'deped_k12')
 /** Weights must sum to exactly 100 before settings can be saved (§1.7). */
 export function weightsValid(components) {
   return components.reduce((sum, c) => sum + Number(c.weight_percent || 0), 0) === 100
+}
+
+/**
+ * Final grade across grading periods: each period's grade weighted by its
+ * weight_percent, over periods that have a grade. DepEd finals are whole
+ * numbers; CHED modes keep two decimals.
+ */
+export function finalAcrossPeriods(periodGrades, periods, mode = 'deped_k12') {
+  let weighted = 0
+  let weightTotal = 0
+  for (const p of periods) {
+    const g = periodGrades[p.id]
+    if (g != null) {
+      weighted += p.weight_percent * g
+      weightTotal += p.weight_percent
+    }
+  }
+  if (weightTotal === 0) return null
+  const avg = weighted / weightTotal
+  return mode === 'deped_k12' ? Math.round(avg) : round2(avg)
 }

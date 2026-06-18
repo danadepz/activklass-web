@@ -1,10 +1,24 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import { fetchUsersByIds } from '../../lib/roster'
 
 let keyCounter = 0
 const newKey = () => `qk${++keyCounter}`
+const newId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 const TYPE_LABELS = {
   mcq: 'Multiple choice',
@@ -12,6 +26,10 @@ const TYPE_LABELS = {
   matching: 'Matching',
   short_answer: 'Short answer',
   essay: 'Essay',
+}
+
+function sumPoints(questions) {
+  return (questions ?? []).reduce((sum, q) => sum + (Number(q.points) || 0), 0)
 }
 
 function toEditable(question) {
@@ -46,9 +64,9 @@ function blankQuestion() {
 }
 
 function toPayload(q) {
-  const base = { id: q.id, qtype: q.qtype, text: q.text, points: Number(q.points), ai_generated: q.ai_generated }
+  const base = { id: q.id || newId(), qtype: q.qtype, text: q.text, points: Number(q.points), ai_generated: q.ai_generated }
   if (q.qtype === 'mcq') {
-    base.options = q.options.map((o) => ({ id: o.id, text: o.text, is_correct: o.is_correct }))
+    base.options = q.options.map((o) => ({ id: o.id || newId(), text: o.text, is_correct: o.is_correct }))
   } else if (q.qtype === 'true_false') {
     base.answer_key = { value: q.tfValue }
   } else if (q.qtype === 'short_answer') {
@@ -197,87 +215,28 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
   )
 }
 
-function PublishModal({ classId, quizId, onClose, onPublished }) {
-  const { data } = useQuery({
-    queryKey: ['grading-setup', classId],
-    queryFn: () => api(`/api/classes/${classId}/grading-setup`),
-  })
-  const [componentId, setComponentId] = useState('')
-  const [periodId, setPeriodId] = useState('')
-  const [error, setError] = useState(null)
-  const [publishing, setPublishing] = useState(false)
-
-  async function publish(e) {
-    e.preventDefault()
-    setPublishing(true)
-    setError(null)
-    try {
-      await api(`/api/classes/${classId}/quizzes/${quizId}/publish`, {
-        method: 'POST',
-        body: { component_id: componentId, grading_period_id: periodId },
-      })
-      onPublished()
-    } catch (err) {
-      setError(err.message)
-      setPublishing(false)
-    }
-  }
-
-  if (data && !data.configured) {
-    return (
-      <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-        <div className="bg-white rounded-xl p-6 w-full max-w-md text-center">
-          <p className="text-slate-600">Set up grading periods and components before publishing a quiz.</p>
-          <div className="flex gap-3 justify-center mt-4">
-            <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600">Cancel</button>
-            <Link to={`/teacher/classes/${classId}/grading`} className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium">Open Grading Setup</Link>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <form onSubmit={publish} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-        <h3 className="text-lg font-semibold text-slate-800">Publish Quiz</h3>
-        <p className="text-sm text-slate-500">
-          Publishing locks editing, opens the quiz to students, and adds a column to the class record.
-        </p>
-        {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Grading period</span>
-          <select required value={periodId} onChange={(e) => setPeriodId(e.target.value)} className={`${inputCls} w-full mt-1 bg-white`}>
-            <option value="">Choose…</option>
-            {(data?.periods ?? []).filter((p) => !p.locked).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Grade component</span>
-          <select required value={componentId} onChange={(e) => setComponentId(e.target.value)} className={`${inputCls} w-full mt-1 bg-white`}>
-            <option value="">Choose…</option>
-            {(data?.components ?? []).map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.weight_percent}%)</option>
-            ))}
-          </select>
-        </label>
-        <div className="flex gap-3 justify-end pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">Cancel</button>
-          <button type="submit" disabled={publishing} className="rounded-lg bg-green-600 text-white px-4 py-2 font-medium hover:bg-green-700 disabled:opacity-50">
-            {publishing ? 'Publishing…' : 'Publish'}
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
 function ResultsView({ classId, quizId, totalPoints }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['quiz-results', classId, quizId],
-    queryFn: () => api(`/api/classes/${classId}/quizzes/${quizId}/results`),
+    queryKey: ['fs-quiz-results', classId, quizId],
+    queryFn: async () => {
+      const classSnap = await getDoc(doc(db, 'classes', classId))
+      const ids = classSnap.data()?.student_ids ?? []
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      const students = users
+        .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
+        .sort((a, b) =>
+          `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
+        )
+      const attemptsSnap = await getDocs(
+        query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId)),
+      )
+      const attempts = {}
+      attemptsSnap.forEach((d) => {
+        const a = d.data()
+        ;(attempts[a.student_id] ??= []).push(a)
+      })
+      return { students, attempts }
+    },
   })
   if (isLoading) return <p className="text-slate-400 mt-4">Loading results…</p>
 
@@ -295,7 +254,7 @@ function ResultsView({ classId, quizId, totalPoints }) {
         <tbody>
           {data.students.map((s) => {
             const attempts = data.attempts[s.student_id] ?? []
-            const scores = attempts.filter((a) => a.total_score !== null).map((a) => a.total_score)
+            const scores = attempts.filter((a) => a.total_score != null).map((a) => a.total_score)
             const best = scores.length ? Math.max(...scores) : null
             const pendingEssay = attempts.some((a) => a.status === 'submitted')
             return (
@@ -323,8 +282,8 @@ function BuilderForm({ classId, quiz, refetch }) {
     title: quiz.title,
     instructions: quiz.instructions ?? '',
     time_limit_minutes: quiz.time_limit_minutes ?? '',
-    attempts_allowed: quiz.attempts_allowed,
-    shuffle_questions: quiz.shuffle_questions,
+    attempts_allowed: quiz.attempts_allowed ?? 1,
+    shuffle_questions: quiz.shuffle_questions ?? false,
     opens_at: quiz.opens_at?.slice(0, 16) ?? '',
     closes_at: quiz.closes_at?.slice(0, 16) ?? '',
   })
@@ -332,29 +291,34 @@ function BuilderForm({ classId, quiz, refetch }) {
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [showPublish, setShowPublish] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   const set = (key) => (e) =>
     setSettings((s) => ({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0)
 
+  async function persist(extra = {}) {
+    await updateDoc(doc(db, 'quizzes', quiz.id), {
+      title: settings.title,
+      instructions: settings.instructions,
+      time_limit_minutes: settings.time_limit_minutes ? Number(settings.time_limit_minutes) : null,
+      attempts_allowed: Number(settings.attempts_allowed) || 1,
+      shuffle_questions: !!settings.shuffle_questions,
+      opens_at: settings.opens_at || null,
+      closes_at: settings.closes_at || null,
+      questions: questions.map(toPayload),
+      updated_at: serverTimestamp(),
+      ...extra,
+    })
+  }
+
   async function save() {
     setSaving(true)
     setError(null)
     setSaved(false)
     try {
-      await api(`/api/classes/${classId}/quizzes/${quiz.id}`, {
-        method: 'PUT',
-        body: {
-          ...settings,
-          topic_id: quiz.topic_id,
-          opens_at: settings.opens_at || null,
-          closes_at: settings.closes_at || null,
-          time_limit_minutes: settings.time_limit_minutes || null,
-          questions: questions.map(toPayload),
-        },
-      })
+      await persist()
       refetch()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -365,10 +329,29 @@ function BuilderForm({ classId, quiz, refetch }) {
     }
   }
 
+  async function publish() {
+    if (questions.length === 0) return
+    if (
+      !window.confirm(
+        'Publish this quiz? It opens to students and locks editing. (You can close it later.)',
+      )
+    )
+      return
+    setPublishing(true)
+    setError(null)
+    try {
+      await persist({ status: 'published', published_at: serverTimestamp() })
+      refetch()
+    } catch (err) {
+      setError(err.message)
+      setPublishing(false)
+    }
+  }
+
   async function deleteQuiz() {
     if (!window.confirm('Delete this draft quiz?')) return
     try {
-      await api(`/api/classes/${classId}/quizzes/${quiz.id}`, { method: 'DELETE' })
+      await deleteDoc(doc(db, 'quizzes', quiz.id))
       navigate(`/teacher/classes/${classId}/quizzes`)
     } catch (err) {
       setError(err.message)
@@ -447,29 +430,14 @@ function BuilderForm({ classId, quiz, refetch }) {
             {saving ? 'Saving…' : 'Save draft'}
           </button>
           <button
-            onClick={async () => {
-              await save()
-              setShowPublish(true)
-            }}
-            disabled={saving || questions.length === 0}
+            onClick={publish}
+            disabled={saving || publishing || questions.length === 0}
             className="rounded-lg bg-green-600 text-white px-5 py-2 font-medium hover:bg-green-700 disabled:opacity-40"
           >
-            Publish…
+            {publishing ? 'Publishing…' : 'Publish'}
           </button>
         </div>
       </div>
-
-      {showPublish && (
-        <PublishModal
-          classId={classId}
-          quizId={quiz.id}
-          onClose={() => setShowPublish(false)}
-          onPublished={() => {
-            setShowPublish(false)
-            refetch()
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -478,23 +446,33 @@ export default function QuizBuilderPage() {
   const { classId, quizId } = useParams()
   const queryClient = useQueryClient()
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['quiz', classId, quizId],
-    queryFn: () => api(`/api/classes/${classId}/quizzes/${quizId}`),
+  const { data: quiz, isLoading, isError } = useQuery({
+    queryKey: ['fs-quiz', classId, quizId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'quizzes', quizId))
+      if (!snap.exists()) throw new Error('Quiz not found')
+      return { id: snap.id, ...snap.data() }
+    },
   })
 
   const refetch = () => {
-    queryClient.invalidateQueries({ queryKey: ['quiz', classId, quizId] })
-    queryClient.invalidateQueries({ queryKey: ['quizzes', classId] })
-    queryClient.invalidateQueries({ queryKey: ['quiz-results', classId, quizId] })
-    queryClient.invalidateQueries({ queryKey: ['record', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-quiz', classId, quizId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-quizzes', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-quiz-results', classId, quizId] })
+  }
+
+  async function closeQuiz() {
+    if (!window.confirm('Close this quiz? Students will no longer be able to take it.')) return
+    await updateDoc(doc(db, 'quizzes', quizId), { status: 'closed', updated_at: serverTimestamp() })
+    refetch()
   }
 
   if (isLoading) return <p className="text-slate-400">Loading quiz…</p>
-  if (isError || !data) return <p className="text-red-600">Quiz not found.</p>
+  if (isError || !quiz) return <p className="text-red-600">Quiz not found.</p>
 
-  const quiz = data.quiz
   const editable = quiz.status === 'draft'
+  const questionCount = quiz.questions?.length ?? 0
+  const totalPoints = sumPoints(quiz.questions)
 
   return (
     <div>
@@ -508,16 +486,12 @@ export default function QuizBuilderPage() {
             {quiz.generated_by === 'ai_generated' && <span title="AI-generated"> ✨</span>}
           </h2>
           <p className="text-slate-500 mt-1 capitalize">
-            {quiz.status} · {quiz.question_count} questions · {quiz.total_points} pts
+            {quiz.status} · {questionCount} questions · {totalPoints} pts
           </p>
         </div>
         {quiz.status === 'published' && (
           <button
-            onClick={async () => {
-              if (!window.confirm('Close this quiz? Students will no longer be able to take it.')) return
-              await api(`/api/classes/${classId}/quizzes/${quizId}/close`, { method: 'POST' })
-              refetch()
-            }}
+            onClick={closeQuiz}
             className="rounded-lg border border-amber-300 text-amber-700 px-4 py-2 text-sm font-medium hover:bg-amber-50"
           >
             Close quiz
@@ -536,10 +510,10 @@ export default function QuizBuilderPage() {
         </>
       ) : (
         <div className="max-w-3xl">
-          <ResultsView classId={classId} quizId={quizId} totalPoints={quiz.total_points} />
+          <ResultsView classId={classId} quizId={quizId} totalPoints={totalPoints} />
           <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4">
             <h3 className="font-semibold text-slate-700 mb-3">Questions (read-only)</h3>
-            {quiz.questions.map((q, i) => (
+            {(quiz.questions ?? []).map((q, i) => (
               <div key={q.id} className="border-b border-slate-100 last:border-0 py-2">
                 <p className="text-sm text-slate-700">
                   <span className="font-semibold">Q{i + 1}.</span> {q.text}

@@ -1,1 +1,101 @@
 @import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Activklass design tokens (Tailwind v4 CSS-first theme)
+ *
+ * Palette convention used across the app:
+ *   indigo  → primary / brand / actions          (links, buttons, active nav)
+ *   slate   → neutral surfaces & text
+ *   violet  → AI-generated / AI-suggested content (always paired with ✨)
+ *   emerald → success / mastered / saved
+ *   amber   → warning / needs attention
+ *   rose    → danger / destructive / teacher-only risk flags
+ * The full default Tailwind palette is available — these tokens only add
+ * the brand typography and base styling.
+ * ------------------------------------------------------------------ */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Lexend", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-800);
+  }
+
+  /* Headings use the humanist display face; body inherits Inter. */
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Numbers in records, metrics and grade tables stay column-aligned. */
+  th, td {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Landing-page float/pulse decorations (used only by the marketing Landing). */
+@keyframes ak-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes ak-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@keyframes ak-swap {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Marketing/auth text inputs — navy focus ring (the !important overrides the
+   inline base border these fields carry). Used by the Login/Register shell. */
+.ak-input::placeholder { color: #9AA6BD; }
+.ak-input:focus {
+  outline: none;
+  border-color: #0E2A5C !important;
+  box-shadow: 0 0 0 3px rgba(14, 42, 92, 0.1) !important;
+}
+
+/* Primary auth button — lifts on hover, presses on click (the !important
+   overrides the inline base shadow the button carries). */
+.ak-primary { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+.ak-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 #061840, 0 16px 32px -12px rgba(14, 42, 92, 0.55) !important;
+}
+.ak-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #061840, 0 6px 16px -12px rgba(14, 42, 92, 0.5) !important;
+}
+
+/* Teacher portal hover affordances (sidebar nav, cards, quick actions).
+   The !important overrides the inline base colors these elements carry. */
+.ak-nav:hover { background: rgba(255, 255, 255, 0.06) !important; }
+.ak-card-hov { transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
+.ak-card-hov:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px -16px rgba(14, 42, 92, 0.28) !important;
+  border-color: rgba(14, 42, 92, 0.18) !important;
+}
+.ak-action:hover { background: rgba(14, 42, 92, 0.04) !important; }
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
