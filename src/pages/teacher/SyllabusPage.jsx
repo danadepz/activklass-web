@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { api } from '../../lib/api'
 
@@ -73,16 +73,37 @@ function move(list, index, delta) {
   return next
 }
 
-function GenerateModal({ onClose, onDraft }) {
+function GenerateModal({ classMeta, onClose, onDraft }) {
+  const [subjectCode, setSubjectCode] = useState('')
+  const [subjectDesc, setSubjectDesc] = useState(classMeta?.subject ?? '')
+  const [gradeLevel, setGradeLevel] = useState(classMeta?.grade_level ?? '')
+  const [durationWeeks, setDurationWeeks] = useState(10)
+  const [notes, setNotes] = useState('')
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
 
+  const inputCls =
+    'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white w-full'
+
   async function generate() {
+    if (!subjectCode.trim() && !subjectDesc.trim()) {
+      setError('Please provide a subject code or description')
+      return
+    }
     setGenerating(true)
     setError(null)
     try {
-      const canned = await api('/api/syllabus')
-      onDraft(fromCannedSyllabus(canned))
+      const res = await api(`/api/classes/${classMeta.id}/syllabus/generate`, {
+        method: 'POST',
+        body: {
+          subject_code: subjectCode.trim(),
+          subject_description: subjectDesc.trim(),
+          grade_level: gradeLevel.trim() || undefined,
+          duration_weeks: durationWeeks,
+          notes: notes.trim() || undefined,
+        },
+      })
+      onDraft(res.draft)
     } catch (err) {
       setError(err.message)
       setGenerating(false)
@@ -91,16 +112,71 @@ function GenerateModal({ onClose, onDraft }) {
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
-          Loads the DepEd-aligned <strong>Grade 10 Mathematics</strong> starter (Most Essential
-          Learning Competencies) as an editable draft. Review and adjust everything before saving —
-          nothing is stored until you save.
+          Specify your subject details below. The AI will dynamically align the topics to DepEd MELCs (for K-12) or CHED CMO (for college) standards.
         </p>
+
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Subject Code</label>
+            <input
+              type="text"
+              placeholder="e.g. MATH10 or GE-MMW"
+              value={subjectCode}
+              onChange={(e) => setSubjectCode(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Subject Name</label>
+            <input
+              type="text"
+              placeholder="e.g. Mathematics"
+              value={subjectDesc}
+              onChange={(e) => setSubjectDesc(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Grade / Year Level</label>
+            <input
+              type="text"
+              placeholder="e.g. Grade 10"
+              value={gradeLevel}
+              onChange={(e) => setGradeLevel(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Duration (Weeks)</label>
+            <input
+              type="number"
+              min="1"
+              max="40"
+              value={durationWeeks}
+              onChange={(e) => setDurationWeeks(Number(e.target.value))}
+              className={inputCls}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Additional Instructions (Notes)</label>
+          <textarea
+            rows="3"
+            placeholder="e.g. Focus on quadratic equations and sequences..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className={inputCls}
+          />
+        </div>
+
         <div className="flex gap-3 justify-end pt-2">
           <button
             onClick={onClose}
@@ -114,7 +190,7 @@ function GenerateModal({ onClose, onDraft }) {
             disabled={generating}
             className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
           >
-            {generating ? 'Loading…' : 'Load starter'}
+            {generating ? 'Generating draft...' : '✨ Generate'}
           </button>
         </div>
       </div>
@@ -122,10 +198,11 @@ function GenerateModal({ onClose, onDraft }) {
   )
 }
 
-function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
+function SyllabusEditor({ classId, initial, isAiDraft, isNewDraft, onSaved }) {
   const [tree, setTree] = useState(initial)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [isEditing, setIsEditing] = useState(isNewDraft ?? isAiDraft)
 
   const setModules = (modules) => setTree((t) => ({ ...t, modules }))
   const updateModule = (mIdx, patch) =>
@@ -152,15 +229,46 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
             .filter(Boolean),
         })),
       }))
-      await setDoc(doc(db, 'classes', classId, 'syllabus', 'current'), {
+
+      const payload = {
         class_id: classId,
         title: tree.title,
         description: tree.description,
         source: isAiDraft ? 'ai_generated' : tree.source || 'manual',
         modules,
+      }
+
+      // Save to Firestore for direct client queries (like quizzes)
+      await setDoc(doc(db, 'classes', classId, 'syllabus', 'current'), {
+        ...payload,
         updated_at: serverTimestamp(),
       })
-      onSaved()
+
+      // Save to Flask backend database (SQLite) for AI features & sync
+      await api(`/api/classes/${classId}/syllabus`, {
+        method: 'PUT',
+        body: payload,
+      })
+
+      setIsEditing(false)
+      onSaved(payload)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteWholeSyllabus() {
+    if (!window.confirm('Are you sure you want to delete the entire syllabus? This cannot be undone.')) return
+    setSaving(true)
+    setError(null)
+    try {
+      await deleteDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
+      await api(`/api/classes/${classId}/syllabus`, {
+        method: 'DELETE',
+      })
+      onSaved(null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -276,19 +384,43 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
       ))}
 
       <div className="flex items-center justify-between mt-4 pb-8">
-        <button
-          onClick={() => setModules([...tree.modules, emptyModule()])}
-          className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-        >
-          + Add module
-        </button>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save syllabus'}
-        </button>
+        {isEditing ? (
+          <button
+            onClick={() => setModules([...tree.modules, emptyModule()])}
+            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
+          >
+            + Add module
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          {isEditing ? (
+            <>
+              <button
+                onClick={deleteWholeSyllabus}
+                disabled={saving}
+                className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <button
+                onClick={save}
+                disabled={saving}
+                className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="rounded-lg border border-indigo-300 text-indigo-700 px-5 py-2 font-medium hover:bg-indigo-50"
+            >
+              ✏️ Edit
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -318,9 +450,9 @@ export default function SyllabusPage() {
 
   if (isLoading) return <p className="text-slate-400">Loading syllabus…</p>
 
-  const onSaved = () => {
+  const onSaved = (newSyllabus) => {
+    queryClient.setQueryData(['fs-syllabus', classId], newSyllabus)
     setDraft(null)
-    queryClient.invalidateQueries({ queryKey: ['fs-syllabus', classId] })
     setEditorKey((k) => k + 1)
   }
 
@@ -364,6 +496,7 @@ export default function SyllabusPage() {
           classId={classId}
           initial={initial}
           isAiDraft={draft?.ai ?? false}
+          isNewDraft={!!draft}
           onSaved={onSaved}
         />
       ) : (
@@ -397,6 +530,7 @@ export default function SyllabusPage() {
 
       {showGenerate && (
         <GenerateModal
+          classMeta={clazz}
           onClose={() => setShowGenerate(false)}
           onDraft={(d) => {
             setShowGenerate(false)

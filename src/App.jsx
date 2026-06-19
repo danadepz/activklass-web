@@ -21,6 +21,7 @@ import QuizzesPage from './pages/teacher/QuizzesPage'
 import QuizBuilderPage from './pages/teacher/QuizBuilderPage'
 import QuizzesIndexPage from './pages/teacher/QuizzesIndexPage'
 import ComingSoon from './pages/teacher/ComingSoon'
+import AnnouncementsPage from './pages/teacher/AnnouncementsPage'
 
 export default function App() {
   return (
@@ -33,7 +34,7 @@ export default function App() {
       <Route element={<ProtectedRoute roles={['teacher']} />}>
         <Route path="/teacher" element={<TeacherLayout />}>
           <Route index element={<TeacherDashboard />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="analytics" element={<Navigate to="/teacher/classes" replace />} />
           <Route path="classes" element={<ClassesPage />} />
 
           {/* A specific class: ClassLayout renders the sub-navbar; the tabs
@@ -55,7 +56,7 @@ export default function App() {
           <Route path="attendance" element={<AttendanceIndexPage />} />
           <Route path="syllabus" element={<SyllabusIndexPage />} />
           <Route path="quizzes" element={<QuizzesIndexPage />} />
-          <Route path="announcements" element={<ComingSoon />} />
+          <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="reports" element={<ComingSoon />} />
         </Route>
       </Route>

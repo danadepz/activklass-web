@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -9,8 +9,13 @@ import {
   getDoc,
   updateDoc,
   writeBatch,
+  collection,
+  getDocs,
+  query,
+  where,
 } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
+import { api } from '../../lib/api'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -28,6 +33,9 @@ const STATUS_STYLE = {
 }
 
 const ENROLLMENT_STYLE = {
+  enrolled: 'bg-green-50 text-green-700',
+  invited: 'bg-amber-50 text-amber-700',
+  dropped: 'bg-slate-100 text-slate-500',
   AC: 'bg-green-50 text-green-700',
   IN: 'bg-slate-100 text-slate-500',
 }
@@ -377,7 +385,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
    enrollment_status. Matches registered students by email; preview first. */
 function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const fileRef = useRef(null)
-  const [preview, setPreview] = useState(null) // { matched: [], unmatched: [] }
+  const [preview, setPreview] = useState(null) // { students: [] }
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -391,10 +399,9 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
       const header = rows[0].map((h) => h.trim().toLowerCase())
       const col = (name) => header.indexOf(name)
       if (col('email') === -1) {
-        throw new Error('CSV must have an "email" column (expected: first_name,last_name,email,lrn,birthdate)')
+        throw new Error('CSV must have an "email" column (expected: email, first_name, last_name)')
       }
-      const matched = []
-      const unmatched = []
+      const students = []
       for (const row of rows.slice(1)) {
         const cell = (name) => (col(name) === -1 ? '' : row[col(name)]?.trim() ?? '')
         const entry = {
@@ -410,15 +417,11 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           remarks: cell('remarks'),
           enrollment_status: cell('enrollment_status'),
         }
-        if (!entry.email) continue
-        const student = await findStudentByEmail(entry.email)
-        if (student) {
-          matched.push({ ...entry, uid: student.id, already: enrolledIds.includes(student.id) })
-        } else {
-          unmatched.push(entry)
+        if (entry.email) {
+          students.push(entry)
         }
       }
-      setPreview({ matched, unmatched })
+      setPreview({ students })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -430,31 +433,10 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
     setBusy(true)
     setError(null)
     try {
-      const incoming = preview.matched.filter((m) => !m.already).length
-      if (maxStudents > 0 && enrolledIds.length + incoming > maxStudents) {
-        throw new Error(
-          `Importing ${incoming} student${incoming === 1 ? '' : 's'} would exceed the class max of ${maxStudents}.`,
-        )
-      }
-      const batch = writeBatch(db)
-      const newIds = []
-      for (const m of preview.matched) {
-        const patch = {}
-        for (const key of ['lrn', 'student_number', 'middle_name', 'course', 'year_level', 'remarks']) {
-          if (m[key]) patch[key] = m[key]
-        }
-        if (m.enrollment_status) patch.enrollment_status = m.enrollment_status.toUpperCase()
-        if (m.birthdate) {
-          patch.birthdate = m.birthdate
-          patch.age = ageFromBirthdate(m.birthdate)
-        }
-        if (Object.keys(patch).length) batch.update(doc(db, 'users', m.uid), patch)
-        if (!m.already) newIds.push(m.uid)
-      }
-      if (newIds.length) {
-        batch.update(doc(db, 'classes', classId), { student_ids: arrayUnion(...newIds) })
-      }
-      await batch.commit()
+      await api(`/api/classes/${classId}/students/provision`, {
+        method: 'POST',
+        body: { students: preview.students }
+      })
       onDone()
     } catch (err) {
       setError(err.message)
@@ -469,7 +451,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
         <p className="text-sm text-slate-500">
           Required header: <code className="bg-slate-100 px-1 rounded text-xs">email</code>. Optional columns:{' '}
           <code className="bg-slate-100 px-1 rounded text-xs">first_name,last_name,lrn,birthdate,student_number,middle_name,course,year_level,remarks,enrollment_status</code>.
-          Students must already have Activklass accounts — rows are matched by email.
+          Students without Activklass accounts will be invited and automatically enrolled when they register.
         </p>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
@@ -482,40 +464,26 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:px-4 file:py-2 file:font-medium hover:file:bg-indigo-100"
         />
-        {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
+        {busy && !preview && <p className="text-sm text-slate-400">Processing roster…</p>}
 
         {preview && (
           <>
-            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 text-sm">
-              {preview.matched.map((m) => (
-                <div key={m.uid} className="px-3 py-2 flex justify-between">
+            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 text-sm max-h-60 overflow-y-auto">
+              {preview.students.map((s, idx) => (
+                <div key={idx} className="px-3 py-2 flex justify-between">
                   <span className="text-slate-700">
-                    {m.last_name || m.first_name ? `${m.last_name}, ${m.first_name}` : m.email}
+                    {s.last_name || s.first_name ? `${s.last_name}, ${s.first_name}` : s.email}
                   </span>
-                  <span className={m.already ? 'text-slate-400' : 'text-green-600 font-medium'}>
-                    {m.already ? 'already enrolled — will update info' : 'will enroll'}
-                  </span>
-                </div>
-              ))}
-              {preview.unmatched.map((u, i) => (
-                <div key={`u-${i}`} className="px-3 py-2 flex justify-between">
-                  <span className="text-slate-700">{u.email}</span>
-                  <span className="text-red-500 font-medium">no account — skipped</span>
+                  <span className="text-indigo-600 font-medium">will import/invite</span>
                 </div>
               ))}
             </div>
-            {preview.unmatched.length > 0 && (
-              <p className="text-xs text-amber-600">
-                {preview.unmatched.length} student{preview.unmatched.length === 1 ? '' : 's'} have no
-                Activklass account yet — ask them to register, then re-upload.
-              </p>
-            )}
             <button
               onClick={commit}
-              disabled={busy || preview.matched.length === 0}
+              disabled={busy || preview.students.length === 0}
               className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-40"
             >
-              {busy ? 'Importing…' : `Import ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'}`}
+              {busy ? 'Importing…' : `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}`}
             </button>
           </>
         )}
@@ -528,6 +496,36 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
   )
 }
 
+const FAIL_BELOW = 0.6
+const MASTERY_AT = 0.75
+const ALERT_FAIL_RATE = 0.4
+
+function RiskBarChart({ highRisk, onTrack }) {
+  const max = Math.max(highRisk, onTrack, 1)
+  const bars = [
+    { label: 'High Risk of Remediation', count: highRisk, color: 'bg-red-500' },
+    { label: 'On-Track', count: onTrack, color: 'bg-green-500' },
+  ]
+  return (
+    <div className="space-y-3">
+      {bars.map((bar) => (
+        <div key={bar.label}>
+          <div className="flex justify-between text-sm text-slate-600 mb-1">
+            <span>{bar.label}</span>
+            <span className="font-semibold">{bar.count}</span>
+          </div>
+          <div className="h-6 bg-slate-100 rounded overflow-hidden">
+            <div
+              className={`h-6 rounded transition-all duration-500 ${bar.color}`}
+              style={{ width: `${(bar.count / max) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function ClassDetailPage() {
   const { classId } = useParams()
   const navigate = useNavigate()
@@ -536,24 +534,148 @@ export default function ClassDetailPage() {
   const [error, setError] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['fs-class', classId],
+    queryKey: ['class-detail', classId],
     queryFn: async () => {
-      const snap = await getDoc(doc(db, 'classes', classId))
-      if (!snap.exists()) throw new Error('Class not found')
-      const clazz = { id: snap.id, ...snap.data() }
-      const students = clazz.student_ids?.length
-        ? await fetchUsersByIds(clazz.student_ids)
-        : []
-      students.sort((a, b) =>
-        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
-      )
-      return { clazz, students }
+      const res = await api(`/api/classes/${classId}`)
+      return {
+        clazz: res.class,
+        students: res.students,
+        summary: res.roster_summary,
+      }
     },
   })
 
+  const { data: attempts } = useQuery({
+    queryKey: ['fs-quiz-attempts', classId],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'quiz_attempts'), where('class_id', '==', classId)),
+      )
+      return snap.docs.map((d) => d.data())
+    },
+  })
+
+  const { data: gradeEntries } = useQuery({
+    queryKey: ['fs-grade-entries', classId],
+    queryFn: async () => {
+      const snap = await getDocs(collection(db, 'gradebooks', classId, 'entries'))
+      return snap.docs.map((d) => d.data())
+    },
+  })
+
+  const { data: syllabus } = useQuery({
+    queryKey: ['syllabus'],
+    queryFn: () => api('/api/syllabus', { requireAuth: false }),
+  })
+
+  const { data: attendanceData } = useQuery({
+    queryKey: ['attendance-summary', classId],
+    queryFn: () => api(`/api/classes/${classId}/attendance`),
+  })
+
+  const studentAverages = useMemo(() => {
+    const byStudent = {}
+    for (const a of attempts ?? []) {
+      ;(byStudent[a.student_id] ??= []).push(a.score_ratio)
+    }
+    return Object.fromEntries(
+      Object.entries(byStudent).map(([sid, ratios]) => [
+        sid,
+        (ratios.reduce((s, r) => s + r, 0) / ratios.length) * 100,
+      ]),
+    )
+  }, [attempts])
+
+  const attendanceRates = useMemo(() => {
+    if (!attendanceData?.summary) return {}
+    return Object.fromEntries(
+      Object.entries(attendanceData.summary).map(([sid, counts]) => {
+        const p = counts.present ?? 0
+        const l = counts.late ?? 0
+        const e = counts.excused ?? 0
+        const a = counts.absent ?? 0
+        const total = p + l + e + a
+        return [sid, total > 0 ? (p + l + e) / total : 0.92]
+      })
+    )
+  }, [attendanceData])
+
+  const { data: prediction } = useQuery({
+    queryKey: ['predict', classId, Object.keys(studentAverages).length, Object.keys(attendanceRates).length],
+    enabled: !!data?.students?.length,
+    queryFn: () => {
+      const studentsPayload = data.students
+        .filter((s) => s.student_id)
+        .map((s) => {
+          const sid = s.student_id
+          const indicators = {}
+          if (studentAverages[sid] != null) {
+            indicators.quiz_average = studentAverages[sid]
+          }
+          if (attendanceRates[sid] != null) {
+            indicators.attendance_rate = attendanceRates[sid]
+          }
+          return {
+            student_id: sid,
+            indicators,
+          }
+        })
+      if (studentsPayload.length === 0) return { results: [] }
+      return api('/api/predict', {
+        method: 'POST',
+        body: { students: studentsPayload },
+      })
+    },
+  })
+
+  const stats = useMemo(() => {
+    const grades = (gradeEntries ?? [])
+      .map((e) => e.final_grade)
+      .filter((g) => g != null)
+    const classAverage = grades.length
+      ? (grades.reduce((s, g) => s + g, 0) / grades.length).toFixed(1)
+      : '—'
+
+    const allAttempts = attempts ?? []
+    const masteryRate = allAttempts.length
+      ? Math.round(
+          (allAttempts.filter((a) => a.score_ratio >= MASTERY_AT).length /
+            allAttempts.length) * 100,
+        )
+      : null
+
+    const byModule = {}
+    for (const a of allAttempts) {
+      if (!a.module_id) continue
+      const m = (byModule[a.module_id] ??= { total: 0, failed: 0 })
+      m.total += 1
+      if (a.score_ratio < FAIL_BELOW) m.failed += 1
+    }
+    const moduleTitle = (id) =>
+      syllabus?.modules?.find((m) => m.id === id)?.title ?? id
+    const alerts = Object.entries(byModule)
+      .map(([id, { total, failed }]) => ({
+        moduleId: id,
+        title: moduleTitle(id),
+        failRate: failed / total,
+        total,
+      }))
+      .filter((m) => m.failRate > ALERT_FAIL_RATE)
+      .sort((a, b) => b.failRate - a.failRate)
+
+    const leastMastered = alerts[0] ?? null
+    const results = prediction?.results ?? []
+    const highRisk = results.filter((r) => r.risk_flag === 'high_risk').length
+
+    const predictionMap = Object.fromEntries(
+      results.map((r) => [r.student_id, r])
+    )
+
+    return { classAverage, masteryRate, alerts, leastMastered, highRisk, results, predictionMap }
+  }, [gradeEntries, attempts, syllabus, prediction])
+
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['fs-class', classId] })
-    queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+    queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
     setModal(null)
   }
 
@@ -570,31 +692,76 @@ export default function ClassDetailPage() {
   if (isLoading) return <p className="text-slate-400">Loading roster…</p>
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
-  const { clazz, students } = data
-  const acCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
+  const { clazz, students, summary } = data
 
   return (
     <div>
       {/* Analytics: quick stats for this class */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-400">Students</p>
-          <p className="text-2xl font-bold text-slate-800">{students.length}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500 font-medium">Class Average Grade</p>
+          <p className="text-3xl font-bold text-slate-800 mt-1">{stats.classAverage}</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-400">Active (AC)</p>
-          <p className="text-2xl font-bold text-green-700">{acCount}</p>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500 font-medium">Mastery Rate %</p>
+          <p className="text-3xl font-bold text-slate-800 mt-1">
+            {stats.masteryRate != null ? `${stats.masteryRate}%` : '—'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">attempts scoring ≥ {MASTERY_AT * 100}%</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-400">Inactive (IN)</p>
-          <p className="text-2xl font-bold text-slate-500">{students.length - acCount}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-400">Capacity</p>
-          <p className="text-2xl font-bold text-slate-800">
-            {clazz.max_students ? `${students.length} / ${clazz.max_students}` : '—'}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500 font-medium">Least-Mastered Skill</p>
+          <p className="text-xl font-bold text-slate-800 mt-1 truncate" title={stats.leastMastered ? stats.leastMastered.title : 'None'}>
+            {stats.leastMastered ? stats.leastMastered.title : 'None'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {stats.leastMastered
+              ? `${Math.round(stats.leastMastered.failRate * 100)}% fail rate`
+              : 'no module above threshold'}
           </p>
         </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <p className="text-sm text-slate-500 font-medium">At-Risk Students</p>
+          <p className="text-3xl font-bold text-red-600 mt-1">
+            {stats.results.length ? stats.highRisk : '—'}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {stats.results.length ? `out of ${stats.results.length} active students` : 'no active students'}
+          </p>
+        </div>
+      </div>
+
+      {/* Module fail rate warnings */}
+      {stats.alerts.map((alert) => (
+        <div
+          key={alert.moduleId}
+          className={`mt-4 rounded-xl border p-4 text-sm font-medium ${
+            alert.failRate >= 0.6
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+          }`}
+        >
+          ⚠ Warning: {alert.title} has a fail rate of {Math.round(alert.failRate * 100)}%
+          ({alert.total} attempts). Consider assigning a remediation quiz.
+        </div>
+      ))}
+
+      {/* Predictive risk bar chart */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4">
+        <h3 className="font-semibold text-slate-800">Predictive Remediation Risk</h3>
+        <p className="text-xs text-slate-400 mt-0.5 mb-4">
+          Random Forest classification from quiz performance and demographic indicators (via <code>/api/predict</code>).
+        </p>
+        {stats.results.length ? (
+          <RiskBarChart
+            highRisk={stats.highRisk}
+            onTrack={stats.results.length - stats.highRisk}
+          />
+        ) : (
+          <p className="text-sm text-slate-400">
+            No active students in this class yet, or the AI service is offline.
+          </p>
+        )}
       </div>
 
       {clazz.syllabus_file && (
@@ -653,6 +820,7 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-medium">Remarks</th>
                 <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
                 <th className="px-5 py-2.5 font-medium">Progress</th>
+                <th className="px-5 py-2.5 font-medium">Remediation Risk</th>
                 <th className="px-5 py-2.5" />
               </tr>
             </thead>
@@ -661,8 +829,15 @@ export default function ClassDetailPage() {
                 const status = s.status ?? 'active'
                 const enrollment = s.enrollment_status ?? 'AC'
                 const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
+                const ENROLLMENT_STATUS_LABELS_NEW = {
+                  enrolled: 'Active',
+                  invited: 'Invited',
+                  dropped: 'Inactive',
+                  AC: 'Active',
+                  IN: 'Inactive',
+                }
                 return (
-                  <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <tr key={s.id || s.email} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
                     <td className="px-5 py-3 text-slate-600 font-mono text-xs">{s.student_number ?? '—'}</td>
                     <td className="px-5 py-3">
                       <p className="font-medium text-slate-700">
@@ -675,21 +850,40 @@ export default function ClassDetailPage() {
                     <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
                     <td className="px-5 py-3 text-center">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ENROLLMENT_STYLE[enrollment]}`}>
-                        {enrollment}
+                        {ENROLLMENT_STATUS_LABELS_NEW[enrollment] || enrollment}
                       </span>
                     </td>
                     <td className="px-5 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
-                        {STATUS_LABELS[status]}
+                        {STATUS_LABELS[status] || status}
                       </span>
                     </td>
+                    <td className="px-5 py-3">
+                      {s.student_id && stats.predictionMap[s.student_id] ? (
+                        stats.predictionMap[s.student_id].risk_flag === 'high_risk' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                            ⚠ High Risk ({Math.round(stats.predictionMap[s.student_id].risk_probability * 100)}%)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                            On-Track
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => setModal(s)}
-                        className="text-indigo-600 hover:underline text-xs font-medium"
-                      >
-                        Edit
-                      </button>
+                      {s.id ? (
+                        <button
+                          onClick={() => setModal(s)}
+                          className="text-indigo-600 hover:underline text-xs font-medium"
+                        >
+                          Edit
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Invited</span>
+                      )}
                     </td>
                   </tr>
                 )

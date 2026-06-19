@@ -33,7 +33,7 @@ const QUICK_ACTIONS = [
   { to: '/teacher/classes', label: 'New class', hint: 'Add a section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
   { to: '/teacher/attendance', label: 'Take attendance', hint: "Mark today's sheet", Icon: CalendarCheck, bg: 'rgba(63,169,245,0.14)', color: blueText },
   { to: '/teacher/quizzes', label: 'Create a quiz', hint: 'Build or AI-generate', Icon: FileText, bg: 'rgba(245,197,24,0.2)', color: goldDeep },
-  { to: '/teacher/analytics', label: 'View analytics', hint: 'Risk & mastery', Icon: BarChart, bg: 'rgba(14,42,92,0.08)', color: navy },
+  { to: '/teacher/classes', label: 'Class Analytics', hint: 'Select a class section', Icon: BarChart, bg: 'rgba(14,42,92,0.08)', color: navy },
 ]
 
 // Compact class badge, e.g. "MATH10" -> "M10", "ENG" -> "ENG".
@@ -142,11 +142,11 @@ export default function TeacherDashboard() {
           </p>
         </div>
         <Link
-          to="/teacher/analytics"
+          to="/teacher/classes"
           className="inline-flex shrink-0 items-center gap-2 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
           style={{ padding: '11px 18px', fontSize: 14, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, textDecoration: 'none', boxShadow: '0 2px 0 rgba(14,42,92,0.05)' }}
         >
-          Overall analytics
+          Go to Classes
           <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
             <ArrowRight className="h-3 w-3" />
           </span>
@@ -253,7 +253,7 @@ export default function TeacherDashboard() {
             <div className="flex flex-col gap-2.5">
               {QUICK_ACTIONS.map(({ to, label, hint, Icon, bg, color }) => (
                 <Link
-                  key={to}
+                  key={label}
                   to={to}
                   className="ak-action flex items-center gap-3.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
                   style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 13, padding: '15px 18px', textDecoration: 'none' }}
