@@ -6,7 +6,7 @@ import { emptyClassForm } from '../../lib/classForm'
 import { useAuth } from '../../context/useAuth'
 
 const inputCls =
-  'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40'
 
 const MAX_SYLLABUS_BYTES = 10 * 1024 * 1024
 const ALLOWED_SYLLABUS_TYPES = [
@@ -144,8 +144,9 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">
           {mode === 'edit' ? 'Edit Class' : 'New Class'}
         </h3>
@@ -194,7 +195,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {currentSyllabusFile && !syllabusFile && (
             <p className="text-xs text-slate-500 mt-1">
               Current:{' '}
-              <a href={currentSyllabusFile.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+              <a href={currentSyllabusFile.url} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: '#0E2A5C' }}>
                 {currentSyllabusFile.name}
               </a>{' '}
               — choose a file to replace it.
@@ -205,12 +206,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             type="file"
             accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={handleFile}
-            className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:px-4 file:py-2 file:font-medium hover:file:bg-indigo-100"
+            className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
           />
           {syllabusFile ? (
             <p className="text-xs text-slate-500 mt-1">
               Attached: {syllabusFile.name} ({Math.ceil(syllabusFile.size / 1024)} KB) ·{' '}
-              <button type="button" onClick={clearFile} className="text-indigo-600 hover:underline">
+              <button type="button" onClick={clearFile} className="hover:underline" style={{ color: '#0E2A5C' }}>
                 remove
               </button>
             </p>
@@ -230,12 +231,14 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+            style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
           >
             {saving ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create class'}
           </button>
         </div>
       </form>
+      </div>
     </div>
   )
 }

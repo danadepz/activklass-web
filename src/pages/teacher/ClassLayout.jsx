@@ -42,7 +42,20 @@ export default function ClassLayout() {
 
   return (
     <div>
-      <Link to="/teacher/classes" className="text-sm text-indigo-600 hover:underline">
+      <Link
+        to="/teacher/classes"
+        className="inline-flex items-center gap-1.5 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#0E2A5C',
+          background: 'rgba(14,42,92,0.07)',
+          border: '1px solid rgba(14,42,92,0.14)',
+          borderRadius: 8,
+          padding: '6px 12px',
+          textDecoration: 'none',
+        }}
+      >
         ← My Classes
       </Link>
 
@@ -60,7 +73,7 @@ export default function ClassLayout() {
             onClick={() => setShowEdit(true)}
             className="shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            ✎ Edit class
+            Edit Class
           </button>
         )}
       </div>
@@ -74,7 +87,7 @@ export default function ClassLayout() {
         </p>
       )}
 
-      <nav className="mt-4 border-b border-slate-200 flex gap-1 overflow-x-auto">
+      <nav className="mt-4 border-b border-slate-200 flex gap-1 flex-wrap">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to || 'overview'}
@@ -83,7 +96,7 @@ export default function ClassLayout() {
             className={({ isActive }) =>
               `whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
                 isActive
-                  ? 'border-indigo-600 text-indigo-700'
+                  ? 'border-[#F5C518] text-[#0E2A5C]'
                   : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`
             }

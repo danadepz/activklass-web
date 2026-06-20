@@ -90,7 +90,8 @@ function GenerateModal({ onClose, onDraft }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
@@ -112,11 +113,13 @@ function GenerateModal({ onClose, onDraft }) {
           <button
             onClick={generate}
             disabled={generating}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+            style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
           >
             {generating ? 'Loading…' : 'Load starter'}
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
@@ -169,7 +172,7 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl mx-auto">
       {isAiDraft && (
         <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-4">
           ✨ AI-generated draft — review and edit below, then save. Nothing is stored until you save.
@@ -331,8 +334,8 @@ export default function SyllabusPage() {
       : null
 
   return (
-    <div>
-      <div className="flex items-start justify-between max-w-3xl">
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Syllabus</h2>
           <p className="text-slate-500 mt-1">
@@ -341,7 +344,7 @@ export default function SyllabusPage() {
         </div>
         <button
           onClick={() => setShowGenerate(true)}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+          className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
         >
           ✨ Generate with AI
         </button>
@@ -387,7 +390,7 @@ export default function SyllabusPage() {
             </button>
             <button
               onClick={() => setShowGenerate(true)}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
+              className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
               ✨ Generate with AI
             </button>

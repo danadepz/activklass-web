@@ -242,7 +242,7 @@ function GradingSetupForm({ classId, setup }) {
   })
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl mx-auto">
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Grading Setup</h2>
@@ -253,7 +253,7 @@ function GradingSetupForm({ classId, setup }) {
         <button
           onClick={() => save.mutate()}
           disabled={save.isPending}
-          className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-lg px-5 py-2 font-medium transition hover:brightness-110 disabled:opacity-50" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
         >
           {save.isPending ? 'Saving…' : 'Save setup'}
         </button>

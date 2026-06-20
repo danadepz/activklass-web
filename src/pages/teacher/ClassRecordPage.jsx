@@ -182,7 +182,8 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
       <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">
           New Assessment — {record.period.name}
@@ -197,7 +198,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
             placeholder="e.g. Quiz 1 — Fractions"
             value={form.title}
             onChange={set('title')}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
           />
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -206,7 +207,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
             <select
               value={form.component_id}
               onChange={set('component_id')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             >
               {record.components.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -218,7 +219,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
             <select
               value={form.kind}
               onChange={set('kind')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white capitalize focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white capitalize focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             >
               {KIND_OPTIONS.map((k) => (
                 <option key={k} value={k}>{k}</option>
@@ -236,7 +237,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
               step="0.5"
               value={form.total_points}
               onChange={set('total_points')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             />
           </label>
           <label className="block">
@@ -245,7 +246,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
               type="date"
               value={form.date_given}
               onChange={set('date_given')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             />
           </label>
         </div>
@@ -260,12 +261,14 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+            style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
           >
             {saving ? 'Adding…' : 'Add assessment'}
           </button>
         </div>
       </form>
+      </div>
     </div>
   )
 }
@@ -407,14 +410,16 @@ function RecordGrid({ classId, record, refetch }) {
             <>
               <button
                 onClick={() => setShowAdd(true)}
-                className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50"
+                style={{ borderColor: 'rgba(14,42,92,0.2)', color: '#0E2A5C' }}
               >
-                + Add assessment
+                Add assessment
               </button>
               <button
                 onClick={saveAll}
                 disabled={dirtyCount === 0 || saving}
-                className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-40"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
               >
                 {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? '' : 's'}` : 'All saved'}
               </button>
@@ -477,7 +482,7 @@ function RecordGrid({ classId, record, refetch }) {
                     <span className="text-xs text-slate-400 font-normal">/{fmt(a.total_points)}</span>
                   </th>
                 )),
-                <th key={`${component.id}-pct`} className="px-2 py-1.5 border-b border-r border-slate-200 text-xs font-semibold text-indigo-600 min-w-14">
+                <th key={`${component.id}-pct`} className="px-2 py-1.5 border-b border-r border-slate-200 text-xs font-semibold min-w-14" style={{ color: '#0E2A5C' }}>
                   %
                 </th>,
               ])}
@@ -488,7 +493,7 @@ function RecordGrid({ classId, record, refetch }) {
               <tr>
                 <td colSpan={99} className="px-4 py-8 text-center text-slate-400">
                   No students enrolled yet —{' '}
-                  <Link to={`/teacher/classes/${classId}`} className="text-indigo-600 hover:underline">
+                  <Link to={`/teacher/classes/${classId}`} className="hover:underline" style={{ color: '#0E2A5C' }}>
                     add students to the roster
                   </Link>
                   .
@@ -512,7 +517,7 @@ function RecordGrid({ classId, record, refetch }) {
                               value={getCell(a.id, student.student_id)}
                               onChange={(e) => setCell(a.id, student.student_id, e.target.value)}
                               disabled={locked}
-                              className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 ${
+                              className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 disabled:bg-slate-50 disabled:text-slate-500 ${
                                 isDirty ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
                               }`}
                             />
@@ -521,7 +526,7 @@ function RecordGrid({ classId, record, refetch }) {
                       }),
                       <td
                         key={`${component.id}-pct`}
-                        className="px-2 py-1 text-center text-indigo-700 font-medium border-r border-slate-200"
+                        className="px-2 py-1 text-center font-medium border-r border-slate-200" style={{ color: '#0E2A5C' }}
                       >
                         {fmt(grade?.components?.[component.id])}
                       </td>,
@@ -535,7 +540,7 @@ function RecordGrid({ classId, record, refetch }) {
                         disabled={locked}
                         placeholder="—"
                         title="Type a grade (0–100) to override the computed grade; clear to restore"
-                        className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 ${
+                        className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 disabled:bg-slate-50 disabled:text-slate-500 ${
                           overrideDirty ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
                         }`}
                       />
@@ -663,7 +668,8 @@ export default function ClassRecordPage() {
           </p>
           <Link
             to={`/teacher/classes/${classId}/grading`}
-            className="inline-block mt-3 rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
+            className="inline-block mt-3 rounded-lg px-4 py-2 font-medium transition hover:brightness-110"
+            style={{ background: '#0E2A5C', color: '#FAFAF6' }}
           >
             Open Grading Setup
           </Link>
@@ -681,7 +687,7 @@ export default function ClassRecordPage() {
                     onClick={() => setTab(p.id)}
                     className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ${
                       tab !== 'summary' && p.id === record.period.id
-                        ? 'bg-white border-slate-200 text-indigo-700'
+                        ? 'bg-white border-slate-200 text-[#0E2A5C]'
                         : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
                     }`}
                   >
@@ -692,7 +698,7 @@ export default function ClassRecordPage() {
                   onClick={() => setTab('summary')}
                   className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ml-auto ${
                     tab === 'summary'
-                      ? 'bg-white border-slate-200 text-indigo-700'
+                      ? 'bg-white border-slate-200 text-[#0E2A5C]'
                       : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
                   }`}
                 >

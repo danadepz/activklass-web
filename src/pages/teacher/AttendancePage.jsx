@@ -129,7 +129,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
         <button
           onClick={save}
           disabled={!hasChanges || saving}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+          className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-40" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
         >
           {saving ? 'Saving…' : hasChanges ? 'Save attendance' : 'All saved'}
         </button>
@@ -272,7 +272,7 @@ export default function AttendancePage() {
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Attendance</h2>
         <input

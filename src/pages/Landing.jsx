@@ -5,7 +5,7 @@ import { ArrowRight, Sparkles, Check } from '../components/icons'
  * Landing — marketing page for Activklass.
  *
  * This page deliberately uses its own navy + gold + cream brand
- * identity (DM Serif Display / Plus Jakarta Sans / JetBrains Mono),
+ * identity (Lexend / Plus Jakarta Sans / JetBrains Mono),
  * distinct from the indigo product UI. The palette lives here as inline
  * styles because the values are bespoke to this page; structural layout
  * stays in Tailwind so the page is responsive. The ak-float / ak-pulse
@@ -22,7 +22,7 @@ const slate = '#3A4A6B'
 const muted = '#6A7A95'
 const line = 'rgba(14,42,92,0.08)'
 
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
 // --- content -------------------------------------------------------------

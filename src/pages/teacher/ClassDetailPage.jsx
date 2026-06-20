@@ -4,9 +4,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   arrayRemove,
   arrayUnion,
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
@@ -33,7 +35,7 @@ const ENROLLMENT_STYLE = {
 }
 
 const inputCls =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40'
 
 const EMPTY_STUDENT_FIELDS = {
   student_number: '',
@@ -169,14 +171,17 @@ function StudentFields({ fields, setFields }) {
   )
 }
 
-/* Add a registered student by email; lets the teacher fill in roster details. */
+/* Add a registered student by email, or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
-  const [email, setEmail] = useState('')
-  const [student, setStudent] = useState(null)
-  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
+  const [tab, setTab] = useState('find') // 'find' | 'create'
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
+
+  // --- Find existing ---
+  const [email, setEmail] = useState('')
+  const [student, setStudent] = useState(null)
+  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
 
   async function lookup(e) {
     e.preventDefault()
@@ -186,9 +191,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     try {
       const found = await findStudentByEmail(email)
       if (!found) {
-        setError(
-          'No registered student account with that email. Ask the student to sign up first (Register → "I am a Student"), then add them here.',
-        )
+        setError('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
       } else if (enrolledIds.includes(found.id)) {
         setError('That student is already in this class.')
       } else {
@@ -212,15 +215,11 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   }
 
   async function enroll() {
-    if (isFull) {
-      setError(`This class is full (max ${maxStudents} students).`)
-      return
-    }
+    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
     setError(null)
     try {
-      const patch = { status: student.status ?? 'active', ...rosterPatch(fields) }
-      await updateDoc(doc(db, 'users', student.id), patch)
+      await updateDoc(doc(db, 'users', student.id), { status: student.status ?? 'active', ...rosterPatch(fields) })
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
       onDone()
     } catch (err) {
@@ -229,10 +228,69 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     }
   }
 
+  // --- Create new ---
+  const [newFirst, setNewFirst] = useState('')
+  const [newLast, setNewLast] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newFields, setNewFields] = useState(EMPTY_STUDENT_FIELDS)
+
+  async function createStudent(e) {
+    e.preventDefault()
+    if (!newFirst.trim() || !newLast.trim()) { setError('First name and last name are required.'); return }
+    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
+    setBusy(true)
+    setError(null)
+    try {
+      const newRef = doc(collection(db, 'users'))
+      await setDoc(newRef, {
+        id: newRef.id,
+        first_name: newFirst.trim(),
+        last_name: newLast.trim(),
+        email: newEmail.trim().toLowerCase() || null,
+        role: 'student',
+        status: 'active',
+        ...rosterPatch(newFields),
+      })
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(newRef.id) })
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  const tabBtn = (id, label) => (
+    <button
+      type="button"
+      onClick={() => { setTab(id); setError(null) }}
+      style={{
+        flex: 1,
+        padding: '8px 0',
+        fontSize: 13,
+        fontWeight: 600,
+        border: 'none',
+        borderBottom: tab === id ? '2px solid #0E2A5C' : '2px solid transparent',
+        background: 'transparent',
+        color: tab === id ? '#0E2A5C' : '#6A7A95',
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  )
+
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
+
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
+          {tabBtn('find', 'Find Registered Student')}
+          {tabBtn('create', 'Create New Manually')}
+        </div>
+
         {isFull && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             This class has reached its maximum of {maxStudents} students.
@@ -241,51 +299,94 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
-        <form onSubmit={lookup} className="flex gap-2">
-          <input
-            type="email"
-            required
-            placeholder="student@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={`${inputCls} flex-1`}
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50 disabled:opacity-50"
-          >
-            Find
-          </button>
-        </form>
 
-        {student && (
-          <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-            <p className="font-medium text-slate-800">
-              {student.last_name}, {student.first_name}
-              <span className="text-slate-400 font-normal"> · {student.email}</span>
+        {tab === 'find' ? (
+          <>
+            <form onSubmit={lookup} className="flex gap-2">
+              <input
+                type="email"
+                required
+                placeholder="student@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${inputCls} flex-1`}
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+              >
+                Find
+              </button>
+            </form>
+            {student && (
+              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                <p className="font-medium text-slate-800">
+                  {student.last_name}, {student.first_name}
+                  <span className="text-slate-400 font-normal"> · {student.email}</span>
+                </p>
+                <StudentFields fields={fields} setFields={setFields} />
+                <button
+                  onClick={enroll}
+                  disabled={busy || isFull}
+                  className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+                  style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+                >
+                  {busy ? 'Adding…' : 'Add to class'}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <form onSubmit={createStudent} className="space-y-3">
+            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              Creates a student record directly — no login account needed. The student can link their account later by signing up with the same email.
             </p>
-            <StudentFields fields={fields} setFields={setFields} />
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
+                <input required value={newFirst} onChange={(e) => setNewFirst(e.target.value)} className={`${inputCls} w-full mt-1`} />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
+                <input required value={newLast} onChange={(e) => setNewLast(e.target.value)} className={`${inputCls} w-full mt-1`} />
+              </label>
+            </div>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Email <span className="text-slate-400 font-normal">(optional)</span></span>
+              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="student@email.com" className={`${inputCls} w-full mt-1`} />
+            </label>
+            <StudentFields fields={newFields} setFields={setNewFields} />
             <button
-              onClick={enroll}
+              type="submit"
               disabled={busy || isFull}
-              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
             >
-              {busy ? 'Adding…' : 'Add to class'}
+              {busy ? 'Creating…' : 'Create & add to class'}
             </button>
-          </div>
+          </form>
         )}
 
-        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+        <button
+          onClick={onClose}
+          className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+        >
           Close
         </button>
+      </div>
       </div>
     </div>
   )
 }
 
 /* Edit roster fields on one student (rules allow teachers to maintain these). */
+// 2026-06-20: Added first_name and last_name fields so teachers can correct student names
 function EditStudentModal({ student, classId, onClose, onDone }) {
+  // 2026-06-20: Name state — editable first and last name
+  const [firstName, setFirstName] = useState(student.first_name ?? '')
+  const [lastName, setLastName] = useState(student.last_name ?? '')
   const [fields, setFields] = useState({
     student_number: student.student_number ?? '',
     middle_name: student.middle_name ?? '',
@@ -301,10 +402,20 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   const [busy, setBusy] = useState(false)
 
   async function save() {
+    // 2026-06-20: Validate and save edited name alongside all other roster fields
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await updateDoc(doc(db, 'users', student.id), { status, ...rosterPatch(fields) })
+      await updateDoc(doc(db, 'users', student.id), {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        status,
+        ...rosterPatch(fields),
+      })
       onDone()
     } catch (err) {
       setError(err.message)
@@ -325,14 +436,32 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">
-          {student.last_name}, {student.first_name}
-        </h3>
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Edit Student</h3>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
+        {/* 2026-06-20: Name fields — teachers can now correct first and last name */}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
+        </div>
         <StudentFields fields={fields} setFields={setFields} />
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Academic progress</span>
@@ -361,12 +490,14 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
             <button
               onClick={save}
               disabled={busy}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
               {busy ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
@@ -463,14 +594,47 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster (CSV)</h3>
-        <p className="text-sm text-slate-500">
-          Required header: <code className="bg-slate-100 px-1 rounded text-xs">email</code>. Optional columns:{' '}
-          <code className="bg-slate-100 px-1 rounded text-xs">first_name,last_name,lrn,birthdate,student_number,middle_name,course,year_level,remarks,enrollment_status</code>.
-          Students must already have Activklass accounts — rows are matched by email.
-        </p>
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster</h3>
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
+          <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
+            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — required, matches each student to their Activklass account</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — student full name</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">lrn</code>, <code className="bg-slate-100 px-1 rounded text-xs">birthdate</code>, <code className="bg-slate-100 px-1 rounded text-xs">student_number</code></li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">course</code>, <code className="bg-slate-100 px-1 rounded text-xs">year_level</code>, <code className="bg-slate-100 px-1 rounded text-xs">middle_name</code></li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
+          </ul>
+          <p className="text-xs text-slate-400">Rows without a matching account are skipped — ask those students to register first, then re-upload.</p>
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-left text-slate-500">
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">email</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">first_name</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">last_name</th>
+                  <th className="px-3 py-2 font-medium border-b border-slate-200">lrn</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="text-slate-600">
+                  <td className="px-3 py-1.5 border-r border-slate-200">juan@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Juan</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Dela Cruz</td>
+                  <td className="px-3 py-1.5">123456789012</td>
+                </tr>
+                <tr className="text-slate-600 bg-slate-50/60">
+                  <td className="px-3 py-1.5 border-r border-slate-200">maria@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Maria</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Santos</td>
+                  <td className="px-3 py-1.5">987654321098</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
@@ -480,7 +644,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           type="file"
           accept=".csv,text/csv"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:px-4 file:py-2 file:font-medium hover:file:bg-indigo-100"
+          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
         />
         {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
 
@@ -513,7 +677,8 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
             <button
               onClick={commit}
               disabled={busy || preview.matched.length === 0}
-              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-40"
+              className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
               {busy ? 'Importing…' : `Import ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'}`}
             </button>
@@ -523,6 +688,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
         <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
           Close
         </button>
+      </div>
       </div>
     </div>
   )
@@ -534,6 +700,9 @@ export default function ClassDetailPage() {
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
   const [error, setError] = useState(null)
+  const [rosterSearch, setRosterSearch] = useState('')
+  const [rosterFilter, setRosterFilter] = useState('all')
+  const [rosterSort, setRosterSort] = useState('az')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['fs-class', classId],
@@ -567,11 +736,45 @@ export default function ClassDetailPage() {
     }
   }
 
+  // 2026-06-20: Quick remove from table row — does not open the edit modal
+  async function handleRemoveStudent(s) {
+    if (!window.confirm(`Remove ${s.first_name} ${s.last_name} from this class? Their student account is kept.`)) return
+    try {
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(s.id) })
+      queryClient.invalidateQueries({ queryKey: ['fs-class', classId] })
+      queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   if (isLoading) return <p className="text-slate-400">Loading roster…</p>
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
   const { clazz, students } = data
   const acCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
+
+  const filteredStudents = students
+    .filter((s) => {
+      const name = `${s.last_name ?? ''} ${s.first_name ?? ''}`.toLowerCase()
+      const matchSearch = !rosterSearch ||
+        name.includes(rosterSearch.toLowerCase()) ||
+        (s.email ?? '').toLowerCase().includes(rosterSearch.toLowerCase())
+      const enroll = s.enrollment_status ?? 'AC'
+      const prog = s.status ?? 'active'
+      const matchFilter =
+        rosterFilter === 'all' ||
+        (rosterFilter === 'AC' && enroll === 'AC') ||
+        (rosterFilter === 'IN' && enroll === 'IN') ||
+        (rosterFilter === 'needs_remediation' && prog === 'needs_remediation') ||
+        (rosterFilter === 'mastered' && prog === 'mastered')
+      return matchSearch && matchFilter
+    })
+    .sort((a, b) => {
+      const nameA = `${a.last_name ?? ''} ${a.first_name ?? ''}`.toLowerCase()
+      const nameB = `${b.last_name ?? ''} ${b.first_name ?? ''}`.toLowerCase()
+      return rosterSort === 'az' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+    })
 
   return (
     <div>
@@ -602,7 +805,8 @@ export default function ClassDetailPage() {
           href={clazz.syllabus_file.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:border-indigo-300"
+          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:border-slate-300"
+          style={{ color: '#0E2A5C' }}
         >
           📄 Syllabus file: {clazz.syllabus_file.name}
         </a>
@@ -613,36 +817,68 @@ export default function ClassDetailPage() {
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 mt-6 overflow-x-auto">
-        <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold text-slate-800">
-            Roster <span className="text-sm font-normal text-slate-400">· {students.length} student{students.length === 1 ? '' : 's'}</span>
-          </h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setModal('csv')}
-              className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
+        <div className="px-5 py-4 border-b border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="font-semibold text-slate-800">
+              Roster <span className="text-sm font-normal text-slate-400">· {students.length} student{students.length === 1 ? '' : 's'}</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModal('csv')}
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50" style={{ borderColor: 'rgba(14,42,92,0.2)', color: '#0E2A5C' }}
+              >
+                Bulk Upload
+              </button>
+              <button
+                onClick={() => setModal('add')}
+                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+              >
+                Add Student
+              </button>
+              <button
+                onClick={deleteClass}
+                title="Delete class"
+                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search by name or email…"
+              value={rosterSearch}
+              onChange={(e) => setRosterSearch(e.target.value)}
+              className="flex-1 min-w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
+            />
+            <select
+              value={rosterFilter}
+              onChange={(e) => setRosterFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             >
-              ⇪ Bulk Upload CSV
-            </button>
-            <button
-              onClick={() => setModal('add')}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
+              <option value="all">All students</option>
+              <option value="AC">Active (AC)</option>
+              <option value="IN">Inactive (IN)</option>
+              <option value="needs_remediation">Needs Remediation</option>
+              <option value="mastered">Mastered</option>
+            </select>
+            <select
+              value={rosterSort}
+              onChange={(e) => setRosterSort(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             >
-              + Add Student
-            </button>
-            <button
-              onClick={deleteClass}
-              title="Delete class"
-              className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
-            >
-              Delete
-            </button>
+              <option value="az">A → Z</option>
+              <option value="za">Z → A</option>
+            </select>
           </div>
         </div>
         {students.length === 0 ? (
           <p className="p-8 text-center text-slate-400">
             No students yet. Add them by email or upload a CSV roster.
           </p>
+        ) : filteredStudents.length === 0 ? (
+          <p className="p-8 text-center text-slate-400">No students match your search or filter.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -653,11 +889,12 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-medium">Remarks</th>
                 <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
                 <th className="px-5 py-2.5 font-medium">Progress</th>
-                <th className="px-5 py-2.5" />
+                {/* 2026-06-20: Actions column header — Edit and Remove per row */}
+                <th className="px-5 py-2.5 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {students.map((s) => {
+              {filteredStudents.map((s) => {
                 const status = s.status ?? 'active'
                 const enrollment = s.enrollment_status ?? 'AC'
                 const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
@@ -683,13 +920,23 @@ export default function ClassDetailPage() {
                         {STATUS_LABELS[status]}
                       </span>
                     </td>
+                    {/* 2026-06-20: Edit opens modal with name + roster fields; Remove immediately removes from class */}
                     <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => setModal(s)}
-                        className="text-indigo-600 hover:underline text-xs font-medium"
-                      >
-                        Edit
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => setModal(s)}
+                          className="text-xs font-medium hover:underline"
+                          style={{ color: '#0E2A5C' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleRemoveStudent(s)}
+                          className="text-xs font-medium hover:underline text-red-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
