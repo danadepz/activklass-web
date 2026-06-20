@@ -12,11 +12,6 @@ import ClassesPage from './pages/teacher/ClassesPage'
 import ClassDetailPage from './pages/teacher/ClassDetailPage'
 import GradingSetupPage from './pages/teacher/GradingSetupPage'
 import ClassRecordPage from './pages/teacher/ClassRecordPage'
-import PerformancePage from './pages/teacher/PerformancePage'
-import ScaffoldTopicsPage from './pages/teacher/ScaffoldTopicsPage'
-import HistoryPage from './pages/teacher/HistoryPage'
-import AnnouncementsPage from './pages/teacher/AnnouncementsPage'
-import ReportsPage from './pages/teacher/ReportsPage'
 import RecordIndexPage from './pages/teacher/RecordIndexPage'
 import AttendancePage from './pages/teacher/AttendancePage'
 import AttendanceIndexPage from './pages/teacher/AttendanceIndexPage'
@@ -25,6 +20,8 @@ import SyllabusIndexPage from './pages/teacher/SyllabusIndexPage'
 import QuizzesPage from './pages/teacher/QuizzesPage'
 import QuizBuilderPage from './pages/teacher/QuizBuilderPage'
 import QuizzesIndexPage from './pages/teacher/QuizzesIndexPage'
+import ComingSoon from './pages/teacher/ComingSoon'
+import AnnouncementsPage from './pages/teacher/AnnouncementsPage'
 
 export default function App() {
   return (
@@ -37,7 +34,7 @@ export default function App() {
       <Route element={<ProtectedRoute roles={['teacher']} />}>
         <Route path="/teacher" element={<TeacherLayout />}>
           <Route index element={<TeacherDashboard />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="analytics" element={<Navigate to="/teacher/classes" replace />} />
           <Route path="classes" element={<ClassesPage />} />
 
           {/* A specific class: ClassLayout renders the sub-navbar; the tabs
@@ -45,14 +42,14 @@ export default function App() {
           <Route path="classes/:classId" element={<ClassLayout />}>
             <Route index element={<ClassDetailPage />} />
             <Route path="record" element={<ClassRecordPage />} />
-            <Route path="performance" element={<PerformancePage />} />
+            <Route path="performance" element={<ComingSoon />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="syllabus" element={<SyllabusPage />} />
             <Route path="quizzes" element={<QuizzesPage />} />
             <Route path="quizzes/:quizId" element={<QuizBuilderPage />} />
-            <Route path="scaffolds" element={<ScaffoldTopicsPage />} />
+            <Route path="scaffolds" element={<ComingSoon />} />
             <Route path="grading" element={<GradingSetupPage />} />
-            <Route path="history" element={<HistoryPage />} />
+            <Route path="history" element={<ComingSoon />} />
           </Route>
 
           <Route path="record" element={<RecordIndexPage />} />
@@ -60,7 +57,7 @@ export default function App() {
           <Route path="syllabus" element={<SyllabusIndexPage />} />
           <Route path="quizzes" element={<QuizzesIndexPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
-          <Route path="reports" element={<ReportsPage />} />
+          <Route path="reports" element={<ComingSoon />} />
         </Route>
       </Route>
 

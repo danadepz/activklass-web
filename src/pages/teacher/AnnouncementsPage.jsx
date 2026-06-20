@@ -1,266 +1,472 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { useAuth } from '../../context/useAuth'
-import { Plus, Megaphone, Trash, Send, X, Clock } from '../../components/icons'
+import { api } from '../../lib/api'
 
+/* ─── Design tokens (matching TeacherLayout) ─── */
 const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
 const gold = '#F5C518'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+const cream = '#FAFAF6'
+const sans = "'Plus Jakarta Sans', system-ui, sans-serif"
 
-const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
-const fieldStyle = {
-  width: '100%', padding: '12px 14px', fontSize: 14, fontFamily: sans, color: ink,
-  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10,
-  transition: 'border-color 0.15s, box-shadow 0.15s',
+/* ─── Category config ─── */
+const CATEGORIES = [
+  { value: 'general',  label: 'General',  color: '#3B82F6', bg: '#EFF6FF', dot: '#3B82F6' },
+  { value: 'reminder', label: 'Reminder', color: '#D97706', bg: '#FFFBEB', dot: '#F59E0B' },
+  { value: 'urgent',   label: 'Urgent',   color: '#DC2626', bg: '#FEF2F2', dot: '#EF4444' },
+]
+const catMap = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
+
+/* ─── Helpers ─── */
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins  = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days  = Math.floor(diff / 86400000)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-function toDate(ts) {
-  if (!ts) return null
-  if (typeof ts.toDate === 'function') return ts.toDate()
-  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000)
-  return null
+function ExpiryBadge({ iso }) {
+  if (!iso) return null
+  const d = new Date(iso)
+  const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return (
+    <span style={{ fontSize: 11, background: '#F1F5F9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+      Expires {label}
+    </span>
+  )
 }
 
-function fmtDate(ts) {
-  const d = toDate(ts)
-  if (!d) return 'Just now'
-  let h = d.getHours()
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  h = h % 12 || 12
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} at ${h}:${mm} ${ampm}`
+/* ─── Empty state ─── */
+function EmptyState({ filtered }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '64px 32px', color: '#94A3B8' }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>📢</div>
+      <div style={{ fontWeight: 700, fontSize: 16, color: '#64748B', marginBottom: 8 }}>
+        {filtered ? 'No announcements for this class' : 'No announcements yet'}
+      </div>
+      <div style={{ fontSize: 13 }}>
+        {filtered
+          ? 'Switch to "All Classes" or create a new one.'
+          : 'Use the form above to post your first announcement.'}
+      </div>
+    </div>
+  )
 }
 
-const classLabel = (c) => `${c.subject_code ? `${c.subject_code} · ` : ''}${c.section}`
-
-function PostModal({ classes, profile, onClose, onPosted }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [audience, setAudience] = useState('All Classes')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-  const valid = title.trim() && body.trim()
-
-  async function post() {
-    if (!valid || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      const cls = classes.find((c) => classLabel(c) === audience)
-      await addDoc(collection(db, 'announcements'), {
-        teacher_id: profile.id,
-        title: title.trim(),
-        body: body.trim(),
-        audience,
-        class_id: cls?.id ?? null,
-        created_at: serverTimestamp(),
-      })
-      onPosted()
-    } catch (err) {
-      setError(err.message)
-      setBusy(false)
-    }
-  }
+/* ─── Announcement Card ─── */
+function AnnouncementCard({ item, onDelete, deleting }) {
+  const [expanded, setExpanded] = useState(false)
+  const cat = catMap[item.category] ?? catMap.general
+  const isLong = item.content.length > 160
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
-        <div style={{ padding: '22px 28px 18px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <span style={{ width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-            <Megaphone className="h-[18px] w-[18px]" />
+    <div
+      style={{
+        background: '#fff',
+        borderRadius: 14,
+        border: '1px solid #E2E8F0',
+        overflow: 'hidden',
+        transition: 'box-shadow .15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.07)'}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+    >
+      {/* category stripe */}
+      <div style={{ height: 4, background: cat.color }} />
+
+      <div style={{ padding: '18px 20px' }}>
+        {/* header row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+          {/* category pill */}
+          <span style={{
+            flexShrink: 0,
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            background: cat.bg,
+            color: cat.color,
+            borderRadius: 20,
+            padding: '3px 10px',
+            marginTop: 2,
+          }}>
+            {cat.label}
           </span>
-          <h2 style={{ ...serif, fontSize: 24, margin: 0, color: ink, flex: 1 }}>Post Announcement</h2>
-          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, borderRadius: 8, background: 'transparent', border: 'none', color: faint, cursor: 'pointer' }}>
-            <X className="h-[18px] w-[18px]" />
-          </button>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A', lineHeight: 1.3 }}>
+              {item.title}
+            </div>
+            {item.class_id === null && (
+              <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+                📣 All classes
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: '#94A3B8', whiteSpace: 'nowrap' }}>
+              {timeAgo(item.created_at)}
+            </span>
+            <button
+              onClick={() => onDelete(item.id)}
+              disabled={deleting}
+              title="Delete announcement"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: deleting ? 'not-allowed' : 'pointer',
+                color: '#94A3B8',
+                padding: 4,
+                borderRadius: 6,
+                lineHeight: 1,
+                fontSize: 16,
+                transition: 'color .15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+              onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+            >
+              ✕
+            </button>
+          </div>
         </div>
-        <div style={{ padding: '22px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
-          {error && (
-            <div role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</div>
-          )}
-          <div>
-            <label style={labelStyle}>Title</label>
-            <input className="ak-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Midterm Exam Schedule Released" style={fieldStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Message</label>
-            <textarea className="ak-input" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your announcement…" rows={4} style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.55 }} />
-          </div>
-          <div>
-            <label style={labelStyle}>Send to</label>
-            <select className="ak-input" value={audience} onChange={(e) => setAudience(e.target.value)} style={{ ...fieldStyle, fontWeight: 600, cursor: 'pointer' }}>
-              <option>All Classes</option>
-              {classes.map((c) => (
-                <option key={c.id} value={classLabel(c)}>{classLabel(c)}</option>
-              ))}
-            </select>
-          </div>
+
+        {/* content */}
+        <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.65, marginBottom: 10 }}>
+          {isLong && !expanded
+            ? item.content.slice(0, 160) + '…'
+            : item.content}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
-          <button onClick={onClose} style={{ padding: '12px 22px', fontSize: 14, fontWeight: 600, fontFamily: sans, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
-            Cancel
-          </button>
+        {isLong && (
           <button
-            onClick={post}
-            disabled={!valid || busy}
-            className={valid && !busy ? 'transition hover:brightness-110' : ''}
-            style={{
-              flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, padding: '12px 22px',
-              fontSize: 14, fontWeight: 700, fontFamily: sans, border: 'none', borderRadius: 10,
-              ...(valid && !busy
-                ? { color: '#FAFAF6', background: navy, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }
-                : { color: 'rgba(250,250,246,0.85)', background: '#9DB0CE', cursor: 'not-allowed', boxShadow: 'none' }),
-            }}
+            onClick={() => setExpanded(v => !v)}
+            style={{ background: 'none', border: 'none', color: '#3B82F6', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: 10 }}
           >
-            <Send className="h-4 w-4" />
-            {busy ? 'Posting…' : 'Post Announcement'}
+            {expanded ? 'Show less ▲' : 'Read more ▼'}
           </button>
+        )}
+
+        {/* footer */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <ExpiryBadge iso={item.expires_at} />
+          {item.linked_resource_type && (
+            <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+              🔗 {item.linked_resource_type}
+            </span>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
+/* ─── Main Page ─── */
 export default function AnnouncementsPage() {
   const { profile } = useAuth()
-  const queryClient = useQueryClient()
-  const [showPost, setShowPost] = useState(false)
-  const [error, setError] = useState(null)
+  const qc = useQueryClient()
 
-  const { data: rows, isLoading } = useQuery({
-    queryKey: ['fs-announcements', profile.id],
-    queryFn: async () => {
-      const snap = await getDocs(query(collection(db, 'announcements'), where('teacher_id', '==', profile.id)))
-      return snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.created_at?.seconds ?? Infinity) - (a.created_at?.seconds ?? Infinity))
-    },
+  /* filter state */
+  const [filterCat, setFilterCat] = useState('all')
+
+  /* form state */
+  const [form, setForm] = useState({
+    title: '',
+    content: '',
+    category: 'general',
+    class_id: '',      // '' = global
+    expires_at: '',
+    linked_resource_type: '',
+    linked_resource_id: '',
   })
+  const [formErr, setFormErr] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
 
-  const { data: classes } = useQuery({
+  /* ── fetch classes from Firestore (same source as ClassesPage) ── */
+  const { data: classes = [] } = useQuery({
     queryKey: ['fs-classes', profile.id],
     queryFn: async () => {
-      const snap = await getDocs(query(collection(db, 'classes'), where('teacher_id', '==', profile.id)))
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      const snap = await getDocs(
+        query(collection(db, 'classes'), where('teacher_id', '==', profile.id))
+      )
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
     },
   })
 
-  const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-announcements', profile.id] })
+  /* ── fetch announcements ── */
+  const { data: announcements = [], isLoading } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: () => api('/api/announcements'),
+  })
 
-  async function remove(id) {
+  /* ── create ── */
+  const createMut = useMutation({
+    mutationFn: (body) => api('/api/announcements', { method: 'POST', body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] })
+      setForm({ title: '', content: '', category: 'general', class_id: '', expires_at: '', linked_resource_type: '', linked_resource_id: '' })
+      setFormErr('')
+    },
+    onError: (e) => setFormErr(e.message ?? 'Failed to post announcement'),
+  })
+
+  /* ── delete ── */
+  const deleteMut = useMutation({
+    mutationFn: (id) => api(`/api/announcements/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+    onError: () => setDeletingId(null),
+    onSettled: () => setDeletingId(null),
+  })
+
+  function handleDelete(id) {
     if (!window.confirm('Delete this announcement?')) return
-    try {
-      await deleteDoc(doc(db, 'announcements', id))
-      refetch()
-    } catch (err) {
-      setError(err.message)
-    }
+    setDeletingId(id)
+    deleteMut.mutate(id)
   }
 
-  const list = rows ?? []
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.title.trim() || !form.content.trim()) {
+      setFormErr('Title and content are required.')
+      return
+    }
+    const body = {
+      title: form.title.trim(),
+      content: form.content.trim(),
+      category: form.category,
+      class_id: form.class_id || null,
+      expires_at: form.expires_at || null,
+      linked_resource_type: form.linked_resource_type || null,
+      linked_resource_id: form.linked_resource_id || null,
+    }
+    createMut.mutate(body)
+  }
+
+  /* ── filtered list ── */
+  const filtered = announcements.filter(a =>
+    filterCat === 'all' || a.category === filterCat
+  )
+
+  /* ── styles ── */
+  const labelStyle = { fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
+  const inputStyle = { width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', padding: '10px 14px', fontSize: 14, fontFamily: sans, color: '#0F172A', outline: 'none', boxSizing: 'border-box', background: '#FAFAFA' }
+  const selectStyle = { ...inputStyle, cursor: 'pointer' }
 
   return (
-    <div>
-      <div className="mb-[30px] flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[clamp(30px,4vw,40px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
-            Announcements
-          </h1>
-          <p style={{ fontSize: 15, color: muted, margin: 0 }}>Post updates to your classes and keep students in the loop.</p>
-        </div>
-        <button
-          onClick={() => setShowPost(true)}
-          className="inline-flex items-center gap-2.5 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
-          style={{ padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
-        >
-          <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
-            <Plus className="h-3 w-3" />
-          </span>
-          New Announcement
-        </button>
+    <div style={{ fontFamily: sans, maxWidth: 900, margin: '0 auto' }}>
+      {/* ── Page header ── */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: navy, margin: 0 }}>Announcements</h1>
+        <p style={{ fontSize: 14, color: '#64748B', marginTop: 6 }}>
+          Post updates, reminders, or urgent notices to all your classes or a specific section.
+        </p>
       </div>
 
-      {error && (
-        <p role="alert" className="mb-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', maxWidth: 920 }}>{error}</p>
-      )}
-
-      {!isLoading && list.length > 0 && (
-        <div className="mb-[22px] flex items-center gap-[18px]">
-          <div className="inline-flex items-center gap-2.5" style={{ fontSize: 13, fontWeight: 600, color: muted }}>
-            <span style={{ display: 'inline-grid', placeItems: 'center', width: 30, height: 30, borderRadius: 8, background: 'rgba(14,42,92,0.07)', color: navy }}>
-              <Megaphone className="h-[15px] w-[15px]" />
-            </span>
-            <span><strong style={{ color: ink }}>{list.length}</strong> posted</span>
-          </div>
-          <div style={{ width: 1, height: 18, background: 'rgba(14,42,92,0.12)' }} />
-          <div style={{ fontSize: 13, color: faint }}>Last update {fmtDate(list[0].created_at)}</div>
+      {/* ── Compose form ── */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: '24px 28px', marginBottom: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: navy, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>✍️</span> New Announcement
         </div>
-      )}
 
-      {isLoading ? (
-        <p style={{ color: faint }}>Loading announcements…</p>
-      ) : list.length === 0 ? (
-        <div className="text-center" style={{ background: '#FFFFFF', border: '1px dashed rgba(14,42,92,0.18)', borderRadius: 16, padding: '56px 28px', maxWidth: 920 }}>
-          <div style={{ display: 'inline-grid', placeItems: 'center', width: 56, height: 56, borderRadius: 14, background: 'rgba(14,42,92,0.06)', color: navy, marginBottom: 16 }}>
-            <Megaphone className="h-[26px] w-[26px]" />
+        <form onSubmit={handleSubmit}>
+          {/* Row 1: title + category */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>Title</label>
+              <input
+                id="ann-title"
+                style={inputStyle}
+                placeholder="e.g. Quiz on Friday — Chapter 5"
+                value={form.title}
+                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Category</label>
+              <select
+                id="ann-category"
+                style={{ ...selectStyle, width: 160 }}
+                value={form.category}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+              >
+                {CATEGORIES.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No announcements yet</h3>
-          <p style={{ fontSize: 14, color: muted, margin: '0 0 20px' }}>Post your first update so students know what's coming up.</p>
-          <button onClick={() => setShowPost(true)} className="inline-flex transition hover:brightness-110" style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}>
-            New Announcement
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4" style={{ maxWidth: 920 }}>
-          {list.map((a) => {
-            const isAll = !a.class_id
-            return (
-              <div key={a.id} className="ak-ann-card" style={{ position: 'relative', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '24px 26px' }}>
-                <div className="mb-3 flex items-start justify-between gap-4">
-                  <h3 style={{ fontSize: 19, fontWeight: 700, color: ink, margin: 0, lineHeight: 1.25, letterSpacing: '-0.01em' }}>{a.title}</h3>
-                  <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
-                    <span style={{ display: 'inline-block', padding: '5px 12px', fontSize: 12, fontWeight: 700, borderRadius: 999, whiteSpace: 'nowrap', background: isAll ? 'rgba(14,42,92,0.08)' : 'rgba(63,169,245,0.14)', color: isAll ? navy : blueText }}>
-                      {a.audience || 'All Classes'}
-                    </span>
-                    <button onClick={() => remove(a.id)} className="ak-ann-del" title="Delete" style={{ display: 'grid', placeItems: 'center', width: 30, height: 30, borderRadius: 8, background: 'transparent', border: 'none', color: '#B6C0D2', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s, color 0.15s, background 0.15s' }}>
-                      <Trash className="h-[15px] w-[15px]" />
-                    </button>
-                  </div>
-                </div>
-                <p style={{ fontSize: 14.5, lineHeight: 1.65, color: '#3A4A6B', margin: '0 0 16px', maxWidth: 680, whiteSpace: 'pre-wrap' }}>{a.body}</p>
-                <div className="flex items-center gap-2" style={{ ...mono, fontSize: 12.5, color: faint }}>
-                  <Clock className="h-3.5 w-3.5" />
-                  {fmtDate(a.created_at)}
-                </div>
+
+          {/* Row 2: content */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={labelStyle}>Message</label>
+            <textarea
+              id="ann-content"
+              rows={4}
+              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
+              placeholder="Write your announcement here…"
+              value={form.content}
+              onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+            />
+          </div>
+
+          {/* Row 3: target class + expiry */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>Target Class</label>
+              <select
+                id="ann-class"
+                style={selectStyle}
+                value={form.class_id}
+                onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}
+              >
+                <option value="">📣 All my classes (Global)</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.subject_code ? `${c.subject_code} — ` : ''}{c.section || c.subject || c.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Expires On (optional)</label>
+              <input
+                id="ann-expires"
+                type="date"
+                style={inputStyle}
+                value={form.expires_at}
+                onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          {/* Row 4: linked resource (collapsible-ish) */}
+          <details style={{ marginBottom: 18 }}>
+            <summary style={{ fontSize: 13, color: '#64748B', cursor: 'pointer', userSelect: 'none', fontWeight: 600 }}>
+              + Link a resource (optional)
+            </summary>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 12 }}>
+              <div>
+                <label style={labelStyle}>Resource Type</label>
+                <select
+                  id="ann-res-type"
+                  style={selectStyle}
+                  value={form.linked_resource_type}
+                  onChange={e => setForm(f => ({ ...f, linked_resource_type: e.target.value }))}
+                >
+                  <option value="">— None —</option>
+                  <option value="quiz">Quiz</option>
+                  <option value="syllabus">Syllabus</option>
+                  <option value="attendance">Attendance</option>
+                  <option value="record">Class Record</option>
+                </select>
               </div>
+              <div>
+                <label style={labelStyle}>Resource ID / URL</label>
+                <input
+                  id="ann-res-id"
+                  style={inputStyle}
+                  placeholder="e.g. quiz ID or link"
+                  value={form.linked_resource_id}
+                  onChange={e => setForm(f => ({ ...f, linked_resource_id: e.target.value }))}
+                />
+              </div>
+            </div>
+          </details>
+
+          {formErr && (
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+              {formErr}
+            </div>
+          )}
+
+          <button
+            id="ann-submit"
+            type="submit"
+            disabled={createMut.isPending}
+            style={{
+              background: navy,
+              color: cream,
+              border: 'none',
+              borderRadius: 10,
+              padding: '11px 28px',
+              fontSize: 14,
+              fontWeight: 700,
+              fontFamily: sans,
+              cursor: createMut.isPending ? 'not-allowed' : 'pointer',
+              opacity: createMut.isPending ? 0.7 : 1,
+              transition: 'opacity .15s, transform .1s',
+            }}
+            onMouseEnter={e => { if (!createMut.isPending) e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+          >
+            {createMut.isPending ? 'Posting…' : '📢 Post Announcement'}
+          </button>
+        </form>
+      </div>
+
+      {/* ── Feed header + filters ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 16, color: navy }}>
+          Posted Announcements
+          {announcements.length > 0 && (
+            <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 600, color: '#64748B' }}>
+              ({filtered.length})
+            </span>
+          )}
+        </div>
+
+        {/* Category filter chips */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {['all', ...CATEGORIES.map(c => c.value)].map(v => {
+            const cat = catMap[v]
+            const active = filterCat === v
+            return (
+              <button
+                key={v}
+                onClick={() => setFilterCat(v)}
+                style={{
+                  border: `1.5px solid ${active ? (cat?.color ?? navy) : '#E2E8F0'}`,
+                  background: active ? (cat?.bg ?? '#EEF1F6') : '#fff',
+                  color: active ? (cat?.color ?? navy) : '#64748B',
+                  borderRadius: 20,
+                  padding: '5px 14px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: sans,
+                  cursor: 'pointer',
+                  transition: 'all .15s',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {v === 'all' ? 'All' : (cat?.label ?? v)}
+              </button>
             )
           })}
         </div>
-      )}
+      </div>
 
-      {showPost && (
-        <PostModal
-          classes={classes ?? []}
-          profile={profile}
-          onClose={() => setShowPost(false)}
-          onPosted={() => {
-            setShowPost(false)
-            refetch()
-          }}
-        />
+      {/* ── Announcement list ── */}
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: 14 }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState filtered={filterCat !== 'all'} />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {filtered.map(item => (
+            <AnnouncementCard
+              key={item.id}
+              item={item}
+              onDelete={handleDelete}
+              deleting={deletingId === item.id}
+            />
+          ))}
+        </div>
       )}
     </div>
   )
