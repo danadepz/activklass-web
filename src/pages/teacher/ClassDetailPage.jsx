@@ -1,19 +1,7 @@
-import { useRef, useState, useMemo } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  arrayRemove,
-  arrayUnion,
-  deleteDoc,
-  doc,
-  getDoc,
-  updateDoc,
-  writeBatch,
-  collection,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore'
+import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { api } from '../../lib/api'
 import {
@@ -25,23 +13,7 @@ import {
   findStudentByEmail,
   parseCsv,
 } from '../../lib/roster'
-
-const STATUS_STYLE = {
-  active: 'bg-green-50 text-green-700',
-  needs_remediation: 'bg-amber-50 text-amber-700',
-  mastered: 'bg-indigo-50 text-indigo-700',
-}
-
-const ENROLLMENT_STYLE = {
-  enrolled: 'bg-green-50 text-green-700',
-  invited: 'bg-amber-50 text-amber-700',
-  dropped: 'bg-slate-100 text-slate-500',
-  AC: 'bg-green-50 text-green-700',
-  IN: 'bg-slate-100 text-slate-500',
-}
-
-const inputCls =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+import { X, Users, FileText } from '../../components/icons'
 
 const EMPTY_STUDENT_FIELDS = {
   student_number: '',
@@ -78,100 +50,55 @@ function rosterPatch(fields) {
 function StudentFields({ fields, setFields }) {
   const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3.5">
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">ID Number</span>
-          <input
-            placeholder="Student ID"
-            value={fields.student_number}
-            onChange={set('student_number')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Middle name <span className="text-slate-400 font-normal">(opt)</span>
-          </span>
-          <input
-            value={fields.middle_name}
-            onChange={set('middle_name')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
+        <div>
+          <label style={labelStyle}>ID Number</label>
+          <input className="ak-input" placeholder="Student ID" value={fields.student_number} onChange={set('student_number')} style={fieldStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
+          <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Course <span className="text-slate-400 font-normal">(opt)</span>
-          </span>
-          <input
-            placeholder="e.g. BSIT"
-            value={fields.course}
-            onChange={set('course')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Year</span>
-          <input
-            placeholder="e.g. 1st Year / Grade 10"
-            value={fields.year_level}
-            onChange={set('year_level')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
+        <div>
+          <label style={labelStyle}>Course <span style={optHint}>(opt)</span></label>
+          <input className="ak-input" placeholder="e.g. BSIT" value={fields.course} onChange={set('course')} style={fieldStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Year</label>
+          <input className="ak-input" placeholder="e.g. 1st Year / Grade 10" value={fields.year_level} onChange={set('year_level')} style={fieldStyle} />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            Remarks <span className="text-slate-400 font-normal">(opt)</span>
-          </span>
-          <select
-            value={fields.remarks}
-            onChange={set('remarks')}
-            className={`${inputCls} w-full mt-1 bg-white`}
-          >
+        <div>
+          <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
+          <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }}>
             <option value="">—</option>
             {REMARKS_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Enrollment status</span>
-          <select
-            value={fields.enrollment_status}
-            onChange={set('enrollment_status')}
-            className={`${inputCls} w-full mt-1 bg-white`}
-          >
+        </div>
+        <div>
+          <label style={labelStyle}>Enrollment status</label>
+          <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }}>
             {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label} ({value})</option>
             ))}
           </select>
-        </label>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">
-            DepEd LRN <span className="text-slate-400 font-normal">(opt)</span>
-          </span>
-          <input
-            placeholder="12-digit LRN"
-            value={fields.lrn}
-            onChange={set('lrn')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Birthdate</span>
-          <input
-            type="date"
-            value={fields.birthdate}
-            onChange={set('birthdate')}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
+        <div>
+          <label style={labelStyle}>DepEd LRN <span style={optHint}>(opt)</span></label>
+          <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>Birthdate</label>
+          <input className="ak-input" type="date" value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+        </div>
       </div>
     </div>
   )
@@ -238,55 +165,51 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
-        {isFull && (
-          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            This class has reached its maximum of {maxStudents} students.
-          </p>
-        )}
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
-        <form onSubmit={lookup} className="flex gap-2">
-          <input
-            type="email"
-            required
-            placeholder="student@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={`${inputCls} flex-1`}
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50 disabled:opacity-50"
-          >
-            Find
-          </button>
-        </form>
-
-        {student && (
-          <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-            <p className="font-medium text-slate-800">
-              {student.last_name}, {student.first_name}
-              <span className="text-slate-400 font-normal"> · {student.email}</span>
-            </p>
-            <StudentFields fields={fields} setFields={setFields} />
-            <button
-              onClick={enroll}
-              disabled={busy || isFull}
-              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {busy ? 'Adding…' : 'Add to class'}
+    <div onClick={onClose} style={overlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
+        <div style={modalHeaderStyle}>
+          <span style={iconSquare}><Users className="h-[18px] w-[18px]" /></span>
+          <h2 style={modalTitle}>Add Student</h2>
+          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+        </div>
+        <div style={modalBodyStyle} className="flex flex-col gap-4">
+          {isFull && (
+            <div style={{ ...alertStyle, color: goldDeep, background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.5)' }}>
+              This class has reached its maximum of {maxStudents} students.
+            </div>
+          )}
+          {error && <div role="alert" style={alertStyle}>{error}</div>}
+          <form onSubmit={lookup} className="flex gap-2">
+            <input
+              type="email"
+              required
+              placeholder="student@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="ak-input"
+              style={{ ...fieldStyle, flex: 1 }}
+            />
+            <button type="submit" disabled={busy} className="transition hover:brightness-105 disabled:opacity-50" style={{ ...btnModalGhost, padding: '11px 18px', color: navy, borderColor: navy }}>
+              Find
             </button>
-          </div>
-        )}
+          </form>
 
-        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
-          Close
-        </button>
+          {student && (
+            <div className="flex flex-col gap-3.5" style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>
+                {student.last_name}, {student.first_name}
+                <span style={{ color: faint, fontWeight: 400 }}> · {student.email}</span>
+              </div>
+              <StudentFields fields={fields} setFields={setFields} />
+            </div>
+          )}
+        </div>
+        <div style={modalFooterStyle}>
+          <button onClick={onClose} style={btnModalGhost}>Cancel</button>
+          <button onClick={enroll} disabled={busy || isFull || !student} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+            {busy ? 'Adding…' : 'Add to class'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -333,44 +256,32 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">
-          {student.last_name}, {student.first_name}
-        </h3>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
-        <StudentFields fields={fields} setFields={setFields} />
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Academic progress</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className={`${inputCls} w-full mt-1 bg-white`}
-          >
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <div className="flex gap-3 justify-between pt-2">
-          <button
-            onClick={removeFromClass}
-            disabled={busy}
-            className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50 disabled:opacity-50"
-          >
+    <div onClick={onClose} style={overlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
+        <div style={modalHeaderStyle}>
+          <span style={iconSquare}><Users className="h-[18px] w-[18px]" /></span>
+          <h2 style={modalTitle}>{student.last_name}, {student.first_name}</h2>
+          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+        </div>
+        <div style={modalBodyStyle} className="flex flex-col gap-4">
+          {error && <div role="alert" style={alertStyle}>{error}</div>}
+          <StudentFields fields={fields} setFields={setFields} />
+          <div>
+            <label style={labelStyle}>Academic progress</label>
+            <select className="ak-input" value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }}>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{ ...modalFooterStyle, justifyContent: 'space-between' }}>
+          <button onClick={removeFromClass} disabled={busy} className="transition hover:brightness-105 disabled:opacity-50" style={{ ...btnModalGhost, color: red, borderColor: 'rgba(192,57,43,0.3)' }}>
             Remove from class
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              disabled={busy}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-            >
+            <button onClick={onClose} style={btnModalGhost}>Cancel</button>
+            <button onClick={save} disabled={busy} className="transition hover:brightness-110 disabled:opacity-50" style={btnModalPrimary}>
               {busy ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -383,7 +294,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
 /* CSV import: header row first_name,last_name,email,lrn,birthdate plus the
    optional roster columns student_number,middle_name,course,year_level,remarks,
    enrollment_status. Matches registered students by email; preview first. */
-function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
+function CsvUploadModal({ classId, onClose, onDone }) {
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { students: [] }
   const [error, setError] = useState(null)
@@ -445,83 +356,116 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster (CSV)</h3>
-        <p className="text-sm text-slate-500">
-          Required header: <code className="bg-slate-100 px-1 rounded text-xs">email</code>. Optional columns:{' '}
-          <code className="bg-slate-100 px-1 rounded text-xs">first_name,last_name,lrn,birthdate,student_number,middle_name,course,year_level,remarks,enrollment_status</code>.
-          Students without Activklass accounts will be invited and automatically enrolled when they register.
-        </p>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
+    <div onClick={onClose} style={overlayStyle}>
+      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
+        <div style={modalHeaderStyle}>
+          <span style={iconSquare}><FileText className="h-[18px] w-[18px]" /></span>
+          <h2 style={modalTitle}>Bulk Upload Roster</h2>
+          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+        </div>
+        <div style={modalBodyStyle} className="flex flex-col gap-4">
+          <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, margin: 0 }}>
+            Required header: <code style={codeStyle}>email</code>. Optional columns:{' '}
+            <code style={codeStyle}>first_name, last_name, lrn, birthdate, student_number, middle_name, course, year_level, remarks, enrollment_status</code>.
+            Students without Activklass accounts are invited and auto-enrolled when they register.
+          </p>
+          {error && <div role="alert" style={alertStyle}>{error}</div>}
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:px-4 file:py-2 file:font-medium hover:file:bg-indigo-100"
-        />
-        {busy && !preview && <p className="text-sm text-slate-400">Processing roster…</p>}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            style={{ fontSize: 13, color: muted }}
+          />
+          {busy && !preview && <p style={{ fontSize: 13, color: faint }}>Processing roster…</p>}
 
-        {preview && (
-          <>
-            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 text-sm max-h-60 overflow-y-auto">
+          {preview && (
+            <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
               {preview.students.map((s, idx) => (
-                <div key={idx} className="px-3 py-2 flex justify-between">
-                  <span className="text-slate-700">
+                <div key={idx} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                  <span style={{ color: ink }}>
                     {s.last_name || s.first_name ? `${s.last_name}, ${s.first_name}` : s.email}
                   </span>
-                  <span className="text-indigo-600 font-medium">will import/invite</span>
+                  <span style={{ color: blueText, fontWeight: 600 }}>will import/invite</span>
                 </div>
               ))}
             </div>
-            <button
-              onClick={commit}
-              disabled={busy || preview.students.length === 0}
-              className="w-full rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-40"
-            >
-              {busy ? 'Importing…' : `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}`}
-            </button>
-          </>
-        )}
-
-        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
-          Close
-        </button>
+          )}
+        </div>
+        <div style={modalFooterStyle}>
+          <button onClick={onClose} style={btnModalGhost}>Cancel</button>
+          <button
+            onClick={commit}
+            disabled={busy || !preview || preview.students.length === 0}
+            className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={btnModalPrimary}
+          >
+            {busy ? 'Importing…' : preview ? `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}` : 'Import'}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-const FAIL_BELOW = 0.6
-const MASTERY_AT = 0.75
-const ALERT_FAIL_RATE = 0.4
+// --- navy+gold Overview surface (matches the DC mock: stat cards + roster) ---
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
 
-function RiskBarChart({ highRisk, onTrack }) {
-  const max = Math.max(highRisk, onTrack, 1)
-  const bars = [
-    { label: 'High Risk of Remediation', count: highRisk, color: 'bg-red-500' },
-    { label: 'On-Track', count: onTrack, color: 'bg-green-500' },
-  ]
+// Shared modal chrome for the roster dialogs (navy+gold, matches PostModal).
+const overlayStyle = { position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }
+const cardStyle = { width: '100%', maxWidth: 560, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }
+const modalHeaderStyle = { padding: '22px 28px 18px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }
+const iconSquare = { width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }
+const modalTitle = { ...serif, fontSize: 24, margin: 0, color: ink, flex: 1 }
+const closeBtn = { display: 'grid', placeItems: 'center', width: 32, height: 32, borderRadius: 8, background: 'transparent', border: 'none', color: faint, cursor: 'pointer' }
+const modalBodyStyle = { padding: '22px 28px', overflowY: 'auto' }
+const modalFooterStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
+const optHint = { color: faint, fontWeight: 400 }
+const fieldStyle = { width: '100%', padding: '11px 13px', fontSize: 14, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, transition: 'border-color 0.15s, box-shadow 0.15s' }
+const alertStyle = { fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }
+const codeStyle = { ...mono, background: 'rgba(14,42,92,0.06)', padding: '1px 5px', borderRadius: 5, fontSize: 12, color: navy }
+const btnModalPrimary = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 22px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }
+const btnModalGhost = { padding: '12px 22px', fontSize: 14, fontWeight: 600, fontFamily: sans, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }
+
+const th = { padding: '12px 18px', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
+const td = { padding: '14px 18px', fontSize: 14, color: ink, verticalAlign: 'middle' }
+const btnGhost = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 15px', fontSize: 13, fontWeight: 600, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }
+const btnPrimary = { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 15px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }
+const btnDanger = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 15px', fontSize: 13, fontWeight: 600, fontFamily: sans, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.3)', borderRadius: 10, cursor: 'pointer' }
+
+const PILL_TONES = {
+  green: { fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  gray: { fg: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
+  gold: { fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
+  blue: { fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.45)' },
+}
+function pillStyle(tone) {
+  const m = PILL_TONES[tone] ?? PILL_TONES.gray
+  return { display: 'inline-block', padding: '4px 11px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: m.fg, background: m.bg, border: `1px solid ${m.border}`, whiteSpace: 'nowrap' }
+}
+const statusTone = (status) => (status === 'mastered' ? 'blue' : status === 'needs_remediation' ? 'gold' : 'green')
+
+function StatCard({ label, value, sub, color }) {
   return (
-    <div className="space-y-3">
-      {bars.map((bar) => (
-        <div key={bar.label}>
-          <div className="flex justify-between text-sm text-slate-600 mb-1">
-            <span>{bar.label}</span>
-            <span className="font-semibold">{bar.count}</span>
-          </div>
-          <div className="h-6 bg-slate-100 rounded overflow-hidden">
-            <div
-              className={`h-6 rounded transition-all duration-500 ${bar.color}`}
-              style={{ width: `${(bar.count / max) * 100}%` }}
-            />
-          </div>
-        </div>
-      ))}
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: muted, marginBottom: 12 }}>{label}</div>
+      <div style={{ ...serif, fontSize: 40, lineHeight: 1, color: color ?? ink }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 8 }}>{sub}</div>}
     </div>
   )
 }
@@ -536,143 +480,26 @@ export default function ClassDetailPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['class-detail', classId],
     queryFn: async () => {
-      const res = await api(`/api/classes/${classId}`)
-      return {
-        clazz: res.class,
-        students: res.students,
-        summary: res.roster_summary,
-      }
-    },
-  })
-
-  const { data: attempts } = useQuery({
-    queryKey: ['fs-quiz-attempts', classId],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'quiz_attempts'), where('class_id', '==', classId)),
-      )
-      return snap.docs.map((d) => d.data())
-    },
-  })
-
-  const { data: gradeEntries } = useQuery({
-    queryKey: ['fs-grade-entries', classId],
-    queryFn: async () => {
-      const snap = await getDocs(collection(db, 'gradebooks', classId, 'entries'))
-      return snap.docs.map((d) => d.data())
-    },
-  })
-
-  const { data: syllabus } = useQuery({
-    queryKey: ['syllabus'],
-    queryFn: () => api('/api/syllabus', { requireAuth: false }),
-  })
-
-  const { data: attendanceData } = useQuery({
-    queryKey: ['attendance-summary', classId],
-    queryFn: () => api(`/api/classes/${classId}/attendance`),
-  })
-
-  const studentAverages = useMemo(() => {
-    const byStudent = {}
-    for (const a of attempts ?? []) {
-      ;(byStudent[a.student_id] ??= []).push(a.score_ratio)
-    }
-    return Object.fromEntries(
-      Object.entries(byStudent).map(([sid, ratios]) => [
-        sid,
-        (ratios.reduce((s, r) => s + r, 0) / ratios.length) * 100,
-      ]),
-    )
-  }, [attempts])
-
-  const attendanceRates = useMemo(() => {
-    if (!attendanceData?.summary) return {}
-    return Object.fromEntries(
-      Object.entries(attendanceData.summary).map(([sid, counts]) => {
-        const p = counts.present ?? 0
-        const l = counts.late ?? 0
-        const e = counts.excused ?? 0
-        const a = counts.absent ?? 0
-        const total = p + l + e + a
-        return [sid, total > 0 ? (p + l + e) / total : 0.92]
-      })
-    )
-  }, [attendanceData])
-
-  const { data: prediction } = useQuery({
-    queryKey: ['predict', classId, Object.keys(studentAverages).length, Object.keys(attendanceRates).length],
-    enabled: !!data?.students?.length,
-    queryFn: () => {
-      const studentsPayload = data.students
-        .filter((s) => s.student_id)
-        .map((s) => {
-          const sid = s.student_id
-          const indicators = {}
-          if (studentAverages[sid] != null) {
-            indicators.quiz_average = studentAverages[sid]
-          }
-          if (attendanceRates[sid] != null) {
-            indicators.attendance_rate = attendanceRates[sid]
-          }
-          return {
-            student_id: sid,
-            indicators,
-          }
-        })
-      if (studentsPayload.length === 0) return { results: [] }
-      return api('/api/predict', {
-        method: 'POST',
-        body: { students: studentsPayload },
-      })
-    },
-  })
-
-  const stats = useMemo(() => {
-    const grades = (gradeEntries ?? [])
-      .map((e) => e.final_grade)
-      .filter((g) => g != null)
-    const classAverage = grades.length
-      ? (grades.reduce((s, g) => s + g, 0) / grades.length).toFixed(1)
-      : '—'
-
-    const allAttempts = attempts ?? []
-    const masteryRate = allAttempts.length
-      ? Math.round(
-          (allAttempts.filter((a) => a.score_ratio >= MASTERY_AT).length /
-            allAttempts.length) * 100,
+      // Firestore-primary: read the class doc + roster (student fields live on
+      // the users docs, written by the Add/Edit roster modals). No backend.
+      const snap = await getDoc(doc(db, 'classes', classId))
+      if (!snap.exists()) throw new Error('Class not found')
+      const clazz = { id: snap.id, ...snap.data() }
+      const ids = clazz.student_ids ?? []
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      const students = users
+        .map((u) => ({
+          ...u,
+          student_id: u.id,
+          enrollment_status: u.enrollment_status ?? 'AC',
+          status: u.status ?? 'active',
+        }))
+        .sort((a, b) =>
+          `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
         )
-      : null
-
-    const byModule = {}
-    for (const a of allAttempts) {
-      if (!a.module_id) continue
-      const m = (byModule[a.module_id] ??= { total: 0, failed: 0 })
-      m.total += 1
-      if (a.score_ratio < FAIL_BELOW) m.failed += 1
-    }
-    const moduleTitle = (id) =>
-      syllabus?.modules?.find((m) => m.id === id)?.title ?? id
-    const alerts = Object.entries(byModule)
-      .map(([id, { total, failed }]) => ({
-        moduleId: id,
-        title: moduleTitle(id),
-        failRate: failed / total,
-        total,
-      }))
-      .filter((m) => m.failRate > ALERT_FAIL_RATE)
-      .sort((a, b) => b.failRate - a.failRate)
-
-    const leastMastered = alerts[0] ?? null
-    const results = prediction?.results ?? []
-    const highRisk = results.filter((r) => r.risk_flag === 'high_risk').length
-
-    const predictionMap = Object.fromEntries(
-      results.map((r) => [r.student_id, r])
-    )
-
-    return { classAverage, masteryRate, alerts, leastMastered, highRisk, results, predictionMap }
-  }, [gradeEntries, attempts, syllabus, prediction])
+      return { clazz, students, summary: { total: students.length } }
+    },
+  })
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
@@ -689,79 +516,30 @@ export default function ClassDetailPage() {
     }
   }
 
-  if (isLoading) return <p className="text-slate-400">Loading roster…</p>
-  if (isError || !data) return <p className="text-red-600">Class not found.</p>
+  if (isLoading) return <p style={{ color: faint }}>Loading roster…</p>
+  if (isError || !data) return <p style={{ color: red }}>Class not found.</p>
 
-  const { clazz, students, summary } = data
+  const { clazz, students } = data
+  const maxStudents = clazz.max_students ?? 0
+  const activeCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
+  const inactiveCount = students.length - activeCount
 
   return (
     <div>
-      {/* Analytics: quick stats for this class */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500 font-medium">Class Average Grade</p>
-          <p className="text-3xl font-bold text-slate-800 mt-1">{stats.classAverage}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500 font-medium">Mastery Rate %</p>
-          <p className="text-3xl font-bold text-slate-800 mt-1">
-            {stats.masteryRate != null ? `${stats.masteryRate}%` : '—'}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">attempts scoring ≥ {MASTERY_AT * 100}%</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500 font-medium">Least-Mastered Skill</p>
-          <p className="text-xl font-bold text-slate-800 mt-1 truncate" title={stats.leastMastered ? stats.leastMastered.title : 'None'}>
-            {stats.leastMastered ? stats.leastMastered.title : 'None'}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            {stats.leastMastered
-              ? `${Math.round(stats.leastMastered.failRate * 100)}% fail rate`
-              : 'no module above threshold'}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <p className="text-sm text-slate-500 font-medium">At-Risk Students</p>
-          <p className="text-3xl font-bold text-red-600 mt-1">
-            {stats.results.length ? stats.highRisk : '—'}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            {stats.results.length ? `out of ${stats.results.length} active students` : 'no active students'}
-          </p>
-        </div>
-      </div>
-
-      {/* Module fail rate warnings */}
-      {stats.alerts.map((alert) => (
-        <div
-          key={alert.moduleId}
-          className={`mt-4 rounded-xl border p-4 text-sm font-medium ${
-            alert.failRate >= 0.6
-              ? 'bg-red-50 border-red-200 text-red-800'
-              : 'bg-yellow-50 border-yellow-200 text-yellow-800'
-          }`}
-        >
-          ⚠ Warning: {alert.title} has a fail rate of {Math.round(alert.failRate * 100)}%
-          ({alert.total} attempts). Consider assigning a remediation quiz.
-        </div>
-      ))}
-
-      {/* Predictive risk bar chart */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4">
-        <h3 className="font-semibold text-slate-800">Predictive Remediation Risk</h3>
-        <p className="text-xs text-slate-400 mt-0.5 mb-4">
-          Random Forest classification from quiz performance and demographic indicators (via <code>/api/predict</code>).
-        </p>
-        {stats.results.length ? (
-          <RiskBarChart
-            highRisk={stats.highRisk}
-            onTrack={stats.results.length - stats.highRisk}
-          />
-        ) : (
-          <p className="text-sm text-slate-400">
-            No active students in this class yet, or the AI service is offline.
-          </p>
-        )}
+      {/* Stat cards (matches the DC mock's Overview) */}
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        <StatCard label="Students" value={students.length} />
+        <StatCard label="Active (AC)" value={activeCount} color={green} />
+        <StatCard label="Inactive (IN)" value={inactiveCount} />
+        <StatCard
+          label="Capacity"
+          value={
+            <>
+              {students.length} <span style={{ color: '#C3CCDB' }}>/ {maxStudents || '—'}</span>
+            </>
+          }
+          sub="students enrolled"
+        />
       </div>
 
       {clazz.syllabus_file && (
@@ -769,127 +547,89 @@ export default function ClassDetailPage() {
           href={clazz.syllabus_file.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:border-indigo-300"
+          className="mt-4 inline-flex items-center gap-2 transition hover:brightness-105"
+          style={{ ...btnGhost, color: navy, textDecoration: 'none' }}
         >
           📄 Syllabus file: {clazz.syllabus_file.name}
         </a>
       )}
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">{error}</p>
+        <p role="alert" className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 mt-6 overflow-x-auto">
-        <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold text-slate-800">
-            Roster <span className="text-sm font-normal text-slate-400">· {students.length} student{students.length === 1 ? '' : 's'}</span>
+      {/* Roster */}
+      <div className="mt-5" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '18px 22px', borderBottom: `1px solid ${line}` }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: ink, margin: 0 }}>
+            Roster <span style={{ fontWeight: 500, color: faint, fontSize: 14 }}>· {students.length} student{students.length === 1 ? '' : 's'}</span>
           </h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setModal('csv')}
-              className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-            >
-              ⇪ Bulk Upload CSV
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button onClick={() => setModal('csv')} className="transition hover:brightness-105" style={btnGhost}>⇪ Bulk Upload CSV</button>
+            <button onClick={() => setModal('add')} className="transition hover:brightness-110" style={btnPrimary}>
+              <span style={{ display: 'inline-grid', placeItems: 'center', width: 18, height: 18, borderRadius: '50%', background: gold, color: navy, fontSize: 13, lineHeight: 1 }}>+</span>
+              Add Student
             </button>
-            <button
-              onClick={() => setModal('add')}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
-            >
-              + Add Student
-            </button>
-            <button
-              onClick={deleteClass}
-              title="Delete class"
-              className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
-            >
-              Delete
-            </button>
+            <button onClick={deleteClass} title="Delete class" className="transition hover:brightness-105" style={btnDanger}>Delete</button>
           </div>
         </div>
         {students.length === 0 ? (
-          <p className="p-8 text-center text-slate-400">
+          <div style={{ padding: '56px 24px', textAlign: 'center', color: faint, fontSize: 14 }}>
             No students yet. Add them by email or upload a CSV roster.
-          </p>
+          </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-500 border-b border-slate-100">
-                <th className="px-5 py-2.5 font-medium">ID No.</th>
-                <th className="px-5 py-2.5 font-medium">Name</th>
-                <th className="px-5 py-2.5 font-medium">Course / Year</th>
-                <th className="px-5 py-2.5 font-medium">Remarks</th>
-                <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
-                <th className="px-5 py-2.5 font-medium">Progress</th>
-                <th className="px-5 py-2.5 font-medium">Remediation Risk</th>
-                <th className="px-5 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s) => {
-                const status = s.status ?? 'active'
-                const enrollment = s.enrollment_status ?? 'AC'
-                const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
-                const ENROLLMENT_STATUS_LABELS_NEW = {
-                  enrolled: 'Active',
-                  invited: 'Invited',
-                  dropped: 'Inactive',
-                  AC: 'Active',
-                  IN: 'Inactive',
-                }
-                return (
-                  <tr key={s.id || s.email} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
-                    <td className="px-5 py-3 text-slate-600 font-mono text-xs">{s.student_number ?? '—'}</td>
-                    <td className="px-5 py-3">
-                      <p className="font-medium text-slate-700">
-                        {s.last_name}, {s.first_name}
-                        {s.middle_name ? ` ${s.middle_name}` : ''}
-                      </p>
-                      <p className="text-xs text-slate-400">{s.email}</p>
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">{courseYear || '—'}</td>
-                    <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ENROLLMENT_STYLE[enrollment]}`}>
-                        {ENROLLMENT_STATUS_LABELS_NEW[enrollment] || enrollment}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
-                        {STATUS_LABELS[status] || status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      {s.student_id && stats.predictionMap[s.student_id] ? (
-                        stats.predictionMap[s.student_id].risk_flag === 'high_risk' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-                            ⚠ High Risk ({Math.round(stats.predictionMap[s.student_id].risk_probability * 100)}%)
-                          </span>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: `1px solid ${line}` }}>
+                  <th style={{ ...th, textAlign: 'left' }}>ID No.</th>
+                  <th style={{ ...th, textAlign: 'left' }}>Name</th>
+                  <th style={{ ...th, textAlign: 'left' }}>Course · Year</th>
+                  <th style={{ ...th, textAlign: 'left' }}>Remarks</th>
+                  <th style={{ ...th, textAlign: 'center' }}>Enrollment</th>
+                  <th style={{ ...th, textAlign: 'left' }}>Progress</th>
+                  <th style={th} aria-label="Edit" />
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((s) => {
+                  const status = s.status ?? 'active'
+                  const enrollment = s.enrollment_status ?? 'AC'
+                  const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
+                  return (
+                    <tr key={s.id || s.email} style={{ borderBottom: `1px solid ${line}` }}>
+                      <td style={{ ...td, ...mono, fontSize: 12, color: muted }}>{s.student_number ?? '—'}</td>
+                      <td style={td}>
+                        <div style={{ fontWeight: 700, color: ink }}>
+                          {s.last_name}, {s.first_name}{s.middle_name ? ` ${s.middle_name}` : ''}
+                        </div>
+                        <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>{s.email}</div>
+                      </td>
+                      <td style={{ ...td, color: '#3A4A6B' }}>{courseYear || '—'}</td>
+                      <td style={{ ...td, color: '#3A4A6B' }}>{s.remarks ?? '—'}</td>
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <span style={pillStyle(enrollment === 'AC' ? 'green' : 'gray')}>
+                          {ENROLLMENT_STATUS_LABELS[enrollment] ?? enrollment}
+                        </span>
+                      </td>
+                      <td style={td}>
+                        <span style={pillStyle(statusTone(status))}>{STATUS_LABELS[status] || status}</span>
+                      </td>
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        {s.id ? (
+                          <button onClick={() => setModal(s)} className="transition hover:brightness-110" style={{ fontSize: 13, fontWeight: 700, color: navy, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: sans }}>
+                            Edit →
+                          </button>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
-                            On-Track
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      {s.id ? (
-                        <button
-                          onClick={() => setModal(s)}
-                          className="text-indigo-600 hover:underline text-xs font-medium"
-                        >
-                          Edit
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">Invited</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                          <span style={{ fontSize: 12, color: faint, fontStyle: 'italic' }}>Invited</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

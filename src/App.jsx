@@ -7,7 +7,6 @@ import RolePlaceholder from './pages/RolePlaceholder'
 import TeacherLayout from './pages/teacher/TeacherLayout'
 import ClassLayout from './pages/teacher/ClassLayout'
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
-import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import ClassesPage from './pages/teacher/ClassesPage'
 import ClassDetailPage from './pages/teacher/ClassDetailPage'
 import GradingSetupPage from './pages/teacher/GradingSetupPage'
@@ -22,6 +21,9 @@ import QuizBuilderPage from './pages/teacher/QuizBuilderPage'
 import QuizzesIndexPage from './pages/teacher/QuizzesIndexPage'
 import ComingSoon from './pages/teacher/ComingSoon'
 import AnnouncementsPage from './pages/teacher/AnnouncementsPage'
+import PerformancePage from './pages/teacher/PerformancePage'
+import ScaffoldTopicsPage from './pages/teacher/ScaffoldTopicsPage'
+import HistoryPage from './pages/teacher/HistoryPage'
 
 export default function App() {
   return (
@@ -42,14 +44,14 @@ export default function App() {
           <Route path="classes/:classId" element={<ClassLayout />}>
             <Route index element={<ClassDetailPage />} />
             <Route path="record" element={<ClassRecordPage />} />
-            <Route path="performance" element={<ComingSoon />} />
+            <Route path="performance" element={<PerformancePage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="syllabus" element={<SyllabusPage />} />
             <Route path="quizzes" element={<QuizzesPage />} />
             <Route path="quizzes/:quizId" element={<QuizBuilderPage />} />
-            <Route path="scaffolds" element={<ComingSoon />} />
+            <Route path="scaffolds" element={<ScaffoldTopicsPage />} />
             <Route path="grading" element={<GradingSetupPage />} />
-            <Route path="history" element={<ComingSoon />} />
+            <Route path="history" element={<HistoryPage />} />
           </Route>
 
           <Route path="record" element={<RecordIndexPage />} />

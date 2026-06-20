@@ -111,7 +111,7 @@ async function loadHistory(classId) {
     const a = d.data()
     const ts = toDate(a.updated_at) ?? toDate(a.date)
     if (!ts) return
-    const cnt = a.students ? Object.keys(a.students).length : 0
+    const cnt = a.records ? Object.keys(a.records).length : a.students ? Object.keys(a.students).length : 0
     events.push({ ts, kind: 'attendance', actor: 'You', summary: `Recorded attendance${a.date ? ` · ${a.date}` : ''}`, detail: `${cnt} student${cnt === 1 ? '' : 's'} marked` })
   })
 

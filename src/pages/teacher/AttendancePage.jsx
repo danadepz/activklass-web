@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../lib/api'
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
+import { db } from '../../lib/firebase'
+import { fetchUsersByIds } from '../../lib/roster'
 import { useAuth } from '../../context/useAuth'
 
 const navy = '#0E2A5C'
@@ -166,21 +168,26 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
     setSaving(true)
     setError(null)
     try {
-      const entries = sheet.students.map((s) => {
+      // One doc per day holds the full sheet; status 'none' is simply omitted
+      // from the records map (so re-saving a cleared student removes them).
+      const records = {}
+      for (const s of sheet.students) {
         const entry = current(s.student_id)
-        return {
-          student_id: s.student_id,
-          status: entry.status,
-          remarks: entry.remarks || '',
+        if (entry.status && entry.status !== 'none') {
+          records[s.student_id] = { status: entry.status, remarks: entry.remarks || '' }
         }
-      })
+      }
+      const teacherEntry =
+        teacher.status && teacher.status !== 'none'
+          ? { status: teacher.status, remarks: teacher.remarks || '' }
+          : null
 
-      await api(`/api/classes/${classId}/attendance`, {
-        method: 'PUT',
-        body: {
-          date: day,
-          entries,
-        },
+      await setDoc(doc(db, 'classes', classId, 'attendance', day), {
+        date: day,
+        records,
+        teacher: teacherEntry,
+        recorded_by: profile.id,
+        updated_at: serverTimestamp(),
       })
       setDirty({})
       setTeacherDirty(false)
@@ -350,19 +357,43 @@ export default function AttendancePage() {
   const [day, setDay] = useState(todayIso())
 
   const { data: sheet, isLoading, isError } = useQuery({
-    queryKey: ['attendance', classId, day],
+    queryKey: ['fs-attendance', classId, day],
     queryFn: async () => {
-      const data = await api(`/api/classes/${classId}/attendance?date=${day}`)
+      const cls = await getDoc(doc(db, 'classes', classId))
+      if (!cls.exists()) throw new Error('Class not found')
+      const ids = cls.data().student_ids ?? []
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      const students = users
+        .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
+        .sort((a, b) =>
+          `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
+        )
+
+      // This day's sheet.
+      const daySnap = await getDoc(doc(db, 'classes', classId, 'attendance', day))
+      const dayData = daySnap.exists() ? daySnap.data() : {}
+
+      // All-time P/L/A/E tally per student, across every recorded day.
+      const allSnap = await getDocs(collection(db, 'classes', classId, 'attendance'))
+      const summary = {}
+      allSnap.forEach((d) => {
+        const recs = d.data().records ?? {}
+        for (const [sid, rec] of Object.entries(recs)) {
+          if (!rec?.status) continue
+          ;(summary[sid] ??= {})[rec.status] = (summary[sid][rec.status] ?? 0) + 1
+        }
+      })
+
       return {
-        students: data.students,
-        records: data.records,
-        teacher: null,
-        summary: data.summary,
+        students,
+        records: dayData.records ?? {},
+        teacher: dayData.teacher ?? null,
+        summary,
       }
     },
   })
 
-  const refetch = () => queryClient.invalidateQueries({ queryKey: ['attendance', classId] })
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
 
   return (
     <div>
