@@ -2,8 +2,8 @@ import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { api } from '../../lib/api'
+import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -12,8 +12,8 @@ import {
   fetchUsersByIds,
   findStudentByEmail,
   parseCsv,
-} from '../../lib/roster'
-import { X, Users, FileText } from '../../components/icons'
+} from '@/lib/roster'
+import { X, Users, FileText } from '@/components/icons'
 
 const EMPTY_STUDENT_FIELDS = {
   student_number: '',

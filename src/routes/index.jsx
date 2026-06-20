@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Sparkles, Check } from '../components/icons'
+import { ArrowRight, Sparkles, Check } from '@/components/icons'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for Activklass.

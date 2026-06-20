@@ -2,16 +2,16 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { auth, db } from '../lib/firebase'
-import { useAuth } from '../context/useAuth'
+import { auth, db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
   SubmitButton,
   EyeToggle,
   AuthError,
   AuthNotice,
-} from '../components/AuthLayout'
-import { authInputStyle, authLabelStyle } from '../components/authStyles'
-import { Check } from '../components/icons'
+} from '@/components/AuthLayout'
+import { authInputStyle, authLabelStyle } from '@/components/authStyles'
+import { Check } from '@/components/icons'
 
 const navy = '#0E2A5C'
 const ink = '#0A1733'

@@ -1,4 +1,4 @@
-import ClassPicker from '../../components/ClassPicker'
+import ClassPicker from '@/components/ClassPicker'
 
 export default function SyllabusIndexPage() {
   return (

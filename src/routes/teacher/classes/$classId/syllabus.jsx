@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { api } from '../../lib/api'
+import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`

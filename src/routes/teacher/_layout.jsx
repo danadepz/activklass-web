@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { useAuth } from '../../context/useAuth'
-import { LayoutGrid, Megaphone, Notebook, BarChart } from '../../components/icons'
+import { useAuth } from '@/context/useAuth'
+import { LayoutGrid, Megaphone, Notebook, BarChart } from '@/components/icons'
 
 /* Teacher portal shell — navy sidebar (matching the Landing / Auth brand
    identity) beside the scrolling content area. Top-level nav is just three

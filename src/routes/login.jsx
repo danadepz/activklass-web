@@ -7,14 +7,14 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
 } from 'firebase/auth'
-import { auth } from '../lib/firebase'
+import { auth } from '@/lib/firebase'
 import AuthLayout, {
   SubmitButton,
   EyeToggle,
   AuthError,
   AuthNotice,
-} from '../components/AuthLayout'
-import { authInputStyle, authLabelStyle } from '../components/authStyles'
+} from '@/components/AuthLayout'
+import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 
 const navy = '#0E2A5C'
 const ink = '#0A1733'

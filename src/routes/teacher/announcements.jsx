@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { useAuth } from '../../context/useAuth'
-import { api } from '../../lib/api'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
+import { api } from '@/lib/api'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
 const navy = '#0E2A5C'

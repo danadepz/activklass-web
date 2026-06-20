@@ -13,10 +13,10 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { fetchUsersByIds } from '../../lib/roster'
-import { computeFinalGrade, finalAcrossPeriods } from '../../lib/grading'
-import { ArrowRight, Plus } from '../../components/icons'
+import { db } from '@/lib/firebase'
+import { fetchUsersByIds } from '@/lib/roster'
+import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
+import { ArrowRight, Plus } from '@/components/icons'
 
 const navy = '#0E2A5C'
 const navyDeep = '#061840'

@@ -12,9 +12,9 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { fetchUsersByIds } from '../../lib/roster'
-import { ArrowRight, Sparkles } from '../../components/icons'
+import { db } from '@/lib/firebase'
+import { fetchUsersByIds } from '@/lib/roster'
+import { ArrowRight, Sparkles } from '@/components/icons'
 
 const navy = '#0E2A5C'
 const navyDeep = '#061840'

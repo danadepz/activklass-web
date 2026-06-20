@@ -11,10 +11,10 @@ import {
   serverTimestamp,
   where,
 } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { api } from '../../lib/api'
-import { useAuth } from '../../context/useAuth'
-import { ArrowRight, Plus, Sparkles } from '../../components/icons'
+import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
+import { useAuth } from '@/context/useAuth'
+import { ArrowRight, Plus, Sparkles } from '@/components/icons'
 
 const navy = '#0E2A5C'
 const navyDeep = '#061840'

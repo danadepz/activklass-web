@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '../../lib/firebase'
-import { useAuth } from '../../context/useAuth'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
 import {
   Layers,
   Users,
@@ -15,7 +15,7 @@ import {
   BarChart,
   ChevronRight,
   ArrowRight,
-} from '../../components/icons'
+} from '@/components/icons'
 
 const navy = '#0E2A5C'
 const ink = '#0A1733'
