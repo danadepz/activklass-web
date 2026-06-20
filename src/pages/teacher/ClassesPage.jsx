@@ -7,6 +7,59 @@ import { useAuth } from '../../context/useAuth'
 import { emptyClassForm } from '../../lib/classForm'
 import ClassFormModal from './ClassFormModal'
 
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+// Compact class badge, e.g. "MATH10" -> "M10", "ENG" -> "ENG".
+function classBadge(c) {
+  const base = (c.subject_code || c.subject || c.section || '').toUpperCase()
+  const letters = base.match(/[A-Z]+/)?.[0] ?? ''
+  const digits = base.match(/\d+/)?.[0] ?? ''
+  if (letters && digits) return (letters[0] + digits).slice(0, 4)
+  return base.replace(/[^A-Z0-9]/g, '').slice(0, 3) || '—'
+}
+
+function ClassCard({ c }) {
+  const count = c.student_ids?.length ?? 0
+  return (
+    <Link
+      to={`/teacher/classes/${c.id}`}
+      className="ak-card-hov block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
+      style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22, textDecoration: 'none' }}
+    >
+      <div className="flex items-start gap-3" style={{ marginBottom: 18 }}>
+        <span style={{ ...mono, width: 40, height: 40, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
+          {classBadge(c)}
+        </span>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: ink, lineHeight: 1.2 }}>
+            {c.subject_code ? `${c.subject_code} · ` : ''}
+            {c.section}
+          </div>
+          {c.subject && <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{c.subject}</div>}
+          {c.schedule && <div style={{ ...mono, fontSize: 12, color: faint, marginTop: 2 }}>{c.schedule}</div>}
+        </div>
+      </div>
+      <div className="flex items-center justify-between" style={{ paddingTop: 16, borderTop: '1px solid rgba(14,42,92,0.07)' }}>
+        <span style={{ ...mono, fontSize: 13, color: muted }}>{c.academic_year}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: navy, background: 'rgba(14,42,92,0.06)', padding: '5px 11px', borderRadius: 999 }}>
+          {count}
+          {c.max_students ? ` / ${c.max_students}` : ''} student{count === 1 && !c.max_students ? '' : 's'}
+        </span>
+      </div>
+    </Link>
+  )
+}
+
 export default function ClassesPage() {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
@@ -25,56 +78,45 @@ export default function ClassesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">My Classes</h2>
-          <p className="text-slate-500 mt-1">Create class sections and manage student rosters.</p>
+          <h1 className="text-[clamp(30px,4vw,40px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
+            My Classes
+          </h1>
+          <p style={{ fontSize: 15, color: muted, margin: 0 }}>Create class sections and manage student rosters.</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
+          className="inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+          style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}, 0 10px 24px -12px rgba(14,42,92,0.5)` }}
         >
-          + New Class
+          <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy, fontSize: 14, lineHeight: 1 }}>+</span>
+          New Class
         </button>
       </div>
 
       {warning && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-4 flex items-start justify-between gap-3">
+        <div
+          className="mt-4 flex items-start justify-between gap-3"
+          style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 11, padding: '12px 16px', fontSize: 13.5, color: goldDeep }}
+        >
           <span>{warning}</span>
-          <button onClick={() => setWarning(null)} className="text-amber-600 hover:text-amber-800 shrink-0">
+          <button onClick={() => setWarning(null)} style={{ color: goldDeep, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             ✕
           </button>
-        </p>
+        </div>
       )}
 
       {isLoading ? (
-        <p className="text-slate-400 mt-8">Loading classes…</p>
+        <p className="mt-8" style={{ color: faint }}>Loading classes…</p>
       ) : classes?.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 mt-6 text-center text-slate-400">
+        <div className="mt-6 text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 48, color: faint, fontSize: 14 }}>
           No classes yet. Create your first class section to start building its roster.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+        <div className="mt-6 grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
           {classes?.map((c) => (
-            <Link
-              key={c.id}
-              to={`/teacher/classes/${c.id}`}
-              className="bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-400 hover:shadow-sm transition"
-            >
-              <h3 className="font-semibold text-slate-800">
-                {c.subject_code ? `${c.subject_code} · ` : ''}{c.section}
-              </h3>
-              <p className="text-sm text-slate-500">{c.subject}</p>
-              {c.schedule && <p className="text-xs text-slate-400 mt-1">{c.schedule}</p>}
-              <div className="flex items-center justify-between mt-4 text-sm">
-                <span className="text-slate-500">{c.academic_year}</span>
-                <span className="rounded-full bg-indigo-50 text-indigo-700 px-2.5 py-0.5 font-medium">
-                  {c.student_ids?.length ?? 0}
-                  {c.max_students ? ` / ${c.max_students}` : ''} student
-                  {(c.student_ids?.length ?? 0) === 1 && !c.max_students ? '' : 's'}
-                </span>
-              </div>
-            </Link>
+            <ClassCard key={c.id} c={c} />
           ))}
         </div>
       )}

@@ -14,15 +14,71 @@ import {
 import { db } from '../../lib/firebase'
 import { api } from '../../lib/api'
 import { useAuth } from '../../context/useAuth'
+import { ArrowRight, Plus, Sparkles } from '../../components/icons'
 
-const STATUS_STYLE = {
-  draft: 'bg-slate-100 text-slate-600',
-  published: 'bg-green-50 text-green-700',
-  closed: 'bg-amber-50 text-amber-700',
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+const STATUS_PILL = {
+  draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
+  published: { label: 'Published', color: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  closed: { label: 'Closed', color: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.5)' },
+}
+const FILTERS = ['all', 'draft', 'published', 'closed']
+
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
+const fieldStyle = {
+  width: '100%', padding: '12px 14px', fontSize: 14, fontFamily: sans, color: ink,
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10,
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const btnPrimary = {
+  display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', fontSize: 13,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
+}
+const btnGhost = {
+  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 16px', fontSize: 13,
+  fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF',
+  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer',
+}
+const btnModalGhost = {
+  padding: '12px 20px', fontSize: 14, fontWeight: 600, fontFamily: sans, color: '#3A4A6B',
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
+}
+const btnModalPrimary = {
+  display: 'inline-flex', alignItems: 'center', gap: 9, padding: '12px 20px', fontSize: 14,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
 }
 
-const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
-const COUNT_OPTIONS = [5, 10, 15, 20]
+function GoldArrow() {
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
+      <ArrowRight className="h-3 w-3" />
+    </span>
+  )
+}
+
+function AlertBox({ children }) {
+  return (
+    <div role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>
+      {children}
+    </div>
+  )
+}
 
 const newId = () =>
   globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -80,6 +136,9 @@ function GenerateQuizModal({ classId, topics, onClose }) {
   })
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
+  const selectStyle = { ...fieldStyle, cursor: 'pointer' }
+  const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
+  const COUNT_OPTIONS = [5, 10, 15, 20]
 
   async function generate(e) {
     e.preventDefault()
@@ -119,83 +178,105 @@ function GenerateQuizModal({ classId, topics, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <form onSubmit={generate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-slate-800">Generate Quiz with AI</h3>
-        <p className="text-sm text-slate-500">
-          Builds a multiple-choice draft (local Llama 3, with a math fallback). Review every question
-          and answer key before publishing.
-        </p>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
-        {topics.length > 0 ? (
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Syllabus topic</span>
-            <select
-              value={form.topic_id}
-              onChange={(e) => setForm((f) => ({ ...f, topic_id: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">— Describe a topic instead —</option>
-              {topics.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <p className="text-xs text-slate-400">
-            Tip: build a syllabus first and you can target its topics here.
-          </p>
-        )}
-        {!form.topic_id && (
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Topic</span>
-            <input
-              required={!form.topic_id}
-              placeholder="e.g. Arithmetic sequences"
-              value={form.topic}
-              onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700"># Questions</span>
-            <select
-              value={form.count}
-              onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {COUNT_OPTIONS.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Bloom's level</span>
-            <select
-              value={form.blooms_level}
-              onChange={(e) => setForm((f) => ({ ...f, blooms_level: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white capitalize focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {BLOOMS_LEVELS.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </label>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <form onSubmit={generate} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <Sparkles className="h-[18px] w-[18px]" />
+          </span>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Generate Quiz with AI</h2>
         </div>
-        <div className="flex gap-3 justify-end pt-2">
-          <button type="button" onClick={onClose} disabled={generating} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+        <div style={{ padding: '24px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
+          <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
+            Builds a multiple-choice draft (local Llama 3, with a math fallback). Review every question and
+            answer key before publishing.
+          </p>
+          {error && <AlertBox>{error}</AlertBox>}
+          {topics.length > 0 ? (
+            <div>
+              <label style={labelStyle}>Syllabus topic</label>
+              <select className="ak-input" value={form.topic_id} onChange={(e) => setForm((f) => ({ ...f, topic_id: e.target.value }))} style={selectStyle}>
+                <option value="">— Describe a topic instead —</option>
+                {topics.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: faint, margin: 0 }}>Tip: build a syllabus first and you can target its topics here.</p>
+          )}
+          {!form.topic_id && (
+            <div>
+              <label style={labelStyle}>Topic</label>
+              <input className="ak-input" required={!form.topic_id} placeholder="e.g. Arithmetic sequences" value={form.topic} onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))} style={fieldStyle} />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label style={labelStyle}># Questions</label>
+              <select className="ak-input" value={form.count} onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))} style={selectStyle}>
+                {COUNT_OPTIONS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Bloom's level</label>
+              <select className="ak-input capitalize" value={form.blooms_level} onChange={(e) => setForm((f) => ({ ...f, blooms_level: e.target.value }))} style={selectStyle}>
+                {BLOOMS_LEVELS.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
             Cancel
           </button>
-          <button type="submit" disabled={generating} className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50">
+          <button type="submit" disabled={generating} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
             {generating ? 'Generating… (can take a minute)' : 'Generate draft'}
+            <GoldArrow />
           </button>
         </div>
       </form>
     </div>
+  )
+}
+
+function QuizCard({ classId, quiz }) {
+  const count = quiz.questions?.length ?? 0
+  const s = STATUS_PILL[quiz.status] ?? STATUS_PILL.draft
+  const isAi = quiz.generated_by === 'ai_generated'
+  return (
+    <Link
+      to={`/teacher/classes/${classId}/quizzes/${quiz.id}`}
+      className="ak-card-hov block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
+      style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px', textDecoration: 'none' }}
+    >
+      <div className="flex items-center justify-between gap-2" style={{ marginBottom: 10 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999 }}>
+          {s.label}
+        </span>
+        {isAi && (
+          <span className="inline-flex items-center gap-1" style={{ ...mono, fontSize: 11, color: blueText, fontWeight: 600 }}>
+            <Sparkles className="h-3 w-3" /> AI
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: ink, lineHeight: 1.3 }}>{quiz.title}</div>
+      <div className="flex items-center gap-4" style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(14,42,92,0.07)' }}>
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Items</div>
+          <div style={{ ...mono, fontSize: 15, fontWeight: 700, color: ink, marginTop: 2 }}>{count}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Points</div>
+          <div style={{ ...mono, fontSize: 15, fontWeight: 700, color: ink, marginTop: 2 }}>{totalPoints(quiz.questions)}</div>
+        </div>
+        <span style={{ ...mono, marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: navy }}>Open →</span>
+      </div>
+    </Link>
   )
 }
 
@@ -206,6 +287,7 @@ export default function QuizzesPage() {
   const [showGenerate, setShowGenerate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
+  const [filter, setFilter] = useState('all')
 
   const { data: quizzes, isLoading } = useQuery({
     queryKey: ['fs-quizzes', classId],
@@ -234,6 +316,11 @@ export default function QuizzesPage() {
     })),
   )
 
+  const list = quizzes ?? []
+  const counts = { all: list.length, draft: 0, published: 0, closed: 0 }
+  for (const q of list) if (q.status in counts) counts[q.status] += 1
+  const shown = filter === 'all' ? list : list.filter((q) => q.status === filter)
+
   async function newQuiz() {
     const title = window.prompt('Quiz title:')
     if (!title?.trim()) return
@@ -252,63 +339,67 @@ export default function QuizzesPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Quizzes</h2>
-          <p className="text-slate-500 mt-1">Build or generate quizzes, then publish to open them to students.</p>
+          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+            Quizzes
+          </h1>
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>Build or generate quizzes, then publish to open them to students.</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowGenerate(true)}
-            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-          >
-            ✨ Generate with AI
+        <div className="flex flex-wrap gap-2.5">
+          <button onClick={newQuiz} disabled={creating} className="transition hover:brightness-105 disabled:opacity-50" style={btnGhost}>
+            <Plus className="h-4 w-4" /> New quiz
           </button>
-          <button
-            onClick={newQuiz}
-            disabled={creating}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
-            + New Quiz
+          <button onClick={() => setShowGenerate(true)} className="transition hover:brightness-110" style={btnPrimary}>
+            <span style={{ color: gold, display: 'inline-flex' }}>
+              <Sparkles className="h-4 w-4" />
+            </span>
+            Generate with AI
           </button>
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">{error}</p>
+      {error && <div className="mt-4">{<AlertBox>{error}</AlertBox>}</div>}
+
+      {!isLoading && list.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          {FILTERS.map((f) => {
+            const active = filter === f
+            const labelMap = { all: 'All', draft: 'Draft', published: 'Published', closed: 'Closed' }
+            return (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className="transition hover:brightness-105"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 14px', fontSize: 13,
+                  fontWeight: 700, fontFamily: sans, borderRadius: 999, cursor: 'pointer',
+                  ...(active
+                    ? { color: '#FAFAF6', background: navy, border: `1.5px solid ${navy}` }
+                    : { color: muted, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+                }}
+              >
+                {labelMap[f]}
+                <span style={{ display: 'inline-block', padding: '1px 7px', fontSize: 11, fontWeight: 800, borderRadius: 999, background: active ? 'rgba(245,197,24,0.8)' : 'rgba(14,42,92,0.08)', color: active ? navy : muted }}>
+                  {counts[f]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       )}
 
       {isLoading ? (
-        <p className="text-slate-400 mt-8">Loading quizzes…</p>
-      ) : quizzes?.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 mt-6 text-center text-slate-400">
+        <p className="mt-8" style={{ color: faint }}>Loading quizzes…</p>
+      ) : list.length === 0 ? (
+        <div className="mt-6 text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 48, color: faint, fontSize: 14 }}>
           No quizzes yet — create one manually or generate a draft with AI.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 mt-6 divide-y divide-slate-100">
-          {quizzes?.map((quiz) => {
-            const count = quiz.questions?.length ?? 0
-            return (
-              <Link
-                key={quiz.id}
-                to={`/teacher/classes/${classId}/quizzes/${quiz.id}`}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50"
-              >
-                <div>
-                  <p className="font-medium text-slate-800">
-                    {quiz.title}
-                    {quiz.generated_by === 'ai_generated' && <span title="AI-generated"> ✨</span>}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {count} question{count === 1 ? '' : 's'} · {totalPoints(quiz.questions)} pts
-                  </p>
-                </div>
-                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_STYLE[quiz.status]}`}>
-                  {quiz.status}
-                </span>
-              </Link>
-            )
-          })}
+        <div className="mt-5 grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+          {shown.map((quiz) => (
+            <QuizCard key={quiz.id} classId={classId} quiz={quiz} />
+          ))}
         </div>
       )}
 

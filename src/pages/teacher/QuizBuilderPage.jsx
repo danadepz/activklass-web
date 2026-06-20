@@ -14,6 +14,57 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { fetchUsersByIds } from '../../lib/roster'
+import { ArrowRight, Sparkles } from '../../components/icons'
+
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
+const fieldStyle = {
+  width: '100%', padding: '9px 12px', fontSize: 13, fontFamily: sans, color: ink,
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9,
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const btnGhost = {
+  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', fontSize: 13,
+  fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF',
+  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
+}
+const btnDanger = {
+  padding: '10px 16px', fontSize: 13, fontWeight: 600, fontFamily: sans, color: red,
+  background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.3)', borderRadius: 10, cursor: 'pointer',
+}
+const btnPrimary = {
+  display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontSize: 14,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
+}
+const btnGold = {
+  padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: goldDeep,
+  background: 'rgba(245,197,24,0.18)', border: '1.5px solid rgba(245,197,24,0.55)', borderRadius: 10, cursor: 'pointer',
+}
+const linkBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }
+const iconBtn = { color: faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontSize: 14, lineHeight: 1 }
+
+function GoldArrow() {
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
+      <ArrowRight className="h-3 w-3" />
+    </span>
+  )
+}
 
 let keyCounter = 0
 const newKey = () => `qk${++keyCounter}`
@@ -79,84 +130,48 @@ function toPayload(q) {
   return base
 }
 
-const inputCls = 'rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
-
 function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
   const setOptions = (options) => update({ options })
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 mt-3">
+    <div className="mt-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 18 }}>
       <div className="flex items-center gap-2">
-        <span className="rounded-lg bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1">Q{index + 1}</span>
-        <select
-          value={q.qtype}
-          onChange={(e) => update({ qtype: e.target.value })}
-          className={`${inputCls} bg-white`}
-        >
+        <span style={{ ...mono, background: navy, color: gold, fontSize: 11, fontWeight: 700, padding: '5px 9px', borderRadius: 7 }}>Q{index + 1}</span>
+        <select value={q.qtype} onChange={(e) => update({ qtype: e.target.value })} className="ak-input" style={{ ...fieldStyle, width: 'auto', cursor: 'pointer' }}>
           {Object.entries(TYPE_LABELS).map(([k, label]) => (
             <option key={k} value={k}>{label}</option>
           ))}
         </select>
         <div className="relative ml-auto">
-          <input
-            type="number" min="0.5" step="0.5" value={q.points}
-            onChange={(e) => update({ points: e.target.value })}
-            className={`${inputCls} w-20 pr-8 text-right`}
-          />
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">pts</span>
+          <input type="number" min="0.5" step="0.5" value={q.points} onChange={(e) => update({ points: e.target.value })} className="ak-input" style={{ ...fieldStyle, width: 80, paddingRight: 30, textAlign: 'right' }} />
+          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: faint }}>pts</span>
         </div>
-        <button onClick={moveUp} className="text-slate-400 hover:text-slate-600 px-1">↑</button>
-        <button onClick={moveDown} className="text-slate-400 hover:text-slate-600 px-1">↓</button>
-        <button onClick={remove} title="Remove question" className="text-slate-400 hover:text-red-600 px-1 text-lg leading-none">×</button>
+        <button onClick={moveUp} title="Move up" style={iconBtn} className="transition hover:text-[#0A1733]">↑</button>
+        <button onClick={moveDown} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
+        <button onClick={remove} title="Remove question" style={{ ...iconBtn, fontSize: 18 }} className="transition hover:text-[#C0392B]">×</button>
       </div>
 
-      <textarea
-        rows={2}
-        placeholder="Question text"
-        value={q.text}
-        onChange={(e) => update({ text: e.target.value })}
-        className={`${inputCls} w-full mt-2`}
-      />
+      <textarea rows={2} placeholder="Question text" value={q.text} onChange={(e) => update({ text: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 10, resize: 'vertical' }} />
 
       {q.qtype === 'mcq' && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 flex flex-col gap-1.5">
           {q.options.map((o, i) => (
             <div key={o._key} className="flex items-center gap-2">
-              <input
-                type="radio"
-                name={`correct-${q._key}`}
-                checked={o.is_correct}
-                onChange={() => setOptions(q.options.map((x, j) => ({ ...x, is_correct: j === i })))}
-                title="Correct answer"
-              />
-              <input
-                placeholder={`Option ${i + 1}`}
-                value={o.text}
-                onChange={(e) => setOptions(q.options.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
-                className={`${inputCls} flex-1`}
-              />
-              <button
-                onClick={() => setOptions(q.options.filter((_, j) => j !== i))}
-                disabled={q.options.length <= 2}
-                className="text-slate-400 hover:text-red-600 disabled:opacity-30"
-              >
-                ×
-              </button>
+              <input type="radio" name={`correct-${q._key}`} checked={o.is_correct} onChange={() => setOptions(q.options.map((x, j) => ({ ...x, is_correct: j === i })))} title="Correct answer" style={{ accentColor: navy, width: 16, height: 16 }} />
+              <input placeholder={`Option ${i + 1}`} value={o.text} onChange={(e) => setOptions(q.options.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
+              <button onClick={() => setOptions(q.options.filter((_, j) => j !== i))} disabled={q.options.length <= 2} style={{ ...iconBtn, opacity: q.options.length <= 2 ? 0.3 : 1 }} className="transition hover:text-[#C0392B] disabled:cursor-not-allowed">×</button>
             </div>
           ))}
-          <button
-            onClick={() => setOptions([...q.options, { _key: newKey(), id: null, text: '', is_correct: false }])}
-            className="text-sm text-indigo-600 font-medium hover:underline"
-          >
-            + Add option
+          <button onClick={() => setOptions([...q.options, { _key: newKey(), id: null, text: '', is_correct: false }])} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
+            <span style={{ color: gold }}>+</span> Add option
           </button>
         </div>
       )}
 
       {q.qtype === 'true_false' && (
-        <div className="flex gap-4 mt-2 text-sm text-slate-700">
+        <div className="mt-2 flex gap-4" style={{ fontSize: 13, color: '#3A4A6B' }}>
           {[true, false].map((v) => (
-            <label key={String(v)} className="flex items-center gap-1.5">
-              <input type="radio" name={`tf-${q._key}`} checked={q.tfValue === v} onChange={() => update({ tfValue: v })} />
+            <label key={String(v)} className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+              <input type="radio" name={`tf-${q._key}`} checked={q.tfValue === v} onChange={() => update({ tfValue: v })} style={{ accentColor: navy }} />
               {v ? 'True' : 'False'} is correct
             </label>
           ))}
@@ -164,56 +179,33 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
       )}
 
       {q.qtype === 'short_answer' && (
-        <textarea
-          rows={2}
-          placeholder={'Accepted answers — one per line (case-insensitive)'}
-          value={q.answersText}
-          onChange={(e) => update({ answersText: e.target.value })}
-          className={`${inputCls} w-full mt-2`}
-        />
+        <textarea rows={2} placeholder={'Accepted answers — one per line (case-insensitive)'} value={q.answersText} onChange={(e) => update({ answersText: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 8, resize: 'vertical' }} />
       )}
 
       {q.qtype === 'matching' && (
-        <div className="mt-2 space-y-1.5">
+        <div className="mt-2 flex flex-col gap-1.5">
           {q.pairs.map((p, i) => (
             <div key={p._key} className="flex items-center gap-2">
-              <input
-                placeholder="Left item"
-                value={p.left}
-                onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, left: e.target.value } : x)) })}
-                className={`${inputCls} flex-1`}
-              />
-              <span className="text-slate-400">→</span>
-              <input
-                placeholder="Matches with"
-                value={p.right}
-                onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, right: e.target.value } : x)) })}
-                className={`${inputCls} flex-1`}
-              />
-              <button onClick={() => update({ pairs: q.pairs.filter((_, j) => j !== i) })} className="text-slate-400 hover:text-red-600">×</button>
+              <input placeholder="Left item" value={p.left} onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, left: e.target.value } : x)) })} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
+              <span style={{ color: faint }}>→</span>
+              <input placeholder="Matches with" value={p.right} onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, right: e.target.value } : x)) })} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
+              <button onClick={() => update({ pairs: q.pairs.filter((_, j) => j !== i) })} style={iconBtn} className="transition hover:text-[#C0392B]">×</button>
             </div>
           ))}
-          <button
-            onClick={() => update({ pairs: [...q.pairs, { _key: newKey(), left: '', right: '' }] })}
-            className="text-sm text-indigo-600 font-medium hover:underline"
-          >
-            + Add pair
+          <button onClick={() => update({ pairs: [...q.pairs, { _key: newKey(), left: '', right: '' }] })} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
+            <span style={{ color: gold }}>+</span> Add pair
           </button>
         </div>
       )}
 
       {q.qtype === 'essay' && (
-        <textarea
-          rows={2}
-          placeholder="Grading rubric (what a full-credit answer includes)"
-          value={q.rubric}
-          onChange={(e) => update({ rubric: e.target.value })}
-          className={`${inputCls} w-full mt-2`}
-        />
+        <textarea rows={2} placeholder="Grading rubric (what a full-credit answer includes)" value={q.rubric} onChange={(e) => update({ rubric: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 8, resize: 'vertical' }} />
       )}
     </div>
   )
 }
+
+const thHead = { padding: '13px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase' }
 
 function ResultsView({ classId, quizId, totalPoints }) {
   const { data, isLoading } = useQuery({
@@ -238,17 +230,17 @@ function ResultsView({ classId, quizId, totalPoints }) {
       return { students, attempts }
     },
   })
-  if (isLoading) return <p className="text-slate-400 mt-4">Loading results…</p>
+  if (isLoading) return <p className="mt-4" style={{ color: faint }}>Loading results…</p>
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 mt-4 overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="mt-4 overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
+      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr className="bg-slate-50 text-left text-slate-500 border-b border-slate-200">
-            <th className="px-4 py-2.5 font-medium">Student</th>
-            <th className="px-4 py-2.5 font-medium text-center">Attempts</th>
-            <th className="px-4 py-2.5 font-medium text-center">Best Score</th>
-            <th className="px-4 py-2.5 font-medium">Status</th>
+          <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+            <th style={thHead}>Student</th>
+            <th style={{ ...thHead, textAlign: 'center' }}>Attempts</th>
+            <th style={{ ...thHead, textAlign: 'center' }}>Best Score</th>
+            <th style={thHead}>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -258,13 +250,13 @@ function ResultsView({ classId, quizId, totalPoints }) {
             const best = scores.length ? Math.max(...scores) : null
             const pendingEssay = attempts.some((a) => a.status === 'submitted')
             return (
-              <tr key={s.student_id} className="border-b border-slate-100 last:border-0">
-                <td className="px-4 py-2 font-medium text-slate-700">{s.last_name}, {s.first_name}</td>
-                <td className="px-4 py-2 text-center text-slate-600">{attempts.length || '—'}</td>
-                <td className="px-4 py-2 text-center font-semibold text-slate-800">
+              <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+                <td style={{ padding: '12px 18px', fontWeight: 700, color: ink }}>{s.last_name}, {s.first_name}</td>
+                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>{attempts.length || '—'}</td>
+                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', fontWeight: 700, color: best !== null ? ink : faint }}>
                   {best !== null ? `${best} / ${totalPoints}` : '—'}
                 </td>
-                <td className="px-4 py-2 text-slate-500">
+                <td style={{ padding: '12px 18px', color: muted }}>
                   {attempts.length === 0 ? 'Not taken' : pendingEssay ? 'Essay pending review' : 'Graded'}
                 </td>
               </tr>
@@ -360,47 +352,51 @@ function BuilderForm({ classId, quiz, refetch }) {
 
   return (
     <div className="max-w-3xl">
-      {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">{error}</p>}
-      {saved && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mt-4">Quiz saved.</p>}
+      {error && (
+        <p className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
+      )}
+      {saved && (
+        <p className="mt-4" style={{ fontSize: 13, color: green, background: 'rgba(31,138,91,0.08)', border: '1px solid rgba(31,138,91,0.35)', borderRadius: 10, padding: '10px 12px' }}>Quiz saved.</p>
+      )}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4 space-y-3">
+      <div className="mt-4 flex flex-col gap-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
         <div className="grid grid-cols-3 gap-3">
-          <label className="block col-span-2">
-            <span className="text-sm font-medium text-slate-700">Title</span>
-            <input value={settings.title} onChange={set('title')} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Time limit (min)</span>
-            <input type="number" min="1" placeholder="None" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} className={`${inputCls} w-full mt-1`} />
-          </label>
+          <div className="col-span-2">
+            <label style={labelStyle}>Title</label>
+            <input className="ak-input" value={settings.title} onChange={set('title')} style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Time limit (min)</label>
+            <input className="ak-input" type="number" min="1" placeholder="None" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} style={fieldStyle} />
+          </div>
         </div>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Instructions (optional)</span>
-          <input value={settings.instructions} onChange={set('instructions')} className={`${inputCls} w-full mt-1`} />
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Attempts</span>
-            <input type="number" min="1" max="10" value={settings.attempts_allowed} onChange={set('attempts_allowed')} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Opens</span>
-            <input type="datetime-local" value={settings.opens_at} onChange={set('opens_at')} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Closes</span>
-            <input type="datetime-local" value={settings.closes_at} onChange={set('closes_at')} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700 pb-2">
-            <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} className="rounded" />
+        <div>
+          <label style={labelStyle}>Instructions (optional)</label>
+          <input className="ak-input" value={settings.instructions} onChange={set('instructions')} style={fieldStyle} />
+        </div>
+        <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
+          <div>
+            <label style={labelStyle}>Attempts</label>
+            <input className="ak-input" type="number" min="1" max="10" value={settings.attempts_allowed} onChange={set('attempts_allowed')} style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Opens</label>
+            <input className="ak-input" type="datetime-local" value={settings.opens_at} onChange={set('opens_at')} style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Closes</label>
+            <input className="ak-input" type="datetime-local" value={settings.closes_at} onChange={set('closes_at')} style={fieldStyle} />
+          </div>
+          <label className="flex items-center gap-2 pb-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
+            <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
             Shuffle questions
           </label>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-5">
-        <h3 className="font-semibold text-slate-700">
-          Questions <span className="text-slate-400 font-normal">({questions.length} · {totalPoints} pts)</span>
+      <div className="mt-5 flex items-center justify-between">
+        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>
+          Questions <span style={{ ...mono, fontSize: 13, color: faint, fontWeight: 400 }}>({questions.length} · {totalPoints} pts)</span>
         </h3>
       </div>
 
@@ -416,25 +412,22 @@ function BuilderForm({ classId, quiz, refetch }) {
         />
       ))}
 
-      <div className="flex items-center justify-between mt-4 pb-8">
-        <div className="flex gap-2">
-          <button onClick={() => setQuestions([...questions, blankQuestion()])} className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50">
-            + Add question
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pb-8">
+        <div className="flex gap-2.5">
+          <button onClick={() => setQuestions([...questions, blankQuestion()])} className="transition hover:brightness-105" style={btnGhost}>
+            <span style={{ color: gold }}>+</span> Add question
           </button>
-          <button onClick={deleteQuiz} className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50">
+          <button onClick={deleteQuiz} className="transition hover:brightness-105" style={btnDanger}>
             Delete draft
           </button>
         </div>
-        <div className="flex gap-2">
-          <button onClick={save} disabled={saving} className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50">
+        <div className="flex gap-2.5">
+          <button onClick={save} disabled={saving} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
             {saving ? 'Saving…' : 'Save draft'}
           </button>
-          <button
-            onClick={publish}
-            disabled={saving || publishing || questions.length === 0}
-            className="rounded-lg bg-green-600 text-white px-5 py-2 font-medium hover:bg-green-700 disabled:opacity-40"
-          >
+          <button onClick={publish} disabled={saving || publishing || questions.length === 0} className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" style={btnPrimary}>
             {publishing ? 'Publishing…' : 'Publish'}
+            <GoldArrow />
           </button>
         </div>
       </div>
@@ -467,8 +460,8 @@ export default function QuizBuilderPage() {
     refetch()
   }
 
-  if (isLoading) return <p className="text-slate-400">Loading quiz…</p>
-  if (isError || !quiz) return <p className="text-red-600">Quiz not found.</p>
+  if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
+  if (isError || !quiz) return <p style={{ color: red }}>Quiz not found.</p>
 
   const editable = quiz.status === 'draft'
   const questionCount = quiz.questions?.length ?? 0
@@ -476,24 +469,25 @@ export default function QuizBuilderPage() {
 
   return (
     <div>
-      <Link to={`/teacher/classes/${classId}/quizzes`} className="text-sm text-indigo-600 hover:underline">
+      <Link to={`/teacher/classes/${classId}/quizzes`} className="inline-flex items-center gap-1.5 transition hover:opacity-70" style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}>
         ← Back to quizzes
       </Link>
-      <div className="flex items-start justify-between mt-2 max-w-3xl">
+      <div className="mt-2 flex max-w-3xl items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">
+          <h1 className="flex items-center gap-2 text-[clamp(24px,3.2vw,30px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
             {quiz.title}
-            {quiz.generated_by === 'ai_generated' && <span title="AI-generated"> ✨</span>}
-          </h2>
-          <p className="text-slate-500 mt-1 capitalize">
+            {quiz.generated_by === 'ai_generated' && (
+              <span title="AI-generated" style={{ color: blueText, display: 'inline-flex' }}>
+                <Sparkles className="h-5 w-5" />
+              </span>
+            )}
+          </h1>
+          <p className="capitalize" style={{ ...mono, fontSize: 13, color: muted, margin: 0 }}>
             {quiz.status} · {questionCount} questions · {totalPoints} pts
           </p>
         </div>
         {quiz.status === 'published' && (
-          <button
-            onClick={closeQuiz}
-            className="rounded-lg border border-amber-300 text-amber-700 px-4 py-2 text-sm font-medium hover:bg-amber-50"
-          >
+          <button onClick={closeQuiz} className="transition hover:brightness-105" style={btnGold}>
             Close quiz
           </button>
         )}
@@ -502,22 +496,25 @@ export default function QuizBuilderPage() {
       {editable ? (
         <>
           {quiz.generated_by === 'ai_generated' && (
-            <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-4 max-w-3xl">
-              ✨ AI-generated draft — review every question and answer key before publishing.
-            </p>
+            <div className="mt-4 flex max-w-3xl items-center gap-2.5" style={{ background: 'rgba(63,169,245,0.06)', border: '1px solid rgba(63,169,245,0.3)', borderRadius: 11, padding: '12px 14px', fontSize: 13, color: ink }}>
+              <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: 7, background: 'rgba(63,169,245,0.2)', color: blueText, flexShrink: 0 }}>
+                <Sparkles className="h-3 w-3" />
+              </span>
+              AI-generated draft — review every question and answer key before publishing.
+            </div>
           )}
           <BuilderForm key={quiz.id} classId={classId} quiz={quiz} refetch={refetch} />
         </>
       ) : (
         <div className="max-w-3xl">
           <ResultsView classId={classId} quizId={quizId} totalPoints={totalPoints} />
-          <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4">
-            <h3 className="font-semibold text-slate-700 mb-3">Questions (read-only)</h3>
+          <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+            <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 12px' }}>Questions (read-only)</h3>
             {(quiz.questions ?? []).map((q, i) => (
-              <div key={q.id} className="border-b border-slate-100 last:border-0 py-2">
-                <p className="text-sm text-slate-700">
-                  <span className="font-semibold">Q{i + 1}.</span> {q.text}
-                  <span className="text-slate-400"> · {TYPE_LABELS[q.qtype]} · {q.points} pts</span>
+              <div key={q.id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '8px 0' }}>
+                <p style={{ fontSize: 13, color: '#3A4A6B', margin: 0 }}>
+                  <span style={{ fontWeight: 700, color: ink }}>Q{i + 1}.</span> {q.text}
+                  <span style={{ color: faint }}> · {TYPE_LABELS[q.qtype]} · {q.points} pts</span>
                 </p>
               </div>
             ))}

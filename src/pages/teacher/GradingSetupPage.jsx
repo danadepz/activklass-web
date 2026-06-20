@@ -5,6 +5,65 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { GRADING_MODES, GRADING_PRESETS } from '../../lib/grading'
 import { useAuth } from '../../context/useAuth'
+import { ArrowRight } from '../../components/icons'
+
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+const fieldStyle = {
+  padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
+  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const iconBtn = { color: faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontSize: 18, lineHeight: 1 }
+const btnPrimary = {
+  display: 'inline-flex', alignItems: 'center', gap: 9, padding: '12px 20px', fontSize: 14,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
+}
+
+function GoldArrow() {
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
+      <ArrowRight className="h-3 w-3" />
+    </span>
+  )
+}
+
+function Banner({ tone, children }) {
+  const t =
+    tone === 'ok'
+      ? { color: green, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.35)' }
+      : { color: red, bg: 'rgba(192,57,43,0.07)', border: 'rgba(192,57,43,0.3)' }
+  return (
+    <p className="mt-4" style={{ fontSize: 13, color: t.color, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 12px' }}>
+      {children}
+    </p>
+  )
+}
+
+function WeightBadge({ ok, children }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 999,
+        ...(ok
+          ? { color: green, background: 'rgba(31,138,91,0.10)', border: '1px solid rgba(31,138,91,0.4)' }
+          : { color: red, background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.35)' }),
+      }}
+    >
+      {children}
+    </span>
+  )
+}
 
 const newId = () =>
   globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -39,29 +98,26 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <div className="flex items-center justify-between">
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-slate-800">{title}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">{hint}</p>
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>{title}</h3>
+          <p style={{ fontSize: 12, color: faint, margin: 0 }}>{hint}</p>
         </div>
-        <span
-          className={`rounded-full px-3 py-1 text-sm font-semibold ${
-            ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
-          }`}
-        >
-          {sum.toFixed(sum % 1 === 0 ? 0 : 2)}%
-        </span>
+        <WeightBadge ok={ok}>{sum.toFixed(sum % 1 === 0 ? 0 : 2)}%</WeightBadge>
       </div>
 
-      <div className="mt-4 space-y-2">
+      <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
+
+      <div className="flex flex-col gap-2.5">
         {rows.map((row, i) => (
-          <div key={row.id ?? `new-${i}`} className="flex gap-2 items-center">
+          <div key={row.id ?? `new-${i}`} className="flex items-center gap-2.5">
             <input
+              className="ak-input"
               placeholder="Name"
               value={row.name}
               onChange={(e) => update(i, 'name', e.target.value)}
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              style={{ ...fieldStyle, flex: 1 }}
             />
             <input
               type="range"
@@ -70,10 +126,11 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
               step="5"
               value={parseFloat(row.weight_percent) || 0}
               onChange={(e) => update(i, 'weight_percent', e.target.value)}
-              className="w-28 accent-indigo-600"
+              style={{ width: 112, accentColor: navy }}
             />
             <div className="relative">
               <input
+                className="ak-input"
                 type="number"
                 min="0"
                 max="100"
@@ -81,16 +138,17 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
                 placeholder="0"
                 value={row.weight_percent}
                 onChange={(e) => update(i, 'weight_percent', e.target.value)}
-                className="w-24 rounded-lg border border-slate-300 px-3 py-2 pr-7 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                style={{ ...fieldStyle, width: 88, paddingRight: 26, textAlign: 'right' }}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
             </div>
             <button
               type="button"
               onClick={() => setRows(rows.filter((_, j) => j !== i))}
               disabled={rows.length === 1}
               title="Remove"
-              className="text-slate-400 hover:text-red-600 disabled:opacity-30 px-1 text-lg leading-none"
+              className="transition hover:text-[#C0392B] disabled:cursor-not-allowed"
+              style={{ ...iconBtn, opacity: rows.length === 1 ? 0.3 : 1 }}
             >
               ×
             </button>
@@ -101,9 +159,10 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
       <button
         type="button"
         onClick={() => setRows([...rows, newRow()])}
-        className="mt-3 text-sm text-indigo-600 font-medium hover:underline"
+        className="mt-3 transition hover:opacity-70"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
       >
-        + {addLabel}
+        <span style={{ color: gold }}>+</span> {addLabel}
       </button>
     </div>
   )
@@ -154,35 +213,39 @@ function GradingTypeSelector({ classId }) {
     }
   }
 
+  const disabled = saving || mode === null
+
   return (
-    <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5">
-      <h3 className="font-semibold text-slate-800">Grading Type</h3>
-      <p className="text-xs text-slate-400 mt-0.5">
-        DepEd K-12 transmutes the weighted grade per DepEd Order No. 8, s. 2015; CHED modes
-        report raw percentages or the 1.0–5.0 point scale.
+    <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
+      <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Grading Type</h3>
+      <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px', maxWidth: 620 }}>
+        DepEd K-12 transmutes the weighted grade per DepEd Order No. 8, s. 2015; CHED modes report raw
+        percentages or the 1.0–5.0 point scale.
       </p>
-      <div className="flex flex-wrap gap-2 mt-3">
-        {GRADING_MODES.map((m) => (
-          <button
-            key={m.value}
-            type="button"
-            onClick={() => select(m.value)}
-            disabled={saving || mode === null}
-            className={`rounded-lg border px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${
-              mode === m.value
-                ? 'bg-indigo-600 border-indigo-600 text-white'
-                : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap gap-3">
+        {GRADING_MODES.map((m) => {
+          const active = mode === m.value
+          return (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => select(m.value)}
+              disabled={disabled}
+              className="transition hover:brightness-105 disabled:cursor-not-allowed"
+              style={{
+                padding: '11px 18px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11, cursor: 'pointer', textAlign: 'left',
+                opacity: disabled ? 0.6 : 1,
+                ...(active
+                  ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
+                  : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+              }}
+            >
+              {m.label}
+            </button>
+          )
+        })}
       </div>
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
-          {error}
-        </p>
-      )}
+      {error && <Banner tone="err">{error}</Banner>}
     </div>
   )
 }
@@ -243,25 +306,32 @@ function GradingSetupForm({ classId, setup }) {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Grading Setup</h2>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+            Grading Setup
+          </h1>
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
             Define your grading periods and grade components. Each set must total 100%.
           </p>
         </div>
         <button
           onClick={() => save.mutate()}
           disabled={save.isPending}
-          className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={btnPrimary}
         >
           {save.isPending ? 'Saving…' : 'Save setup'}
+          <GoldArrow />
         </button>
       </div>
 
-      <div className="mt-4 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-        <p className="text-sm font-medium text-indigo-900">Quick start with a preset:</p>
-        <div className="flex flex-wrap gap-2 mt-2">
+      <div className="mt-4" style={{ background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 18px' }}>
+        <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
+          <span style={{ color: gold }}>✦</span>
+          <span style={{ fontSize: 12, color: muted, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Quick-start with a preset</span>
+        </div>
+        <div className="flex flex-wrap gap-3">
           {GRADING_PRESETS.map((p) => (
             <button
               key={p.key}
@@ -271,28 +341,24 @@ function GradingSetupForm({ classId, setup }) {
                 }
               }}
               disabled={applyPreset.isPending}
-              className="rounded-lg bg-white border border-indigo-200 text-indigo-700 px-3 py-1.5 text-sm font-medium hover:bg-indigo-100 disabled:opacity-50"
+              className="transition hover:brightness-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ textAlign: 'left', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', fontFamily: sans }}
             >
-              {p.label}
+              <div style={{ fontSize: 14, fontWeight: 800, color: ink, marginBottom: 4 }}>{p.label}</div>
+              <div style={{ fontSize: 12, color: muted, lineHeight: 1.4 }}>
+                {p.periods.length} period{p.periods.length === 1 ? '' : 's'} · {p.components.length} component{p.components.length === 1 ? '' : 's'}
+              </div>
             </button>
           ))}
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">
-          {error}
-        </p>
-      )}
-      {saved && (
-        <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mt-4">
-          Grading setup saved.
-        </p>
-      )}
+      {error && <Banner tone="err">{error}</Banner>}
+      {saved && <Banner tone="ok">Grading setup saved.</Banner>}
 
       <GradingTypeSelector classId={classId} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <EditorCard
           title="Grading Periods"
           hint="e.g. Quarters 1–4, or Prelim / Midterm / Finals"
@@ -328,8 +394,8 @@ export default function GradingSetupPage() {
     },
   })
 
-  if (isLoading) return <p className="text-slate-400">Loading grading setup…</p>
-  if (isError || !data) return <p className="text-red-600">Class not found.</p>
+  if (isLoading) return <p style={{ color: faint }}>Loading grading setup…</p>
+  if (isError || !data) return <p style={{ color: red }}>Class not found.</p>
 
   return <GradingSetupForm key={classId} classId={classId} setup={data} />
 }

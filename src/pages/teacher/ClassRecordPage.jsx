@@ -16,6 +16,115 @@ import {
 import { db } from '../../lib/firebase'
 import { fetchUsersByIds } from '../../lib/roster'
 import { computeFinalGrade, finalAcrossPeriods } from '../../lib/grading'
+import { ArrowRight, Plus } from '../../components/icons'
+
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+// --- shared modal + button styling ----------------------------------------
+const overlayStyle = {
+  position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)',
+  backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24,
+}
+const cardStyle = {
+  width: '100%', background: '#FFFFFF', borderRadius: 20,
+  boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden',
+  display: 'flex', flexDirection: 'column', maxHeight: '90vh',
+}
+const headerStyle = {
+  padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)',
+  display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+}
+const iconSquare = {
+  width: 36, height: 36, borderRadius: 10, background: navy, color: gold,
+  display: 'grid', placeItems: 'center', flexShrink: 0,
+}
+const bodyStyle = { padding: '24px 28px', overflowY: 'auto' }
+const footerStyle = {
+  display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+  padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)',
+  background: 'rgba(14,42,92,0.02)', flexShrink: 0,
+}
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
+const fieldStyle = {
+  width: '100%', padding: '12px 14px', fontSize: 14, fontFamily: sans, color: ink,
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10,
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const btnPrimary = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+  padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6',
+  background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
+}
+const btnGhost = {
+  padding: '12px 20px', fontSize: 14, fontWeight: 600, fontFamily: sans, color: '#3A4A6B',
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
+}
+// Toolbar (compact) variants
+const btnGhostSm = {
+  padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy,
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
+}
+const btnPrimarySm = {
+  display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 10, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}`,
+}
+const lockBtnActive = {
+  padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: goldDeep,
+  background: 'rgba(245,197,24,0.18)', border: '1.5px solid rgba(245,197,24,0.55)', borderRadius: 10, cursor: 'pointer',
+}
+
+function GoldArrow() {
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
+      <ArrowRight className="h-3 w-3" />
+    </span>
+  )
+}
+
+function AlertBox({ tone = 'error', children }) {
+  const t =
+    tone === 'warn'
+      ? { color: goldDeep, bg: 'rgba(245,197,24,0.12)', border: 'rgba(245,197,24,0.45)' }
+      : { color: red, bg: 'rgba(192,57,43,0.07)', border: 'rgba(192,57,43,0.3)' }
+  return (
+    <div role="alert" style={{ fontSize: 13, color: t.color, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 12px' }}>
+      {children}
+    </div>
+  )
+}
+
+function StatMini({ label, value, sub, color, highlight }) {
+  return (
+    <div
+      style={{
+        background: '#FFFFFF',
+        borderRadius: 14,
+        padding: '16px 18px',
+        border: highlight ? '1px solid rgba(245,197,24,0.45)' : `1px solid ${line}`,
+        boxShadow: highlight ? '0 0 0 3px rgba(245,197,24,0.08)' : 'none',
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, color: highlight ? goldDeep : muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ ...serif, fontSize: 32, lineHeight: 1, color: color ?? ink, marginTop: 6 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 6 }}>{sub}</div>}
+    </div>
+  )
+}
 
 /* Cell text → score entry. Number = graded, M = missing, X = excused, blank = not recorded. */
 function parseCell(text, totalPoints) {
@@ -38,6 +147,16 @@ function cellText(score) {
 
 function fmt(pct) {
   return pct === null || pct === undefined ? '—' : pct.toFixed(2).replace(/\.00$/, '')
+}
+
+// Grade → colour band for the final-grade / summary cells.
+function gradeColor(v) {
+  if (v == null) return muted
+  if (v >= 90) return green
+  if (v >= 85) return blueText
+  if (v >= 75) return ink
+  if (v >= 70) return goldDeep
+  return red
 }
 
 const KIND_OPTIONS = ['activity', 'quiz', 'exam', 'contest', 'other']
@@ -153,6 +272,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const selectStyle = { ...fieldStyle, cursor: 'pointer' }
 
   async function submit(e) {
     e.preventDefault()
@@ -182,92 +302,87 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-        <h3 className="text-lg font-semibold text-slate-800">
-          New Assessment — {record.period.name}
-        </h3>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Title</span>
-          <input
-            required
-            placeholder="e.g. Quiz 1 — Fractions"
-            value={form.title}
-            onChange={set('title')}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Component</span>
-            <select
-              value={form.component_id}
-              onChange={set('component_id')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {record.components.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Type</span>
-            <select
-              value={form.kind}
-              onChange={set('kind')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 bg-white capitalize focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {KIND_OPTIONS.map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-          </label>
+    <div style={overlayStyle}>
+      <form onSubmit={submit} style={{ ...cardStyle, maxWidth: 460 }}>
+        <div style={headerStyle}>
+          <span style={iconSquare}>
+            <Plus className="h-[18px] w-[18px]" />
+          </span>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>New Assessment · {record.period.name}</h2>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Total points</span>
-            <input
-              required
-              type="number"
-              min="0.5"
-              step="0.5"
-              value={form.total_points}
-              onChange={set('total_points')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Date given</span>
-            <input
-              type="date"
-              value={form.date_given}
-              onChange={set('date_given')}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </label>
+        <div style={bodyStyle} className="flex flex-col gap-4">
+          {error && <AlertBox>{error}</AlertBox>}
+          <div>
+            <label style={labelStyle}>Title</label>
+            <input className="ak-input" required placeholder="e.g. Quiz 1 — Fractions" value={form.title} onChange={set('title')} style={fieldStyle} />
+          </div>
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label style={labelStyle}>Component</label>
+              <select className="ak-input" value={form.component_id} onChange={set('component_id')} style={selectStyle}>
+                {record.components.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Type</label>
+              <select className="ak-input capitalize" value={form.kind} onChange={set('kind')} style={selectStyle}>
+                {KIND_OPTIONS.map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label style={labelStyle}>Total points</label>
+              <input className="ak-input" required type="number" min="0.5" step="0.5" value={form.total_points} onChange={set('total_points')} style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Date given</label>
+              <input className="ak-input" type="date" value={form.date_given} onChange={set('date_given')} style={fieldStyle} />
+            </div>
+          </div>
         </div>
-        <div className="flex gap-3 justify-end pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
-          >
+        <div style={footerStyle}>
+          <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnGhost}>
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
+          <button type="submit" disabled={saving} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnPrimary}>
             {saving ? 'Adding…' : 'Add assessment'}
+            <GoldArrow />
           </button>
         </div>
       </form>
     </div>
   )
+}
+
+function cellInputStyle(dirty, locked) {
+  return {
+    ...mono,
+    width: 60,
+    padding: '6px 4px',
+    textAlign: 'center',
+    fontSize: 13,
+    borderRadius: 8,
+    border: dirty ? '1.5px solid #F5C518' : '1.5px solid rgba(14,42,92,0.14)',
+    background: locked ? 'rgba(14,42,92,0.03)' : dirty ? 'rgba(245,197,24,0.12)' : '#FFFFFF',
+    color: locked ? muted : ink,
+    outline: 'none',
+  }
+}
+
+const thHead = {
+  padding: '10px 12px',
+  fontSize: 11,
+  fontWeight: 700,
+  color: muted,
+  letterSpacing: '0.05em',
+  textTransform: 'uppercase',
+  background: 'rgba(14,42,92,0.03)',
+  borderBottom: '1px solid rgba(14,42,92,0.07)',
 }
 
 function RecordGrid({ classId, record, refetch }) {
@@ -299,6 +414,20 @@ function RecordGrid({ classId, record, refetch }) {
     dirtyOverrides[studentId] ?? (record.grades[studentId]?.override != null
       ? String(record.grades[studentId].override)
       : '')
+
+  // Class-level stats for the active period (computed from real grades).
+  const gradeVals = record.students.map((s) => record.grades[s.student_id]?.grade).filter((v) => v != null)
+  const avg = gradeVals.length ? gradeVals.reduce((a, b) => a + b, 0) / gradeVals.length : null
+  const passed = gradeVals.filter((v) => v >= 75).length
+  const atRisk = gradeVals.filter((v) => v < 85).length
+  const hi = gradeVals.length ? Math.max(...gradeVals) : null
+  const lo = gradeVals.length ? Math.min(...gradeVals) : null
+  const passingRate = gradeVals.length ? `${Math.round((passed / gradeVals.length) * 100)}%` : '—'
+  const nameForGrade = (t) => {
+    if (t == null) return ''
+    const s = record.students.find((st) => record.grades[st.student_id]?.grade === t)
+    return s ? s.last_name : ''
+  }
 
   async function saveAll() {
     setSaving(true)
@@ -387,34 +516,35 @@ function RecordGrid({ classId, record, refetch }) {
 
   return (
     <>
-      <div className="flex items-center justify-between mt-4">
-        <p className="text-xs text-slate-400">
-          Enter a score, <span className="font-semibold">M</span> for missing (counts as 0),{' '}
-          <span className="font-semibold">X</span> for excused, or leave blank.
+      {record.students.length > 0 && (
+        <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+          <StatMini label="Class average" value={fmt(avg)} sub={`across ${record.students.length} students`} />
+          <StatMini label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ≥ 75`} color={green} />
+          <StatMini label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" color={goldDeep} highlight={atRisk > 0} />
+          <StatMini label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} color={green} />
+          <StatMini label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} color={red} />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3" style={{ marginBottom: 14 }}>
+        <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
+          Enter a score, <strong style={{ color: ink }}>M</strong> for missing (counts as 0),{' '}
+          <strong style={{ color: ink }}>X</strong> for excused, or leave blank.
         </p>
-        <div className="flex gap-2">
-          <button
-            onClick={toggleLock}
-            className={`rounded-lg border px-4 py-2 text-sm font-medium ${
-              locked
-                ? 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100'
-                : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
+        <div className="flex flex-wrap gap-2.5">
+          <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : { ...btnGhostSm, color: muted }}>
             {locked ? '🔒 Unlock period' : 'Lock period'}
           </button>
           {!locked && (
             <>
-              <button
-                onClick={() => setShowAdd(true)}
-                className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-              >
-                + Add assessment
+              <button onClick={() => setShowAdd(true)} className="transition hover:brightness-105" style={btnGhostSm}>
+                <span style={{ color: gold }}>+</span> Add assessment
               </button>
               <button
                 onClick={saveAll}
                 disabled={dirtyCount === 0 || saving}
-                className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+                className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={btnPrimarySm}
               >
                 {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? '' : 's'}` : 'All saved'}
               </button>
@@ -424,60 +554,51 @@ function RecordGrid({ classId, record, refetch }) {
       </div>
 
       {locked && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-          This period is locked — grades are final and read-only. Unlock to make changes.
-        </p>
+        <div style={{ marginBottom: 12 }}>
+          <AlertBox tone="warn">This period is locked — grades are final and read-only. Unlock to make changes.</AlertBox>
+        </div>
       )}
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{error}</p>
+        <div style={{ marginBottom: 12 }}>
+          <AlertBox>{error}</AlertBox>
+        </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 mt-3 overflow-x-auto">
-        <table className="text-sm border-collapse min-w-full">
+      <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 13, minWidth: '100%' }}>
           <thead>
-            <tr className="bg-slate-50">
-              <th rowSpan={2} className="sticky left-0 bg-slate-50 px-4 py-2 text-left font-medium text-slate-600 border-b border-r border-slate-200 min-w-44">
+            <tr>
+              <th rowSpan={2} style={{ ...thHead, position: 'sticky', left: 0, zIndex: 2, textAlign: 'left', borderRight: '1px solid rgba(14,42,92,0.07)', minWidth: 176 }}>
                 Student
               </th>
               {byComponent.map((component) => (
-                <th
-                  key={component.id}
-                  colSpan={component.assessments.length + 1}
-                  className="px-3 py-2 text-center font-semibold text-slate-700 border-b border-r border-slate-200"
-                >
-                  {component.name}{' '}
-                  <span className="font-normal text-slate-400">({fmt(component.weight_percent)}%)</span>
+                <th key={component.id} colSpan={component.assessments.length + 1} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, fontWeight: 700, color: ink, background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', borderRight: '1px solid rgba(14,42,92,0.07)' }}>
+                  {component.name} <span style={{ fontWeight: 600, color: faint }}>({fmt(component.weight_percent)}%)</span>
                 </th>
               ))}
-              <th rowSpan={2} className="px-3 py-2 font-medium text-slate-500 border-b border-slate-200 min-w-20">
-                Override
-              </th>
-              <th rowSpan={2} className="px-4 py-2 font-semibold text-slate-700 border-b border-slate-200">
+              <th rowSpan={2} style={{ ...thHead, minWidth: 80 }}>Override</th>
+              <th rowSpan={2} style={{ ...thHead, color: navy, textAlign: 'center' }}>
                 {record.period.name}
                 <br />
                 Grade
               </th>
             </tr>
-            <tr className="bg-slate-50">
+            <tr>
               {byComponent.flatMap((component) => [
                 ...component.assessments.map((a) => (
-                  <th key={a.id} className="px-2 py-1.5 border-b border-slate-200 font-medium text-slate-500 min-w-20">
+                  <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: muted, minWidth: 84 }}>
                     <div className="flex items-center justify-center gap-1">
-                      <span title={a.title} className="truncate max-w-28">{a.title}</span>
+                      <span title={a.title} style={{ ...mono, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                       {!locked && (
-                        <button
-                          onClick={() => deleteAssessment(a)}
-                          title="Delete assessment"
-                          className="text-slate-300 hover:text-red-500"
-                        >
+                        <button onClick={() => deleteAssessment(a)} title="Delete assessment" style={{ color: faint, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
                           ×
                         </button>
                       )}
                     </div>
-                    <span className="text-xs text-slate-400 font-normal">/{fmt(a.total_points)}</span>
+                    <span style={{ ...mono, fontSize: 10, color: faint, fontWeight: 400 }}>/{fmt(a.total_points)}</span>
                   </th>
                 )),
-                <th key={`${component.id}-pct`} className="px-2 py-1.5 border-b border-r border-slate-200 text-xs font-semibold text-indigo-600 min-w-14">
+                <th key={`${component.id}-pct`} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', borderRight: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 700, color: navy, minWidth: 56 }}>
                   %
                 </th>,
               ])}
@@ -486,9 +607,9 @@ function RecordGrid({ classId, record, refetch }) {
           <tbody>
             {record.students.length === 0 ? (
               <tr>
-                <td colSpan={99} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={99} style={{ padding: 32, textAlign: 'center', color: faint }}>
                   No students enrolled yet —{' '}
-                  <Link to={`/teacher/classes/${classId}`} className="text-indigo-600 hover:underline">
+                  <Link to={`/teacher/classes/${classId}`} style={{ color: navy, fontWeight: 600 }}>
                     add students to the roster
                   </Link>
                   .
@@ -499,57 +620,46 @@ function RecordGrid({ classId, record, refetch }) {
                 const grade = record.grades[student.student_id]
                 const overrideDirty = dirtyOverrides[student.student_id] !== undefined
                 return (
-                  <tr key={student.student_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                    <td className="sticky left-0 bg-white px-4 py-1.5 font-medium text-slate-700 border-r border-slate-200 whitespace-nowrap">
+                  <tr key={student.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+                    <td style={{ position: 'sticky', left: 0, zIndex: 1, background: '#FFFFFF', padding: '8px 16px', fontWeight: 700, color: ink, borderRight: '1px solid rgba(14,42,92,0.07)', whiteSpace: 'nowrap' }}>
                       {student.last_name}, {student.first_name}
                     </td>
                     {byComponent.flatMap((component) => [
                       ...component.assessments.map((a) => {
                         const isDirty = dirty[a.id]?.[student.student_id] !== undefined
                         return (
-                          <td key={a.id} className="px-1 py-1 text-center">
+                          <td key={a.id} style={{ padding: 4, textAlign: 'center' }}>
                             <input
+                              className="ak-input"
                               value={getCell(a.id, student.student_id)}
                               onChange={(e) => setCell(a.id, student.student_id, e.target.value)}
                               disabled={locked}
-                              className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 ${
-                                isDirty ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
-                              }`}
+                              style={cellInputStyle(isDirty, locked)}
                             />
                           </td>
                         )
                       }),
-                      <td
-                        key={`${component.id}-pct`}
-                        className="px-2 py-1 text-center text-indigo-700 font-medium border-r border-slate-200"
-                      >
+                      <td key={`${component.id}-pct`} style={{ ...mono, padding: '4px 8px', textAlign: 'center', color: navy, fontWeight: 700, borderRight: '1px solid rgba(14,42,92,0.07)' }}>
                         {fmt(grade?.components?.[component.id])}
                       </td>,
                     ])}
-                    <td className="px-1 py-1 text-center">
+                    <td style={{ padding: 4, textAlign: 'center' }}>
                       <input
+                        className="ak-input"
                         value={getOverride(student.student_id)}
-                        onChange={(e) =>
-                          setDirtyOverrides((d) => ({ ...d, [student.student_id]: e.target.value }))
-                        }
+                        onChange={(e) => setDirtyOverrides((d) => ({ ...d, [student.student_id]: e.target.value }))}
                         disabled={locked}
                         placeholder="—"
                         title="Type a grade (0–100) to override the computed grade; clear to restore"
-                        className={`w-16 rounded-md border px-1 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 ${
-                          overrideDirty ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
-                        }`}
+                        style={cellInputStyle(overrideDirty, locked)}
                       />
                     </td>
                     <td
-                      className="px-3 py-1 text-center font-bold text-slate-800"
-                      title={
-                        grade?.override != null
-                          ? `Overridden (computed: ${fmt(grade?.period_grade)})`
-                          : undefined
-                      }
+                      style={{ ...mono, padding: '6px 12px', textAlign: 'center', fontWeight: 800, color: gradeColor(grade?.grade) }}
+                      title={grade?.override != null ? `Overridden (computed: ${fmt(grade?.period_grade)})` : undefined}
                     >
                       {fmt(grade?.grade)}
-                      {grade?.override != null && <span className="text-amber-500">*</span>}
+                      {grade?.override != null && <span style={{ color: gold }}>*</span>}
                     </td>
                   </tr>
                 )
@@ -560,7 +670,7 @@ function RecordGrid({ classId, record, refetch }) {
       </div>
 
       {dirtyCount > 0 && !locked && (
-        <p className="text-xs text-amber-600 mt-2">
+        <p style={{ fontSize: 12, color: goldDeep, marginTop: 8 }}>
           Unsaved changes are highlighted. Computed grades update after saving. * = overridden grade.
         </p>
       )}
@@ -582,33 +692,31 @@ function RecordGrid({ classId, record, refetch }) {
 
 function SummaryView({ summary }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 mt-4 overflow-x-auto">
-      <table className="w-full text-sm">
+    <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
+      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
-          <tr className="bg-slate-50 text-left text-slate-500 border-b border-slate-200">
-            <th className="px-4 py-2.5 font-medium">Student</th>
+          <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+            <th style={{ ...thHead, textAlign: 'left' }}>Student</th>
             {summary.periods.map((p) => (
-              <th key={p.id} className="px-4 py-2.5 font-medium text-center">
+              <th key={p.id} style={{ ...thHead, textAlign: 'center' }}>
                 {p.name} {p.locked && <span title="Locked">🔒</span>}
-                <span className="block text-xs font-normal text-slate-400">{fmt(p.weight_percent)}%</span>
+                <span style={{ ...mono, display: 'block', fontWeight: 600, color: faint, marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>{fmt(p.weight_percent)}%</span>
               </th>
             ))}
-            <th className="px-4 py-2.5 font-semibold text-slate-700 text-center">Final Grade</th>
+            <th style={{ ...thHead, color: navy, textAlign: 'center' }}>Final Grade</th>
           </tr>
         </thead>
         <tbody>
           {summary.students.length === 0 ? (
             <tr>
-              <td colSpan={99} className="px-4 py-8 text-center text-slate-400">
-                No students enrolled yet.
-              </td>
+              <td colSpan={99} style={{ padding: 32, textAlign: 'center', color: faint }}>No students enrolled yet.</td>
             </tr>
           ) : (
             summary.students.map((student) => {
               const grades = summary.grades[student.student_id]
               return (
-                <tr key={student.student_id} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-2 font-medium text-slate-700 whitespace-nowrap">
+                <tr key={student.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+                  <td style={{ padding: '12px 18px', fontWeight: 700, color: ink, whiteSpace: 'nowrap' }}>
                     {student.last_name}, {student.first_name}
                   </td>
                   {summary.periods.map((p) => {
@@ -616,15 +724,15 @@ function SummaryView({ summary }) {
                     return (
                       <td
                         key={p.id}
-                        className="px-4 py-2 text-center text-slate-700"
+                        style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}
                         title={cell?.override != null ? `Overridden (computed: ${fmt(cell?.computed)})` : undefined}
                       >
                         {fmt(cell?.grade)}
-                        {cell?.override != null && <span className="text-amber-500">*</span>}
+                        {cell?.override != null && <span style={{ color: gold }}>*</span>}
                       </td>
                     )
                   })}
-                  <td className="px-4 py-2 text-center font-bold text-slate-800">
+                  <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', fontWeight: 800, color: gradeColor(grades?.final_grade) }}>
                     {fmt(grades?.final_grade)}
                   </td>
                 </tr>
@@ -635,6 +743,21 @@ function SummaryView({ summary }) {
       </table>
     </div>
   )
+}
+
+function pillStyle(active) {
+  return {
+    padding: '8px 18px',
+    fontSize: 13,
+    fontWeight: 700,
+    fontFamily: sans,
+    borderRadius: 999,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    ...(active
+      ? { color: navy, background: gold, border: `1.5px solid ${gold}`, boxShadow: '0 2px 0 rgba(14,42,92,0.18)' }
+      : { color: muted, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+  }
 }
 
 export default function ClassRecordPage() {
@@ -649,23 +772,30 @@ export default function ClassRecordPage() {
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
 
-  if (isLoading) return <p className="text-slate-400">Loading class record…</p>
-  if (isError || !bundle) return <p className="text-red-600">Class not found.</p>
+  if (isLoading) return <p style={{ color: faint }}>Loading class record…</p>
+  if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
+
+  const subline =
+    bundle.components.map((c) => `${c.name} ${fmt(c.weight_percent)}%`).join(' · ') +
+    (bundle.mode === 'deped_k12' ? ' · transmuted per DepEd Order No. 8, s. 2015' : '')
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-slate-800">Class Record</h2>
+      <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+        Class Record
+      </h1>
+      {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 22px' }}>{subline}</p>}
 
       {!bundle.configured ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-10 mt-6 text-center">
-          <p className="text-slate-500">
-            Set up grading periods and components before recording scores.
-          </p>
+        <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40, marginTop: 8 }}>
+          <p style={{ color: muted, margin: 0 }}>Set up grading periods and components before recording scores.</p>
           <Link
             to={`/teacher/classes/${classId}/grading`}
-            className="inline-block mt-3 rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
+            className="mt-4 inline-flex transition hover:brightness-110"
+            style={{ ...btnPrimary, textDecoration: 'none' }}
           >
             Open Grading Setup
+            <GoldArrow />
           </Link>
         </div>
       ) : (
@@ -674,28 +804,17 @@ export default function ClassRecordPage() {
           const record = buildPeriodRecord(bundle, activePeriodId)
           return (
             <>
-              <div className="flex gap-1 mt-4 border-b border-slate-200">
+              <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 20 }}>
+                <span style={{ fontSize: 11, color: faint, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginRight: 6 }}>
+                  Grading period
+                </span>
                 {bundle.periods.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setTab(p.id)}
-                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ${
-                      tab !== 'summary' && p.id === record.period.id
-                        ? 'bg-white border-slate-200 text-indigo-700'
-                        : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {p.name} {p.locked && '🔒'}
+                  <button key={p.id} onClick={() => setTab(p.id)} style={pillStyle(tab !== 'summary' && p.id === record.period.id)}>
+                    {p.name}
+                    {p.locked ? ' 🔒' : ''}
                   </button>
                 ))}
-                <button
-                  onClick={() => setTab('summary')}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 ml-auto ${
-                    tab === 'summary'
-                      ? 'bg-white border-slate-200 text-indigo-700'
-                      : 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
+                <button onClick={() => setTab('summary')} style={{ ...pillStyle(tab === 'summary'), marginLeft: 'auto' }}>
                   Summary
                 </button>
               </div>

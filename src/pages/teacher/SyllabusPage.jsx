@@ -4,6 +4,69 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../../lib/firebase'
 import { api } from '../../lib/api'
+import { ArrowRight, Sparkles } from '../../components/icons'
+
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
+const fieldStyle = {
+  width: '100%', padding: '12px 14px', fontSize: 14, fontFamily: sans, color: ink,
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10,
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const btnPrimary = {
+  display: 'inline-flex', alignItems: 'center', gap: 9, padding: '12px 20px', fontSize: 14,
+  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
+  borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
+}
+const btnGhost = {
+  padding: '12px 20px', fontSize: 14, fontWeight: 600, fontFamily: sans, color: '#3A4A6B',
+  background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer',
+}
+const btnAdd = {
+  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', fontSize: 13,
+  fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF',
+  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
+}
+const iconBtn = { color: faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontSize: 14, lineHeight: 1 }
+
+function GenerateBtn({ onClick, style }) {
+  return (
+    <button onClick={onClick} className="transition hover:brightness-110" style={{ ...btnPrimary, padding: '11px 18px', fontSize: 13, ...style }}>
+      <span style={{ color: gold, display: 'inline-flex' }}>
+        <Sparkles className="h-4 w-4" />
+      </span>
+      Generate with AI
+    </button>
+  )
+}
+
+function GoldArrow() {
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
+      <ArrowRight className="h-3 w-3" />
+    </span>
+  )
+}
+
+function AlertBox({ children }) {
+  return (
+    <div role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>
+      {children}
+    </div>
+  )
+}
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -90,31 +153,29 @@ function GenerateModal({ onClose, onDraft }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-10">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
-        <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
-        <p className="text-sm text-slate-500">
-          Loads the DepEd-aligned <strong>Grade 10 Mathematics</strong> starter (Most Essential
-          Learning Competencies) as an editable draft. Review and adjust everything before saving —
-          nothing is stored until you save.
-        </p>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
-        <div className="flex gap-3 justify-end pt-2">
-          <button
-            onClick={onClose}
-            disabled={generating}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-          >
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <Sparkles className="h-[18px] w-[18px]" />
+          </span>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Generate Syllabus with AI</h2>
+        </div>
+        <div style={{ padding: '24px 28px' }} className="flex flex-col gap-4">
+          <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
+            Loads the DepEd-aligned <strong>Grade 10 Mathematics</strong> starter (Most Essential Learning
+            Competencies) as an editable draft. Review and adjust everything before saving — nothing is
+            stored until you save.
+          </p>
+          {error && <AlertBox>{error}</AlertBox>}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)' }}>
+          <button onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnGhost}>
             Cancel
           </button>
-          <button
-            onClick={generate}
-            disabled={generating}
-            className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
+          <button onClick={generate} disabled={generating} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnPrimary}>
             {generating ? 'Loading…' : 'Load starter'}
+            <GoldArrow />
           </button>
         </div>
       </div>
@@ -134,6 +195,8 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
     updateModule(mIdx, {
       topics: tree.modules[mIdx].topics.map((t, i) => (i === tIdx ? { ...t, ...patch } : t)),
     })
+
+  const topicCount = tree.modules.reduce((n, m) => n + m.topics.length, 0)
 
   async function save() {
     setSaving(true)
@@ -171,57 +234,44 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
   return (
     <div className="max-w-3xl">
       {isAiDraft && (
-        <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-4">
-          ✨ AI-generated draft — review and edit below, then save. Nothing is stored until you save.
-        </p>
+        <div className="mt-4 flex items-center gap-2.5" style={{ background: 'rgba(63,169,245,0.06)', border: '1px solid rgba(63,169,245,0.3)', borderRadius: 11, padding: '12px 14px', fontSize: 13, color: ink }}>
+          <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: 7, background: 'rgba(63,169,245,0.2)', color: blueText, flexShrink: 0 }}>
+            <Sparkles className="h-3 w-3" />
+          </span>
+          AI-generated draft — review and edit below, then save. Nothing is stored until you save.
+        </div>
       )}
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-4">{error}</p>
-      )}
+      {error && <div className="mt-4">{<AlertBox>{error}</AlertBox>}</div>}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 mt-4 space-y-3">
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Syllabus title</span>
-          <input
-            value={tree.title}
-            onChange={(e) => setTree((t) => ({ ...t, title: e.target.value }))}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Description</span>
-          <textarea
-            rows={2}
-            value={tree.description}
-            onChange={(e) => setTree((t) => ({ ...t, description: e.target.value }))}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </label>
+      <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label style={labelStyle}>Syllabus title</label>
+            <input className="ak-input" value={tree.title} onChange={(e) => setTree((t) => ({ ...t, title: e.target.value }))} style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea className="ak-input" rows={2} value={tree.description} onChange={(e) => setTree((t) => ({ ...t, description: e.target.value }))} style={{ ...fieldStyle, resize: 'vertical' }} />
+          </div>
+          <div style={{ ...mono, fontSize: 12, color: faint }}>
+            {tree.modules.length} module{tree.modules.length === 1 ? '' : 's'} · {topicCount} topic{topicCount === 1 ? '' : 's'}
+          </div>
+        </div>
       </div>
 
       {tree.modules.map((module, mIdx) => (
-        <div key={module._key} className="bg-white rounded-xl border border-slate-200 p-5 mt-4">
-          <div className="flex items-start gap-2">
-            <span className="rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 mt-2">
+        <div key={module._key} className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+          <div className="flex items-start gap-3">
+            <span style={{ ...mono, background: navy, color: gold, fontSize: 11, fontWeight: 700, padding: '6px 11px', borderRadius: 8, marginTop: 6, flexShrink: 0 }}>
               M{mIdx + 1}
             </span>
-            <div className="flex-1 space-y-2">
-              <input
-                placeholder="Module title"
-                value={module.title}
-                onChange={(e) => updateModule(mIdx, { title: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <input
-                placeholder="Module description (optional)"
-                value={module.description}
-                onChange={(e) => updateModule(mIdx, { description: e.target.value })}
-                className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+            <div className="flex flex-1 flex-col gap-2">
+              <input className="ak-input" placeholder="Module title" value={module.title} onChange={(e) => updateModule(mIdx, { title: e.target.value })} style={{ ...fieldStyle, fontWeight: 700 }} />
+              <input className="ak-input" placeholder="Module description (optional)" value={module.description} onChange={(e) => updateModule(mIdx, { description: e.target.value })} style={{ ...fieldStyle, fontSize: 13 }} />
             </div>
             <div className="flex flex-col gap-1">
-              <button onClick={() => setModules(move(tree.modules, mIdx, -1))} title="Move up" className="text-slate-400 hover:text-slate-600 px-1">↑</button>
-              <button onClick={() => setModules(move(tree.modules, mIdx, 1))} title="Move down" className="text-slate-400 hover:text-slate-600 px-1">↓</button>
+              <button onClick={() => setModules(move(tree.modules, mIdx, -1))} title="Move up" style={iconBtn} className="transition hover:text-[#0A1733]">↑</button>
+              <button onClick={() => setModules(move(tree.modules, mIdx, 1))} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
               <button
                 onClick={() => {
                   if (window.confirm(`Remove module "${module.title || mIdx + 1}" and its topics?`)) {
@@ -229,65 +279,47 @@ function SyllabusEditor({ classId, initial, isAiDraft, onSaved }) {
                   }
                 }}
                 title="Remove module"
-                className="text-slate-400 hover:text-red-600 px-1"
+                style={iconBtn}
+                className="transition hover:text-[#C0392B]"
               >
                 ×
               </button>
             </div>
           </div>
 
-          <div className="mt-3 space-y-3 pl-9">
+          <div className="mt-3 flex flex-col gap-3" style={{ paddingLeft: 40 }}>
             {module.topics.map((topic, tIdx) => (
-              <div key={topic._key} className="rounded-lg border border-slate-200 p-3">
+              <div key={topic._key} style={{ border: `1px solid ${line}`, borderRadius: 11, padding: 14 }}>
                 <div className="flex items-center gap-2">
-                  <input
-                    placeholder={`Topic ${tIdx + 1} title`}
-                    value={topic.title}
-                    onChange={(e) => updateTopic(mIdx, tIdx, { title: e.target.value })}
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, -1) })} title="Move up" className="text-slate-400 hover:text-slate-600">↑</button>
-                  <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, 1) })} title="Move down" className="text-slate-400 hover:text-slate-600">↓</button>
-                  <button
-                    onClick={() => updateModule(mIdx, { topics: module.topics.filter((_, i) => i !== tIdx) })}
-                    title="Remove topic"
-                    className="text-slate-400 hover:text-red-600"
-                  >
-                    ×
-                  </button>
+                  <input className="ak-input" placeholder={`Topic ${tIdx + 1} title`} value={topic.title} onChange={(e) => updateTopic(mIdx, tIdx, { title: e.target.value })} style={{ ...fieldStyle, flex: 1, fontSize: 13 }} />
+                  <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, -1) })} title="Move up" style={iconBtn} className="transition hover:text-[#0A1733]">↑</button>
+                  <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, 1) })} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
+                  <button onClick={() => updateModule(mIdx, { topics: module.topics.filter((_, i) => i !== tIdx) })} title="Remove topic" style={iconBtn} className="transition hover:text-[#C0392B]">×</button>
                 </div>
                 <textarea
+                  className="ak-input"
                   rows={Math.max(2, topic.objectivesText.split('\n').length)}
                   placeholder={'Learning objectives — one per line\ne.g. Identify proper and improper fractions'}
                   value={topic.objectivesText}
                   onChange={(e) => updateTopic(mIdx, tIdx, { objectivesText: e.target.value })}
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  style={{ ...fieldStyle, marginTop: 8, fontSize: 13, resize: 'vertical' }}
                 />
               </div>
             ))}
-            <button
-              onClick={() => updateModule(mIdx, { topics: [...module.topics, emptyTopic()] })}
-              className="text-sm text-indigo-600 font-medium hover:underline"
-            >
-              + Add topic
+            <button onClick={() => updateModule(mIdx, { topics: [...module.topics, emptyTopic()] })} className="transition hover:brightness-105" style={{ ...btnAdd, alignSelf: 'flex-start', padding: '8px 14px', fontSize: 12 }}>
+              <span style={{ color: gold }}>+</span> Add topic
             </button>
           </div>
         </div>
       ))}
 
-      <div className="flex items-center justify-between mt-4 pb-8">
-        <button
-          onClick={() => setModules([...tree.modules, emptyModule()])}
-          className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-        >
-          + Add module
+      <div className="mt-4 flex items-center justify-between pb-8">
+        <button onClick={() => setModules([...tree.modules, emptyModule()])} className="transition hover:brightness-105" style={btnAdd}>
+          <span style={{ color: gold }}>+</span> Add module
         </button>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
-        >
+        <button onClick={save} disabled={saving} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnPrimary}>
           {saving ? 'Saving…' : 'Save syllabus'}
+          <GoldArrow />
         </button>
       </div>
     </div>
@@ -316,7 +348,7 @@ export default function SyllabusPage() {
     },
   })
 
-  if (isLoading) return <p className="text-slate-400">Loading syllabus…</p>
+  if (isLoading) return <p style={{ color: faint }}>Loading syllabus…</p>
 
   const onSaved = () => {
     setDraft(null)
@@ -332,19 +364,16 @@ export default function SyllabusPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between max-w-3xl">
+      <div className="flex flex-wrap items-start justify-between gap-4" style={{ maxWidth: 768 }}>
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Syllabus</h2>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+            Syllabus
+          </h1>
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
             Modules and topics drive performance mapping, quizzes, and scaffold recommendations.
           </p>
         </div>
-        <button
-          onClick={() => setShowGenerate(true)}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700"
-        >
-          ✨ Generate with AI
-        </button>
+        <GenerateBtn onClick={() => setShowGenerate(true)} />
       </div>
 
       {clazz?.syllabus_file && (
@@ -352,7 +381,8 @@ export default function SyllabusPage() {
           href={clazz.syllabus_file.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-indigo-700 hover:border-indigo-300"
+          className="mt-4 inline-flex items-center gap-2 transition hover:brightness-105"
+          style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 11, padding: '10px 16px', fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}
         >
           📄 Attached syllabus file: {clazz.syllabus_file.name}
         </a>
@@ -367,9 +397,9 @@ export default function SyllabusPage() {
           onSaved={onSaved}
         />
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 mt-6 text-center max-w-3xl">
-          <p className="text-slate-500">No syllabus yet for this class.</p>
-          <div className="flex gap-3 justify-center mt-4">
+        <div className="mt-6 text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 48, maxWidth: 768 }}>
+          <p style={{ color: muted, margin: 0 }}>No syllabus yet for this class.</p>
+          <div className="mt-4 flex justify-center gap-3">
             <button
               onClick={() =>
                 setDraft({
@@ -381,16 +411,12 @@ export default function SyllabusPage() {
                   },
                 })
               }
-              className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 font-medium hover:bg-indigo-50"
+              className="transition hover:brightness-105"
+              style={btnAdd}
             >
               Build manually
             </button>
-            <button
-              onClick={() => setShowGenerate(true)}
-              className="rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
-            >
-              ✨ Generate with AI
-            </button>
+            <GenerateBtn onClick={() => setShowGenerate(true)} />
           </div>
         </div>
       )}

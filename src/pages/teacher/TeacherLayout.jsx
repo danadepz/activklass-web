@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../../context/useAuth'
-import { LayoutGrid, Megaphone, Notebook } from '../../components/icons'
+import { LayoutGrid, Megaphone, Notebook, BarChart } from '../../components/icons'
 
 /* Teacher portal shell — navy sidebar (matching the Landing / Auth brand
    identity) beside the scrolling content area. Top-level nav is just three
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true, Icon: LayoutGrid },
   { to: '/teacher/announcements', label: 'Announcement', Icon: Megaphone },
   { to: '/teacher/classes', label: 'My Classes', Icon: Notebook },
+  { to: '/teacher/reports', label: 'Reports', Icon: BarChart },
 ]
 
 const navBase = {

@@ -88,6 +88,15 @@
 }
 .ak-action:hover { background: rgba(14, 42, 92, 0.04) !important; }
 
+/* Announcement cards — lift on hover; reveal the delete button on hover. */
+.ak-ann-card { transition: box-shadow 0.15s, border-color 0.15s; }
+.ak-ann-card:hover {
+  box-shadow: 0 14px 36px -18px rgba(14, 42, 92, 0.26);
+  border-color: rgba(14, 42, 92, 0.16) !important;
+}
+.ak-ann-card:hover .ak-ann-del { opacity: 1 !important; }
+.ak-ann-del:hover { background: rgba(225, 29, 72, 0.08) !important; color: #E11D48 !important; }
+
 /* Respect users who prefer reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   *,

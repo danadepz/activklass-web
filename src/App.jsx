@@ -12,6 +12,11 @@ import ClassesPage from './pages/teacher/ClassesPage'
 import ClassDetailPage from './pages/teacher/ClassDetailPage'
 import GradingSetupPage from './pages/teacher/GradingSetupPage'
 import ClassRecordPage from './pages/teacher/ClassRecordPage'
+import PerformancePage from './pages/teacher/PerformancePage'
+import ScaffoldTopicsPage from './pages/teacher/ScaffoldTopicsPage'
+import HistoryPage from './pages/teacher/HistoryPage'
+import AnnouncementsPage from './pages/teacher/AnnouncementsPage'
+import ReportsPage from './pages/teacher/ReportsPage'
 import RecordIndexPage from './pages/teacher/RecordIndexPage'
 import AttendancePage from './pages/teacher/AttendancePage'
 import AttendanceIndexPage from './pages/teacher/AttendanceIndexPage'
@@ -20,7 +25,6 @@ import SyllabusIndexPage from './pages/teacher/SyllabusIndexPage'
 import QuizzesPage from './pages/teacher/QuizzesPage'
 import QuizBuilderPage from './pages/teacher/QuizBuilderPage'
 import QuizzesIndexPage from './pages/teacher/QuizzesIndexPage'
-import ComingSoon from './pages/teacher/ComingSoon'
 
 export default function App() {
   return (
@@ -41,22 +45,22 @@ export default function App() {
           <Route path="classes/:classId" element={<ClassLayout />}>
             <Route index element={<ClassDetailPage />} />
             <Route path="record" element={<ClassRecordPage />} />
-            <Route path="performance" element={<ComingSoon />} />
+            <Route path="performance" element={<PerformancePage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="syllabus" element={<SyllabusPage />} />
             <Route path="quizzes" element={<QuizzesPage />} />
             <Route path="quizzes/:quizId" element={<QuizBuilderPage />} />
-            <Route path="scaffolds" element={<ComingSoon />} />
+            <Route path="scaffolds" element={<ScaffoldTopicsPage />} />
             <Route path="grading" element={<GradingSetupPage />} />
-            <Route path="history" element={<ComingSoon />} />
+            <Route path="history" element={<HistoryPage />} />
           </Route>
 
           <Route path="record" element={<RecordIndexPage />} />
           <Route path="attendance" element={<AttendanceIndexPage />} />
           <Route path="syllabus" element={<SyllabusIndexPage />} />
           <Route path="quizzes" element={<QuizzesIndexPage />} />
-          <Route path="announcements" element={<ComingSoon />} />
-          <Route path="reports" element={<ComingSoon />} />
+          <Route path="announcements" element={<AnnouncementsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
         </Route>
       </Route>
 

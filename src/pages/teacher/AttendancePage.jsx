@@ -6,12 +6,56 @@ import { db } from '../../lib/firebase'
 import { fetchUsersByIds } from '../../lib/roster'
 import { useAuth } from '../../context/useAuth'
 
-const STATUSES = [
-  { key: 'present', label: 'Present', short: 'P', active: 'bg-green-600 text-white border-green-600', count: 'text-green-700' },
-  { key: 'late', label: 'Late', short: 'L', active: 'bg-amber-500 text-white border-amber-500', count: 'text-amber-600' },
-  { key: 'absent', label: 'Absent', short: 'A', active: 'bg-red-600 text-white border-red-600', count: 'text-red-600' },
-  { key: 'excused', label: 'Excused', short: 'E', active: 'bg-sky-600 text-white border-sky-600', count: 'text-sky-600' },
-]
+const navy = '#0E2A5C'
+const navyDeep = '#061840'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+const sans = "'Plus Jakarta Sans', sans-serif"
+
+const STATUS_META = {
+  present: { short: 'P', label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)', fillBg: green, fillFg: '#FFFFFF' },
+  late: { short: 'L', label: 'Late', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)', fillBg: gold, fillFg: navy },
+  absent: { short: 'A', label: 'Absent', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)', fillBg: red, fillFg: '#FFFFFF' },
+  excused: { short: 'E', label: 'Excused', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.45)', fillBg: blueText, fillFg: '#FFFFFF' },
+}
+const STATUS_KEYS = ['present', 'late', 'absent', 'excused']
+
+const fieldStyle = {
+  padding: '9px 12px',
+  fontSize: 13,
+  fontFamily: sans,
+  color: ink,
+  background: '#FFFFFF',
+  border: '1.5px solid rgba(14,42,92,0.14)',
+  borderRadius: 9,
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+const thHead = {
+  padding: '13px 18px',
+  textAlign: 'left',
+  fontSize: 11,
+  fontWeight: 700,
+  color: muted,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+}
+
+function remarksStyle(disabled) {
+  return {
+    ...fieldStyle,
+    width: '100%',
+    ...(disabled ? { background: 'rgba(14,42,92,0.03)', color: faint } : {}),
+  }
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
@@ -21,22 +65,53 @@ function emptyEntry() {
   return { status: 'none', remarks: '' }
 }
 
+function AttStat({ label, value, color, highlight }) {
+  return (
+    <div
+      style={{
+        background: '#FFFFFF',
+        borderRadius: 14,
+        padding: '16px 18px',
+        border: highlight ? '1px solid rgba(63,169,245,0.4)' : `1px solid ${line}`,
+        boxShadow: highlight ? '0 0 0 3px rgba(63,169,245,0.08)' : 'none',
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
+      <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
+    </div>
+  )
+}
+
 /* Reusable Present/Late/Absent/Excused button group. */
 function StatusButtons({ status, onToggle }) {
   return (
     <div className="flex gap-1">
-      {STATUSES.map((s) => (
-        <button
-          key={s.key}
-          onClick={() => onToggle(s.key)}
-          title={s.label}
-          className={`w-9 h-8 rounded-lg border text-sm font-semibold transition ${
-            status === s.key ? s.active : 'border-slate-200 text-slate-400 hover:border-slate-300'
-          }`}
-        >
-          {s.short}
-        </button>
-      ))}
+      {STATUS_KEYS.map((key) => {
+        const m = STATUS_META[key]
+        const active = status === key
+        return (
+          <button
+            key={key}
+            onClick={() => onToggle(key)}
+            title={m.label}
+            className="transition hover:brightness-105"
+            style={{
+              width: 36,
+              height: 32,
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: sans,
+              cursor: 'pointer',
+              ...(active
+                ? { background: m.fillBg, color: m.fillFg, border: `1.5px solid ${m.fillBg}` }
+                : { background: '#FFFFFF', color: faint, border: '1.5px solid rgba(14,42,92,0.14)' }),
+            }}
+          >
+            {m.short}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -69,17 +144,25 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
     setTeacherDirty(true)
   }
 
-  const markAllPresent = () => {
+  // Set every student to `status` ('none' clears), preserving remarks.
+  const markAll = (status) => {
     const next = {}
     for (const s of sheet.students) {
-      const entry = current(s.student_id)
-      if (entry.status === 'none') next[s.student_id] = { ...entry, status: 'present' }
+      next[s.student_id] = { ...current(s.student_id), status }
     }
     setDirty((d) => ({ ...d, ...next }))
   }
 
   const dirtyCount = Object.keys(dirty).length
   const hasChanges = dirtyCount > 0 || teacherDirty
+
+  // Live tallies for the stat cards (reflect unsaved edits).
+  const statuses = sheet.students.map((s) => current(s.student_id).status)
+  const total = sheet.students.length
+  const presentCount = statuses.filter((x) => x === 'present').length
+  const absentCount = statuses.filter((x) => x === 'absent').length
+  const lateCount = statuses.filter((x) => x === 'late').length
+  const rate = total ? `${Math.round((presentCount / total) * 100)}%` : '—'
 
   async function save() {
     setSaving(true)
@@ -119,59 +202,92 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
 
   return (
     <>
-      <div className="flex items-center justify-between mt-4">
-        <button
-          onClick={markAllPresent}
-          className="rounded-lg border border-green-200 text-green-700 px-4 py-2 text-sm font-medium hover:bg-green-50"
-        >
-          Mark all present
-        </button>
+      {/* Live session tallies */}
+      <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+        <AttStat label="Total" value={total} />
+        <AttStat label="Present" value={presentCount} color={green} />
+        <AttStat label="Absent" value={absentCount} color={red} />
+        <AttStat label="Late" value={lateCount} color={goldDeep} />
+        <AttStat label="Rate" value={rate} color={blueText} highlight />
+      </div>
+
+      {/* Action bar */}
+      <div
+        className="mb-4 flex flex-wrap items-center justify-between gap-3"
+        style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '14px 18px' }}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span style={{ fontSize: 13, color: muted, fontWeight: 500, marginRight: 4 }}>Mark all as</span>
+          {STATUS_KEYS.map((key) => {
+            const m = STATUS_META[key]
+            return (
+              <button
+                key={key}
+                onClick={() => markAll(key)}
+                className="transition hover:brightness-105"
+                style={{ padding: '7px 15px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 999, cursor: 'pointer', color: m.fg, background: m.bg, border: `1.5px solid ${m.border}` }}
+              >
+                {m.label}
+              </button>
+            )
+          })}
+          <span style={{ width: 1, height: 22, background: 'rgba(14,42,92,0.1)', margin: '0 2px' }} />
+          <button
+            onClick={() => markAll('none')}
+            className="transition hover:brightness-105"
+            style={{ padding: '7px 14px', fontSize: 13, fontWeight: 600, fontFamily: sans, borderRadius: 999, cursor: 'pointer', color: muted, background: 'transparent', border: '1.5px solid rgba(14,42,92,0.14)' }}
+          >
+            Reset
+          </button>
+        </div>
         <button
           onClick={save}
           disabled={!hasChanges || saving}
-          className="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-medium hover:bg-indigo-700 disabled:opacity-40"
+          className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
         >
-          {saving ? 'Saving…' : hasChanges ? 'Save attendance' : 'All saved'}
+          {saving ? 'Saving…' : hasChanges ? `Save attendance${dirtyCount ? ` · ${dirtyCount}` : ''}` : 'All saved'}
         </button>
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">{error}</p>
+        <div role="alert" className="mb-3" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>
+          {error}
+        </div>
       )}
 
       {/* Teacher's own attendance for the session */}
-      <div className="bg-white rounded-xl border border-slate-200 mt-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-700">My attendance (teacher)</p>
-            <p className="text-xs text-slate-400">
-              {profile.first_name} {profile.last_name} · your status for this session
-            </p>
+      <div className="flex flex-wrap items-center justify-between gap-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 18 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>My attendance (teacher)</div>
+          <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>
+            {profile.first_name} {profile.last_name} · your status for this session
           </div>
-          <div className="flex items-center gap-3">
-            <StatusButtons status={teacher.status} onToggle={toggleTeacher} />
-            <input
-              value={teacher.remarks ?? ''}
-              onChange={(e) => {
-                setTeacher((t) => ({ ...t, remarks: e.target.value }))
-                setTeacherDirty(true)
-              }}
-              placeholder="Remarks (optional)"
-              disabled={teacher.status === 'none'}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
-            />
-          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <StatusButtons status={teacher.status} onToggle={toggleTeacher} />
+          <input
+            className="ak-input"
+            value={teacher.remarks ?? ''}
+            onChange={(e) => {
+              setTeacher((t) => ({ ...t, remarks: e.target.value }))
+              setTeacherDirty(true)
+            }}
+            placeholder="Remarks (optional)"
+            disabled={teacher.status === 'none'}
+            style={{ ...remarksStyle(teacher.status === 'none'), width: 224 }}
+          />
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 mt-3 overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="mt-4 overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
+        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr className="bg-slate-50 text-left text-slate-500 border-b border-slate-200">
-              <th className="px-4 py-2.5 font-medium">Student</th>
-              <th className="px-4 py-2.5 font-medium">Status</th>
-              <th className="px-4 py-2.5 font-medium">Remarks</th>
-              <th className="px-4 py-2.5 font-medium text-center" title="Totals: Present / Late / Absent / Excused">
+            <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+              <th style={thHead}>Student</th>
+              <th style={thHead}>Status</th>
+              <th style={thHead}>Remarks</th>
+              <th style={{ ...thHead, textAlign: 'center' }} title="Totals: Present / Late / Absent / Excused">
                 P / L / A / E
               </th>
             </tr>
@@ -179,9 +295,9 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           <tbody>
             {sheet.students.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={4} style={{ padding: 32, textAlign: 'center', color: faint }}>
                   No students enrolled yet —{' '}
-                  <Link to={`/teacher/classes/${classId}`} className="text-indigo-600 hover:underline">
+                  <Link to={`/teacher/classes/${classId}`} style={{ color: navy, fontWeight: 600 }}>
                     add students to the roster
                   </Link>
                   .
@@ -194,27 +310,28 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
                 const totals = sheet.summary[sid] ?? {}
                 const isDirty = dirty[sid] !== undefined
                 return (
-                  <tr key={sid} className={`border-b border-slate-100 last:border-0 ${isDirty ? 'bg-amber-50/50' : ''}`}>
-                    <td className="px-4 py-2 font-medium text-slate-700 whitespace-nowrap">
+                  <tr key={sid} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', background: isDirty ? 'rgba(245,197,24,0.06)' : 'transparent' }}>
+                    <td style={{ padding: '12px 18px', fontWeight: 700, color: ink, whiteSpace: 'nowrap' }}>
                       {student.last_name}, {student.first_name}
                     </td>
-                    <td className="px-4 py-2">
+                    <td style={{ padding: '12px 18px' }}>
                       <StatusButtons status={entry.status} onToggle={(status) => toggle(sid, status)} />
                     </td>
-                    <td className="px-4 py-2">
+                    <td style={{ padding: '12px 18px' }}>
                       <input
+                        className="ak-input"
                         value={entry.remarks ?? ''}
                         onChange={(e) => setEntry(sid, { ...entry, remarks: e.target.value })}
                         placeholder="—"
                         disabled={entry.status === 'none'}
-                        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
+                        style={remarksStyle(entry.status === 'none')}
                       />
                     </td>
-                    <td className="px-4 py-2 text-center whitespace-nowrap text-xs font-medium">
-                      {STATUSES.map((s, i) => (
-                        <span key={s.key}>
-                          {i > 0 && <span className="text-slate-300"> / </span>}
-                          <span className={s.count}>{totals[s.key] ?? 0}</span>
+                    <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: 12 }}>
+                      {STATUS_KEYS.map((key, i) => (
+                        <span key={key}>
+                          {i > 0 && <span style={{ color: '#C3CCDB' }}> / </span>}
+                          <span style={{ color: STATUS_META[key].fg, fontWeight: 700 }}>{totals[key] ?? 0}</span>
                         </span>
                       ))}
                     </td>
@@ -225,6 +342,12 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           </tbody>
         </table>
       </div>
+
+      {sheet.students.length > 0 && (
+        <div style={{ ...mono, marginTop: 12, fontSize: 12, color: faint }}>
+          {sheet.students.length} students · {day}
+        </div>
+      )}
     </>
   )
 }
@@ -272,22 +395,28 @@ export default function AttendancePage() {
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-slate-800">Attendance</h2>
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-4" style={{ marginBottom: 24 }}>
+        <div>
+          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+            Attendance
+          </h1>
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>Track and record daily student attendance for the selected date.</p>
+        </div>
         <input
           type="date"
           value={day}
           max={todayIso()}
           onChange={(e) => e.target.value && setDay(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="ak-input"
+          style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
         />
       </div>
 
       {isLoading ? (
-        <p className="text-slate-400 mt-6">Loading attendance…</p>
+        <p style={{ color: faint }}>Loading attendance…</p>
       ) : isError || !sheet ? (
-        <p className="text-red-600 mt-6">Class not found.</p>
+        <p style={{ color: red }}>Class not found.</p>
       ) : (
         <AttendanceSheet
           key={`${classId}-${day}-${JSON.stringify(sheet.records)}-${JSON.stringify(sheet.teacher)}`}
