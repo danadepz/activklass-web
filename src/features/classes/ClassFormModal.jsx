@@ -15,6 +15,47 @@ const ALLOWED_SYLLABUS_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
+function parseSchedule(str = '') {
+  const defaults = {
+    days: ['M', 'W', 'F'],
+    startHour: '8',
+    startMinute: '00',
+    startPeriod: 'AM',
+    endHour: '9',
+    endMinute: '30',
+    endPeriod: 'AM'
+  }
+  if (!str.trim()) return defaults
+
+  // Match days
+  const days = []
+  if (str.includes('M')) days.push('M')
+  if (str.includes('Th')) {
+    days.push('Th')
+  } else if (str.includes('T')) {
+    days.push('T')
+  }
+  if (str.includes('W')) days.push('W')
+  if (str.includes('F')) days.push('F')
+  if (str.includes('Sa')) days.push('Sa')
+  if (str.includes('Su')) days.push('Su')
+
+  // Match times
+  const matches = [...str.matchAll(/(\d+):(\d+)\s*(AM|PM)/ig)]
+  if (matches.length >= 2) {
+    return {
+      days,
+      startHour: matches[0][1],
+      startMinute: matches[0][2],
+      startPeriod: matches[0][3].toUpperCase(),
+      endHour: matches[1][1],
+      endMinute: matches[1][2],
+      endPeriod: matches[1][3].toUpperCase()
+    }
+  }
+  return { ...defaults, days }
+}
+
 function validate(form) {
   if (
     !form.subject_code.trim() ||
@@ -54,6 +95,17 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const { profile } = useAuth()
   const [form, setForm] = useState(initial ?? emptyClassForm())
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
+  
+  // Parse schedule helper
+  const parsed = parseSchedule(form.schedule)
+  const [selectedDays, setSelectedDays] = useState(parsed.days)
+  const [startHour, setStartHour] = useState(parsed.startHour)
+  const [startMinute, setStartMinute] = useState(parsed.startMinute)
+  const [startPeriod, setStartPeriod] = useState(parsed.startPeriod)
+  const [endHour, setEndHour] = useState(parsed.endHour)
+  const [endMinute, setEndMinute] = useState(parsed.endMinute)
+  const [endPeriod, setEndPeriod] = useState(parsed.endPeriod)
+
   const [syllabusFile, setSyllabusFile] = useState(null)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -64,6 +116,45 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const handleEducationLevelChange = (level) => {
     setEducationLevel(level)
     setForm((f) => ({ ...f, education_level: level }))
+  }
+
+  // Update schedule string helper
+  const updateScheduleString = (days, sh, sm, sp, eh, em, ep) => {
+    const dayOrder = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
+    const sortedDays = dayOrder.filter(d => days.includes(d)).join('')
+    const str = sortedDays ? `${sortedDays} ${sh}:${sm} ${sp} – ${eh}:${em} ${ep}` : ''
+    setForm(f => ({ ...f, schedule: str }))
+  }
+
+  const toggleDay = (day) => {
+    let next
+    if (selectedDays.includes(day)) {
+      next = selectedDays.filter(d => d !== day)
+    } else {
+      next = [...selectedDays, day]
+    }
+    setSelectedDays(next)
+    updateScheduleString(next, startHour, startMinute, startPeriod, endHour, endMinute, endPeriod)
+  }
+
+  const handleStartHourChange = (val) => {
+    setStartHour(val)
+    updateScheduleString(selectedDays, val, startMinute, startPeriod, endHour, endMinute, endPeriod)
+  }
+
+  const handleStartMinuteChange = (val) => {
+    setStartMinute(val)
+    updateScheduleString(selectedDays, startHour, val, startPeriod, endHour, endMinute, endPeriod)
+  }
+
+  const handleEndHourChange = (val) => {
+    setEndHour(val)
+    updateScheduleString(selectedDays, startHour, startMinute, startPeriod, val, endMinute, endPeriod)
+  }
+
+  const handleEndMinuteChange = (val) => {
+    setEndMinute(val)
+    updateScheduleString(selectedDays, startHour, startMinute, startPeriod, endHour, val, endPeriod)
   }
 
   const clearFile = () => {
@@ -189,11 +280,122 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             <input required placeholder="e.g. Mathematics 10, Introduction to Computing" value={form.subject} onChange={set('subject')} className={inputCls} />
           </label>
 
-          {/* Row 3: Schedule */}
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Schedule (Day and Time)</span>
-            <input required placeholder="e.g. MWF 8:00–9:00 AM" value={form.schedule} onChange={set('schedule')} className={inputCls} />
-          </label>
+          {/* Row 3: Schedule Day & Time Custom Selector */}
+          <div className="space-y-2 border border-slate-100 rounded-xl p-3 bg-slate-50/50">
+            <span className="text-sm font-medium text-slate-700 block">Schedule Days</span>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { val: 'M', label: 'M' },
+                { val: 'T', label: 'T' },
+                { val: 'W', label: 'W' },
+                { val: 'Th', label: 'Th' },
+                { val: 'F', label: 'F' },
+                { val: 'Sa', label: 'Sa' },
+                { val: 'Su', label: 'Su' }
+              ].map(day => {
+                const isActive = selectedDays.includes(day.val);
+                return (
+                  <button
+                    key={day.val}
+                    type="button"
+                    onClick={() => toggleDay(day.val)}
+                    className="w-10 h-10 rounded-full font-semibold text-sm transition-all focus:outline-none flex items-center justify-center cursor-pointer border"
+                    style={{
+                      background: isActive ? '#0E2A5C' : '#fff',
+                      color: isActive ? '#FAFAF6' : '#475569',
+                      borderColor: isActive ? '#0E2A5C' : '#cbd5e1'
+                    }}
+                  >
+                    {day.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              {/* Start Time */}
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-slate-500 block">Start Time</span>
+                <div className="flex items-center gap-1">
+                  {/* Hour */}
+                  <select
+                    value={startHour}
+                    onChange={(e) => handleStartHourChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                  >
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <span className="text-slate-400">:</span>
+                  {/* Minute */}
+                  <select
+                    value={startMinute}
+                    onChange={(e) => handleStartMinuteChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                  >
+                    <option value="00">00</option>
+                    <option value="30">30</option>
+                  </select>
+                  {/* AM/PM Arrow Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = startPeriod === 'AM' ? 'PM' : 'AM';
+                      setStartPeriod(next);
+                      updateScheduleString(selectedDays, startHour, startMinute, next, endHour, endMinute, endPeriod);
+                    }}
+                    className="flex items-center justify-between border border-slate-300 rounded-lg px-2 py-2 bg-white hover:bg-slate-50 transition cursor-pointer text-sm font-semibold text-slate-800"
+                    style={{ width: '60px', height: '38px' }}
+                  >
+                    <span>{startPeriod}</span>
+                    <span className="text-slate-400 text-xs">⇅</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* End Time */}
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-slate-500 block">End Time</span>
+                <div className="flex items-center gap-1">
+                  {/* Hour */}
+                  <select
+                    value={endHour}
+                    onChange={(e) => handleEndHourChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                  >
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <span className="text-slate-400">:</span>
+                  {/* Minute */}
+                  <select
+                    value={endMinute}
+                    onChange={(e) => handleEndMinuteChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                  >
+                    <option value="00">00</option>
+                    <option value="30">30</option>
+                  </select>
+                  {/* AM/PM Arrow Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = endPeriod === 'AM' ? 'PM' : 'AM';
+                      setEndPeriod(next);
+                      updateScheduleString(selectedDays, startHour, startMinute, startPeriod, endHour, endMinute, next);
+                    }}
+                    className="flex items-center justify-between border border-slate-300 rounded-lg px-2 py-2 bg-white hover:bg-slate-50 transition cursor-pointer text-sm font-semibold text-slate-800"
+                    style={{ width: '60px', height: '38px' }}
+                  >
+                    <span>{endPeriod}</span>
+                    <span className="text-slate-400 text-xs">⇅</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Row 4: Grade/Year Level, Max Students, School Year */}
           <div className="grid grid-cols-3 gap-3">
@@ -272,4 +474,5 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
         </form>
       </div>
     </div>
-)}
+  )
+}
