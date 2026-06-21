@@ -355,7 +355,6 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
           </button>
         </div>
       </form>
-      </div>
     </div>
   )
 }

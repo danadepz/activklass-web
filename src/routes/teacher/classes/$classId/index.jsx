@@ -20,10 +20,9 @@ import {
   ageFromBirthdate,
   fetchUsersByIds,
   findStudentByEmail,
-  parseCsv,
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
-} from '@/lib/roster'
+
 
 const STATUS_STYLE = {
   active: 'bg-green-50 text-green-700',
@@ -580,7 +579,8 @@ function CsvUploadModal({ classId, onClose, onDone }) {
         {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
 
           {preview && (
-            <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
+            <>
+              <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
               {preview.students.map((s, idx) => (
                 <div key={idx} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
                   <span style={{ color: ink }}>
@@ -862,7 +862,7 @@ export default function ClassDetailPage() {
         {students.length === 0 ? (
           <div style={{ padding: '56px 24px', textAlign: 'center', color: faint, fontSize: 14 }}>
             No students yet. Add them by email or upload a CSV roster.
-          </p>
+          </div>
         ) : filteredStudents.length === 0 ? (
           <p className="p-8 text-center text-slate-400">No students match your search or filter.</p>
         ) : (

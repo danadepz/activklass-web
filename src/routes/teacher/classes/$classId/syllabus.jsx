@@ -195,7 +195,6 @@ function GenerateModal({ classMeta, onClose, onDraft }) {
           </button>
         </div>
       </div>
-      </div>
     </div>
   )
 }
