@@ -23,6 +23,7 @@ const muted = '#6A7A95'
 const faint = '#9AA6BD'
 const line = 'rgba(14,42,92,0.08)'
 const sans = "'Plus Jakarta Sans', sans-serif"
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
 const SORT_OPTIONS = [

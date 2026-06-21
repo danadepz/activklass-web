@@ -10,6 +10,7 @@ const navy = '#0E2A5C'
 const gold = '#F5C518'
 const cream = '#FAFAF6'
 const sans = "'Plus Jakarta Sans', system-ui, sans-serif"
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 
 /* ─── Category config ─── */
 const CATEGORIES = [
