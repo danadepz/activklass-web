@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { Bell } from '@/components/icons'
+import { useQuery } from '@tanstack/react-query'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 const navy = '#0E2A5C'
 const gold = '#F5C518'
@@ -74,6 +77,29 @@ export default function TeacherLayout() {
   const [notifOpen, setNotifOpen] = useState(false)
   const notifRef = useRef(null)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
+
+  const { data: classes } = useQuery({
+    queryKey: ['fs-classes', profile?.id],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
+      )
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    },
+    enabled: !!profile?.id,
+  })
+
+  const emptyRosters = (classes ?? []).filter((c) => (c.student_ids?.length ?? 0) === 0)
+  
+  const notifications = emptyRosters.map((c) => ({
+    id: `empty-roster-${c.id}`,
+    message: (
+      <span>
+        Needs your attention. <strong>{c.section}</strong> has no students yet — add a roster.
+      </span>
+    ),
+    link: `/teacher/classes/${c.id}`
+  }))
 
   const closeMenu = () => setMenuOpen(false)
 
@@ -193,6 +219,19 @@ export default function TeacherLayout() {
                 }}
               >
                 <Bell className="h-4 w-4" />
+                {notifications.length > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#EF4444',
+                    }}
+                  />
+                )}
               </button>
 
               {/* Dropdown panel */}
@@ -222,7 +261,7 @@ export default function TeacherLayout() {
                     }}
                   >
                     <span style={{ fontSize: 14, fontWeight: 700, color: '#0A1733', fontFamily: sans }}>
-                      Notifications
+                      Notifications ({notifications.length})
                     </span>
                     <button
                       onClick={() => setNotifOpen(false)}
@@ -245,21 +284,50 @@ export default function TeacherLayout() {
                     </button>
                   </div>
 
-                  {/* Empty state */}
-                  <div
-                    style={{
-                      padding: '36px 24px',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 28, marginBottom: 10 }}>🔔</div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#0A1733', marginBottom: 4 }}>
-                      No notifications yet
-                    </p>
-                    <p style={{ fontSize: 12, color: '#6A7A95', lineHeight: 1.5 }}>
-                      You're all caught up! Alerts about your classes and students will appear here.
-                    </p>
-                  </div>
+                  {/* List */}
+                  {notifications.length > 0 ? (
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      {notifications.map((n) => (
+                        <NavLink
+                          key={n.id}
+                          to={n.link}
+                          onClick={() => setNotifOpen(false)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'start',
+                            gap: 10,
+                            padding: '12px 16px',
+                            borderBottom: '1px solid rgba(14,42,92,0.06)',
+                            textDecoration: 'none',
+                            color: '#0A1733',
+                            transition: 'background-color 0.15s',
+                          }}
+                          className="hover:bg-slate-50"
+                        >
+                          <div style={{ fontSize: 16, marginTop: 1 }}>⚠️</div>
+                          <div style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>
+                            {n.message}
+                          </div>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Empty state */
+                    <div
+                      style={{
+                        padding: '36px 24px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ fontSize: 28, marginBottom: 10 }}>🔔</div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#0A1733', marginBottom: 4 }}>
+                        No notifications yet
+                      </p>
+                      <p style={{ fontSize: 12, color: '#6A7A95', lineHeight: 1.5 }}>
+                        You're all caught up! Alerts about your classes and students will appear here.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

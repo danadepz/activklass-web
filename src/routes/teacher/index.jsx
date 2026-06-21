@@ -179,30 +179,7 @@ export default function TeacherDashboard() {
         />
       </div>
 
-      {/* Needs attention */}
-      {needsAttention && (
-        <div className="mt-6" style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 16, padding: '20px 22px' }}>
-          <div className="flex items-center gap-2.5" style={{ marginBottom: 14 }}>
-            <AlertCircle className="h-[17px] w-[17px]" style={{ color: goldDeep }} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: goldDeep }}>Needs your attention</span>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {emptyRosters.slice(0, 4).map((c) => (
-              <Link
-                key={c.id}
-                to={`/teacher/classes/${c.id}`}
-                className="flex items-center justify-between gap-3 transition hover:brightness-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
-                style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 11, padding: '14px 18px', textDecoration: 'none' }}
-              >
-                <span style={{ fontSize: 14, color: '#3A4A6B' }}>
-                  <strong style={{ color: ink }}>{c.section}</strong> has no students yet — add a roster.
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0" style={{ color: navy }} />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Empty state vs. classes + quick actions */}
       {!isLoading && !hasClasses ? (
