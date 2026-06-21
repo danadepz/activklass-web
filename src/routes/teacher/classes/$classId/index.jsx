@@ -402,7 +402,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
                 className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
                 style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
               >
-                {busy ? 'Creating…' : 'Create & add to class'}
+                {busy ? 'Creating…' : 'Create'}
               </button>
               <button
                 type="button"
