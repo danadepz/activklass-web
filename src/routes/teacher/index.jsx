@@ -26,7 +26,7 @@ const faint = '#9AA6BD'
 const blueText = '#1E6FB0'
 const line = 'rgba(14,42,92,0.08)'
 
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
 const QUICK_ACTIONS = [
@@ -48,6 +48,7 @@ function classBadge(c) {
 function MetricCard({ label, value, sub, Icon, iconBg, iconColor, highlight, loading }) {
   return (
     <div
+      className="transition-all duration-150 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
       style={{
         background: '#FFFFFF',
         borderRadius: 16,

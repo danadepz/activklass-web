@@ -68,8 +68,17 @@ export default function ClassLayout() {
     <div>
       <Link
         to="/teacher/classes"
-        className="inline-flex items-center gap-1.5 transition hover:opacity-70"
-        style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none', marginBottom: 14 }}
+        className="inline-flex items-center gap-1.5 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#0E2A5C',
+          background: 'rgba(14,42,92,0.07)',
+          border: '1px solid rgba(14,42,92,0.14)',
+          borderRadius: 8,
+          padding: '6px 12px',
+          textDecoration: 'none',
+        }}
       >
         ← My Classes
       </Link>
@@ -89,7 +98,7 @@ export default function ClassLayout() {
             className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
           >
-            ✎ Edit class
+            Edit Class
           </button>
         )}
       </div>
@@ -106,9 +115,20 @@ export default function ClassLayout() {
         </div>
       )}
 
-      <nav className="flex gap-1 overflow-x-auto" style={{ borderBottom: '1.5px solid rgba(14,42,92,0.1)', marginBottom: 26 }}>
+      <nav className="mt-4 border-b border-slate-200 flex gap-1 flex-wrap">
         {TABS.map((tab) => (
-          <NavLink key={tab.to || 'overview'} to={tab.to ? `${base}/${tab.to}` : base} end={tab.end} style={tabStyle}>
+          <NavLink
+            key={tab.to || 'overview'}
+            to={tab.to ? `${base}/${tab.to}` : base}
+            end={tab.end}
+            className={({ isActive }) =>
+              `whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+                isActive
+                  ? 'border-[#F5C518] text-[#0E2A5C]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`
+            }
+          >
             {tab.label}
           </NavLink>
         ))}

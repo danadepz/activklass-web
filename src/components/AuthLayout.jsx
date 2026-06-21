@@ -22,7 +22,7 @@ const gold = '#F5C518'
 const muted = '#6A7A95'
 const cream = '#FAFAF6'
 
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 const sans = "'Plus Jakarta Sans', sans-serif"
 

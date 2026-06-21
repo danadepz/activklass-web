@@ -1,9 +1,18 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { api } from '@/lib/api'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -14,6 +23,21 @@ import {
   parseCsv,
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
+} from '@/lib/roster'
+
+const STATUS_STYLE = {
+  active: 'bg-green-50 text-green-700',
+  needs_remediation: 'bg-amber-50 text-amber-700',
+  mastered: 'bg-indigo-50 text-indigo-700',
+}
+
+const ENROLLMENT_STYLE = {
+  AC: 'bg-green-50 text-green-700',
+  IN: 'bg-slate-100 text-slate-500',
+}
+
+const inputCls =
+  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40'
 
 const EMPTY_STUDENT_FIELDS = {
   student_number: '',
@@ -104,14 +128,17 @@ function StudentFields({ fields, setFields }) {
   )
 }
 
-/* Add a registered student by email; lets the teacher fill in roster details. */
+/* Add a registered student by email, or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
-  const [email, setEmail] = useState('')
-  const [student, setStudent] = useState(null)
-  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
+  const [tab, setTab] = useState('find') // 'find' | 'create'
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
+
+  // --- Find existing ---
+  const [email, setEmail] = useState('')
+  const [student, setStudent] = useState(null)
+  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
 
   async function lookup(e) {
     e.preventDefault()
@@ -121,9 +148,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     try {
       const found = await findStudentByEmail(email)
       if (!found) {
-        setError(
-          'No registered student account with that email. Ask the student to sign up first (Register → "I am a Student"), then add them here.',
-        )
+        setError('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
       } else if (enrolledIds.includes(found.id)) {
         setError('That student is already in this class.')
       } else {
@@ -147,15 +172,11 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   }
 
   async function enroll() {
-    if (isFull) {
-      setError(`This class is full (max ${maxStudents} students).`)
-      return
-    }
+    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
     setError(null)
     try {
-      const patch = { status: student.status ?? 'active', ...rosterPatch(fields) }
-      await updateDoc(doc(db, 'users', student.id), patch)
+      await updateDoc(doc(db, 'users', student.id), { status: student.status ?? 'active', ...rosterPatch(fields) })
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
       onDone()
     } catch (err) {
@@ -164,59 +185,165 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     }
   }
 
+  // --- Create new ---
+  const [newFirst, setNewFirst] = useState('')
+  const [newLast, setNewLast] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newFields, setNewFields] = useState(EMPTY_STUDENT_FIELDS)
+
+  async function createStudent(e) {
+    e.preventDefault()
+    if (!newFirst.trim() || !newLast.trim()) { setError('First name and last name are required.'); return }
+    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
+    setBusy(true)
+    setError(null)
+    try {
+      const newRef = doc(collection(db, 'users'))
+      await setDoc(newRef, {
+        id: newRef.id,
+        first_name: newFirst.trim(),
+        last_name: newLast.trim(),
+        email: newEmail.trim().toLowerCase() || null,
+        role: 'student',
+        status: 'active',
+        ...rosterPatch(newFields),
+      })
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(newRef.id) })
+      onDone()
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
+
+  const tabBtn = (id, label) => (
+    <button
+      type="button"
+      onClick={() => { setTab(id); setError(null) }}
+      style={{
+        flex: 1,
+        padding: '8px 0',
+        fontSize: 13,
+        fontWeight: 600,
+        border: 'none',
+        borderBottom: tab === id ? '2px solid #0E2A5C' : '2px solid transparent',
+        background: 'transparent',
+        color: tab === id ? '#0E2A5C' : '#6A7A95',
+        cursor: 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  )
+
   return (
-    <div onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
-        <div style={modalHeaderStyle}>
-          <span style={iconSquare}><Users className="h-[18px] w-[18px]" /></span>
-          <h2 style={modalTitle}>Add Student</h2>
-          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
+
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
+          {tabBtn('find', 'Find Registered Student')}
+          {tabBtn('create', 'Create New Manually')}
         </div>
-        <div style={modalBodyStyle} className="flex flex-col gap-4">
-          {isFull && (
-            <div style={{ ...alertStyle, color: goldDeep, background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.5)' }}>
-              This class has reached its maximum of {maxStudents} students.
+
+        {isFull && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            This class has reached its maximum of {maxStudents} students.
+          </p>
+        )}
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        {tab === 'find' ? (
+          <>
+            <form onSubmit={lookup} className="flex gap-2">
+              <input
+                type="email"
+                required
+                placeholder="student@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${inputCls} flex-1`}
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+              >
+                Find
+              </button>
+            </form>
+            {student && (
+              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+                <p className="font-medium text-slate-800">
+                  {student.last_name}, {student.first_name}
+                  <span className="text-slate-400 font-normal"> · {student.email}</span>
+                </p>
+                <StudentFields fields={fields} setFields={setFields} />
+                <button
+                  onClick={enroll}
+                  disabled={busy || isFull}
+                  className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+                  style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+                >
+                  {busy ? 'Adding…' : 'Add to class'}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <form onSubmit={createStudent} className="space-y-3">
+            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              Creates a student record directly — no login account needed. The student can link their account later by signing up with the same email.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
+                <input required value={newFirst} onChange={(e) => setNewFirst(e.target.value)} className={`${inputCls} w-full mt-1`} />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
+                <input required value={newLast} onChange={(e) => setNewLast(e.target.value)} className={`${inputCls} w-full mt-1`} />
+              </label>
             </div>
-          )}
-          {error && <div role="alert" style={alertStyle}>{error}</div>}
-          <form onSubmit={lookup} className="flex gap-2">
-            <input
-              type="email"
-              required
-              placeholder="student@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="ak-input"
-              style={{ ...fieldStyle, flex: 1 }}
-            />
-            <button type="submit" disabled={busy} className="transition hover:brightness-105 disabled:opacity-50" style={{ ...btnModalGhost, padding: '11px 18px', color: navy, borderColor: navy }}>
-              Find
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Email <span className="text-slate-400 font-normal">(optional)</span></span>
+              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="student@email.com" className={`${inputCls} w-full mt-1`} />
+            </label>
+            <StudentFields fields={newFields} setFields={setNewFields} />
+            <button
+              type="submit"
+              disabled={busy || isFull}
+              className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+            >
+              {busy ? 'Creating…' : 'Create & add to class'}
             </button>
           </form>
+        )}
 
-          {student && (
-            <div className="flex flex-col gap-3.5" style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>
-                {student.last_name}, {student.first_name}
-                <span style={{ color: faint, fontWeight: 400 }}> · {student.email}</span>
-              </div>
-              <StudentFields fields={fields} setFields={setFields} />
-            </div>
-          )}
-        </div>
-        <div style={modalFooterStyle}>
-          <button onClick={onClose} style={btnModalGhost}>Cancel</button>
-          <button onClick={enroll} disabled={busy || isFull || !student} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
-            {busy ? 'Adding…' : 'Add to class'}
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+        >
+          Close
+        </button>
+      </div>
       </div>
     </div>
   )
 }
 
 /* Edit roster fields on one student (rules allow teachers to maintain these). */
+// 2026-06-20: Added first_name and last_name fields so teachers can correct student names
 function EditStudentModal({ student, classId, onClose, onDone }) {
+  // 2026-06-20: Name state — editable first and last name
+  const [firstName, setFirstName] = useState(student.first_name ?? '')
+  const [lastName, setLastName] = useState(student.last_name ?? '')
   const [fields, setFields] = useState({
     student_number: student.student_number ?? '',
     middle_name: student.middle_name ?? '',
@@ -232,10 +359,20 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   const [busy, setBusy] = useState(false)
 
   async function save() {
+    // 2026-06-20: Validate and save edited name alongside all other roster fields
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await updateDoc(doc(db, 'users', student.id), { status, ...rosterPatch(fields) })
+      await updateDoc(doc(db, 'users', student.id), {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        status,
+        ...rosterPatch(fields),
+      })
       onDone()
     } catch (err) {
       setError(err.message)
@@ -256,36 +393,68 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   }
 
   return (
-    <div onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
-        <div style={modalHeaderStyle}>
-          <span style={iconSquare}><Users className="h-[18px] w-[18px]" /></span>
-          <h2 style={modalTitle}>{student.last_name}, {student.first_name}</h2>
-          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Edit Student</h3>
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+        {/* 2026-06-20: Name fields — teachers can now correct first and last name */}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className={`${inputCls} w-full mt-1`}
+            />
+          </label>
         </div>
-        <div style={modalBodyStyle} className="flex flex-col gap-4">
-          {error && <div role="alert" style={alertStyle}>{error}</div>}
-          <StudentFields fields={fields} setFields={setFields} />
-          <div>
-            <label style={labelStyle}>Academic progress</label>
-            <select className="ak-input" value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }}>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div style={{ ...modalFooterStyle, justifyContent: 'space-between' }}>
-          <button onClick={removeFromClass} disabled={busy} className="transition hover:brightness-105 disabled:opacity-50" style={{ ...btnModalGhost, color: red, borderColor: 'rgba(192,57,43,0.3)' }}>
+        <StudentFields fields={fields} setFields={setFields} />
+        <label className="block">
+          <span className="text-sm font-medium text-slate-700">Academic progress</span>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className={`${inputCls} w-full mt-1 bg-white`}
+          >
+            {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-3 justify-between pt-2">
+          <button
+            onClick={removeFromClass}
+            disabled={busy}
+            className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50 disabled:opacity-50"
+          >
             Remove from class
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} style={btnModalGhost}>Cancel</button>
-            <button onClick={save} disabled={busy} className="transition hover:brightness-110 disabled:opacity-50" style={btnModalPrimary}>
+            <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={busy}
+              className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+            >
               {busy ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
@@ -356,29 +525,59 @@ function CsvUploadModal({ classId, onClose, onDone }) {
   }
 
   return (
-    <div onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={cardStyle}>
-        <div style={modalHeaderStyle}>
-          <span style={iconSquare}><FileText className="h-[18px] w-[18px]" /></span>
-          <h2 style={modalTitle}>Bulk Upload Roster</h2>
-          <button onClick={onClose} className="transition hover:text-[#0A1733]" style={closeBtn}><X className="h-[18px] w-[18px]" /></button>
+    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster</h3>
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
+          <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
+            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — required, matches each student to their Activklass account</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — student full name</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">lrn</code>, <code className="bg-slate-100 px-1 rounded text-xs">birthdate</code>, <code className="bg-slate-100 px-1 rounded text-xs">student_number</code></li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">course</code>, <code className="bg-slate-100 px-1 rounded text-xs">year_level</code>, <code className="bg-slate-100 px-1 rounded text-xs">middle_name</code></li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
+          </ul>
+          <p className="text-xs text-slate-400">Rows without a matching account are skipped — ask those students to register first, then re-upload.</p>
+          <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-left text-slate-500">
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">email</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">first_name</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">last_name</th>
+                  <th className="px-3 py-2 font-medium border-b border-slate-200">lrn</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="text-slate-600">
+                  <td className="px-3 py-1.5 border-r border-slate-200">juan@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Juan</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Dela Cruz</td>
+                  <td className="px-3 py-1.5">123456789012</td>
+                </tr>
+                <tr className="text-slate-600 bg-slate-50/60">
+                  <td className="px-3 py-1.5 border-r border-slate-200">maria@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Maria</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Santos</td>
+                  <td className="px-3 py-1.5">987654321098</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div style={modalBodyStyle} className="flex flex-col gap-4">
-          <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, margin: 0 }}>
-            Required header: <code style={codeStyle}>email</code>. Optional columns:{' '}
-            <code style={codeStyle}>first_name, last_name, lrn, birthdate, student_number, middle_name, course, year_level, remarks, enrollment_status</code>.
-            Students without Activklass accounts are invited and auto-enrolled when they register.
-          </p>
-          {error && <div role="alert" style={alertStyle}>{error}</div>}
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
 
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            style={{ fontSize: 13, color: muted }}
-          />
-          {busy && !preview && <p style={{ fontSize: 13, color: faint }}>Processing roster…</p>}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
+        />
+        {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
 
           {preview && (
             <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
@@ -391,19 +590,27 @@ function CsvUploadModal({ classId, onClose, onDone }) {
                 </div>
               ))}
             </div>
-          )}
-        </div>
-        <div style={modalFooterStyle}>
-          <button onClick={onClose} style={btnModalGhost}>Cancel</button>
-          <button
-            onClick={commit}
-            disabled={busy || !preview || preview.students.length === 0}
-            className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={btnModalPrimary}
-          >
-            {busy ? 'Importing…' : preview ? `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}` : 'Import'}
-          </button>
-        </div>
+            {preview.unmatched.length > 0 && (
+              <p className="text-xs text-amber-600">
+                {preview.unmatched.length} student{preview.unmatched.length === 1 ? '' : 's'} have no
+                Activklass account yet — ask them to register, then re-upload.
+              </p>
+            )}
+            <button
+              onClick={commit}
+              disabled={busy || preview.matched.length === 0}
+              className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
+              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+            >
+              {busy ? 'Importing…' : `Import ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'}`}
+            </button>
+          </>
+        )}
+
+        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+          Close
+        </button>
+      </div>
       </div>
     </div>
   )
@@ -476,6 +683,9 @@ export default function ClassDetailPage() {
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
   const [error, setError] = useState(null)
+  const [rosterSearch, setRosterSearch] = useState('')
+  const [rosterFilter, setRosterFilter] = useState('all')
+  const [rosterSort, setRosterSort] = useState('az')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['class-detail', classId],
@@ -516,13 +726,47 @@ export default function ClassDetailPage() {
     }
   }
 
-  if (isLoading) return <p style={{ color: faint }}>Loading roster…</p>
-  if (isError || !data) return <p style={{ color: red }}>Class not found.</p>
+  // 2026-06-20: Quick remove from table row — does not open the edit modal
+  async function handleRemoveStudent(s) {
+    if (!window.confirm(`Remove ${s.first_name} ${s.last_name} from this class? Their student account is kept.`)) return
+    try {
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(s.id) })
+      queryClient.invalidateQueries({ queryKey: ['fs-class', classId] })
+      queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  if (isLoading) return <p className="text-slate-400">Loading roster…</p>
+  if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
   const { clazz, students } = data
   const maxStudents = clazz.max_students ?? 0
   const activeCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
   const inactiveCount = students.length - activeCount
+
+  const filteredStudents = students
+    .filter((s) => {
+      const name = `${s.last_name ?? ''} ${s.first_name ?? ''}`.toLowerCase()
+      const matchSearch = !rosterSearch ||
+        name.includes(rosterSearch.toLowerCase()) ||
+        (s.email ?? '').toLowerCase().includes(rosterSearch.toLowerCase())
+      const enroll = s.enrollment_status ?? 'AC'
+      const prog = s.status ?? 'active'
+      const matchFilter =
+        rosterFilter === 'all' ||
+        (rosterFilter === 'AC' && enroll === 'AC') ||
+        (rosterFilter === 'IN' && enroll === 'IN') ||
+        (rosterFilter === 'needs_remediation' && prog === 'needs_remediation') ||
+        (rosterFilter === 'mastered' && prog === 'mastered')
+      return matchSearch && matchFilter
+    })
+    .sort((a, b) => {
+      const nameA = `${a.last_name ?? ''} ${a.first_name ?? ''}`.toLowerCase()
+      const nameB = `${b.last_name ?? ''} ${b.first_name ?? ''}`.toLowerCase()
+      return rosterSort === 'az' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+    })
 
   return (
     <div>
@@ -547,8 +791,8 @@ export default function ClassDetailPage() {
           href={clazz.syllabus_file.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-4 inline-flex items-center gap-2 transition hover:brightness-105"
-          style={{ ...btnGhost, color: navy, textDecoration: 'none' }}
+          className="inline-flex items-center gap-2 mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:border-slate-300"
+          style={{ color: '#0E2A5C' }}
         >
           📄 Syllabus file: {clazz.syllabus_file.name}
         </a>
@@ -558,78 +802,133 @@ export default function ClassDetailPage() {
         <p role="alert" className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
       )}
 
-      {/* Roster */}
-      <div className="mt-5" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
-        <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '18px 22px', borderBottom: `1px solid ${line}` }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: ink, margin: 0 }}>
-            Roster <span style={{ fontWeight: 500, color: faint, fontSize: 14 }}>· {students.length} student{students.length === 1 ? '' : 's'}</span>
-          </h3>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button onClick={() => setModal('csv')} className="transition hover:brightness-105" style={btnGhost}>⇪ Bulk Upload CSV</button>
-            <button onClick={() => setModal('add')} className="transition hover:brightness-110" style={btnPrimary}>
-              <span style={{ display: 'inline-grid', placeItems: 'center', width: 18, height: 18, borderRadius: '50%', background: gold, color: navy, fontSize: 13, lineHeight: 1 }}>+</span>
-              Add Student
-            </button>
-            <button onClick={deleteClass} title="Delete class" className="transition hover:brightness-105" style={btnDanger}>Delete</button>
+      <div className="bg-white rounded-xl border border-slate-200 mt-6 overflow-x-auto">
+        <div className="px-5 py-4 border-b border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 className="font-semibold text-slate-800">
+              Roster <span className="text-sm font-normal text-slate-400">· {students.length} student{students.length === 1 ? '' : 's'}</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setModal('csv')}
+                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50" style={{ borderColor: 'rgba(14,42,92,0.2)', color: '#0E2A5C' }}
+              >
+                Bulk Upload
+              </button>
+              <button
+                onClick={() => setModal('add')}
+                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+              >
+                Add Student
+              </button>
+              <button
+                onClick={deleteClass}
+                title="Delete class"
+                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search by name or email…"
+              value={rosterSearch}
+              onChange={(e) => setRosterSearch(e.target.value)}
+              className="flex-1 min-w-48 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
+            />
+            <select
+              value={rosterFilter}
+              onChange={(e) => setRosterFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
+            >
+              <option value="all">All students</option>
+              <option value="AC">Active (AC)</option>
+              <option value="IN">Inactive (IN)</option>
+              <option value="needs_remediation">Needs Remediation</option>
+              <option value="mastered">Mastered</option>
+            </select>
+            <select
+              value={rosterSort}
+              onChange={(e) => setRosterSort(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
+            >
+              <option value="az">A → Z</option>
+              <option value="za">Z → A</option>
+            </select>
           </div>
         </div>
         {students.length === 0 ? (
           <div style={{ padding: '56px 24px', textAlign: 'center', color: faint, fontSize: 14 }}>
             No students yet. Add them by email or upload a CSV roster.
-          </div>
+          </p>
+        ) : filteredStudents.length === 0 ? (
+          <p className="p-8 text-center text-slate-400">No students match your search or filter.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-              <thead>
-                <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: `1px solid ${line}` }}>
-                  <th style={{ ...th, textAlign: 'left' }}>ID No.</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Name</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Course · Year</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Remarks</th>
-                  <th style={{ ...th, textAlign: 'center' }}>Enrollment</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Progress</th>
-                  <th style={th} aria-label="Edit" />
-                </tr>
-              </thead>
-              <tbody>
-                {students.map((s) => {
-                  const status = s.status ?? 'active'
-                  const enrollment = s.enrollment_status ?? 'AC'
-                  const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
-                  return (
-                    <tr key={s.id || s.email} style={{ borderBottom: `1px solid ${line}` }}>
-                      <td style={{ ...td, ...mono, fontSize: 12, color: muted }}>{s.student_number ?? '—'}</td>
-                      <td style={td}>
-                        <div style={{ fontWeight: 700, color: ink }}>
-                          {s.last_name}, {s.first_name}{s.middle_name ? ` ${s.middle_name}` : ''}
-                        </div>
-                        <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>{s.email}</div>
-                      </td>
-                      <td style={{ ...td, color: '#3A4A6B' }}>{courseYear || '—'}</td>
-                      <td style={{ ...td, color: '#3A4A6B' }}>{s.remarks ?? '—'}</td>
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <span style={pillStyle(enrollment === 'AC' ? 'green' : 'gray')}>
-                          {ENROLLMENT_STATUS_LABELS[enrollment] ?? enrollment}
-                        </span>
-                      </td>
-                      <td style={td}>
-                        <span style={pillStyle(statusTone(status))}>{STATUS_LABELS[status] || status}</span>
-                      </td>
-                      <td style={{ ...td, textAlign: 'right' }}>
-                        {s.id ? (
-                          <button onClick={() => setModal(s)} className="transition hover:brightness-110" style={{ fontSize: 13, fontWeight: 700, color: navy, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: sans }}>
-                            Edit →
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 12, color: faint, fontStyle: 'italic' }}>Invited</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-slate-500 border-b border-slate-100">
+                <th className="px-5 py-2.5 font-medium">ID No.</th>
+                <th className="px-5 py-2.5 font-medium">Name</th>
+                <th className="px-5 py-2.5 font-medium">Course / Year</th>
+                <th className="px-5 py-2.5 font-medium">Remarks</th>
+                <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
+                <th className="px-5 py-2.5 font-medium">Progress</th>
+                {/* 2026-06-20: Actions column header — Edit and Remove per row */}
+                <th className="px-5 py-2.5 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStudents.map((s) => {
+                const status = s.status ?? 'active'
+                const enrollment = s.enrollment_status ?? 'AC'
+                const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
+                return (
+                  <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                    <td className="px-5 py-3 text-slate-600 font-mono text-xs">{s.student_number ?? '—'}</td>
+                    <td className="px-5 py-3">
+                      <p className="font-medium text-slate-700">
+                        {s.last_name}, {s.first_name}
+                        {s.middle_name ? ` ${s.middle_name}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-400">{s.email}</p>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">{courseYear || '—'}</td>
+                    <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
+                    <td className="px-5 py-3 text-center">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ENROLLMENT_STYLE[enrollment]}`}>
+                        {enrollment}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                    </td>
+                    {/* 2026-06-20: Edit opens modal with name + roster fields; Remove immediately removes from class */}
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => setModal(s)}
+                          className="text-xs font-medium hover:underline"
+                          style={{ color: '#0E2A5C' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleRemoveStudent(s)}
+                          className="text-xs font-medium hover:underline text-red-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 

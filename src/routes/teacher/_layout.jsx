@@ -1,118 +1,392 @@
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
-import { LayoutGrid, Megaphone, Notebook, BarChart } from '@/components/icons'
-
-/* Teacher portal shell — navy sidebar (matching the Landing / Auth brand
-   identity) beside the scrolling content area. Top-level nav is just three
-   sections; per-class tools live in the sub-navbar inside a class (ClassLayout). */
+import { Bell } from '@/components/icons'
 
 const navy = '#0E2A5C'
 const gold = '#F5C518'
 const cream = '#FAFAF6'
 
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const sans = "'Plus Jakarta Sans', sans-serif"
 
 const NAV_ITEMS = [
-  { to: '/teacher', label: 'Dashboard', end: true, Icon: LayoutGrid },
-  { to: '/teacher/announcements', label: 'Announcement', Icon: Megaphone },
-  { to: '/teacher/classes', label: 'My Classes', Icon: Notebook },
-  { to: '/teacher/reports', label: 'Reports', Icon: BarChart },
+  { to: '/teacher', label: 'Dashboard', end: true },
+  { to: '/teacher/announcements', label: 'Announcement' },
+  { to: '/teacher/classes', label: 'My Classes' },
+  { to: '/teacher/reports', label: 'Reports' },
 ]
 
-const navBase = {
-  position: 'relative',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  width: '100%',
-  textAlign: 'left',
-  padding: '11px 14px',
-  fontSize: 14,
-  fontWeight: 600,
-  fontFamily: sans,
-  borderRadius: 10,
-  textDecoration: 'none',
+function HamburgerIcon({ open }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      {open ? (
+        <>
+          <line x1="4" y1="4" x2="16" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <line x1="16" y1="4" x2="4" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          <line x1="3" y1="6" x2="17" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <line x1="3" y1="14" x2="17" y2="14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  )
 }
 
-function navStyle(isActive) {
-  return isActive
-    ? { ...navBase, background: 'rgba(255,255,255,0.1)', color: cream }
-    : { ...navBase, background: 'transparent', color: 'rgba(250,250,246,0.66)' }
+function navLinkStyle(isActive) {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '7px 14px',
+    fontSize: 14,
+    fontWeight: 600,
+    fontFamily: sans,
+    borderRadius: 8,
+    textDecoration: 'none',
+    color: isActive ? cream : 'rgba(250,250,246,0.66)',
+    background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+    position: 'relative',
+  }
+}
+
+function mobileNavLinkStyle(isActive) {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '12px 16px',
+    fontSize: 15,
+    fontWeight: 600,
+    fontFamily: sans,
+    borderRadius: 10,
+    textDecoration: 'none',
+    color: isActive ? cream : 'rgba(250,250,246,0.75)',
+    background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+    borderLeft: isActive ? `3px solid ${gold}` : '3px solid transparent',
+  }
 }
 
 export default function TeacherLayout() {
   const { profile, logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifRef = useRef(null)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
+
+  const closeMenu = () => setMenuOpen(false)
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return
+    function handleClick(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [notifOpen])
 
   return (
     <div
-      className="grid min-h-screen grid-cols-1 md:grid-cols-[256px_1fr]"
-      style={{ background: '#EEF1F6', color: '#0A1733', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        background: '#EEF1F6',
+        color: '#0A1733',
+        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+      }}
     >
-      {/* SIDEBAR */}
-      <aside className="relative flex flex-col overflow-hidden" style={{ background: navy, color: cream }}>
-        <div aria-hidden="true" style={{ position: 'absolute', top: -90, right: -90, width: 260, height: 260, border: '1px solid rgba(245,197,24,0.12)', borderRadius: '50%' }} />
-        <div aria-hidden="true" style={{ position: 'absolute', bottom: 90, left: -120, width: 280, height: 280, border: '1px solid rgba(63,169,245,0.1)', borderRadius: '50%' }} />
+      {/* TOP NAV */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: navy,
+          color: cream,
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        {/* decorative rings — desktop only so they don't clip on mobile */}
+        <div aria-hidden="true" className="hidden md:block" style={{ position: 'absolute', top: -60, right: -60, width: 200, height: 200, border: '1px solid rgba(245,197,24,0.1)', borderRadius: '50%', pointerEvents: 'none' }} />
+        <div aria-hidden="true" className="hidden md:block" style={{ position: 'absolute', bottom: -80, left: -80, width: 200, height: 200, border: '1px solid rgba(63,169,245,0.08)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-        {/* brand */}
-        <div className="relative" style={{ padding: '26px 22px 22px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-2.5">
-            <div style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, background: cream, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-              <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2.5px solid ${navy}`, borderRightColor: 'transparent', transform: 'rotate(35deg)' }} />
-              <div style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: gold }} />
+        {/* Main bar */}
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 20px',
+            height: 64,
+            gap: 16,
+          }}
+        >
+          {/* LEFT — brand + desktop nav */}
+          <div className="flex items-center" style={{ gap: 24, flex: 1 }}>
+            {/* Brand */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <div style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, background: cream, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2.5px solid ${navy}`, borderRightColor: 'transparent', transform: 'rotate(35deg)' }} />
+                <div style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: gold }} />
+              </div>
+              <div>
+                <div style={{ ...serif, fontSize: 22, lineHeight: 1, letterSpacing: '-0.02em' }}>Activklass</div>
+                <div className="hidden sm:block" style={{ fontSize: 10, color: 'rgba(250,250,246,0.5)', letterSpacing: '0.05em', marginTop: 1 }}>Teacher Portal</div>
+              </div>
             </div>
-            <div>
-              <div style={{ ...serif, fontSize: 20, lineHeight: 1, letterSpacing: '-0.01em' }}>Activklass</div>
-              <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.55)', marginTop: 3, letterSpacing: '0.02em' }}>Teacher Portal</div>
-            </div>
-          </div>
-        </div>
 
-        {/* nav */}
-        <nav className="relative flex flex-1 flex-col gap-1" style={{ padding: '18px 14px' }}>
-          {NAV_ITEMS.map(({ to, label, end, Icon }) => (
-            <NavLink key={to} to={to} end={end} className="ak-nav" style={({ isActive }) => navStyle(isActive)}>
-              {({ isActive }) => (
-                <>
-                  <Icon className="h-[17px] w-[17px]" />
-                  {label}
-                  {isActive && (
-                    <span style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: 3, height: 20, borderRadius: '0 3px 3px 0', background: gold }} />
+            {/* Desktop nav links — hidden on mobile */}
+            <nav className="hidden md:flex items-center" style={{ gap: 2 }}>
+              {NAV_ITEMS.map(({ to, label, end }) => (
+                <NavLink key={to} to={to} end={end} style={({ isActive }) => navLinkStyle(isActive)}>
+                  {({ isActive }) => (
+                    <>
+                      {label}
+                      {isActive && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: -1,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: 24,
+                            height: 3,
+                            borderRadius: '3px 3px 0 0',
+                            background: gold,
+                          }}
+                        />
+                      )}
+                    </>
                   )}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* user */}
-        <div className="relative" style={{ padding: 18, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3" style={{ marginBottom: 14 }}>
-            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #F5C518, #3FA9F5)', display: 'grid', placeItems: 'center', color: navy, fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
-              {initials}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>
-                {profile.first_name} {profile.last_name}
-              </div>
-              <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {profile.email}
-              </div>
-            </div>
+                </NavLink>
+              ))}
+            </nav>
           </div>
-          <button
-            onClick={logout}
-            className="transition hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            style={{ width: '100%', padding: 10, fontSize: 13, fontWeight: 600, fontFamily: sans, color: 'rgba(250,250,246,0.85)', background: 'transparent', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 9, cursor: 'pointer' }}
-          >
-            Sign out
-          </button>
-        </div>
-      </aside>
 
-      {/* MAIN */}
-      <main className="overflow-y-auto px-6 py-8 md:px-11 md:py-9">
+          {/* RIGHT — actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* Notification bell + dropdown */}
+            <div ref={notifRef} style={{ position: 'relative' }}>
+              <button
+                aria-label="Notifications"
+                aria-expanded={notifOpen}
+                onClick={() => setNotifOpen((o) => !o)}
+                className="transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  border: notifOpen
+                    ? '1px solid rgba(245,197,24,0.5)'
+                    : '1px solid rgba(255,255,255,0.14)',
+                  background: notifOpen ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  cursor: 'pointer',
+                  color: notifOpen ? gold : 'rgba(250,250,246,0.75)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  position: 'relative',
+                }}
+              >
+                <Bell className="h-4 w-4" />
+              </button>
+
+              {/* Dropdown panel */}
+              {notifOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 10px)',
+                    right: 0,
+                    width: 320,
+                    background: '#fff',
+                    borderRadius: 12,
+                    boxShadow: '0 8px 32px rgba(14,42,92,0.18), 0 2px 8px rgba(14,42,92,0.08)',
+                    border: '1px solid rgba(14,42,92,0.1)',
+                    zIndex: 200,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Panel header */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 16px 12px',
+                      borderBottom: '1px solid rgba(14,42,92,0.08)',
+                    }}
+                  >
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#0A1733', fontFamily: sans }}>
+                      Notifications
+                    </span>
+                    <button
+                      onClick={() => setNotifOpen(false)}
+                      aria-label="Close notifications"
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        border: '1px solid rgba(14,42,92,0.12)',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: '#6A7A95',
+                        fontSize: 16,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Empty state */}
+                  <div
+                    style={{
+                      padding: '36px 24px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 28, marginBottom: 10 }}>🔔</div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#0A1733', marginBottom: 4 }}>
+                      No notifications yet
+                    </p>
+                    <p style={{ fontSize: 12, color: '#6A7A95', lineHeight: 1.5 }}>
+                      You're all caught up! Alerts about your classes and students will appear here.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Avatar + name — name hidden on mobile */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #F5C518, #3FA9F5)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: navy,
+                  fontWeight: 800,
+                  fontSize: 13,
+                  flexShrink: 0,
+                }}
+              >
+                {initials}
+              </div>
+              <div className="hidden md:block" style={{ lineHeight: 1.2 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: cream }}>
+                  {profile.first_name} {profile.last_name}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {profile.email}
+                </div>
+              </div>
+            </div>
+
+            {/* Sign out — desktop only */}
+            <button
+              onClick={logout}
+              className="hidden md:block transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              style={{
+                padding: '7px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: sans,
+                color: 'rgba(250,250,246,0.85)',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: 8,
+                cursor: 'pointer',
+              }}
+            >
+              Sign out
+            </button>
+
+            {/* Hamburger — mobile only */}
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              className="flex md:hidden transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: cream,
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              <HamburgerIcon open={menuOpen} />
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div
+            className="md:hidden"
+            style={{
+              borderTop: '1px solid rgba(255,255,255,0.1)',
+              padding: '10px 16px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            {NAV_ITEMS.map(({ to, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                onClick={closeMenu}
+                style={({ isActive }) => mobileNavLinkStyle(isActive)}
+              >
+                {label}
+              </NavLink>
+            ))}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px' }}>
+              <div style={{ fontSize: 13, color: 'rgba(250,250,246,0.6)' }}>
+                {profile.first_name} {profile.last_name} · {profile.email}
+              </div>
+            </div>
+            <button
+              onClick={() => { closeMenu(); logout() }}
+              style={{
+                margin: '0 0',
+                padding: '11px 16px',
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: sans,
+                color: 'rgba(250,250,246,0.85)',
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: 10,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* MAIN CONTENT — responsive padding */}
+      <main className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-9" style={{ flex: 1 }}>
         <Outlet />
       </main>
     </div>
