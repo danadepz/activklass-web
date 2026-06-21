@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
