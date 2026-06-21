@@ -19,7 +19,6 @@ import {
   STATUS_LABELS,
   ageFromBirthdate,
   fetchUsersByIds,
-  findStudentByEmail,
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
 
@@ -127,85 +126,38 @@ function StudentFields({ fields, setFields }) {
   )
 }
 
-/* Add a registered student by email, or create a new manual student record. */
+/* Create a new manual student record and enroll them. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
-  const [tab, setTab] = useState('find') // 'find' | 'create'
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
 
-  // --- Find existing ---
-  const [email, setEmail] = useState('')
-  const [student, setStudent] = useState(null)
-  const [fields, setFields] = useState(EMPTY_STUDENT_FIELDS)
-
-  async function lookup(e) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    setStudent(null)
-    try {
-      const found = await findStudentByEmail(email)
-      if (!found) {
-        setError('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
-      } else if (enrolledIds.includes(found.id)) {
-        setError('That student is already in this class.')
-      } else {
-        setStudent(found)
-        setFields({
-          student_number: found.student_number ?? '',
-          middle_name: found.middle_name ?? '',
-          course: found.course ?? '',
-          year_level: found.year_level ?? '',
-          remarks: found.remarks ?? '',
-          enrollment_status: found.enrollment_status ?? 'AC',
-          lrn: found.lrn ?? '',
-          birthdate: found.birthdate ?? '',
-        })
-      }
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function enroll() {
-    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
-    setBusy(true)
-    setError(null)
-    try {
-      await updateDoc(doc(db, 'users', student.id), { status: student.status ?? 'active', ...rosterPatch(fields) })
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
-      onDone()
-    } catch (err) {
-      setError(err.message)
-      setBusy(false)
-    }
-  }
-
-  // --- Create new ---
-  const [newFirst, setNewFirst] = useState('')
-  const [newLast, setNewLast] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newFields, setNewFields] = useState(EMPTY_STUDENT_FIELDS)
-
   async function createStudent(e) {
     e.preventDefault()
-    if (!newFirst.trim() || !newLast.trim()) { setError('First name and last name are required.'); return }
-    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First name and last name are required.')
+      return
+    }
+    if (isFull) {
+      setError(`This class is full (max ${maxStudents} students).`)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       const newRef = doc(collection(db, 'users'))
       await setDoc(newRef, {
         id: newRef.id,
-        first_name: newFirst.trim(),
-        last_name: newLast.trim(),
-        email: newEmail.trim().toLowerCase() || null,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim().toLowerCase() || null,
         role: 'student',
         status: 'active',
-        ...rosterPatch(newFields),
+        ...rosterPatch(fields),
       })
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(newRef.id) })
       onDone()
@@ -215,37 +167,13 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     }
   }
 
-  const tabBtn = (id, label) => (
-    <button
-      type="button"
-      onClick={() => { setTab(id); setError(null) }}
-      style={{
-        flex: 1,
-        padding: '8px 0',
-        fontSize: 13,
-        fontWeight: 600,
-        border: 'none',
-        borderBottom: tab === id ? '2px solid #0E2A5C' : '2px solid transparent',
-        background: 'transparent',
-        color: tab === id ? '#0E2A5C' : '#6A7A95',
-        cursor: 'pointer',
-      }}
-    >
-      {label}
-    </button>
-  )
+  const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
-
-        {/* Tab switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
-          {tabBtn('find', 'Find Registered Student')}
-          {tabBtn('create', 'Create New Manually')}
-        </div>
 
         {isFull && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -256,64 +184,80 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
 
-        {tab === 'find' ? (
-          <>
-            <form onSubmit={lookup} className="flex gap-2">
-              <input
-                type="email"
-                required
-                placeholder="student@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`${inputCls} flex-1`}
-              />
-              <button
-                type="submit"
-                disabled={busy}
-                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-50"
-                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
-              >
-                Find
-              </button>
-            </form>
-            {student && (
-              <div className="border border-slate-200 rounded-lg p-4 space-y-3">
-                <p className="font-medium text-slate-800">
-                  {student.last_name}, {student.first_name}
-                  <span className="text-slate-400 font-normal"> · {student.email}</span>
-                </p>
-                <StudentFields fields={fields} setFields={setFields} />
-                <button
-                  onClick={enroll}
-                  disabled={busy || isFull}
-                  className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
-                  style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
-                >
-                  {busy ? 'Adding…' : 'Add to class'}
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <form onSubmit={createStudent} className="space-y-3">
-            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              Creates a student record directly — no login account needed. The student can link their account later by signing up with the same email.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
-                <input required value={newFirst} onChange={(e) => setNewFirst(e.target.value)} className={`${inputCls} w-full mt-1`} />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
-                <input required value={newLast} onChange={(e) => setNewLast(e.target.value)} className={`${inputCls} w-full mt-1`} />
-              </label>
+        <form onSubmit={createStudent} className="space-y-4">
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            Creates a student record directly — no login account needed. The student can link their account later by signing up with the same email.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>First name <span className="text-red-500">*</span></label>
+              <input required className="ak-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={fieldStyle} />
             </div>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">Email <span className="text-slate-400 font-normal">(optional)</span></span>
-              <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="student@email.com" className={`${inputCls} w-full mt-1`} />
-            </label>
-            <StudentFields fields={newFields} setFields={setNewFields} />
+            <div>
+              <label style={labelStyle}>Last name <span className="text-red-500">*</span></label>
+              <input required className="ak-input" value={lastName} onChange={(e) => setLastName(e.target.value)} style={fieldStyle} />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Email <span style={optHint}>(optional)</span></label>
+            <input type="email" className="ak-input" placeholder="student@email.com" value={email} onChange={(e) => setEmail(e.target.value)} style={fieldStyle} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>ID Number</label>
+              <input className="ak-input" placeholder="Student ID" value={fields.student_number} onChange={set('student_number')} style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
+              <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>Course <span style={optHint}>(opt)</span></label>
+              <input className="ak-input" placeholder="e.g. BSIT" value={fields.course} onChange={set('course')} style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Year</label>
+              <input className="ak-input" placeholder="e.g. 1st Year / Grade 10" value={fields.year_level} onChange={set('year_level')} style={fieldStyle} />
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
+            <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+              <option value="">—</option>
+              {REMARKS_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(14,42,92,0.1)', margin: '16px 0' }} />
+
+          <div>
+            <label style={labelStyle}>Enrollment status</label>
+            <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+              {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label} ({value})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle}>DepEd LRN <span style={optHint}>(opt)</span></label>
+              <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Birthdate</label>
+              <input className="ak-input" type="date" value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+            </div>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-2">
             <button
               type="submit"
               disabled={busy || isFull}
@@ -322,15 +266,15 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
             >
               {busy ? 'Creating…' : 'Create & add to class'}
             </button>
-          </form>
-        )}
-
-        <button
-          onClick={onClose}
-          className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
-        >
-          Close
-        </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </form>
       </div>
       </div>
     </div>
