@@ -15,6 +15,8 @@ const ALLOWED_SYLLABUS_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
+const YEARS = Array.from({ length: 12 }, (_, i) => String(2024 + i))
+
 function parseSchedule(str = '') {
   const defaults = {
     days: ['M', 'W', 'F'],
@@ -106,6 +108,16 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const [endMinute, setEndMinute] = useState(parsed.endMinute)
   const [endPeriod, setEndPeriod] = useState(parsed.endPeriod)
 
+  // Academic year parsed states
+  const [fromYear, setFromYear] = useState(() => {
+    const parts = (form.academic_year || '2025-2026').split(/[-–]/)
+    return parts[0]?.trim() || '2025'
+  })
+  const [toYear, setToYear] = useState(() => {
+    const parts = (form.academic_year || '2025-2026').split(/[-–]/)
+    return parts[1]?.trim() || '2026'
+  })
+
   const [syllabusFile, setSyllabusFile] = useState(null)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -155,6 +167,19 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const handleEndMinuteChange = (val) => {
     setEndMinute(val)
     updateScheduleString(selectedDays, startHour, startMinute, startPeriod, endHour, val, endPeriod)
+  }
+
+  // Handle year changes
+  const handleFromYearChange = (val) => {
+    const nextTo = String(Number(val) + 1)
+    setFromYear(val)
+    setToYear(nextTo)
+    setForm(f => ({ ...f, academic_year: `${val}-${nextTo}` }))
+  }
+
+  const handleToYearChange = (val) => {
+    setToYear(val)
+    setForm(f => ({ ...f, academic_year: `${fromYear}-${val}` }))
   }
 
   const clearFile = () => {
@@ -407,10 +432,32 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <span className="text-sm font-medium text-slate-700">Max Students</span>
               <input required type="number" min="1" placeholder="40" value={form.max_students} onChange={set('max_students')} className={inputCls} />
             </label>
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">School Year</span>
-              <input required placeholder="e.g. 2026–2027" value={form.academic_year} onChange={set('academic_year')} className={inputCls} />
-            </label>
+
+            {/* School Year Selectors */}
+            <div className="block">
+              <span className="text-sm font-medium text-slate-700 block mb-1">School Year</span>
+              <div className="flex items-center gap-1">
+                <select
+                  value={fromYear}
+                  onChange={(e) => handleFromYearChange(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                >
+                  {YEARS.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+                <span className="text-slate-400">–</span>
+                <select
+                  value={toYear}
+                  onChange={(e) => handleToYearChange(e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
+                >
+                  {YEARS.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* Row 5: Conditional - Course Units (only for College) */}
