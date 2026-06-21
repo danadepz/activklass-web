@@ -674,19 +674,13 @@ function CsvUploadModal({ classId, onClose, onDone }) {
                 </div>
               ))}
             </div>
-            {preview.unmatched.length > 0 && (
-              <p className="text-xs text-amber-600">
-                {preview.unmatched.length} student{preview.unmatched.length === 1 ? '' : 's'} have no
-                Activklass account yet — ask them to register, then re-upload.
-              </p>
-            )}
             <button
               onClick={commit}
-              disabled={busy || preview.matched.length === 0}
+              disabled={busy || preview.students.length === 0}
               className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
               style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
-              {busy ? 'Importing…' : `Import ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'}`}
+              {busy ? 'Importing…' : `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}`}
             </button>
           </>
         )}
