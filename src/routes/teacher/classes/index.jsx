@@ -17,7 +17,9 @@ import ClassFormModal from '@/features/classes/ClassFormModal'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const navy = '#0E2A5C'
+const navyDeep = '#061840'
 const gold = '#F5C518'
+const goldDeep = '#8B6A00'
 const ink = '#0A1733'
 const muted = '#6A7A95'
 const faint = '#9AA6BD'

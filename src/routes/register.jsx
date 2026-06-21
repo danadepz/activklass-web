@@ -17,7 +17,6 @@ const navy = '#0E2A5C'
 const ink = '#0A1733'
 const gold = '#F5C518'
 const muted = '#6A7A95'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 
 const FRIENDLY_ERRORS = {
   'auth/email-already-in-use': 'That email is already in use. Try signing in instead.',
