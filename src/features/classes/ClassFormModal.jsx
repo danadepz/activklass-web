@@ -15,7 +15,7 @@ const ALLOWED_SYLLABUS_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
-const YEARS = Array.from({ length: 12 }, (_, i) => String(2024 + i))
+const YEARS = Array.from({ length: 10 }, (_, i) => String(2026 + i))
 
 function parseSchedule(str = '') {
   const defaults = {
@@ -88,7 +88,7 @@ function buildMeta(form) {
     schedule: form.schedule.trim(),
     grade_level: form.grade_level.trim(),
     max_students: Number.parseInt(form.max_students, 10),
-    academic_year: form.academic_year.trim() || '2025-2026',
+    academic_year: form.academic_year.trim() || '2026-2027',
     units: form.education_level === 'College' && form.units.trim() ? Number.parseFloat(form.units) : null,
   }
 }
@@ -108,14 +108,16 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const [endMinute, setEndMinute] = useState(parsed.endMinute)
   const [endPeriod, setEndPeriod] = useState(parsed.endPeriod)
 
-  // Academic year parsed states
+  // Academic year parsed states (must fallback to >= 2026)
   const [fromYear, setFromYear] = useState(() => {
-    const parts = (form.academic_year || '2025-2026').split(/[-–]/)
-    return parts[0]?.trim() || '2025'
+    const parts = (form.academic_year || '2026-2027').split(/[-–]/)
+    const val = parts[0]?.trim() || '2026'
+    return Number(val) >= 2026 ? val : '2026'
   })
   const [toYear, setToYear] = useState(() => {
-    const parts = (form.academic_year || '2025-2026').split(/[-–]/)
-    return parts[1]?.trim() || '2026'
+    const parts = (form.academic_year || '2026-2027').split(/[-–]/)
+    const val = parts[1]?.trim() || '2027'
+    return Number(val) >= 2027 ? val : '2027'
   })
 
   const [syllabusFile, setSyllabusFile] = useState(null)
@@ -265,7 +267,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   return (
     <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4 py-8">
-        <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 shadow-xl">
+        <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4 shadow-xl">
           <h3 className="text-lg font-semibold text-slate-800">
             {mode === 'edit' ? 'Edit Class' : 'New Class'}
           </h3>
@@ -423,18 +425,18 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           </div>
 
           {/* Row 4: Grade/Year Level, Max Students, School Year */}
-          <div className="grid grid-cols-3 gap-3">
-            <label className="block">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <label className="block col-span-1">
               <span className="text-sm font-medium text-slate-700">Grade / Year Level</span>
               <input required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')} className={inputCls} />
             </label>
-            <label className="block">
+            <label className="block col-span-1">
               <span className="text-sm font-medium text-slate-700">Max Students</span>
               <input required type="number" min="1" placeholder="40" value={form.max_students} onChange={set('max_students')} className={inputCls} />
             </label>
 
             {/* School Year Selectors */}
-            <div className="block">
+            <div className="block col-span-2">
               <span className="text-sm font-medium text-slate-700 block mb-1">School Year</span>
               <div className="flex items-center gap-1">
                 <select
@@ -452,7 +454,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                   onChange={(e) => handleToYearChange(e.target.value)}
                   className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
                 >
-                  {YEARS.map(y => (
+                  {YEARS.filter(y => Number(y) > Number(fromYear)).map(y => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
