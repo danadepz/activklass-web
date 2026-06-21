@@ -316,7 +316,7 @@ export default function TeacherLayout() {
               onClick={() => setMenuOpen((o) => !o)}
               aria-label={menuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={menuOpen}
-              className="flex md:hidden transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="grid md:hidden transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               style={{
                 width: 36,
                 height: 36,
@@ -325,7 +325,6 @@ export default function TeacherLayout() {
                 background: 'transparent',
                 cursor: 'pointer',
                 color: cream,
-                display: 'grid',
                 placeItems: 'center',
               }}
             >
