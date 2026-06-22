@@ -1,0 +1,1020 @@
+import { useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, storage } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
+import { fetchUsersByIds } from '@/lib/roster'
+import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
+import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
+
+const navy = '#0E2A5C'
+const ink = '#0A1733'
+const gold = '#F5C518'
+const goldDeep = '#8B6A00'
+const muted = '#6A7A95'
+const faint = '#9AA6BD'
+const green = '#1F8A5B'
+const blueText = '#1E6FB0'
+const red = '#C0392B'
+const line = 'rgba(14,42,92,0.08)'
+const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+
+const ATT_META = {
+  present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  late: { label: 'Late', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
+  absent: { label: 'Absent', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
+  excused: { label: 'Excused', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.45)' },
+}
+
+const TABS = [
+  { key: 'topics', label: 'Topics', Icon: BookOpen },
+  { key: 'quizzes', label: 'Quizzes', Icon: FileText },
+  { key: 'grades', label: 'Grade Center', Icon: ClipboardList },
+  { key: 'analytics', label: 'Analytics', Icon: BarChart },
+  { key: 'attendance', label: 'Attendance', Icon: CalendarCheck },
+  { key: 'announcements', label: 'Announcements', Icon: Megaphone },
+]
+
+const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number(q.points) || 0), 0)
+
+/* A quiz is visible to a student if it's assigned to everyone ('all' or legacy
+   undefined) or the student's id is in its assigned_to list. */
+function assignedToStudent(quiz, studentId) {
+  const a = quiz.assigned_to
+  return !a || a === 'all' || (Array.isArray(a) && a.includes(studentId))
+}
+
+function gradeColor(g) {
+  if (g == null) return faint
+  if (g >= 90) return green
+  if (g >= 85) return blueText
+  if (g >= 75) return goldDeep
+  return red
+}
+
+async function loadClassDetail(classId, profile) {
+  const classSnap = await getDoc(doc(db, 'classes', classId))
+  if (!classSnap.exists()) throw new Error('Class not found')
+  const clazz = { id: classSnap.id, ...classSnap.data() }
+
+  // Authorization mirror of the security rule: a student may only open a class
+  // they are enrolled in.
+  if (!(clazz.student_ids ?? []).includes(profile.id)) {
+    throw new Error('not_enrolled')
+  }
+
+  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap] =
+    await Promise.all([
+      loadStudentEntry(classId, profile.id),
+      loadStudentAttendance(classId, profile.id),
+      loadStudentContests(classId, profile.id),
+      loadStudentGradeContests(classId, profile.id),
+      loadSyllabus(classId),
+      getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId))),
+      clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
+      getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+      getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', profile.id))),
+    ])
+
+  const teacher = teachers[0] ?? null
+  const announcements = announcementsSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
+
+  // Students see only published/closed quizzes (never drafts).
+  const quizzes = quizzesSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((q) => (q.status === 'published' || q.status === 'closed') && assignedToStudent(q, profile.id))
+    .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
+  const attemptsByQuiz = {}
+  attemptsSnap.docs.forEach((d) => {
+    const a = { id: d.id, ...d.data() }
+    if (a.class_id !== classId) return
+    ;(attemptsByQuiz[a.quiz_id] ??= []).push(a)
+  })
+  for (const list of Object.values(attemptsByQuiz)) {
+    list.sort((a, b) => (b.submitted_at?.seconds ?? 0) - (a.submitted_at?.seconds ?? 0))
+  }
+
+  return {
+    clazz,
+    teacher,
+    entry,
+    attendance,
+    contestsByDate,
+    gradeContestsByAssessment,
+    syllabus,
+    announcements,
+    quizzes,
+    attemptsByQuiz,
+  }
+}
+
+function Pill({ meta }) {
+  return (
+    <span style={{ display: 'inline-block', padding: '3px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 999, color: meta.fg, background: meta.bg, border: `1px solid ${meta.border}`, whiteSpace: 'nowrap' }}>
+      {meta.label}
+    </span>
+  )
+}
+
+function TopicsTab({ syllabus }) {
+  if (!syllabus || !(syllabus.modules?.length)) {
+    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No syllabus yet" text="Your teacher hasn't published the modules and topics for this class." />
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      {syllabus.modules.map((m, mi) => (
+        <div key={m.id ?? mi} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+          <div className="flex items-center gap-3" style={{ marginBottom: (m.topics?.length ?? 0) ? 14 : 0 }}>
+            <span style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'rgba(14,42,92,0.07)', padding: '4px 9px', borderRadius: 7 }}>M{mi + 1}</span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: ink }}>{m.title || `Module ${mi + 1}`}</div>
+              {m.description && <div style={{ fontSize: 13, color: muted, marginTop: 2 }}>{m.description}</div>}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2.5" style={{ paddingLeft: 6 }}>
+            {(m.topics ?? []).map((t, ti) => (
+              <div key={t.id ?? ti} style={{ borderLeft: '2px solid rgba(14,42,92,0.1)', paddingLeft: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Topic ${ti + 1}`}</div>
+                {(t.learning_objectives ?? t.objectives ?? []).length > 0 && (
+                  <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {(t.learning_objectives ?? t.objectives).map((o, oi) => (
+                      <li key={oi} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: muted }}>
+                        <Check className="h-3.5 w-3.5" style={{ color: green, flexShrink: 0, marginTop: 2 }} />
+                        {o}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* Student's own component percentage (mirrors the teacher gradebook math:
+   graded → earned+possible, missing → possible only, excused/pending excluded). */
+function studentComponentPercent(asmts) {
+  let earned = 0
+  let possible = 0
+  for (const a of asmts) {
+    if (a.status === 'graded' && a.raw_score != null) {
+      earned += a.raw_score
+      possible += a.total_points
+    } else if (a.status === 'missing') {
+      possible += a.total_points
+    }
+  }
+  return possible ? Math.round((earned / possible) * 1000) / 10 : null
+}
+
+function ScoreCell({ a }) {
+  if (a.status === 'graded' && a.raw_score != null) {
+    const ratio = a.total_points ? a.raw_score / a.total_points : 0
+    return (
+      <span style={{ fontWeight: 700, color: ratio < 0.6 ? red : ink }}>
+        {a.raw_score}
+        <span style={{ color: faint, fontWeight: 400 }}>/{a.total_points}</span>
+      </span>
+    )
+  }
+  if (a.status === 'missing') return <span style={{ color: red, fontWeight: 700 }}>Missing</span>
+  if (a.status === 'excused') return <Pill meta={ATT_META.excused} />
+  return <span style={{ color: faint }}>—</span>
+}
+
+function ContestCellGrade({ contest, onContest }) {
+  if (contest) {
+    const tone = CONTEST_TONE[contest.status] ?? CONTEST_TONE.pending
+    return (
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <span style={{ display: 'inline-block', padding: '3px 10px', fontSize: 10.5, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`, whiteSpace: 'nowrap' }}>
+          {tone.label}
+        </span>
+        {contest.excuse_url && (
+          <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontWeight: 600, color: blueText }}>
+            View document
+          </a>
+        )}
+        {contest.status === 'rejected' && contest.resolution_note && (
+          <span style={{ fontSize: 10.5, color: faint, maxWidth: 150, textAlign: 'right', lineHeight: 1.35 }}>{contest.resolution_note}</span>
+        )}
+      </div>
+    )
+  }
+  if (!onContest) return null
+  return (
+    <button onClick={onContest} className="transition hover:bg-slate-50" style={{ padding: '4px 9px', fontSize: 11.5, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      Contest
+    </button>
+  )
+}
+
+function GradeContestModal({ classId, studentId, studentName, assessment, onClose, onSubmitted }) {
+  const [reason, setReason] = useState('')
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function submit() {
+    if (!reason.trim()) {
+      setError('Please explain why you are contesting this score.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      let excuse_url = null
+      if (file) {
+        const safeName = file.name.replace(/[^\w.-]/g, '_')
+        const fileRef = ref(storage, `contest_files/${classId}/${studentId}/${assessment.id}-${safeName}`)
+        await uploadBytes(fileRef, file)
+        excuse_url = await getDownloadURL(fileRef)
+      }
+      await setDoc(doc(db, 'grade_contests', `${classId}_${assessment.id}_${studentId}`), {
+        class_id: classId,
+        student_id: studentId,
+        student_name: studentName ?? null,
+        assessment_id: assessment.id,
+        assessment_title: assessment.title,
+        period_id: assessment.period_id ?? null,
+        component_id: assessment.component_id ?? null,
+        current_score: assessment.status === 'graded' ? assessment.raw_score : null,
+        total_points: assessment.total_points ?? null,
+        reason: reason.trim(),
+        excuse_url,
+        status: 'pending',
+        created_at: serverTimestamp(),
+      })
+      onSubmitted()
+    } catch (err) {
+      setError(err.message || 'Could not submit your contest.')
+      setBusy(false)
+    }
+  }
+
+  const scoreText = assessment.status === 'graded' ? `${assessment.raw_score}/${assessment.total_points}` : assessment.status
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+        <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
+          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest score</h3>
+          <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div style={{ padding: '20px 24px' }}>
+          <div className="flex items-center gap-3" style={{ marginBottom: 16, fontSize: 13.5, color: muted, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: ink }}>{assessment.title}</span>
+            <span>your score</span>
+            <span style={{ ...mono, fontWeight: 700, color: ink }}>{scoreText}</span>
+          </div>
+
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }}>
+            Reason <span style={{ color: red }}>*</span>
+          </label>
+          <textarea
+            rows={4}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. I believe item 4 was marked wrong, or my essay wasn't graded yet."
+            style={{ width: '100%', padding: '11px 13px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, resize: 'vertical' }}
+          />
+
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, margin: '16px 0 7px' }}>
+            Attach supporting file <span style={{ color: faint, fontWeight: 400 }}>(optional — PDF, Word, or image)</span>
+          </label>
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx,image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
+          />
+
+          {error && (
+            <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>{error}</p>
+          )}
+        </div>
+        <div className="flex justify-end gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
+          <button onClick={onClose} disabled={busy} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={busy} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '10px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+            {busy ? 'Submitting…' : 'Submit contest'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAssessment, onContested }) {
+  const [contestAsmt, setContestAsmt] = useState(null)
+  if (!entry || entry.final_grade == null) {
+    return <Empty icon={<ClipboardList className="h-6 w-6" />} title="No grades yet" text="Your grade summary appears here once your teacher records and saves your scores." />
+  }
+  const components = entry.components ?? []
+  const assessments = entry.assessments ?? []
+  const hasDetail = components.length > 0 && assessments.length > 0
+  const periods = (entry.periods ?? []).filter(
+    (p) => p.grade != null || assessments.some((a) => a.period_id === p.id),
+  )
+  const canContest = (a) => a.status === 'graded' || a.status === 'missing'
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Final grade */}
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: muted }}>Current grade</div>
+          <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class.</div>
+        </div>
+        <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade) }}>
+          {Math.round(entry.final_grade)}
+        </div>
+      </div>
+
+      {!hasDetail
+        ? periods.map((p) => (
+            <div key={p.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 20px', display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 700, color: ink }}>{p.name}</span>
+              <span style={{ fontWeight: 700, color: gradeColor(p.grade) }}>{p.grade == null ? '—' : Math.round(p.grade)}</span>
+            </div>
+          ))
+        : periods.map((period) => {
+            const periodAsmts = assessments.filter((a) => a.period_id === period.id)
+            const usedComponents = components.filter((c) => periodAsmts.some((a) => a.component_id === c.id))
+            return (
+              <div key={period.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+                {/* Period header */}
+                <div className="flex items-center justify-between" style={{ padding: '14px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
+                  <span style={{ ...serif, fontSize: 18, color: ink }}>{period.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade) }}>
+                    Grade {period.grade == null ? '—' : Math.round(period.grade)}
+                  </span>
+                </div>
+
+                {usedComponents.length === 0 ? (
+                  <div style={{ padding: '18px 20px', fontSize: 13, color: faint }}>No graded work in this period yet.</div>
+                ) : (
+                  /* One fixed-layout table per period → score / avg / action columns
+                     line up across every component and assessment. */
+                  <div className="overflow-x-auto">
+                    <table style={{ tableLayout: 'fixed', width: '100%', minWidth: 500, borderCollapse: 'collapse', fontSize: 13 }}>
+                      <colgroup>
+                        <col />
+                        <col style={{ width: 88 }} />
+                        <col style={{ width: 76 }} />
+                        <col style={{ width: 132 }} />
+                      </colgroup>
+                      <tbody>
+                        {usedComponents.map((c) => {
+                          const ca = periodAsmts.filter((a) => a.component_id === c.id)
+                          const pct = studentComponentPercent(ca)
+                          return [
+                            <tr key={`h-${c.id}`} style={{ background: 'rgba(14,42,92,0.012)', borderTop: `1px solid ${line}` }}>
+                              <td colSpan={2} style={{ padding: '11px 20px', fontSize: 13.5, fontWeight: 700, color: ink }}>
+                                {c.name} <span style={{ color: faint, fontWeight: 500 }}>({c.weight_percent}%)</span>
+                              </td>
+                              <td style={{ ...mono, padding: '11px 8px', textAlign: 'right', fontSize: 13, fontWeight: 700, color: pct == null ? faint : gradeColor(pct) }}>
+                                {pct == null ? '—' : `${pct}%`}
+                              </td>
+                              <td />
+                            </tr>,
+                            ...ca.map((a) => (
+                              <tr key={a.id} style={{ borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+                                <td style={{ padding: '9px 12px 9px 20px', color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</td>
+                                <td style={{ padding: '9px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}><ScoreCell a={a} /></td>
+                                <td style={{ ...mono, padding: '9px 8px', textAlign: 'right', color: faint, fontSize: 12, whiteSpace: 'nowrap' }}>
+                                  {a.class_average == null ? '' : `avg ${a.class_average}`}
+                                </td>
+                                <td style={{ padding: '9px 16px 9px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <ContestCellGrade
+                                    contest={gradeContestsByAssessment[a.id]}
+                                    onContest={canContest(a) ? () => setContestAsmt(a) : null}
+                                  />
+                                </td>
+                              </tr>
+                            )),
+                          ]
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+      <p style={{ fontSize: 12.5, color: faint, margin: 0 }}>
+        Scores in <span style={{ color: red, fontWeight: 700 }}>red</span> are below 60% — focus your review there. “avg” is the class average. Tap <strong style={{ color: ink }}>Contest</strong> to dispute a score.
+      </p>
+
+      {contestAsmt && (
+        <GradeContestModal
+          classId={classId}
+          studentId={studentId}
+          studentName={studentName}
+          assessment={contestAsmt}
+          onClose={() => setContestAsmt(null)}
+          onSubmitted={() => {
+            setContestAsmt(null)
+            onContested()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+const CONTEST_TONE = {
+  pending: { label: 'Contest pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
+  approved: { label: 'Contest approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  rejected: { label: 'Contest rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
+}
+
+function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitted }) {
+  const [reason, setReason] = useState('')
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function submit() {
+    if (!reason.trim()) {
+      setError('Please explain why you are contesting this record.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      let excuse_url = null
+      if (file) {
+        const safeName = file.name.replace(/[^\w.-]/g, '_')
+        const fileRef = ref(storage, `excuse_letters/${classId}/${studentId}/${day.date}-${safeName}`)
+        await uploadBytes(fileRef, file)
+        excuse_url = await getDownloadURL(fileRef)
+      }
+      // Deterministic id → one active dispute per date per student.
+      await setDoc(doc(db, 'attendance_contests', `${classId}_${day.date}_${studentId}`), {
+        class_id: classId,
+        student_id: studentId,
+        student_name: studentName ?? null,
+        date: day.date,
+        current_status: day.status,
+        reason: reason.trim(),
+        excuse_url,
+        status: 'pending',
+        created_at: serverTimestamp(),
+      })
+      onSubmitted()
+    } catch (err) {
+      setError(err.message || 'Could not submit your contest.')
+      setBusy(false)
+    }
+  }
+
+  const meta = ATT_META[day.status] ?? ATT_META.absent
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+        <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
+          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest attendance</h3>
+          <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div style={{ padding: '20px 24px' }}>
+          <div className="flex items-center gap-3" style={{ marginBottom: 16, fontSize: 13.5, color: muted }}>
+            <span style={{ ...mono, color: ink, fontWeight: 700 }}>{day.date}</span>
+            <span>marked as</span>
+            <Pill meta={meta} />
+          </div>
+
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }}>
+            Reason <span style={{ color: red }}>*</span>
+          </label>
+          <textarea
+            rows={4}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. I attended class that day, or I have a medical certificate for my absence."
+            style={{ width: '100%', padding: '11px 13px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, resize: 'vertical' }}
+          />
+
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, margin: '16px 0 7px' }}>
+            Attach excuse document <span style={{ color: faint, fontWeight: 400 }}>(optional — PDF, Word, or image)</span>
+          </label>
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx,image/*"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
+          />
+
+          {error && (
+            <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>{error}</p>
+          )}
+        </div>
+        <div className="flex justify-end gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
+          <button onClick={onClose} disabled={busy} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={busy} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '10px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+            {busy ? 'Submitting…' : 'Submit contest'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AttendanceTab({ attendance, contestsByDate, classId, studentId, studentName, onContested }) {
+  const { log, tally, rate } = attendance
+  const [contestDay, setContestDay] = useState(null)
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" style={{ marginBottom: 18 }}>
+        <Stat label="Rate" value={rate == null ? '—' : `${rate}%`} color={blueText} />
+        <Stat label="Present" value={tally.present} color={green} />
+        <Stat label="Late" value={tally.late} color={goldDeep} />
+        <Stat label="Absent" value={tally.absent} color={red} />
+        <Stat label="Excused" value={tally.excused} color={blueText} />
+      </div>
+
+      {log.length === 0 ? (
+        <Empty icon={<CalendarCheck className="h-6 w-6" />} title="No attendance recorded" text="Your daily attendance will appear here once your teacher starts marking the sheet." />
+      ) : (
+        <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+                  <th style={thStyle}>Date</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Remarks</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Contest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {log.map((d) => {
+                  const meta = ATT_META[d.status] ?? ATT_META.absent
+                  const contest = contestsByDate[d.date]
+                  const tone = contest ? CONTEST_TONE[contest.status] : null
+                  return (
+                    <tr key={d.date} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+                      <td style={{ ...tdStyle, ...mono, color: ink }}>{d.date}</td>
+                      <td style={tdStyle}><Pill meta={meta} /></td>
+                      <td style={{ ...tdStyle, color: muted }}>{d.remarks || '—'}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                        {contest ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                            <span style={{ display: 'inline-block', padding: '3px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>
+                              {tone.label}
+                            </span>
+                            {contest.excuse_url && (
+                              <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, fontWeight: 600, color: blueText }}>
+                                View document
+                              </a>
+                            )}
+                            {contest.status === 'rejected' && contest.resolution_note && (
+                              <span style={{ fontSize: 11, color: faint, maxWidth: 180, textAlign: 'right' }}>{contest.resolution_note}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setContestDay(d)}
+                            className="transition hover:bg-slate-50"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12.5, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 9, cursor: 'pointer' }}
+                          >
+                            <FileText className="h-3.5 w-3.5" /> Contest
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <p style={{ fontSize: 12.5, color: faint, marginTop: 12 }}>
+        Disagree with a record? Use <strong style={{ color: ink }}>Contest</strong> to explain and optionally attach an excuse letter — your teacher reviews and resolves it.
+      </p>
+
+      {contestDay && (
+        <ContestModal
+          classId={classId}
+          studentId={studentId}
+          studentName={studentName}
+          day={contestDay}
+          onClose={() => setContestDay(null)}
+          onSubmitted={() => {
+            setContestDay(null)
+            onContested()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function QuizzesTab({ classId, quizzes, attemptsByQuiz }) {
+  if (quizzes.length === 0) {
+    return <Empty icon={<FileText className="h-6 w-6" />} title="No quizzes yet" text="Quizzes your teacher publishes for this class will show up here." />
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {quizzes.map((quiz) => {
+        const attempts = attemptsByQuiz[quiz.id] ?? []
+        const latest = attempts[0] ?? null
+        const allowed = quiz.attempts_allowed ?? 1
+        const used = attempts.length
+        const points = quizPoints(quiz)
+        const canTake = quiz.status === 'published' && used < allowed
+        const best = attempts.length
+          ? Math.max(...attempts.map((a) => a.total_score ?? 0))
+          : null
+        return (
+          <div key={quiz.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div style={{ minWidth: 0 }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: ink }}>{quiz.title}</span>
+                  {quiz.status === 'closed' && (
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.18)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 999, padding: '2px 9px' }}>Closed</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1" style={{ ...mono, fontSize: 12, color: muted }}>
+                  <span>{(quiz.questions ?? []).length} items</span>
+                  <span>{points} pts</span>
+                  {quiz.time_limit_minutes && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock className="h-3 w-3" />{quiz.time_limit_minutes} min</span>}
+                  <span>Attempts {used}/{allowed}</span>
+                </div>
+                {best != null && (
+                  <div style={{ fontSize: 13, color: muted, marginTop: 8 }}>
+                    Best score: <strong style={{ color: ink }}>{best}/{quiz.total_possible ?? points}</strong>
+                    {latest?.has_essays_pending && <span style={{ color: blueText }}> · essay pending review</span>}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {latest && (
+                  <Link
+                    to={`/student/quizzes/${latest.id}/result`}
+                    style={{ padding: '9px 15px', fontSize: 13, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, textDecoration: 'none' }}
+                  >
+                    View result
+                  </Link>
+                )}
+                {canTake ? (
+                  <Link
+                    to={`/student/classes/${classId}/quizzes/${quiz.id}`}
+                    style={{ padding: '9px 16px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none' }}
+                  >
+                    {used > 0 ? 'Retake' : 'Take quiz'}
+                  </Link>
+                ) : !latest ? (
+                  <span style={{ fontSize: 12.5, color: faint }}>{quiz.status === 'closed' ? 'Not taken' : 'No attempts left'}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* Dependency-free SVG line chart: the student's % vs the class average % across
+   graded assessments, with a 75% passing reference line. */
+function PerfChart({ points }) {
+  const W = 600
+  const H = 210
+  const padL = 32
+  const padR = 14
+  const padT = 14
+  const padB = 30
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+  const x = (i) => padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW)
+  const y = (v) => padT + (1 - Math.max(0, Math.min(100, v)) / 100) * innerH
+  const youLine = points.map((p, i) => `${x(i)},${y(p.you)}`).join(' ')
+  const avgPts = points.filter((p) => p.avg != null)
+  const avgLine = points.map((p, i) => (p.avg == null ? null : `${x(i)},${y(p.avg)}`)).filter(Boolean).join(' ')
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} preserveAspectRatio="xMidYMid meet">
+        {[0, 25, 50, 75, 100].map((g) => (
+          <g key={g}>
+            <line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke={g === 75 ? 'rgba(245,197,24,0.55)' : 'rgba(14,42,92,0.08)'} strokeWidth="1" strokeDasharray={g === 75 ? '5 4' : ''} />
+            <text x={padL - 6} y={y(g) + 3} textAnchor="end" fontSize="9" fill="#9AA6BD" fontFamily="ui-monospace, monospace">{g}</text>
+          </g>
+        ))}
+        {/* class average (dashed blue) */}
+        {avgPts.length >= 2 && <polyline points={avgLine} fill="none" stroke="#3FA9F5" strokeWidth="2" strokeDasharray="5 4" />}
+        {avgPts.map((p) => {
+          const i = points.indexOf(p)
+          return <circle key={`a${i}`} cx={x(i)} cy={y(p.avg)} r="2.5" fill="#3FA9F5" />
+        })}
+        {/* student (navy line, gold dots) */}
+        {points.length >= 2 && <polyline points={youLine} fill="none" stroke="#0E2A5C" strokeWidth="2.5" />}
+        {points.map((p, i) => (
+          <g key={`y${i}`}>
+            <circle cx={x(i)} cy={y(p.you)} r="4" fill="#F5C518" stroke="#0E2A5C" strokeWidth="1.5" />
+            <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="9" fill="#6A7A95" fontFamily="ui-monospace, monospace">{i + 1}</text>
+          </g>
+        ))}
+      </svg>
+      <div className="flex items-center gap-5" style={{ marginTop: 6, fontSize: 12, color: muted }}>
+        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 3, borderRadius: 2, background: navy, display: 'inline-block' }} /> You</span>
+        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 0, borderTop: '2px dashed #3FA9F5', display: 'inline-block' }} /> Class average</span>
+        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 0, borderTop: '2px dashed rgba(245,197,24,0.8)', display: 'inline-block' }} /> Passing (75)</span>
+      </div>
+    </div>
+  )
+}
+
+function AnalyticsStat({ label, value, sub, color }) {
+  return (
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
+      <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11.5, color: faint, marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function SubjectAnalyticsTab({ entry, attendance }) {
+  const assessments = entry?.assessments ?? []
+  const components = entry?.components ?? []
+  const graded = assessments
+    .filter((a) => a.status === 'graded' && a.raw_score != null && a.total_points > 0)
+    .sort((a, b) => (a.date_given ?? '').localeCompare(b.date_given ?? '') || a.title.localeCompare(b.title))
+
+  if (!entry || entry.final_grade == null || graded.length === 0) {
+    return <Empty icon={<BarChart className="h-6 w-6" />} title="No analytics yet" text="Once your teacher records and saves graded work, your performance trends will appear here." />
+  }
+
+  const points = graded.map((a) => ({
+    title: a.title,
+    date: a.date_given,
+    you: Math.round((a.raw_score / a.total_points) * 100),
+    avg: a.class_average != null ? Math.round((a.class_average / a.total_points) * 100) : null,
+  }))
+  const youAvg = Math.round(points.reduce((s, p) => s + p.you, 0) / points.length)
+  const withAvg = points.filter((p) => p.avg != null)
+  const classAvg = withAvg.length ? Math.round(withAvg.reduce((s, p) => s + p.avg, 0) / withAvg.length) : null
+  const diff = classAvg != null ? youAvg - classAvg : null
+
+  // Per-component performance across the whole subject.
+  const compRows = components
+    .map((c) => ({ name: c.name, weight: c.weight_percent, pct: studentComponentPercent(assessments.filter((a) => a.component_id === c.id)) }))
+    .filter((r) => r.pct != null)
+  const ranked = [...compRows].sort((a, b) => b.pct - a.pct)
+  const strongest = ranked[0]
+  const weakest = ranked[ranked.length - 1]
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <AnalyticsStat label="Current grade" value={Math.round(entry.final_grade)} color={gradeColor(entry.final_grade)} />
+        <AnalyticsStat label="Your average" value={`${youAvg}%`} sub="across graded items" color={gradeColor(youAvg)} />
+        <AnalyticsStat
+          label="vs class"
+          value={diff == null ? '—' : `${diff >= 0 ? '+' : ''}${diff}`}
+          sub={classAvg == null ? '' : `class avg ${classAvg}%`}
+          color={diff == null ? faint : diff >= 0 ? green : red}
+        />
+        <AnalyticsStat label="Attendance" value={attendance.rate == null ? '—' : `${attendance.rate}%`} color={blueText} />
+      </div>
+
+      {/* Performance trend chart */}
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, marginBottom: 4 }}>Performance trend</div>
+        <div style={{ fontSize: 12.5, color: faint, marginBottom: 12 }}>Your score vs the class average on each graded item, over time.</div>
+        <PerfChart points={points} />
+      </div>
+
+      {/* Component breakdown */}
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, marginBottom: 14 }}>Component breakdown</div>
+        <div className="flex flex-col gap-3">
+          {compRows.map((r) => (
+            <div key={r.name}>
+              <div className="flex items-center justify-between" style={{ fontSize: 13, marginBottom: 5 }}>
+                <span style={{ color: ink, fontWeight: 600 }}>{r.name} <span style={{ color: faint, fontWeight: 400 }}>({r.weight}%)</span></span>
+                <span style={{ ...mono, fontWeight: 700, color: gradeColor(r.pct) }}>{r.pct}%</span>
+              </div>
+              <div style={{ height: 9, borderRadius: 999, background: 'rgba(14,42,92,0.07)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, r.pct)}%`, background: gradeColor(r.pct), transition: 'width 0.6s' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        {strongest && weakest && strongest.name !== weakest.name && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+            <span style={{ fontSize: 12.5, color: muted, background: 'rgba(31,138,91,0.08)', border: '1px solid rgba(31,138,91,0.3)', borderRadius: 999, padding: '5px 12px' }}>
+              💪 Strongest: <strong style={{ color: ink }}>{strongest.name}</strong> ({strongest.pct}%)
+            </span>
+            <span style={{ fontSize: 12.5, color: muted, background: 'rgba(192,57,43,0.06)', border: '1px solid rgba(192,57,43,0.28)', borderRadius: 999, padding: '5px 12px' }}>
+              🎯 Focus on: <strong style={{ color: ink }}>{weakest.name}</strong> ({weakest.pct}%)
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Per-item table (keyed to the chart numbers) */}
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+                <th style={{ ...thStyle, width: 36 }}>#</th>
+                <th style={thStyle}>Assessment</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>You</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {points.map((p, i) => (
+                <tr key={i} style={{ borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+                  <td style={{ ...tdStyle, ...mono, color: faint }}>{i + 1}</td>
+                  <td style={{ ...tdStyle, color: ink }}>{p.title}</td>
+                  <td style={{ ...tdStyle, ...mono, textAlign: 'right', fontWeight: 700, color: gradeColor(p.you) }}>{p.you}%</td>
+                  <td style={{ ...tdStyle, ...mono, textAlign: 'right', color: muted }}>{p.avg == null ? '—' : `${p.avg}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AnnouncementsTab({ announcements }) {
+  if (announcements.length === 0) {
+    return <Empty icon={<Megaphone className="h-6 w-6" />} title="No announcements" text="Class announcements from your teacher will show up here." />
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {announcements.map((a) => {
+        const when = a.created_at?.seconds ? new Date(a.created_at.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+        return (
+          <div key={a.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+            <div className="flex items-center justify-between gap-3" style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: ink }}>{a.title || 'Announcement'}</div>
+              {when && <div style={{ ...mono, fontSize: 11.5, color: faint }}>{when}</div>}
+            </div>
+            <div style={{ fontSize: 14, color: muted, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{a.body || a.message}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '14px 16px' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
+      <div style={{ ...serif, fontSize: 28, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
+    </div>
+  )
+}
+
+function Empty({ icon, title, text }) {
+  return (
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
+      <div style={{ display: 'inline-grid', placeItems: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(14,42,92,0.08)', color: navy }}>{icon}</div>
+      <h3 style={{ ...serif, fontSize: 20, margin: '14px 0 6px', color: ink }}>{title}</h3>
+      <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>{text}</p>
+    </div>
+  )
+}
+
+const thStyle = { padding: '12px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
+const tdStyle = { padding: '13px 18px', fontSize: 13, color: ink, verticalAlign: 'middle' }
+
+export default function StudentClassDetail() {
+  const { classId } = useParams()
+  const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  const [tab, setTab] = useState('topics')
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['student-class-detail', classId, profile.id],
+    queryFn: () => loadClassDetail(classId, profile),
+    retry: false,
+  })
+
+  if (isLoading) return <p style={{ color: faint }}>Loading class…</p>
+  if (isError) {
+    const notEnrolled = error?.message === 'not_enrolled'
+    return (
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>
+          {notEnrolled ? "You're not enrolled in this class" : 'Class not found'}
+        </h3>
+        <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
+          {notEnrolled ? 'You can only view classes you have been added to.' : 'This class may have been removed.'}
+        </p>
+        <Link to="/student/classes" style={{ fontSize: 13, fontWeight: 700, color: navy }}>← Back to My Classes</Link>
+      </div>
+    )
+  }
+
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz } = data
+  const finalGrade = entry?.final_grade ?? null
+  const schedule = typeof clazz.schedule === 'string' ? clazz.schedule : null
+  const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['student-class-detail', classId, profile.id] })
+
+  return (
+    <div>
+      {/* Breadcrumb */}
+      <Link to="/student/classes" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: muted, textDecoration: 'none', marginBottom: 14 }}>
+        ← My Classes
+      </Link>
+
+      {/* Course header */}
+      <div style={{ background: 'linear-gradient(135deg, #0E2A5C, #061840)', borderRadius: 20, padding: 'clamp(20px, 3.5vw, 28px)', color: '#FFFFFF', position: 'relative', overflow: 'hidden' }}>
+        <div aria-hidden="true" style={{ position: 'absolute', top: -60, right: -40, width: 180, height: 180, border: '1px solid rgba(245,197,24,0.14)', borderRadius: '50%' }} />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" style={{ position: 'relative' }}>
+          <div>
+            <h1 className="text-[clamp(24px,3.5vw,34px)]" style={{ ...serif, lineHeight: 1.1, margin: '0 0 6px' }}>
+              {clazz.subject_code ? `${clazz.subject_code} · ` : ''}{clazz.subject || clazz.section}
+            </h1>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5" style={{ fontSize: 13.5, color: 'rgba(250,250,246,0.82)' }}>
+              <span>{clazz.section}</span>
+              {schedule && <span>· {schedule}</span>}
+              {teacher && <span>· {teacher.first_name} {teacher.last_name}</span>}
+              {teacher?.email && <span style={{ color: 'rgba(250,250,246,0.6)' }}>· {teacher.email}</span>}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.6)', letterSpacing: '0.05em' }}>CURRENT GRADE</div>
+            <div style={{ ...serif, fontSize: 40, lineHeight: 1, color: finalGrade == null ? 'rgba(255,255,255,0.6)' : gold, marginTop: 2 }}>
+              {finalGrade == null ? '—' : Math.round(finalGrade)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="mt-6 mb-5 flex gap-1.5 overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 6 }}>
+        {TABS.map(({ key, label, Icon }) => {
+          const active = tab === key
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className="transition"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', color: active ? '#FFFFFF' : muted, background: active ? navy : 'transparent' }}
+            >
+              <Icon className="h-4 w-4" style={{ color: active ? gold : faint }} />
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'topics' && <TopicsTab syllabus={syllabus} />}
+      {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
+      {tab === 'grades' && (
+        <GradesTab
+          entry={entry}
+          classId={classId}
+          studentId={profile.id}
+          studentName={studentName}
+          gradeContestsByAssessment={gradeContestsByAssessment}
+          onContested={invalidate}
+        />
+      )}
+      {tab === 'analytics' && <SubjectAnalyticsTab entry={entry} attendance={attendance} />}
+      {tab === 'attendance' && (
+        <AttendanceTab
+          attendance={attendance}
+          contestsByDate={contestsByDate}
+          classId={classId}
+          studentId={profile.id}
+          studentName={studentName}
+          onContested={invalidate}
+        />
+      )}
+      {tab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
+    </div>
+  )
+}

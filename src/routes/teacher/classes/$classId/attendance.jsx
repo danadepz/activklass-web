@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
+import { notifyStudents } from '@/lib/notifications'
 import { useAuth } from '@/context/useAuth'
 
 const navy = '#0E2A5C'
@@ -351,6 +352,167 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   )
 }
 
+const CONTEST_STATUS = {
+  pending: { label: 'Pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
+  approved: { label: 'Approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  rejected: { label: 'Rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
+}
+
+/* Attendance disputes filed by students. The teacher approves (which marks that
+   date as excused on the attendance sheet) or rejects with a note. */
+function ContestsPanel({ classId }) {
+  const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  const [busyId, setBusyId] = useState(null)
+  const [error, setError] = useState(null)
+
+  const { data: contests } = useQuery({
+    queryKey: ['fs-contests', classId],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'attendance_contests'), where('class_id', '==', classId)),
+      )
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      const ids = [...new Set(rows.map((c) => c.student_id))]
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      const nameOf = (id) => {
+        const u = users.find((x) => x.id === id)
+        return u ? `${u.last_name}, ${u.first_name}` : 'Student'
+      }
+      return rows
+        .map((c) => ({ ...c, student_name: c.student_name || nameOf(c.student_id) }))
+        .sort((a, b) => {
+          if ((a.status === 'pending') !== (b.status === 'pending')) return a.status === 'pending' ? -1 : 1
+          return (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0)
+        })
+    },
+  })
+
+  const list = contests ?? []
+  if (list.length === 0) return null
+  const pendingCount = list.filter((c) => c.status === 'pending').length
+
+  const refetch = () => {
+    queryClient.invalidateQueries({ queryKey: ['fs-contests', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-pending-contests'] }) // refresh the bell
+  }
+
+  async function approve(c) {
+    setBusyId(c.id)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'attendance_contests', c.id), {
+        status: 'approved',
+        resolved_at: serverTimestamp(),
+        resolved_by: profile.id,
+      })
+      // Accepting the dispute marks that day excused for the student.
+      await updateDoc(doc(db, 'classes', classId, 'attendance', c.date), {
+        [`records.${c.student_id}`]: {
+          status: 'excused',
+          remarks: 'Excused — contest approved',
+          excuse_url: c.excuse_url ?? null,
+        },
+      })
+      await notifyStudents({
+        studentIds: [c.student_id],
+        classId,
+        createdBy: profile.id,
+        type: 'attendance_contest',
+        message: `Your attendance contest for ${c.date} was approved — it's now marked Excused.`,
+        link: `/student/classes/${classId}`,
+      }).catch(() => {})
+      refetch()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function reject(c) {
+    const note = window.prompt('Reason for rejecting this contest (optional):') ?? ''
+    setBusyId(c.id)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'attendance_contests', c.id), {
+        status: 'rejected',
+        resolution_note: note.trim() || null,
+        resolved_at: serverTimestamp(),
+        resolved_by: profile.id,
+      })
+      await notifyStudents({
+        studentIds: [c.student_id],
+        classId,
+        createdBy: profile.id,
+        type: 'attendance_contest',
+        message: `Your attendance contest for ${c.date} was declined.`,
+        link: `/student/classes/${classId}`,
+      }).catch(() => {})
+      refetch()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="mb-5" style={{ background: '#FFFFFF', border: `1px solid ${pendingCount ? 'rgba(245,197,24,0.55)' : line}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}`, background: pendingCount ? 'rgba(245,197,24,0.08)' : 'rgba(14,42,92,0.02)' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>
+          Attendance disputes
+          {pendingCount > 0 && (
+            <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.22)', borderRadius: 999, padding: '2px 9px' }}>
+              {pendingCount} pending
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div role="alert" style={{ margin: '12px 18px 0', fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</div>
+      )}
+
+      <div>
+        {list.map((c) => {
+          const tone = CONTEST_STATUS[c.status] ?? CONTEST_STATUS.pending
+          return (
+            <div key={c.id} className="flex flex-wrap items-start justify-between gap-3" style={{ padding: '14px 18px', borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>{c.student_name}</span>
+                  <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.date}</span>
+                  <span style={{ fontSize: 11, color: faint }}>(marked {c.current_status})</span>
+                  <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>{tone.label}</span>
+                </div>
+                <div style={{ fontSize: 13, color: muted, lineHeight: 1.5 }}>{c.reason}</div>
+                {c.excuse_url && (
+                  <a href={c.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: blueText }}>📎 View excuse document</a>
+                )}
+                {c.status === 'rejected' && c.resolution_note && (
+                  <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>Note: {c.resolution_note}</div>
+                )}
+              </div>
+              {c.status === 'pending' && (
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => approve(c)} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                    Approve
+                  </button>
+                  <button onClick={() => reject(c)} disabled={busyId === c.id} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function AttendancePage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
@@ -413,6 +575,8 @@ export default function AttendancePage() {
           style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
         />
       </div>
+
+      <ContestsPanel classId={classId} />
 
       {isLoading ? (
         <p style={{ color: faint }}>Loading attendance…</p>

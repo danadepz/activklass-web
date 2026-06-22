@@ -89,17 +89,83 @@ export default function TeacherLayout() {
     enabled: !!profile?.id,
   })
 
+  const classIds = (classes ?? []).map((c) => c.id)
+  const classById = Object.fromEntries((classes ?? []).map((c) => [c.id, c]))
+
+  // Pending attendance disputes across all the teacher's classes — surfaced in
+  // the notification bell so a contest doesn't sit unseen.
+  const { data: pendingContests } = useQuery({
+    queryKey: ['fs-pending-contests', profile?.id, classIds.join(',')],
+    enabled: classIds.length > 0,
+    queryFn: async () => {
+      const out = []
+      for (let i = 0; i < classIds.length; i += 30) {
+        const chunk = classIds.slice(i, i + 30)
+        const snap = await getDocs(
+          query(collection(db, 'attendance_contests'), where('class_id', 'in', chunk)),
+        )
+        snap.forEach((d) => out.push({ id: d.id, ...d.data() }))
+      }
+      return out.filter((c) => c.status === 'pending')
+    },
+  })
+
+  // Pending grade/score disputes across the teacher's classes.
+  const { data: pendingGradeContests } = useQuery({
+    queryKey: ['fs-pending-grade-contests', profile?.id, classIds.join(',')],
+    enabled: classIds.length > 0,
+    queryFn: async () => {
+      const out = []
+      for (let i = 0; i < classIds.length; i += 30) {
+        const chunk = classIds.slice(i, i + 30)
+        const snap = await getDocs(
+          query(collection(db, 'grade_contests'), where('class_id', 'in', chunk)),
+        )
+        snap.forEach((d) => out.push({ id: d.id, ...d.data() }))
+      }
+      return out.filter((c) => c.status === 'pending')
+    },
+  })
+
   const emptyRosters = (classes ?? []).filter((c) => (c.student_ids?.length ?? 0) === 0)
-  
-  const notifications = emptyRosters.map((c) => ({
+
+  const contestNotifications = (pendingContests ?? []).map((c) => ({
+    id: `contest-${c.id}`,
+    icon: '📝',
+    message: (
+      <span>
+        Attendance dispute — <strong>{c.student_name || 'A student'}</strong> contested {c.date}
+        {classById[c.class_id]?.section ? ` in ${classById[c.class_id].section}` : ''}. Review it.
+      </span>
+    ),
+    link: `/teacher/classes/${c.class_id}/attendance`,
+  }))
+
+  const gradeContestNotifications = (pendingGradeContests ?? []).map((c) => ({
+    id: `grade-contest-${c.id}`,
+    icon: '🧮',
+    message: (
+      <span>
+        Score dispute — <strong>{c.student_name || 'A student'}</strong> contested “{c.assessment_title}”
+        {classById[c.class_id]?.section ? ` in ${classById[c.class_id].section}` : ''}. Review it.
+      </span>
+    ),
+    link: `/teacher/classes/${c.class_id}/record`,
+  }))
+
+  const rosterNotifications = emptyRosters.map((c) => ({
     id: `empty-roster-${c.id}`,
+    icon: '⚠️',
     message: (
       <span>
         Needs your attention. <strong>{c.section}</strong> has no students yet — add a roster.
       </span>
     ),
-    link: `/teacher/classes/${c.id}`
+    link: `/teacher/classes/${c.id}`,
   }))
+
+  // Disputes first — they're the most time-sensitive.
+  const notifications = [...contestNotifications, ...gradeContestNotifications, ...rosterNotifications]
 
   const closeMenu = () => setMenuOpen(false)
 
@@ -304,7 +370,7 @@ export default function TeacherLayout() {
                           }}
                           className="hover:bg-slate-50"
                         >
-                          <div style={{ fontSize: 16, marginTop: 1 }}>⚠️</div>
+                          <div style={{ fontSize: 16, marginTop: 1 }}>{n.icon ?? '⚠️'}</div>
                           <div style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>
                             {n.message}
                           </div>

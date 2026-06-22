@@ -9,12 +9,16 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
+import { notifyStudents } from '@/lib/notifications'
 import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
 import { ArrowRight, Plus } from '@/components/icons'
 
@@ -258,6 +262,76 @@ function buildSummary(bundle) {
   return { periods: bundle.periods, students: bundle.students, grades }
 }
 
+/* Persist each student's computed grade to gradebooks/{classId}/entries/{id}.
+   This is the ONLY grade document a student is permitted to read (their own),
+   so it must be kept in sync whenever scores or overrides change. Safe to call
+   after any save — it recomputes from a fresh bundle (teacher-readable). */
+async function syncEntries(classId) {
+  const bundle = await loadBundle(classId)
+  if (!bundle.configured) return
+  const summary = buildSummary(bundle)
+
+  // Class average per assessment (mean of graded scores). This is a safe
+  // aggregate to expose to a student; individual peer scores are never written
+  // into anyone's entry — only the student's own raw_score is.
+  const classAvg = {}
+  for (const a of bundle.assessments) {
+    const vals = Object.values(a.scores ?? {})
+      .filter((sc) => sc?.status === 'graded' && sc.raw_score != null)
+      .map((sc) => sc.raw_score)
+    classAvg[a.id] = vals.length
+      ? Math.round((vals.reduce((x, y) => x + y, 0) / vals.length) * 100) / 100
+      : null
+  }
+  const components = bundle.components.map((c) => ({
+    id: c.id,
+    name: c.name,
+    weight_percent: c.weight_percent,
+  }))
+
+  const batch = writeBatch(db)
+  for (const s of bundle.students) {
+    const g = summary.grades[s.student_id]
+    const computed = {}
+    for (const p of bundle.periods) computed[p.id] = g.periods[p.id]?.grade ?? null
+    // Per-assessment breakdown with ONLY this student's score (+ class average),
+    // so they can see exactly where they're struggling.
+    const assessments = bundle.assessments.map((a) => {
+      const sc = a.scores?.[s.student_id]
+      return {
+        id: a.id,
+        title: a.title ?? 'Untitled',
+        component_id: a.component_id,
+        period_id: a.period_id,
+        total_points: a.total_points ?? 0,
+        date_given: a.date_given ?? null,
+        raw_score: sc?.status === 'graded' ? sc.raw_score : null,
+        status: sc?.status ?? 'pending',
+        class_average: classAvg[a.id],
+      }
+    })
+    batch.set(
+      doc(db, 'gradebooks', classId, 'entries', s.student_id),
+      {
+        student_id: s.student_id,
+        final_grade: g.final_grade,
+        computed_grades: computed,
+        periods: bundle.periods.map((p) => ({
+          id: p.id,
+          name: p.name,
+          grade: g.periods[p.id]?.grade ?? null,
+        })),
+        components,
+        assessments,
+        mode: bundle.mode,
+        updated_at: serverTimestamp(),
+      },
+      { merge: true },
+    )
+  }
+  await batch.commit()
+}
+
 // ---------------------------------------------------------------- components
 
 function AddAssessmentModal({ classId, record, onClose, onSaved }) {
@@ -386,6 +460,7 @@ const thHead = {
 }
 
 function RecordGrid({ classId, record, refetch }) {
+  const { profile } = useAuth()
   const [dirty, setDirty] = useState({})
   const [dirtyOverrides, setDirtyOverrides] = useState({})
   const [error, setError] = useState(null)
@@ -473,6 +548,22 @@ function RecordGrid({ classId, record, refetch }) {
       }
 
       await batch.commit()
+      // Refresh each student's readable grade entry (best-effort).
+      try { await syncEntries(classId) } catch { /* entries are derived; next save re-syncs */ }
+      // Notify students whose scores changed (best-effort).
+      const affected = new Set()
+      for (const cells of Object.values(dirty)) for (const sid of Object.keys(cells)) affected.add(sid)
+      for (const sid of Object.keys(dirtyOverrides)) affected.add(sid)
+      if (affected.size) {
+        notifyStudents({
+          studentIds: [...affected],
+          classId,
+          createdBy: profile.id,
+          type: 'score',
+          message: `New scores were posted in ${record.period?.name ?? 'your class'}. Check your grades.`,
+          link: `/student/classes/${classId}`,
+        }).catch(() => {})
+      }
       setDirty({})
       setDirtyOverrides({})
       refetch()
@@ -487,6 +578,7 @@ function RecordGrid({ classId, record, refetch }) {
     if (!window.confirm(`Delete "${assessment.title}" and all its scores?`)) return
     try {
       await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', assessment.id))
+      try { await syncEntries(classId) } catch { /* entries are derived; next save re-syncs */ }
       setDirty((d) => {
         const next = { ...d }
         delete next[assessment.id]
@@ -760,6 +852,141 @@ function pillStyle(active) {
   }
 }
 
+const GC_STATUS = {
+  pending: { label: 'Pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
+  approved: { label: 'Accepted', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  rejected: { label: 'Rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
+}
+
+/* Score disputes filed by students. Resolving records the teacher's decision;
+   accepting does NOT auto-change the grade — the teacher edits the cell in the
+   grid (the student's reason tells them what to re-check). */
+function GradeContestsPanel({ classId }) {
+  const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  const [busyId, setBusyId] = useState(null)
+  const [error, setError] = useState(null)
+
+  const { data: contests } = useQuery({
+    queryKey: ['fs-grade-contests', classId],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'grade_contests'), where('class_id', '==', classId)),
+      )
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      const ids = [...new Set(rows.map((c) => c.student_id))]
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      const nameOf = (id) => {
+        const u = users.find((x) => x.id === id)
+        return u ? `${u.last_name}, ${u.first_name}` : 'Student'
+      }
+      return rows
+        .map((c) => ({ ...c, student_name: c.student_name || nameOf(c.student_id) }))
+        .sort((a, b) => {
+          if ((a.status === 'pending') !== (b.status === 'pending')) return a.status === 'pending' ? -1 : 1
+          return (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0)
+        })
+    },
+  })
+
+  const list = contests ?? []
+  if (list.length === 0) return null
+  const pendingCount = list.filter((c) => c.status === 'pending').length
+
+  const refetch = () => {
+    queryClient.invalidateQueries({ queryKey: ['fs-grade-contests', classId] })
+    queryClient.invalidateQueries({ queryKey: ['fs-pending-grade-contests'] }) // refresh the bell
+  }
+
+  async function resolve(c, status) {
+    let note = null
+    if (status === 'rejected') note = (window.prompt('Reason for rejecting this score dispute (optional):') ?? '').trim() || null
+    setBusyId(c.id)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'grade_contests', c.id), {
+        status,
+        resolution_note: note,
+        resolved_at: serverTimestamp(),
+        resolved_by: profile.id,
+      })
+      await notifyStudents({
+        studentIds: [c.student_id],
+        classId,
+        createdBy: profile.id,
+        type: 'grade_contest',
+        message: `Your score contest for “${c.assessment_title}” was ${status === 'approved' ? 'accepted' : 'rejected'}.`,
+        link: `/student/classes/${classId}`,
+      }).catch(() => {})
+      refetch()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="mb-6" style={{ background: '#FFFFFF', border: `1px solid ${pendingCount ? 'rgba(245,197,24,0.55)' : line}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}`, background: pendingCount ? 'rgba(245,197,24,0.08)' : 'rgba(14,42,92,0.02)' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>
+          Score disputes
+          {pendingCount > 0 && (
+            <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.22)', borderRadius: 999, padding: '2px 9px' }}>
+              {pendingCount} pending
+            </span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div role="alert" style={{ margin: '12px 18px 0', fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</div>
+      )}
+
+      <div>
+        {list.map((c) => {
+          const tone = GC_STATUS[c.status] ?? GC_STATUS.pending
+          const scoreText = c.current_score != null ? `${c.current_score}/${c.total_points}` : '—'
+          return (
+            <div key={c.id} className="flex flex-wrap items-start justify-between gap-3" style={{ padding: '14px 18px', borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>{c.student_name}</span>
+                  <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.assessment_title}</span>
+                  <span style={{ ...mono, fontSize: 12, color: faint }}>({scoreText})</span>
+                  <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>{tone.label}</span>
+                </div>
+                <div style={{ fontSize: 13, color: muted, lineHeight: 1.5 }}>{c.reason}</div>
+                {c.excuse_url && (
+                  <a href={c.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: blueText }}>📎 View attached file</a>
+                )}
+                {c.status === 'rejected' && c.resolution_note && (
+                  <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>Note: {c.resolution_note}</div>
+                )}
+              </div>
+              {c.status === 'pending' && (
+                <div className="flex gap-2 flex-shrink-0">
+                  <button onClick={() => resolve(c, 'approved')} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                    Accept
+                  </button>
+                  <button onClick={() => resolve(c, 'rejected')} disabled={busyId === c.id} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {pendingCount > 0 && (
+        <div style={{ padding: '10px 18px', fontSize: 11.5, color: faint, borderTop: `1px solid ${line}` }}>
+          Accepting a dispute records your decision — adjust the actual score in the grid below if a change is warranted.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ClassRecordPage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
@@ -785,6 +1012,8 @@ export default function ClassRecordPage() {
         Class Record
       </h1>
       {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 22px' }}>{subline}</p>}
+
+      <GradeContestsPanel classId={classId} />
 
       {!bundle.configured ? (
         <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40, marginTop: 8 }}>

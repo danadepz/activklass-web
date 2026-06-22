@@ -8,7 +8,16 @@ import Register from '@/routes/register'
 
 // ─── Shared components ───────────────────────────────────────────────────────
 import RolePlaceholder from '@/components/RolePlaceholder'
-import ComingSoon      from '@/components/ComingSoon'
+
+// ─── Student portal ──────────────────────────────────────────────────────────
+import StudentLayout      from '@/routes/student/_layout'
+import StudentDashboard   from '@/routes/student/index'
+import StudentClassesIndex from '@/routes/student/classes/index'
+import StudentClassDetail from '@/routes/student/classes/$classId/index'
+import StudentProfile     from '@/routes/student/profile'
+import StudentRemediation from '@/routes/student/remediation'
+import QuizPlayer         from '@/routes/student/quiz-player'
+import QuizFeedback       from '@/routes/student/quiz-feedback'
 
 // ─── Teacher: layout + dashboard ─────────────────────────────────────────────
 import TeacherLayout    from '@/routes/teacher/_layout'
@@ -83,7 +92,15 @@ export default function App() {
         <Route path="/admin" element={<RolePlaceholder title="Admin" />} />
       </Route>
       <Route element={<ProtectedRoute roles={['student']} />}>
-        <Route path="/student" element={<RolePlaceholder title="Student" />} />
+        <Route path="/student" element={<StudentLayout />}>
+          <Route index element={<StudentDashboard />} />
+          <Route path="classes" element={<StudentClassesIndex />} />
+          <Route path="classes/:classId" element={<StudentClassDetail />} />
+          <Route path="classes/:classId/quizzes/:quizId" element={<QuizPlayer />} />
+          <Route path="quizzes/:attemptId/result" element={<QuizFeedback />} />
+          <Route path="remediation" element={<StudentRemediation />} />
+          <Route path="profile" element={<StudentProfile />} />
+        </Route>
       </Route>
       <Route element={<ProtectedRoute roles={['parent']} />}>
         <Route path="/parent" element={<RolePlaceholder title="Parent" />} />

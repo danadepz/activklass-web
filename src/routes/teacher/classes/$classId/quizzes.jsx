@@ -100,6 +100,7 @@ function blankQuiz({ classId, teacherId, title, generatedBy = 'manual', question
     shuffle_questions: false,
     opens_at: null,
     closes_at: null,
+    assigned_to: 'all',
     generated_by: generatedBy,
     questions,
     created_at: serverTimestamp(),

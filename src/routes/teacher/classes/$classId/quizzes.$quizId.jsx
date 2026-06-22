@@ -207,14 +207,15 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
 
 const thHead = { padding: '13px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase' }
 
-function ResultsView({ classId, quizId, totalPoints }) {
+function ResultsView({ classId, quizId, totalPoints, assignedTo }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['fs-quiz-results', classId, quizId],
+    queryKey: ['fs-quiz-results', classId, quizId, Array.isArray(assignedTo) ? assignedTo.join(',') : 'all'],
     queryFn: async () => {
       const classSnap = await getDoc(doc(db, 'classes', classId))
       const ids = classSnap.data()?.student_ids ?? []
       const users = ids.length ? await fetchUsersByIds(ids) : []
       const students = users
+        .filter((u) => !Array.isArray(assignedTo) || assignedTo.includes(u.id))
         .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
         .sort((a, b) =>
           `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
@@ -268,7 +269,114 @@ function ResultsView({ classId, quizId, totalPoints }) {
   )
 }
 
-function BuilderForm({ classId, quiz, refetch }) {
+/* Reusable roster checklist for "assign to specific students". */
+function StudentChecklist({ students, ids, setIds }) {
+  if (students.length === 0) {
+    return <p style={{ fontSize: 12.5, color: faint, padding: '12px 14px', margin: 0 }}>No students enrolled in this class yet.</p>
+  }
+  const allSelected = ids.length === students.length
+  return (
+    <div style={{ border: `1px solid ${line}`, borderRadius: 10, marginTop: 10, maxHeight: 220, overflowY: 'auto' }}>
+      <div className="flex items-center justify-between" style={{ padding: '8px 14px', borderBottom: `1px solid ${line}`, position: 'sticky', top: 0, background: '#FFFFFF' }}>
+        <span style={{ fontSize: 12, color: muted }}>{ids.length} of {students.length} selected</span>
+        <button type="button" onClick={() => setIds(allSelected ? [] : students.map((s) => s.id))} style={{ fontSize: 12, fontWeight: 700, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          {allSelected ? 'Clear all' : 'Select all'}
+        </button>
+      </div>
+      {students.map((s) => (
+        <label key={s.id} className="flex items-center gap-2.5 hover:bg-slate-50" style={{ padding: '8px 14px', fontSize: 13, color: ink, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={ids.includes(s.id)}
+            onChange={() => setIds((prev) => (prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id]))}
+            style={{ accentColor: navy, width: 15, height: 15 }}
+          />
+          {s.name}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+/* Change who a (published) quiz is assigned to without unpublishing it. */
+function AssignmentEditor({ quizId, assignedTo, students, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [mode, setMode] = useState(Array.isArray(assignedTo) ? 'specific' : 'all')
+  const [ids, setIds] = useState(Array.isArray(assignedTo) ? assignedTo : [])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const summary = Array.isArray(assignedTo) ? `${assignedTo.length} student${assignedTo.length === 1 ? '' : 's'}` : 'All students'
+
+  function open() {
+    setMode(Array.isArray(assignedTo) ? 'specific' : 'all')
+    setIds(Array.isArray(assignedTo) ? assignedTo : [])
+    setError(null)
+    setEditing(true)
+  }
+
+  async function save() {
+    if (mode === 'specific' && ids.length === 0) {
+      setError('Select at least one student, or choose "All students".')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'quizzes', quizId), {
+        assigned_to: mode === 'specific' ? ids : 'all',
+        updated_at: serverTimestamp(),
+      })
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 18 }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>Assignment</div>
+          <div style={{ fontSize: 13, color: muted, marginTop: 2 }}>{editing ? 'Choose who can take this quiz.' : `Assigned to: ${summary}`}</div>
+        </div>
+        {!editing && (
+          <button onClick={open} className="transition hover:brightness-105" style={btnGhost}>Edit assignment</button>
+        )}
+      </div>
+
+      {editing && (
+        <div style={{ marginTop: 14 }}>
+          <div className="flex gap-5" style={{ fontSize: 13, color: '#3A4A6B' }}>
+            <label className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assign-edit" checked={mode === 'all'} onChange={() => setMode('all')} style={{ accentColor: navy }} />
+              All students
+            </label>
+            <label className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assign-edit" checked={mode === 'specific'} onChange={() => setMode('specific')} style={{ accentColor: navy }} />
+              Specific students
+            </label>
+          </div>
+          {mode === 'specific' && <StudentChecklist students={students} ids={ids} setIds={setIds} />}
+          {error && (
+            <p role="alert" className="mt-3" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
+          )}
+          <div className="flex gap-2.5" style={{ marginTop: 14 }}>
+            <button onClick={save} disabled={saving} className="transition hover:brightness-110 disabled:opacity-50" style={btnPrimary}>
+              {saving ? 'Saving…' : 'Save assignment'}
+            </button>
+            <button onClick={() => setEditing(false)} disabled={saving} className="transition hover:brightness-105" style={btnGhost}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BuilderForm({ classId, quiz, students, refetch }) {
   const navigate = useNavigate()
   const [settings, setSettings] = useState({
     title: quiz.title,
@@ -279,6 +387,9 @@ function BuilderForm({ classId, quiz, refetch }) {
     opens_at: quiz.opens_at?.slice(0, 16) ?? '',
     closes_at: quiz.closes_at?.slice(0, 16) ?? '',
   })
+  // Assignment: 'all' (string) or an explicit list of student ids.
+  const [assignMode, setAssignMode] = useState(Array.isArray(quiz.assigned_to) ? 'specific' : 'all')
+  const [assignedIds, setAssignedIds] = useState(Array.isArray(quiz.assigned_to) ? quiz.assigned_to : [])
   const [questions, setQuestions] = useState((quiz.questions ?? []).map(toEditable))
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -299,6 +410,7 @@ function BuilderForm({ classId, quiz, refetch }) {
       shuffle_questions: !!settings.shuffle_questions,
       opens_at: settings.opens_at || null,
       closes_at: settings.closes_at || null,
+      assigned_to: assignMode === 'specific' ? assignedIds : 'all',
       questions: questions.map(toPayload),
       updated_at: serverTimestamp(),
       ...extra,
@@ -323,6 +435,10 @@ function BuilderForm({ classId, quiz, refetch }) {
 
   async function publish() {
     if (questions.length === 0) return
+    if (assignMode === 'specific' && assignedIds.length === 0) {
+      setError('Select at least one student, or choose "All students".')
+      return
+    }
     if (
       !window.confirm(
         'Publish this quiz? It opens to students and locks editing. (You can close it later.)',
@@ -392,6 +508,22 @@ function BuilderForm({ classId, quiz, refetch }) {
             Shuffle questions
           </label>
         </div>
+
+        {/* Assignment — all students or a specific subset */}
+        <div style={{ borderTop: `1px solid ${line}`, paddingTop: 14 }}>
+          <label style={labelStyle}>Assign to</label>
+          <div className="flex gap-5" style={{ fontSize: 13, color: '#3A4A6B' }}>
+            <label className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assign-mode" checked={assignMode === 'all'} onChange={() => setAssignMode('all')} style={{ accentColor: navy }} />
+              All students
+            </label>
+            <label className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assign-mode" checked={assignMode === 'specific'} onChange={() => setAssignMode('specific')} style={{ accentColor: navy }} />
+              Specific students
+            </label>
+          </div>
+          {assignMode === 'specific' && <StudentChecklist students={students} ids={assignedIds} setIds={setAssignedIds} />}
+        </div>
       </div>
 
       <div className="mt-5 flex items-center justify-between">
@@ -448,6 +580,19 @@ export default function QuizBuilderPage() {
     },
   })
 
+  // Roster for the "assign to specific students" picker.
+  const { data: roster } = useQuery({
+    queryKey: ['fs-quiz-roster', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'classes', classId))
+      const ids = snap.data()?.student_ids ?? []
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      return users
+        .map((u) => ({ id: u.id, name: `${u.last_name ?? ''}, ${u.first_name ?? ''}`.replace(/^,\s*/, '').trim() }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    },
+  })
+
   const refetch = () => {
     queryClient.invalidateQueries({ queryKey: ['fs-quiz', classId, quizId] })
     queryClient.invalidateQueries({ queryKey: ['fs-quizzes', classId] })
@@ -483,7 +628,8 @@ export default function QuizBuilderPage() {
             )}
           </h1>
           <p className="capitalize" style={{ ...mono, fontSize: 13, color: muted, margin: 0 }}>
-            {quiz.status} · {questionCount} questions · {totalPoints} pts
+            {quiz.status} · {questionCount} questions · {totalPoints} pts ·{' '}
+            {Array.isArray(quiz.assigned_to) ? `${quiz.assigned_to.length} student${quiz.assigned_to.length === 1 ? '' : 's'}` : 'all students'}
           </p>
         </div>
         {quiz.status === 'published' && (
@@ -503,11 +649,12 @@ export default function QuizBuilderPage() {
               AI-generated draft — review every question and answer key before publishing.
             </div>
           )}
-          <BuilderForm key={quiz.id} classId={classId} quiz={quiz} refetch={refetch} />
+          <BuilderForm key={quiz.id} classId={classId} quiz={quiz} students={roster ?? []} refetch={refetch} />
         </>
       ) : (
         <div className="max-w-3xl">
-          <ResultsView classId={classId} quizId={quizId} totalPoints={totalPoints} />
+          <AssignmentEditor quizId={quizId} assignedTo={quiz.assigned_to} students={roster ?? []} onSaved={refetch} />
+          <ResultsView classId={classId} quizId={quizId} totalPoints={totalPoints} assignedTo={quiz.assigned_to} />
           <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
             <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 12px' }}>Questions (read-only)</h3>
             {(quiz.questions ?? []).map((q, i) => (
