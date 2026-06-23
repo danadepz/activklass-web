@@ -59,7 +59,8 @@ async function loadScaffolds(classId) {
   )
 
   const classSnap = await getDoc(doc(db, 'classes', classId))
-  const ids = classSnap.exists() ? classSnap.data().student_ids ?? [] : []
+  const clazz = classSnap.exists() ? classSnap.data() : null
+  const ids = clazz ? clazz.student_ids ?? [] : []
   const users = ids.length ? await fetchUsersByIds(ids) : []
   const nameById = {}
   users.forEach((u) => { nameById[u.id] = `${u.last_name}, ${u.first_name}` })
@@ -98,7 +99,7 @@ async function loadScaffolds(classId) {
   }
 
   const linkedQuizzes = quizzes.filter((q) => q.topic_id).length
-  return { rows, topicCount: topics.length, linkedQuizzes }
+  return { rows, topicCount: topics.length, linkedQuizzes, clazz }
 }
 
 function bucketOf(m) {
@@ -145,7 +146,13 @@ export default function ScaffoldTopicsPage() {
     try {
       const quiz = await api('/api/generate_quiz', {
         method: 'POST',
-        body: { topic: topic.title, count: 10, blooms_level: 'apply' },
+        body: {
+          topic: topic.title,
+          count: 10,
+          blooms_level: 'apply',
+          subject_code: data?.clazz?.subject_code || '',
+          subject_description: data?.clazz?.subject || '',
+        },
       })
       const ref = await addDoc(collection(db, 'quizzes'), {
         class_id: classId,

@@ -141,6 +141,14 @@ function GenerateQuizModal({ classId, topics, onClose }) {
   const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
   const COUNT_OPTIONS = [5, 10, 15, 20]
 
+  const { data: clazz } = useQuery({
+    queryKey: ['fs-class', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'classes', classId))
+      return snap.exists() ? snap.data() : null
+    },
+  })
+
   async function generate(e) {
     e.preventDefault()
     const picked = topics.find((t) => t.id === form.topic_id)
@@ -154,7 +162,13 @@ function GenerateQuizModal({ classId, topics, onClose }) {
     try {
       const quiz = await api('/api/generate_quiz', {
         method: 'POST',
-        body: { topic: topicText, count: Number(form.count), blooms_level: form.blooms_level },
+        body: {
+          topic: topicText,
+          count: Number(form.count),
+          blooms_level: form.blooms_level,
+          subject_code: clazz?.subject_code || '',
+          subject_description: clazz?.subject || '',
+        },
       })
       const ref = await addDoc(
         collection(db, 'quizzes'),
