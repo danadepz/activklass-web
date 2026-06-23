@@ -295,11 +295,64 @@ function QuizCard({ classId, quiz }) {
   )
 }
 
+function CreateQuizModal({ onClose, onCreate }) {
+  const [title, setTitle] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  function onSubmit(e) {
+    e.preventDefault()
+    const trimmed = title.trim()
+    if (!trimmed) return
+    setSubmitting(true)
+    onCreate(trimmed)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <form onSubmit={onSubmit} style={{ width: '100%', maxWidth: 400, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <span style={{ width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <Plus className="h-[18px] w-[18px]" />
+          </span>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Create New Quiz</h2>
+        </div>
+        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: '0 0 12px 0' }}>
+            Enter a title for your new quiz. You will be redirected to the quiz builder where you can add questions.
+          </p>
+          <div>
+            <label style={labelStyle}>Quiz Title</label>
+            <input
+              className="ak-input"
+              required
+              autoFocus
+              placeholder="e.g. Midterm Examination"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              style={fieldStyle}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          <button type="button" onClick={onClose} disabled={submitting} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
+            Cancel
+          </button>
+          <button type="submit" disabled={submitting || !title.trim()} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+            {submitting ? 'Creating…' : 'Create Quiz'}
+            <GoldArrow />
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function QuizzesPage() {
   const { classId } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [showGenerate, setShowGenerate] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState(null)
   const [filter, setFilter] = useState('all')
@@ -336,22 +389,6 @@ export default function QuizzesPage() {
   for (const q of list) if (q.status in counts) counts[q.status] += 1
   const shown = filter === 'all' ? list : list.filter((q) => q.status === filter)
 
-  async function newQuiz() {
-    const title = window.prompt('Quiz title:')
-    if (!title?.trim()) return
-    setCreating(true)
-    try {
-      const ref = await addDoc(
-        collection(db, 'quizzes'),
-        blankQuiz({ classId, teacherId: profile.id, title: title.trim() }),
-      )
-      navigate(`/teacher/classes/${classId}/quizzes/${ref.id}`)
-    } catch (err) {
-      setError(err.message)
-      setCreating(false)
-    }
-  }
-
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -362,7 +399,7 @@ export default function QuizzesPage() {
           <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>Build or generate quizzes, then publish to open them to students.</p>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          <button onClick={newQuiz} disabled={creating} className="transition hover:brightness-105 disabled:opacity-50" style={btnGhost}>
+          <button onClick={() => setShowCreate(true)} disabled={creating} className="transition hover:brightness-105 disabled:opacity-50" style={btnGhost}>
             <Plus className="h-4 w-4" /> New quiz
           </button>
           <button onClick={() => setShowGenerate(true)} className="transition hover:brightness-110" style={btnPrimary}>
@@ -420,6 +457,26 @@ export default function QuizzesPage() {
 
       {showGenerate && (
         <GenerateQuizModal classId={classId} topics={topics} onClose={() => setShowGenerate(false)} />
+      )}
+
+      {showCreate && (
+        <CreateQuizModal
+          onClose={() => setShowCreate(false)}
+          onCreate={async (title) => {
+            setShowCreate(false)
+            setCreating(true)
+            try {
+              const ref = await addDoc(
+                collection(db, 'quizzes'),
+                blankQuiz({ classId, teacherId: profile.id, title }),
+              )
+              navigate(`/teacher/classes/${classId}/quizzes/${ref.id}`)
+            } catch (err) {
+              setError(err.message)
+              setCreating(false)
+            }
+          }}
+        />
       )}
     </div>
   )
