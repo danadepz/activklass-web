@@ -86,6 +86,7 @@ function Brand() {
 export default function StudentLayout() {
   const { profile, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
 
   const closeMenu = () => setMenuOpen(false)
@@ -209,7 +210,7 @@ export default function StudentLayout() {
 
             {/* Sign out */}
             <button
-              onClick={logout}
+              onClick={() => setShowLogoutConfirm(true)}
               className="hidden md:block transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               style={{
                 padding: '7px 14px',
@@ -278,7 +279,7 @@ export default function StudentLayout() {
               </div>
             </div>
             <button
-              onClick={() => { closeMenu(); logout() }}
+              onClick={() => { closeMenu(); setShowLogoutConfirm(true) }}
               style={{
                 margin: '0 0',
                 padding: '11px 16px',
@@ -298,6 +299,92 @@ export default function StudentLayout() {
           </div>
         )}
       </header>
+
+      {/* Sign Out Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(14,23,51,0.55)',
+          backdropFilter: 'blur(3px)',
+          WebkitBackdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 24
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: 400,
+            background: '#FFFFFF',
+            borderRadius: 20,
+            boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)',
+            padding: '30px 28px',
+            textAlign: 'center'
+          }}>
+            <h3 style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: 22,
+              color: '#0A1733',
+              margin: '0 0 12px 0'
+            }}>
+              Sign Out Confirmation
+            </h3>
+            <p style={{
+              fontFamily: sans,
+              fontSize: 14,
+              color: '#6A7A95',
+              lineHeight: 1.5,
+              margin: '0 0 24px 0'
+            }}>
+              Are you sure you want to sign out of your Activklass account?
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  fontFamily: sans,
+                  color: '#3A4A6B',
+                  background: '#FFFFFF',
+                  border: '1.5px solid rgba(14,42,92,0.14)',
+                  borderRadius: 12,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false)
+                  logout()
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: sans,
+                  color: '#FAFAF6',
+                  background: '#C0392B',
+                  border: 'none',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  boxShadow: '0 3px 0 #922B21'
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTENT */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-9" style={{ flex: 1 }}>
