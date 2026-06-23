@@ -74,7 +74,7 @@ function move(list, index, delta) {
 }
 
 function GenerateModal({ classMeta, onClose, onDraft }) {
-  const [subjectCode, setSubjectCode] = useState('')
+  const [subjectCode, setSubjectCode] = useState(classMeta?.subject_code ?? '')
   const [subjectDesc, setSubjectDesc] = useState(classMeta?.subject ?? '')
   const [gradeLevel, setGradeLevel] = useState(classMeta?.grade_level ?? '')
   const [durationWeeks, setDurationWeeks] = useState(10)
