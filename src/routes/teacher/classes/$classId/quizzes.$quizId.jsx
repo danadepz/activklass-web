@@ -384,6 +384,7 @@ function BuilderForm({ classId, quiz, students, refetch }) {
     time_limit_minutes: quiz.time_limit_minutes ?? '',
     attempts_allowed: quiz.attempts_allowed ?? 1,
     shuffle_questions: quiz.shuffle_questions ?? false,
+    prevent_backtracking: quiz.prevent_backtracking ?? false,
     opens_at: quiz.opens_at?.slice(0, 16) ?? '',
     closes_at: quiz.closes_at?.slice(0, 16) ?? '',
   })
@@ -408,6 +409,7 @@ function BuilderForm({ classId, quiz, students, refetch }) {
       time_limit_minutes: settings.time_limit_minutes ? Number(settings.time_limit_minutes) : null,
       attempts_allowed: Number(settings.attempts_allowed) || 1,
       shuffle_questions: !!settings.shuffle_questions,
+      prevent_backtracking: !!settings.prevent_backtracking,
       opens_at: settings.opens_at || null,
       closes_at: settings.closes_at || null,
       assigned_to: assignMode === 'specific' ? assignedIds : 'all',
@@ -503,10 +505,16 @@ function BuilderForm({ classId, quiz, students, refetch }) {
             <label style={labelStyle}>Closes</label>
             <input className="ak-input" type="datetime-local" value={settings.closes_at} onChange={set('closes_at')} style={fieldStyle} />
           </div>
-          <label className="flex items-center gap-2 pb-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
-            <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
-            Shuffle questions
-          </label>
+          <div className="flex flex-col gap-2 pb-2">
+            <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
+              Shuffle questions
+            </label>
+            <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.prevent_backtracking} onChange={set('prevent_backtracking')} style={{ accentColor: navy, width: 16, height: 16 }} />
+              Prevent backtracking
+            </label>
+          </div>
         </div>
 
         {/* Assignment — all students or a specific subset */}

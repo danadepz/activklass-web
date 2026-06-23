@@ -98,6 +98,7 @@ function blankQuiz({ classId, teacherId, title, generatedBy = 'manual', question
     time_limit_minutes: null,
     attempts_allowed: 1,
     shuffle_questions: false,
+    prevent_backtracking: false,
     opens_at: null,
     closes_at: null,
     assigned_to: 'all',

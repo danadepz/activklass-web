@@ -295,13 +295,17 @@ function Runner({ classId, quiz, attemptNumber }) {
 
       {/* Nav controls */}
       <div className="flex items-center justify-between" style={{ marginTop: 20 }}>
-        <button
-          onClick={() => setIdx((i) => Math.max(0, i - 1))}
-          disabled={idx === 0}
-          style={{ padding: '11px 18px', fontSize: 14, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1 }}
-        >
-          ← Previous
-        </button>
+        {!quiz.prevent_backtracking ? (
+          <button
+            onClick={() => setIdx((i) => Math.max(0, i - 1))}
+            disabled={idx === 0}
+            style={{ padding: '11px 18px', fontSize: 14, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1 }}
+          >
+            ← Previous
+          </button>
+        ) : (
+          <div />
+        )}
         {idx < total - 1 ? (
           <button
             onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
@@ -332,9 +336,9 @@ function Runner({ classId, quiz, attemptNumber }) {
           return (
             <button
               key={qq.id}
-              onClick={() => setIdx(i)}
-              title={`Question ${i + 1}${done ? ' (answered)' : ''}`}
-              style={{ width: 30, height: 30, borderRadius: 8, fontSize: 12, fontWeight: 700, ...mono, cursor: 'pointer', color: active ? '#FFFFFF' : done ? green : muted, background: active ? navy : done ? 'rgba(31,138,91,0.12)' : '#FFFFFF', border: active ? `1.5px solid ${navy}` : done ? '1.5px solid rgba(31,138,91,0.4)' : '1.5px solid rgba(14,42,92,0.14)' }}
+              onClick={quiz.prevent_backtracking ? undefined : () => setIdx(i)}
+              title={quiz.prevent_backtracking ? `Question ${i + 1}` : `Question ${i + 1}${done ? ' (answered)' : ''}`}
+              style={{ width: 30, height: 30, borderRadius: 8, fontSize: 12, fontWeight: 700, ...mono, cursor: quiz.prevent_backtracking ? 'default' : 'pointer', color: active ? '#FFFFFF' : done ? green : muted, background: active ? navy : done ? 'rgba(31,138,91,0.12)' : '#FFFFFF', border: active ? `1.5px solid ${navy}` : done ? '1.5px solid rgba(31,138,91,0.4)' : '1.5px solid rgba(14,42,92,0.14)' }}
             >
               {i + 1}
             </button>

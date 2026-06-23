@@ -163,6 +163,7 @@ export default function ScaffoldTopicsPage() {
         time_limit_minutes: null,
         attempts_allowed: 1,
         shuffle_questions: false,
+        prevent_backtracking: false,
         opens_at: null,
         closes_at: null,
         generated_by: 'ai_generated',
