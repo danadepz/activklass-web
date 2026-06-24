@@ -174,11 +174,34 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 
   async function enroll() {
     if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
+    if (!findFields.student_number?.trim()) { setError('ID Number is required.'); return }
     setBusy(true)
     setError(null)
     try {
-      await updateDoc(doc(db, 'users', student.id), { status: student.status ?? 'active', ...rosterPatch(findFields) })
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
+      const payload = {
+        students: [
+          {
+            first_name: student.first_name,
+            last_name: student.last_name,
+            email: student.email,
+            student_number: findFields.student_number.trim(),
+            middle_name: findFields.middle_name?.trim() || '',
+            course: findFields.course?.trim() || '',
+            year_level: findFields.year_level?.trim() || '',
+            remarks: findFields.remarks || '',
+            enrollment_status: findFields.enrollment_status || 'AC',
+            lrn: findFields.lrn?.trim() || '',
+            birthdate: findFields.birthdate || '',
+          }
+        ]
+      }
+      const res = await api(`/api/classes/${classId}/students/provision`, {
+        method: 'POST',
+        body: payload
+      })
+      if (res.failed && res.failed.length > 0) {
+        throw new Error(res.failed[0].reason)
+      }
       onDone()
     } catch (err) {
       setError(err.message)
@@ -195,21 +218,44 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   async function createStudent(e) {
     e.preventDefault()
     if (!firstName.trim() || !lastName.trim()) { setError('First name and last name are required.'); return }
+    if (!newEmail.trim()) { setError('Email is required.'); return }
+    if (!createFields.student_number?.trim()) { setError('ID Number is required.'); return }
     if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
     setError(null)
     try {
-      const newRef = doc(collection(db, 'users'))
-      await setDoc(newRef, {
-        id: newRef.id,
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        email: newEmail.trim().toLowerCase() || null,
-        role: 'student',
-        status: 'active',
-        ...rosterPatch(createFields),
+      // Client-side duplicate check before manual creation
+      const existing = await findStudentByEmail(newEmail)
+      if (existing) {
+        setError('A student with this email is already registered. Please use the "Find Registered Student" tab to add them.')
+        setBusy(false)
+        return
+      }
+
+      const payload = {
+        students: [
+          {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            email: newEmail.trim().toLowerCase(),
+            student_number: createFields.student_number.trim(),
+            middle_name: createFields.middle_name?.trim() || '',
+            course: createFields.course?.trim() || '',
+            year_level: createFields.year_level?.trim() || '',
+            remarks: createFields.remarks || '',
+            enrollment_status: createFields.enrollment_status || 'AC',
+            lrn: createFields.lrn?.trim() || '',
+            birthdate: createFields.birthdate || '',
+          }
+        ]
+      }
+      const res = await api(`/api/classes/${classId}/students/provision`, {
+        method: 'POST',
+        body: payload
       })
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(newRef.id) })
+      if (res.failed && res.failed.length > 0) {
+        throw new Error(res.failed[0].reason)
+      }
       onDone()
     } catch (err) {
       setError(err.message)
@@ -243,8 +289,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       <>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={labelStyle}>ID Number</label>
-            <input className="ak-input" placeholder="Student ID" value={f.student_number} onChange={handleSet('student_number')} style={fieldStyle} />
+            <label style={labelStyle}>ID Number <span className="text-red-500">*</span></label>
+            <input required className="ak-input" placeholder="Student ID" value={f.student_number} onChange={handleSet('student_number')} style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
@@ -391,8 +437,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Email <span style={optHint}>(optional)</span></label>
-              <input type="email" className="ak-input" placeholder="student@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={fieldStyle} />
+              <label style={labelStyle}>Email <span className="text-red-500">*</span></label>
+              <input required type="email" className="ak-input" placeholder="student@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={fieldStyle} />
             </div>
 
             {renderRosterFields(createFields, setCreateFields)}
