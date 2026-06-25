@@ -137,33 +137,20 @@ export function AuthNotice({ children }) {
 
 // --- internal bits -------------------------------------------------------
 
-function BrandMark({ onNavy = false }) {
-  const size = onNavy ? 34 : 30
-  const ring = onNavy ? 15 : 13
+export function BrandMark({ size = 32, onNavy = false }) {
+  const bg = onNavy ? '#f4f1de' : '#0b1b33'
+  const strokeColor = '#d4af37'
+  const capBaseColor = onNavy ? '#0b1b33' : '#f4f1de'
   return (
-    <div
-      style={{
-        position: 'relative',
-        width: size,
-        height: size,
-        borderRadius: 9,
-        background: onNavy ? cream : navy,
-        display: 'grid',
-        placeItems: 'center',
-      }}
-    >
-      <div
-        style={{
-          width: ring,
-          height: ring,
-          borderRadius: '50%',
-          border: `2.5px solid ${onNavy ? navy : gold}`,
-          borderRightColor: 'transparent',
-          transform: 'rotate(35deg)',
-        }}
-      />
-      <div style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: gold }} />
-    </div>
+    <svg viewBox="0 0 512 512" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
+      <rect x="64" y="64" width="384" height="384" rx="92" fill={bg}/>
+      <rect x="88" y="88" width="336" height="336" rx="72" fill="none" stroke={capBaseColor} strokeWidth="2" strokeOpacity="0.1"/>
+      <path d="M 200 280 V 315 C 200 335, 312 335, 312 315 V 280 Z" fill={capBaseColor}/>
+      <polygon points="256,160 380,210 256,260 132,210" fill="none" stroke={strokeColor} strokeWidth="14" strokeLinejoin="round"/>
+      <circle cx="256" cy="210" r="10" fill={strokeColor}/>
+      <path d="M 256 210 C 310 215, 340 240, 344 265" fill="none" stroke={strokeColor} strokeWidth="6" strokeLinecap="round"/>
+      <circle cx="344" cy="275" r="8" fill={strokeColor}/>
+    </svg>
   )
 }
 

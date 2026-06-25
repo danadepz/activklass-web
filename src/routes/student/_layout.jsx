@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import StudentNotificationBell from '@/components/StudentNotificationBell'
+import { BrandMark } from '@/components/AuthLayout'
 
 const navy = '#0E2A5C'
 const gold = '#F5C518'
@@ -71,10 +72,7 @@ function mobileNavLinkStyle(isActive) {
 function Brand() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-      <div style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, background: cream, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-        <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2.5px solid ${navy}`, borderRightColor: 'transparent', transform: 'rotate(35deg)' }} />
-        <div style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: gold }} />
-      </div>
+      <BrandMark size={32} onNavy />
       <div>
         <div style={{ ...serif, fontSize: 22, lineHeight: 1, letterSpacing: '-0.02em', color: cream }}>ActivKlass</div>
         <div className="hidden sm:block" style={{ fontSize: 10, color: 'rgba(250,250,246,0.5)', letterSpacing: '0.05em', marginTop: 1 }}>Student Portal</div>

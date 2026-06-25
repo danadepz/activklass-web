@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { Bell } from '@/components/icons'
+import { BrandMark } from '@/components/AuthLayout'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -226,10 +227,7 @@ export default function TeacherLayout() {
           <div className="flex items-center" style={{ gap: 24, flex: 1 }}>
             {/* Brand */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              <div style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, background: cream, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2.5px solid ${navy}`, borderRightColor: 'transparent', transform: 'rotate(35deg)' }} />
-                <div style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: gold }} />
-              </div>
+              <BrandMark size={32} onNavy />
               <div>
                 <div style={{ ...serif, fontSize: 22, lineHeight: 1, letterSpacing: '-0.02em' }}>ActivKlass</div>
                 <div className="hidden sm:block" style={{ fontSize: 10, color: 'rgba(250,250,246,0.5)', letterSpacing: '0.05em', marginTop: 1 }}>Teacher Portal</div>

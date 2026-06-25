@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
+import { BrandMark } from '@/components/AuthLayout'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.
@@ -133,43 +134,7 @@ const PERKS = [
 // --- small building blocks ----------------------------------------------
 
 function Logo({ size = 32 }) {
-  const ring = Math.round(size * 0.44)
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: size,
-        height: size,
-        borderRadius: size * 0.25,
-        background: navy,
-        display: 'grid',
-        placeItems: 'center',
-        boxShadow: `0 2px 0 ${navyDeep}`,
-      }}
-    >
-      <div
-        style={{
-          width: ring,
-          height: ring,
-          borderRadius: '50%',
-          border: `2.5px solid ${gold}`,
-          borderRightColor: 'transparent',
-          transform: 'rotate(35deg)',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          top: -3,
-          right: -3,
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          background: gold,
-        }}
-      />
-    </div>
-  )
+  return <BrandMark size={size} />
 }
 
 function Eyebrow({ children, color = muted }) {
