@@ -478,14 +478,14 @@ function BankedQuestionCard({ question, onEdit, onDelete }) {
         </div>
       </div>
 
-      <p style={{ fontSize: 14, fontWeight: 600, color: ink, margin: '0 0 10px' }}>{s.text}</p>
+      <p className="break-words" style={{ fontSize: 14, fontWeight: 600, color: ink, margin: '0 0 10px' }}>{s.text}</p>
 
       {s.qtype === 'mcq' && s.options && (
         <div className="space-y-1 mb-3 pl-2">
           {s.options.map((o, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-xs">
-              <span className={`h-2 w-2 rounded-full ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
-              <span className={o.is_correct ? 'font-bold text-slate-800' : 'text-slate-600'}>
+            <div key={idx} className="flex items-start gap-2 text-xs">
+              <span className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
+              <span className={`break-words flex-1 ${o.is_correct ? 'font-bold text-slate-800' : 'text-slate-600'}`}>
                 {o.text}
               </span>
             </div>
@@ -500,7 +500,7 @@ function BankedQuestionCard({ question, onEdit, onDelete }) {
       )}
 
       {s.qtype === 'short_answer' && s.answer_key && (
-        <p className="text-xs text-slate-600 mb-3 pl-2">
+        <p className="text-xs text-slate-600 mb-3 pl-2 break-words">
           Correct Answers: <span className="font-bold">{(s.answer_key.answers || []).join(', ')}</span>
         </p>
       )}
@@ -508,7 +508,7 @@ function BankedQuestionCard({ question, onEdit, onDelete }) {
       {s.qtype === 'matching' && s.answer_key && (
         <div className="space-y-1 mb-3 pl-2 text-xs text-slate-600">
           {(s.answer_key.pairs || []).map((p, idx) => (
-            <div key={idx}>
+            <div key={idx} className="break-words">
               <span className="font-semibold">{p.left}</span> &rarr; <span>{p.right}</span>
             </div>
           ))}
@@ -850,7 +850,7 @@ function QuizBankBrowser({ syllabi }) {
                 <div className="flex items-center justify-between gap-1">
                   <button
                     onClick={() => setSelectedNode({ type: 'syllabus', syllabusId: s.id })}
-                    className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm font-medium transition ${
+                    className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm font-medium transition min-w-0 ${
                       isSelected
                         ? 'bg-indigo-50 text-indigo-700'
                         : 'text-slate-600 hover:bg-slate-50'
@@ -862,7 +862,7 @@ function QuizBankBrowser({ syllabi }) {
                   {s.modules?.length > 0 && (
                     <button
                       onClick={() => toggleSyllabus(s.id)}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                      className="p-1 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                     >
                       <span className={`block text-[10px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
                         ▶
@@ -874,15 +874,15 @@ function QuizBankBrowser({ syllabi }) {
                 {isExpanded && s.modules?.map(m => {
                   const isModExpanded = !!expandedModules[m.id]
                   return (
-                    <div key={m.id} className="pl-4 space-y-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-slate-400 truncate py-1">
+                    <div key={m.id} className="pl-4 space-y-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 min-w-0">
+                        <span className="text-xs font-semibold text-slate-400 truncate py-1 flex-1 min-w-0">
                           📂 {m.title}
                         </span>
                         {m.topics?.length > 0 && (
                           <button
                             onClick={() => toggleModule(m.id)}
-                            className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                            className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                           >
                             <span className={`block text-[8px] transition-transform duration-200 ${isModExpanded ? 'rotate-90' : ''}`}>
                               ▶
@@ -897,7 +897,7 @@ function QuizBankBrowser({ syllabi }) {
                           <button
                             key={t.id}
                             onClick={() => setSelectedNode({ type: 'topic', topicId: t.id, syllabusId: s.id })}
-                            className={`w-full pl-6 pr-2 py-1.5 rounded text-left text-xs font-medium transition truncate block ${
+                            className={`w-full pl-6 pr-2 py-1.5 rounded text-left text-xs font-medium transition truncate block min-w-0 ${
                               isTopicSelected
                                 ? 'text-indigo-600 bg-indigo-50/50 font-semibold'
                                 : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -918,15 +918,15 @@ function QuizBankBrowser({ syllabi }) {
 
       {/* Right pane: questions list */}
       <div className="flex-1 pl-4 min-w-0">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold text-slate-800 break-words leading-snug">
               {selectedNode.type === 'uncategorized' && 'General / Uncategorized Questions'}
               {selectedNode.type === 'syllabus' && `Questions under "${syllabi.find(s => s.id === selectedNode.syllabusId)?.title || ''}"`}
               {selectedNode.type === 'topic' && 'Questions under topic'}
             </h3>
             {selectedNode.type === 'topic' && (
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 break-words">
                 Syllabus: {syllabi.find(s => s.id === selectedNode.syllabusId)?.title}
               </p>
             )}

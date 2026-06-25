@@ -761,11 +761,11 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                 const isSelected = selectedNode.type === 'syllabus' && selectedNode.syllabusId === s.id
                 return (
                   <div key={s.id} className="space-y-1">
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center justify-between gap-1 min-w-0">
                       <button
                         type="button"
                         onClick={() => setSelectedNode({ type: 'syllabus', syllabusId: s.id })}
-                        className={`flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs font-semibold transition ${
+                        className={`flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs font-semibold transition min-w-0 ${
                           isSelected
                             ? 'bg-indigo-50 text-indigo-700'
                             : 'text-slate-600 hover:bg-slate-50'
@@ -778,7 +778,7 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                         <button
                           type="button"
                           onClick={() => toggleSyllabus(s.id)}
-                          className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                          className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                         >
                           <span className={`block text-[8px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
                             ▶
@@ -790,16 +790,16 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                     {isExpanded && s.modules?.map(m => {
                       const isModExpanded = !!expandedModules[m.id]
                       return (
-                        <div key={m.id} className="pl-3 space-y-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] font-bold text-slate-400 truncate py-1">
+                        <div key={m.id} className="pl-3 space-y-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 min-w-0">
+                            <span className="text-[10px] font-bold text-slate-400 truncate py-1 flex-1 min-w-0">
                               📂 {m.title}
                             </span>
                             {m.topics?.length > 0 && (
                               <button
                                 type="button"
                                 onClick={() => toggleModule(m.id)}
-                                className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                                className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                               >
                                 <span className={`block text-[6px] transition-transform duration-200 ${isModExpanded ? 'rotate-90' : ''}`}>
                                   ▶
@@ -815,7 +815,7 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                                 key={t.id}
                                 type="button"
                                 onClick={() => setSelectedNode({ type: 'topic', topicId: t.id, syllabusId: s.id })}
-                                className={`w-full pl-4 pr-1 py-1 rounded text-left text-[11px] font-medium transition truncate block ${
+                                className={`w-full pl-4 pr-1 py-1 rounded text-left text-[11px] font-medium transition truncate block min-w-0 ${
                                   isTopicSelected
                                     ? 'text-indigo-600 bg-indigo-50/50 font-semibold'
                                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -886,9 +886,9 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                         {q.qtype === 'mcq' && q.options && (
                           <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
                             {q.options.map((o, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5">
-                                <span className={`h-1.5 w-1.5 rounded-full ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
-                                <span className={o.is_correct ? 'font-semibold text-slate-700' : ''}>{o.text}</span>
+                              <div key={idx} className="flex items-start gap-1.5">
+                                <span className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
+                                <span className={`break-words flex-1 ${o.is_correct ? 'font-semibold text-slate-700' : ''}`}>{o.text}</span>
                               </div>
                             ))}
                           </div>
