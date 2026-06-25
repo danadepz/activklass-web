@@ -147,27 +147,35 @@ export function BrandMark({ size = 32, onNavy = false }) {
       {/* Container Box */}
       <rect x="50" y="50" width="500" height="500" rx="100" fill={bg}/>
       
-      {/* A Body (evenodd fill-rule) */}
-      <path d="M 210,210 L 50,510 H 135 L 160,455 H 260 L 285,510 H 370 L 210,210 Z M 210,280 L 175,370 H 245 Z" fill={monogramColor} fillRule="evenodd" />
+      {/* A Left Leg */}
+      <polygon points="185,200 255,200 125,500 55,500" fill={monogramColor} />
+      {/* A Right Leg */}
+      <polygon points="185,200 255,200 385,500 315,500" fill={monogramColor} />
+      {/* A Crossbar */}
+      <polygon points="130,380 310,380 310,440 130,440" fill={monogramColor} />
       
-      {/* K Body */}
-      <path d="M 235,225 H 310 L 341,310 L 510,225 V 290 L 390,360 L 510,510 H 430 L 385,430 L 415,510 H 340 Z" fill={monogramColor} />
+      {/* K Stem */}
+      <polygon points="270,200 340,200 470,500 400,500" fill={monogramColor} />
+      {/* K Upper Branch */}
+      <polygon points="315,260 385,260 520,200 450,200" fill={monogramColor} />
+      {/* K Lower Branch */}
+      <polygon points="350,340 420,340 520,500 450,500" fill={monogramColor} />
       
       {/* Graduation Cap (Left half light gold, right half dark gold) */}
       {/* Diamond Left */}
-      <polygon points="300,80 190,130 300,180" fill={lightGold}/>
+      <polygon points="280,50 170,100 280,150" fill={lightGold}/>
       {/* Diamond Right */}
-      <polygon points="300,80 410,130 300,180" fill={darkGold}/>
+      <polygon points="280,50 390,100 280,150" fill={darkGold}/>
       
       {/* Cap Band Left */}
-      <polygon points="240,160 300,187 300,212 240,185" fill={lightGold}/>
+      <polygon points="220,130 280,157 280,182 220,155" fill={lightGold}/>
       {/* Cap Band Right */}
-      <polygon points="300,187 360,160 360,185 300,212" fill={darkGold}/>
+      <polygon points="280,157 340,130 340,155 280,182" fill={darkGold}/>
       
       {/* Tassel */}
-      <line x1="220" y1="144" x2="220" y2="190" stroke={darkGold} strokeWidth="4" strokeLinecap="round"/>
-      <circle cx="220" cy="192" r="4.5" fill={darkGold}/>
-      <polygon points="216,197 224,197 228,218 212,218" fill={darkGold}/>
+      <line x1="200" y1="144" x2="200" y2="190" stroke={darkGold} strokeWidth="4" strokeLinecap="round"/>
+      <circle cx="200" cy="192" r="4.5" fill={darkGold}/>
+      <polygon points="196,197 224,197 228,218 212,218" fill={darkGold}/>
     </svg>
   )
 }
