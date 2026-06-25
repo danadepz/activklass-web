@@ -151,7 +151,7 @@ function toPayload(q) {
   return base
 }
 
-function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
+function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }) {
   const setOptions = (options) => update({ options })
   return (
     <div className="mt-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 18 }}>
@@ -166,6 +166,9 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown }) {
           <input type="number" min="0.5" step="0.5" value={q.points} onChange={(e) => update({ points: e.target.value })} className="ak-input" style={{ ...fieldStyle, width: 80, paddingRight: 30, textAlign: 'right' }} />
           <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: faint }}>pts</span>
         </div>
+        <button type="button" onClick={saveToBank} title="Save to Quiz Bank" style={{ ...iconBtn, fontSize: 14 }} className="transition hover:text-indigo-600 flex items-center gap-0.5">
+          💾 <span className="text-[10px] font-bold">Save</span>
+        </button>
         <button onClick={moveUp} title="Move up" style={iconBtn} className="transition hover:text-[#0A1733]">↑</button>
         <button onClick={moveDown} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
         <button onClick={remove} title="Remove question" style={{ ...iconBtn, fontSize: 18 }} className="transition hover:text-[#C0392B]">×</button>
@@ -393,7 +396,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
   )
 }
 
-function BuilderForm({ quiz, classes, gradebooksMap, refetch }) {
+function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const navigate = useNavigate()
   const [settings, setSettings] = useState({
     title: quiz.title,
@@ -412,6 +415,24 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch }) {
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+
+  const handleSaveToBank = async (q) => {
+    try {
+      const payload = {
+        ...toPayload(q),
+        topic_id: quiz.topic_id || null,
+      }
+      delete payload.id
+      await api('/api/quizzes/bank', {
+        method: 'POST',
+        body: payload
+      })
+      alert('Question saved to Quiz Bank successfully!')
+    } catch (err) {
+      alert(`Failed to save question to bank: ${err.message}`)
+    }
+  }
 
   const set = (key) => (e) =>
     setSettings((s) => ({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
@@ -603,6 +624,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch }) {
           remove={() => setQuestions(questions.filter((_, j) => j !== i))}
           moveUp={() => i > 0 && setQuestions(questions.map((x, j) => (j === i - 1 ? questions[i] : j === i ? questions[i - 1] : x)))}
           moveDown={() => i < questions.length - 1 && setQuestions(questions.map((x, j) => (j === i ? questions[i + 1] : j === i + 1 ? questions[i] : x)))}
+          saveToBank={() => handleSaveToBank(q)}
         />
       ))}
 
@@ -610,6 +632,9 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch }) {
         <div className="flex gap-2.5">
           <button onClick={() => setQuestions([...questions, blankQuestion()])} className="transition hover:brightness-105" style={btnGhost}>
             <span style={{ color: gold }}>+</span> Add question
+          </button>
+          <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
+            📚 Import from Bank
           </button>
           <button onClick={deleteQuiz} className="transition hover:brightness-105" style={btnDanger}>
             Delete draft
@@ -634,9 +659,268 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch }) {
         onConfirm={handleConfirmPublish}
         isPublishing={publishing}
       />
+
+      <ImportFromBankModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        syllabi={syllabi}
+        onImport={(importedQuestions) => {
+          const formatted = importedQuestions.map(q => ({
+            ...toEditable(q),
+            id: null
+          }))
+          setQuestions(prev => [...prev, ...formatted])
+        }}
+      />
     </div>
   )
 }
+
+
+function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
+  const [selectedNode, setSelectedNode] = useState({ type: 'uncategorized' })
+  const [expandedSyllabi, setExpandedSyllabi] = useState({})
+  const [expandedModules, setExpandedModules] = useState({})
+  const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState([])
+
+  const toggleSyllabus = (id) => {
+    setExpandedSyllabi(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+  const toggleModule = (id) => {
+    setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const { data: bankedQuestions = [], isLoading } = useQuery({
+    queryKey: ['import-banked-questions', selectedNode?.type, selectedNode?.syllabusId, selectedNode?.topicId],
+    queryFn: async () => {
+      let url = '/api/quizzes/bank'
+      if (selectedNode?.type === 'uncategorized') {
+        url += '?syllabus_id=uncategorized'
+      } else if (selectedNode?.type === 'topic') {
+        url += `?topic_id=${selectedNode.topicId}`
+      } else if (selectedNode?.type === 'syllabus') {
+        url += `?syllabus_id=${selectedNode.syllabusId}`
+      }
+      const res = await api(url)
+      return res.questions || []
+    },
+    enabled: isOpen && !!selectedNode,
+  })
+
+  if (!isOpen) return null
+
+  const filteredQuestions = bankedQuestions.filter(q => {
+    const term = search.toLowerCase().trim()
+    if (!term) return true
+    const textMatch = q.text.toLowerCase().includes(term)
+    const tagMatch = q.tags?.toLowerCase().includes(term)
+    return textMatch || tagMatch
+  })
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleImport = () => {
+    const selected = bankedQuestions.filter(q => selectedIds.includes(q.id))
+    onImport(selected)
+    setSelectedIds([])
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 760, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Import Questions from Quiz Bank</h2>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {/* Sidebar */}
+          <div className="w-56 border-r border-slate-100 p-4 overflow-y-auto">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Folders</h4>
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setSelectedNode({ type: 'uncategorized' })}
+                className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs font-semibold transition ${
+                  selectedNode.type === 'uncategorized'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <span>📦</span>
+                <span>Uncategorized</span>
+              </button>
+
+              {syllabi.map(s => {
+                const isExpanded = !!expandedSyllabi[s.id]
+                const isSelected = selectedNode.type === 'syllabus' && selectedNode.syllabusId === s.id
+                return (
+                  <div key={s.id} className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNode({ type: 'syllabus', syllabusId: s.id })}
+                        className={`flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded text-left text-xs font-semibold transition ${
+                          isSelected
+                            ? 'bg-indigo-50 text-indigo-700'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>📚</span>
+                        <span className="truncate text-xs">{s.title}</span>
+                      </button>
+                      {s.modules?.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSyllabus(s.id)}
+                          className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                        >
+                          <span className={`block text-[8px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
+                            ▶
+                          </span>
+                        </button>
+                      )}
+                    </div>
+
+                    {isExpanded && s.modules?.map(m => {
+                      const isModExpanded = !!expandedModules[m.id]
+                      return (
+                        <div key={m.id} className="pl-3 space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold text-slate-400 truncate py-1">
+                              📂 {m.title}
+                            </span>
+                            {m.topics?.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleModule(m.id)}
+                                className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                              >
+                                <span className={`block text-[6px] transition-transform duration-200 ${isModExpanded ? 'rotate-90' : ''}`}>
+                                  ▶
+                                </span>
+                              </button>
+                            )}
+                          </div>
+
+                          {isModExpanded && m.topics?.map(t => {
+                            const isTopicSelected = selectedNode.type === 'topic' && selectedNode.topicId === t.id
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setSelectedNode({ type: 'topic', topicId: t.id, syllabusId: s.id })}
+                                className={`w-full pl-4 pr-1 py-1 rounded text-left text-[11px] font-medium transition truncate block ${
+                                  isTopicSelected
+                                    ? 'text-indigo-600 bg-indigo-50/50 font-semibold'
+                                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                                }`}
+                              >
+                                📄 {t.title}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Main Area */}
+          <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+            <input
+              placeholder="Search questions by text or tag..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="ak-input w-full flex-shrink-0"
+              style={{ ...fieldStyle, padding: '7px 10px', fontSize: 12.5 }}
+            />
+
+            {isLoading ? (
+              <div className="p-8 text-center text-xs text-slate-500">Loading questions...</div>
+            ) : filteredQuestions.length === 0 ? (
+              <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl text-xs text-slate-400">
+                No questions found in this folder.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredQuestions.map(q => {
+                  const checked = selectedIds.includes(q.id)
+                  return (
+                    <label
+                      key={q.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer text-xs ${
+                        checked
+                          ? 'border-indigo-300 bg-indigo-50/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSelect(q.id)}
+                        className="rounded text-indigo-600 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          <span className="font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">
+                            {TYPE_LABELS[q.qtype] || q.qtype}
+                          </span>
+                          <span className="text-slate-400 text-[10px]">{q.points} pts</span>
+                          {q.tags && q.tags.split(',').map((t, idx) => (
+                            <span key={idx} className="text-[9px] text-indigo-600">
+                              #{t.trim()}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="font-semibold text-slate-800 leading-normal">{q.text}</p>
+                        
+                        {q.qtype === 'mcq' && q.options && (
+                          <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
+                            {q.options.map((o, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className={`h-1.5 w-1.5 rounded-full ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
+                                <span className={o.is_correct ? 'font-semibold text-slate-700' : ''}>{o.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnModalGhost}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={selectedIds.length === 0}
+            onClick={handleImport}
+            className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={btnModalPrimary}
+          >
+            Import Selected ({selectedIds.length})
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 export default function QuizBuilderPage() {
   const { quizId } = useParams()
@@ -650,6 +934,15 @@ export default function QuizBuilderPage() {
       const snap = await getDoc(doc(db, 'quizzes', quizId))
       if (!snap.exists()) throw new Error('Quiz not found')
       return { id: snap.id, ...snap.data() }
+    },
+  })
+
+  // Load all syllabi
+  const { data: syllabi } = useQuery({
+    queryKey: ['api-syllabus'],
+    queryFn: async () => {
+      const res = await api('/api/syllabus')
+      return res.syllabi || []
     },
   })
 
@@ -755,7 +1048,7 @@ export default function QuizBuilderPage() {
               AI-generated draft — review every question and answer key before publishing.
             </div>
           )}
-          <BuilderForm key={quiz.id} quiz={quiz} classes={classes ?? []} gradebooksMap={gradebooks ?? {}} refetch={refetch} />
+          <BuilderForm key={quiz.id} quiz={quiz} classes={classes ?? []} gradebooksMap={gradebooks ?? {}} refetch={refetch} syllabi={syllabi ?? []} />
         </>
       ) : (
         <div className="max-w-3xl mt-6">
