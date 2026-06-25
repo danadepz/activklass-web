@@ -139,17 +139,34 @@ export function AuthNotice({ children }) {
 
 export function BrandMark({ size = 32, onNavy = false }) {
   const bg = onNavy ? '#f4f1de' : '#0b1b33'
+  const monogramColor = onNavy ? '#0b1b33' : '#f4f1de'
   const strokeColor = '#d4af37'
   const capBaseColor = onNavy ? '#0b1b33' : '#f4f1de'
   return (
     <svg viewBox="0 0 512 512" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
       <rect x="64" y="64" width="384" height="384" rx="92" fill={bg}/>
-      <rect x="88" y="88" width="336" height="336" rx="72" fill="none" stroke={capBaseColor} strokeWidth="2" strokeOpacity="0.1"/>
-      <path d="M 200 280 V 315 C 200 335, 312 335, 312 315 V 280 Z" fill={capBaseColor}/>
-      <polygon points="256,160 380,210 256,260 132,210" fill="none" stroke={strokeColor} strokeWidth="14" strokeLinejoin="round"/>
-      <circle cx="256" cy="210" r="10" fill={strokeColor}/>
-      <path d="M 256 210 C 310 215, 340 240, 344 265" fill="none" stroke={strokeColor} strokeWidth="6" strokeLinecap="round"/>
-      <circle cx="344" cy="275" r="8" fill={strokeColor}/>
+      
+      {/* A - Left diagonal leg */}
+      <line x1="160" y1="400" x2="256" y2="150" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
+      {/* A - Right diagonal leg */}
+      <line x1="256" y1="150" x2="352" y2="400" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
+      {/* A - Crossbar (gold) */}
+      <line x1="195" y1="310" x2="317" y2="310" stroke={strokeColor} strokeWidth="24" strokeLinecap="round" />
+      
+      {/* K - Upper arm */}
+      <line x1="300" y1="285" x2="390" y2="175" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
+      {/* K - Lower arm */}
+      <line x1="300" y1="285" x2="390" y2="400" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
+      
+      {/* GRADUATION CAP at the top peak of A */}
+      {/* Cap neck / under-cap */}
+      <path d="M 216 142 V 165 C 216 180, 296 180, 296 165 V 142 Z" fill={capBaseColor}/>
+      {/* Cap diamond */}
+      <polygon points="256,70 360,110 256,150 152,110" fill={strokeColor} strokeLinejoin="round"/>
+      {/* Tassel */}
+      <circle cx="256" cy="110" r="6" fill={capBaseColor}/>
+      <path d="M 256 110 C 295 113, 315 130, 320 148" fill="none" stroke={capBaseColor} strokeWidth="4" strokeLinecap="round"/>
+      <circle cx="320" cy="154" r="5" fill={capBaseColor}/>
     </svg>
   )
 }
