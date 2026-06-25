@@ -140,33 +140,34 @@ export function AuthNotice({ children }) {
 export function BrandMark({ size = 32, onNavy = false }) {
   const bg = onNavy ? '#f4f1de' : '#0b1b33'
   const monogramColor = onNavy ? '#0b1b33' : '#f4f1de'
-  const strokeColor = '#d4af37'
-  const capBaseColor = onNavy ? '#0b1b33' : '#f4f1de'
+  const lightGold = '#F5C518'
+  const darkGold = '#D4AF37'
   return (
-    <svg viewBox="0 0 512 512" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
-      <rect x="64" y="64" width="384" height="384" rx="92" fill={bg}/>
+    <svg viewBox="0 0 600 600" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
+      {/* Container Box */}
+      <rect x="50" y="50" width="500" height="500" rx="100" fill={bg}/>
       
-      {/* A - Left diagonal leg */}
-      <line x1="160" y1="400" x2="256" y2="150" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
-      {/* A - Right diagonal leg */}
-      <line x1="256" y1="150" x2="352" y2="400" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
-      {/* A - Crossbar (gold) */}
-      <line x1="195" y1="310" x2="317" y2="310" stroke={strokeColor} strokeWidth="24" strokeLinecap="round" />
+      {/* A Body (evenodd fill-rule) */}
+      <path d="M 210,210 L 50,510 H 135 L 160,455 H 260 L 285,510 H 370 L 210,210 Z M 210,280 L 175,370 H 245 Z" fill={monogramColor} fillRule="evenodd" />
       
-      {/* K - Upper arm */}
-      <line x1="300" y1="285" x2="390" y2="175" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
-      {/* K - Lower arm */}
-      <line x1="300" y1="285" x2="390" y2="400" stroke={monogramColor} strokeWidth="36" strokeLinecap="round" />
+      {/* K Body */}
+      <path d="M 235,225 H 310 L 341,310 L 510,225 V 290 L 390,360 L 510,510 H 430 L 385,430 L 415,510 H 340 Z" fill={monogramColor} />
       
-      {/* GRADUATION CAP at the top peak of A */}
-      {/* Cap neck / under-cap */}
-      <path d="M 216 142 V 165 C 216 180, 296 180, 296 165 V 142 Z" fill={capBaseColor}/>
-      {/* Cap diamond */}
-      <polygon points="256,70 360,110 256,150 152,110" fill={strokeColor} strokeLinejoin="round"/>
+      {/* Graduation Cap (Left half light gold, right half dark gold) */}
+      {/* Diamond Left */}
+      <polygon points="300,80 190,130 300,180" fill={lightGold}/>
+      {/* Diamond Right */}
+      <polygon points="300,80 410,130 300,180" fill={darkGold}/>
+      
+      {/* Cap Band Left */}
+      <polygon points="240,160 300,187 300,212 240,185" fill={lightGold}/>
+      {/* Cap Band Right */}
+      <polygon points="300,187 360,160 360,185 300,212" fill={darkGold}/>
+      
       {/* Tassel */}
-      <circle cx="256" cy="110" r="6" fill={capBaseColor}/>
-      <path d="M 256 110 C 295 113, 315 130, 320 148" fill="none" stroke={capBaseColor} strokeWidth="4" strokeLinecap="round"/>
-      <circle cx="320" cy="154" r="5" fill={capBaseColor}/>
+      <line x1="220" y1="144" x2="220" y2="190" stroke={darkGold} strokeWidth="4" strokeLinecap="round"/>
+      <circle cx="220" cy="192" r="4.5" fill={darkGold}/>
+      <polygon points="216,197 224,197 228,218 212,218" fill={darkGold}/>
     </svg>
   )
 }
