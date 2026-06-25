@@ -19,7 +19,7 @@ export default function ProtectedRoute({ roles }) {
   if (status === 'error') {
     return (
       <FullScreenMessage>
-        {errorDetail ?? 'Could not reach the Activklass server. Is the API running?'}
+        {errorDetail ?? 'Could not reach the ActivKlass server. Is the API running?'}
       </FullScreenMessage>
     )
   }
@@ -36,7 +36,7 @@ export function RoleHomeRedirect() {
   if (status === 'error') {
     return (
       <FullScreenMessage>
-        {errorDetail ?? 'Could not reach the Activklass server. Is the API running?'}
+        {errorDetail ?? 'Could not reach the ActivKlass server. Is the API running?'}
       </FullScreenMessage>
     )
   }

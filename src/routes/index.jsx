@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 
 /* ------------------------------------------------------------------ *
- * Landing — marketing page for Activklass.
+ * Landing — marketing page for ActivKlass.
  *
  * This page deliberately uses its own navy + gold + cream brand
  * identity (Lexend / Plus Jakarta Sans / JetBrains Mono),
@@ -220,7 +220,7 @@ export default function Landing() {
           <div className="flex items-center gap-2.5">
             <Logo />
             <span style={{ ...serif, fontSize: 22, color: navy, letterSpacing: '-0.01em' }}>
-              Activklass
+              ActivKlass
             </span>
           </div>
           <div className="flex items-center gap-5 md:gap-7">
@@ -796,7 +796,7 @@ export default function Landing() {
           <div>
             <div className="mb-3.5 flex items-center gap-2.5">
               <Logo size={28} />
-              <span style={{ ...serif, fontSize: 20, color: navy }}>Activklass</span>
+              <span style={{ ...serif, fontSize: 20, color: navy }}>ActivKlass</span>
             </div>
             <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, margin: '0 0 16px', maxWidth: 280 }}>
               Class records that teach back. Built for DepEd K–12 and CHED
@@ -825,7 +825,7 @@ export default function Landing() {
         </div>
         <div style={{ borderTop: `1px solid ${line}` }}>
           <div className="mx-auto flex max-w-[1240px] flex-col justify-between gap-2 px-6 py-5 md:px-8 md:flex-row" style={{ fontSize: 12, color: muted }}>
-            <div>© {new Date().getFullYear()} Activklass. All rights reserved.</div>
+            <div>© {new Date().getFullYear()} ActivKlass. All rights reserved.</div>
             <div>Made in Cebu · for Philippine classrooms</div>
           </div>
         </div>

@@ -231,7 +231,7 @@ export default function TeacherLayout() {
                 <div style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: gold }} />
               </div>
               <div>
-                <div style={{ ...serif, fontSize: 22, lineHeight: 1, letterSpacing: '-0.02em' }}>Activklass</div>
+                <div style={{ ...serif, fontSize: 22, lineHeight: 1, letterSpacing: '-0.02em' }}>ActivKlass</div>
                 <div className="hidden sm:block" style={{ fontSize: 10, color: 'rgba(250,250,246,0.5)', letterSpacing: '0.05em', marginTop: 1 }}>Teacher Portal</div>
               </div>
             </div>
@@ -560,7 +560,7 @@ export default function TeacherLayout() {
               lineHeight: 1.5,
               margin: '0 0 24px 0'
             }}>
-              Are you sure you want to sign out of your Activklass account?
+              Are you sure you want to sign out of your ActivKlass account?
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               <button

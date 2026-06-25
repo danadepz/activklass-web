@@ -72,7 +72,7 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to your Activklass account.">
+    <AuthLayout title="Welcome back" subtitle="Sign in to your ActivKlass account.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {error && <AuthError>{error}</AuthError>}
         {notice && <AuthNotice>{notice}</AuthNotice>}

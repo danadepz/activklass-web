@@ -662,7 +662,7 @@ function CsvUploadModal({ classId, onClose, onDone }) {
         <div className="space-y-3">
           <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
           <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
-            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — required, matches each student to their Activklass account</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — required, matches each student to their ActivKlass account</li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — student full name</li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">lrn</code>, <code className="bg-slate-100 px-1 rounded text-xs">birthdate</code>, <code className="bg-slate-100 px-1 rounded text-xs">student_number</code></li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">course</code>, <code className="bg-slate-100 px-1 rounded text-xs">year_level</code>, <code className="bg-slate-100 px-1 rounded text-xs">middle_name</code></li>

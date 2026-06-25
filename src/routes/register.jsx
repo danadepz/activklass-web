@@ -83,7 +83,7 @@ function RoleCard({ role, selected, onSelect }) {
 export default function Register() {
   const navigate = useNavigate()
   const { status, firebaseUser, refreshProfile, logout } = useAuth()
-  // Signed in with Firebase but no Activklass profile yet — e.g. a registration
+  // Signed in with Firebase but no ActivKlass profile yet — e.g. a registration
   // that failed halfway. Only the profile fields are needed to finish.
   const completing = status === 'not_registered' && firebaseUser !== null
 
@@ -113,7 +113,7 @@ export default function Register() {
       if (!auth.currentUser) {
         await createUserWithEmailAndPassword(auth, form.email, form.password)
       }
-      // 2. Activklass profile doc in the Firestore 'users' collection.
+      // 2. ActivKlass profile doc in the Firestore 'users' collection.
       // Role drives routing; security rules block later role changes by
       // students/parents (escalation guard). Passwords stay in Firebase Auth.
       await setDoc(doc(db, 'users', auth.currentUser.uid), {

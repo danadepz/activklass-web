@@ -189,7 +189,7 @@ export default function AuthLayout({ title, subtitle, children }) {
         {/* brand */}
         <Link to="/" className="relative flex w-fit items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E2A5C]" style={{ textDecoration: 'none', color: cream }}>
           <BrandMark onNavy />
-          <span style={{ ...serif, fontSize: 26, letterSpacing: '-0.01em' }}>Activklass</span>
+          <span style={{ ...serif, fontSize: 26, letterSpacing: '-0.01em' }}>ActivKlass</span>
         </Link>
 
         {/* value prop — vertically centered in the panel */}
@@ -235,7 +235,7 @@ export default function AuthLayout({ title, subtitle, children }) {
           <div className="mb-8 flex justify-center lg:hidden">
             <Link to="/" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
               <BrandMark />
-              <span style={{ ...serif, fontSize: 22, color: navy }}>Activklass</span>
+              <span style={{ ...serif, fontSize: 22, color: navy }}>ActivKlass</span>
             </Link>
           </div>
 

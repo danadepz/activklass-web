@@ -5,7 +5,7 @@ export default function SetupRequired() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
       <div className="bg-white rounded-xl border border-slate-200 p-8 max-w-xl">
-        <h1 className="text-2xl font-bold text-indigo-700">Activklass</h1>
+        <h1 className="text-2xl font-bold text-indigo-700">ActivKlass</h1>
         <h2 className="text-lg font-semibold text-slate-800 mt-4">
           Firebase isn't configured yet
         </h2>
