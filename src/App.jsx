@@ -29,6 +29,8 @@ import RecordIndexPage    from '@/routes/teacher/record'
 import AttendanceIndexPage from '@/routes/teacher/attendance'
 import SyllabusIndexPage  from '@/routes/teacher/syllabus'
 import QuizzesIndexPage   from '@/routes/teacher/quizzes'
+import QuizBuilderPage    from '@/routes/teacher/quizzes.$quizId'
+import GradingSetupPage   from '@/routes/teacher/grading'
 import AnnouncementsPage  from '@/routes/teacher/announcements'
 import ReportsPage        from '@/routes/teacher/reports'
 
@@ -37,10 +39,6 @@ import ClassLayout      from '@/routes/teacher/classes/$classId/_layout'
 import ClassDetailPage  from '@/routes/teacher/classes/$classId/index'
 import ClassRecordPage  from '@/routes/teacher/classes/$classId/record'
 import AttendancePage   from '@/routes/teacher/classes/$classId/attendance'
-import SyllabusPage     from '@/routes/teacher/classes/$classId/syllabus'
-import QuizzesPage      from '@/routes/teacher/classes/$classId/quizzes'
-import QuizBuilderPage  from '@/routes/teacher/classes/$classId/quizzes.$quizId'
-import GradingSetupPage from '@/routes/teacher/classes/$classId/grading'
 import PerformancePage  from '@/routes/teacher/classes/$classId/performance'
 import ScaffoldTopicsPage from '@/routes/teacher/classes/$classId/scaffolds'
 import HistoryPage      from '@/routes/teacher/classes/$classId/history'
@@ -68,10 +66,6 @@ export default function App() {
             <Route index                   element={<ClassDetailPage />} />
             <Route path="record"           element={<ClassRecordPage />} />
             <Route path="attendance"       element={<AttendancePage />} />
-            <Route path="syllabus"         element={<SyllabusPage />} />
-            <Route path="quizzes"          element={<QuizzesPage />} />
-            <Route path="quizzes/:quizId"  element={<QuizBuilderPage />} />
-            <Route path="grading"          element={<GradingSetupPage />} />
             <Route path="performance"      element={<PerformancePage />} />
             <Route path="scaffolds"        element={<ScaffoldTopicsPage />} />
             <Route path="history"          element={<HistoryPage />} />
@@ -82,6 +76,8 @@ export default function App() {
           <Route path="attendance"    element={<AttendanceIndexPage />} />
           <Route path="syllabus"      element={<SyllabusIndexPage />} />
           <Route path="quizzes"       element={<QuizzesIndexPage />} />
+          <Route path="quizzes/:quizId" element={<QuizBuilderPage />} />
+          <Route path="grading"       element={<GradingSetupPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="reports"       element={<ReportsPage />} />
         </Route>

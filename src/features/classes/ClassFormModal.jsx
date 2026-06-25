@@ -19,7 +19,7 @@ const YEARS = Array.from({ length: 10 }, (_, i) => String(2026 + i))
 
 function parseSchedule(str = '') {
   const defaults = {
-    days: ['M', 'W', 'F'],
+    days: [],
     startHour: '8',
     startMinute: '00',
     startPeriod: 'AM',

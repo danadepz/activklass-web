@@ -30,7 +30,7 @@ const ATT_META = {
 }
 
 const TABS = [
-  { key: 'topics', label: 'Topics', Icon: BookOpen },
+  { key: 'topics', label: 'Syllabus', Icon: BookOpen },
   { key: 'quizzes', label: 'Quizzes', Icon: FileText },
   { key: 'grades', label: 'Grade Center', Icon: ClipboardList },
   { key: 'analytics', label: 'Analytics', Icon: BarChart },
@@ -75,7 +75,7 @@ async function loadClassDetail(classId, profile) {
       loadSyllabus(classId),
       getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId))),
       clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
-      getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+      getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', profile.id))),
     ])
 
@@ -121,40 +121,168 @@ function Pill({ meta }) {
   )
 }
 
-function TopicsTab({ syllabus }) {
+function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
+  const [activeNote, setActiveNote] = useState(null)
+
   if (!syllabus || !(syllabus.modules?.length)) {
-    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No syllabus yet" text="Your teacher hasn't published the modules and topics for this class." />
+    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No syllabus yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
   }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {syllabus.modules.map((m, mi) => (
         <div key={m.id ?? mi} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
-          <div className="flex items-center gap-3" style={{ marginBottom: (m.topics?.length ?? 0) ? 14 : 0 }}>
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
             <span style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'rgba(14,42,92,0.07)', padding: '4px 9px', borderRadius: 7 }}>M{mi + 1}</span>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: ink }}>{m.title || `Module ${mi + 1}`}</div>
-              {m.description && <div style={{ fontSize: 13, color: muted, marginTop: 2 }}>{m.description}</div>}
+              {m.description && <div style={{ fontSize: 13.5, color: muted, marginTop: 2 }}>{m.description}</div>}
             </div>
           </div>
-          <div className="flex flex-col gap-2.5" style={{ paddingLeft: 6 }}>
-            {(m.topics ?? []).map((t, ti) => (
-              <div key={t.id ?? ti} style={{ borderLeft: '2px solid rgba(14,42,92,0.1)', paddingLeft: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Topic ${ti + 1}`}</div>
-                {(t.learning_objectives ?? t.objectives ?? []).length > 0 && (
-                  <ul style={{ margin: '6px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {(t.learning_objectives ?? t.objectives).map((o, oi) => (
-                      <li key={oi} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: muted }}>
-                        <Check className="h-3.5 w-3.5" style={{ color: green, flexShrink: 0, marginTop: 2 }} />
-                        {o}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
+          <div className="flex flex-col gap-6 pl-2">
+            {(m.topics ?? []).map((t, ti) => {
+              const linkedQuizzes = quizzes.filter((q) => q.topic_id === t.id)
+              const resources = t.resources ?? []
+
+              return (
+                <div key={t.id ?? ti} className="border-l-2 border-slate-200 pl-4 relative">
+                  <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300" />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Sub-module ${ti + 1}`}</div>
+                  
+                  {(t.learning_objectives ?? t.objectives ?? []).length > 0 && (
+                    <div className="mt-2.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Learning Objectives</span>
+                      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(t.learning_objectives ?? t.objectives).map((o, oi) => (
+                          <li key={oi} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: muted }}>
+                            <Check className="h-3.5 w-3.5" style={{ color: green, flexShrink: 0, marginTop: 2 }} />
+                            {o}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(resources.length > 0 || linkedQuizzes.length > 0) && (
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {resources.map((res) => {
+                        let icon = '📄'
+                        let typeLabel = 'File'
+                        let action = () => window.open(res.url, '_blank')
+
+                        if (res.resource_type === 'link') {
+                          icon = '🔗'
+                          typeLabel = 'Link'
+                        } else if (res.resource_type === 'rich_text') {
+                          icon = '✍️'
+                          typeLabel = 'Study Note'
+                          action = () => setActiveNote(res)
+                        }
+
+                        return (
+                          <button
+                            key={res.id ?? res._key}
+                            onClick={action}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-left transition w-full cursor-pointer"
+                          >
+                            <span className="text-lg bg-white w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center shadow-sm flex-shrink-0">
+                              {icon}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{typeLabel}</div>
+                              <div className="text-sm font-bold text-slate-800 truncate" title={res.title}>{res.title}</div>
+                            </div>
+                          </button>
+                        )
+                      })}
+
+                      {linkedQuizzes.map((quiz) => {
+                        const attempts = attemptsByQuiz[quiz.id] ?? []
+                        const latest = attempts[0] ?? null
+                        const allowed = quiz.attempts_allowed ?? 1
+                        const used = attempts.length
+                        const points = quizPoints(quiz)
+                        const canTake = quiz.status === 'published' && used < allowed
+                        const best = attempts.length ? Math.max(...attempts.map((a) => a.total_score ?? 0)) : null
+
+                        let statusText = 'Not taken'
+                        if (best != null) {
+                          statusText = `Best: ${best}/${quiz.total_possible ?? points} pts`
+                        }
+
+                        return (
+                          <div
+                            key={quiz.id}
+                            className="flex items-center justify-between gap-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/20 text-left w-full"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-lg bg-white w-9 h-9 rounded-lg border border-indigo-100 flex items-center justify-center shadow-sm flex-shrink-0 text-indigo-600">
+                                📝
+                              </span>
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">Quiz · {statusText}</div>
+                                <div className="text-sm font-bold text-slate-800 truncate" title={quiz.title}>{quiz.title}</div>
+                              </div>
+                            </div>
+                            <div>
+                              {canTake ? (
+                                <Link
+                                  to={`/student/classes/${classId}/quizzes/${quiz.id}`}
+                                  className="text-xs font-bold bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700 transition"
+                                  style={{ textDecoration: 'none', display: 'inline-block' }}
+                                >
+                                  {used > 0 ? 'Retake' : 'Take'}
+                                </Link>
+                              ) : latest ? (
+                                <Link
+                                  to={`/student/quizzes/${latest.id}/result`}
+                                  className="text-xs font-bold border border-indigo-200 text-indigo-700 bg-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 transition"
+                                  style={{ textDecoration: 'none', display: 'inline-block' }}
+                                >
+                                  Result
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-slate-400">Closed</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}
+
+      {/* Note view modal */}
+      {activeNote && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+          <div style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+            <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✍️</span>
+                <h3 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>{activeNote.title}</h3>
+              </div>
+              <button onClick={() => setActiveNote(null)} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div style={{ padding: '24px', maxHeight: '60vh', overflowY: 'auto' }}>
+              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                {activeNote.content_markdown}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
+              <button onClick={() => setActiveNote(null)} style={{ padding: '8px 16px', fontSize: 13.5, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -991,7 +1119,7 @@ export default function StudentClassDetail() {
         })}
       </div>
 
-      {tab === 'topics' && <TopicsTab syllabus={syllabus} />}
+      {tab === 'topics' && <TopicsTab syllabus={syllabus} classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
       {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
       {tab === 'grades' && (
         <GradesTab

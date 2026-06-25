@@ -23,10 +23,7 @@ const TABS = [
   { to: 'record', label: 'Class Record' },
   { to: 'performance', label: 'Performance' },
   { to: 'attendance', label: 'Attendance' },
-  { to: 'syllabus', label: 'Syllabus' },
-  { to: 'quizzes', label: 'Quizzes' },
   { to: 'scaffolds', label: 'Scaffold Topics' },
-  { to: 'grading', label: 'Configuration' },
   { to: 'history', label: 'History' },
 ]
 

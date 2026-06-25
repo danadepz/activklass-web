@@ -17,6 +17,9 @@ const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
   { to: '/teacher/announcements', label: 'Announcement' },
   { to: '/teacher/classes', label: 'My Classes' },
+  { to: '/teacher/syllabus', label: 'Syllabus' },
+  { to: '/teacher/quizzes', label: 'Quizzes' },
+  { to: '/teacher/grading', label: 'Grade Config' },
   { to: '/teacher/reports', label: 'Reports' },
 ]
 

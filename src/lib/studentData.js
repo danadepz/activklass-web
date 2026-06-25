@@ -102,10 +102,14 @@ export async function loadStudentGradeContests(classId, studentId) {
   }
 }
 
-/** Syllabus modules/topics for a class (classes/{classId}/syllabus/current). */
+/** Syllabus modules/topics for a class. Reads syllabus_id from class doc, then loads from top-level /syllabi/{syllabusId} */
 export async function loadSyllabus(classId) {
   try {
-    const snap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
+    const classSnap = await getDoc(doc(db, 'classes', classId))
+    if (!classSnap.exists()) return null
+    const syllabusId = classSnap.data().syllabus_id
+    if (!syllabusId) return null
+    const snap = await getDoc(doc(db, 'syllabi', syllabusId))
     return snap.exists() ? snap.data() : null
   } catch {
     return null
