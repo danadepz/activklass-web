@@ -139,43 +139,26 @@ export function AuthNotice({ children }) {
 
 export function BrandMark({ size = 32, onNavy = false }) {
   const bg = onNavy ? '#f4f1de' : '#0b1b33'
-  const monogramColor = onNavy ? '#0b1b33' : '#f4f1de'
-  const lightGold = '#F5C518'
-  const darkGold = '#D4AF37'
+  const capBodyColor = onNavy ? '#0b1b33' : '#f4f1de'
+  const goldColor = '#F5C518'
+  const lightBlueColor = '#3FA9F5'
   return (
-    <svg viewBox="0 0 600 600" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
+    <svg viewBox="0 0 512 512" width={size} height={size} style={{ display: 'block', flexShrink: 0 }}>
       {/* Container Box */}
-      <rect x="50" y="50" width="500" height="500" rx="100" fill={bg}/>
+      <rect x="64" y="64" width="384" height="384" rx="92" fill={bg}/>
       
-      {/* A Left Leg */}
-      <polygon points="185,200 255,200 125,500 55,500" fill={monogramColor} />
-      {/* A Right Leg */}
-      <polygon points="185,200 255,200 385,500 315,500" fill={monogramColor} />
-      {/* A Crossbar */}
-      <polygon points="130,380 310,380 310,440 130,440" fill={monogramColor} />
-      
-      {/* K Stem */}
-      <polygon points="270,200 340,200 470,500 400,500" fill={monogramColor} />
-      {/* K Upper Branch */}
-      <polygon points="315,260 385,260 520,200 450,200" fill={monogramColor} />
-      {/* K Lower Branch */}
-      <polygon points="350,340 420,340 520,500 450,500" fill={monogramColor} />
-      
-      {/* Graduation Cap (Left half light gold, right half dark gold) */}
-      {/* Diamond Left */}
-      <polygon points="280,50 170,100 280,150" fill={lightGold}/>
-      {/* Diamond Right */}
-      <polygon points="280,50 390,100 280,150" fill={darkGold}/>
-      
-      {/* Cap Band Left */}
-      <polygon points="220,130 280,157 280,182 220,155" fill={lightGold}/>
-      {/* Cap Band Right */}
-      <polygon points="280,157 340,130 340,155 280,182" fill={darkGold}/>
-      
-      {/* Tassel */}
-      <line x1="200" y1="144" x2="200" y2="190" stroke={darkGold} strokeWidth="4" strokeLinecap="round"/>
-      <circle cx="200" cy="192" r="4.5" fill={darkGold}/>
-      <polygon points="196,197 224,197 228,218 212,218" fill={darkGold}/>
+      {/* SVGrepo Graduation Cap centered & scaled */}
+      <g transform="translate(106, 106) scale(0.764)">
+        {/* White Underlay */}
+        <path fill="#ffffff" d="M192.232,211.019L85.371,168.675v119.79c8.275-1.681,16.743-2.521,25.471-2.521 c33.487,0,63.677,12.735,81.519,33.552c17.842-20.816,47.968-33.552,81.519-33.552c8.727,0,17.325,0.84,25.471,2.521V171.649 l-99.232,39.434h-7.887V211.019z"/>
+        {/* Cap Main Body */}
+        <path fill={capBodyColor} d="M385.654,117.152L200.248,43.585c-2.521-1.034-5.495-1.034-8.016,0L6.697,117.152 c-9.438,4.461-8.404,17.067,0,20.299l56.889,22.562v142.739c0.517,7.176,6.4,13.059,14.481,10.279 c10.279-3.556,21.333-5.301,32.84-5.301c32,0,60.897,14.545,71.887,36.073c4.202,7.499,14.869,8.404,19.459-0.065 c10.925-21.527,39.693-36.008,71.693-36.008c11.507,0,22.626,1.745,32.84,5.301c7.046,2.392,14.287-2.909,14.481-10.279V162.987 l49.455-19.653v109.64c0,6.012,4.848,10.925,10.925,10.925c6.012,0,10.925-4.848,10.925-10.925V127.366 C392.571,122.712,389.856,119.544,385.654,117.152z M299.48,288.465c-8.275-1.681-16.743-2.521-25.471-2.521 c-33.487,0-63.677,12.735-81.519,33.552c-17.907-20.816-48.162-33.552-81.519-33.552c-8.727,0-17.325,0.84-25.471,2.521v-119.79 l106.861,42.343h8.016l99.232-39.434v116.816h-0.129V288.465z M196.24,189.168L40.313,127.366L196.24,65.564l155.798,61.802 L196.24,189.168z"/>
+        {/* Gold Highlights */}
+        <path fill={goldColor} d="M107.092,200.869h29.543c6.012,0,10.925,4.848,10.925,10.925c0,6.012-4.848,10.925-10.925,10.925 h-29.543v18.747h14.222c6.012,0,10.925,4.848,10.925,10.925c0,6.012-4.848,10.925-10.925,10.925h-14.222v0.84 c1.228,0,52.299-0.453,85.204,25.729c21.657-16.291,50.489-25.794,81.519-25.794c1.228,0,2.457,0,3.685,0.065v-76.154h-19.459 l-57.794,22.949h-8.016l-57.859-22.949h-27.281L107.092,200.869L107.092,200.869z"/>
+        <polygon fill={goldColor} points="196.24,189.168 198.955,188.069 193.525,188.069"/>
+        {/* Light Blue Top Diamond */}
+        <polygon fill={lightBlueColor} points="40.313,127.366 196.24,189.168 352.038,127.366 196.24,65.435"/>
+      </g>
     </svg>
   )
 }
