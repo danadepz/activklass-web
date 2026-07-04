@@ -254,7 +254,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             },
           })
         } catch (err) {
-          warning = `Class saved, but the syllabus file couldn't be uploaded (${err.message}). Make sure the Storage emulator is running, then re-attach it.`
+          warning = `Class saved, but the syllabus file couldn't be uploaded (${err.message}). Please re-attach it and try again.`
         }
       }
       onSaved({ warning })

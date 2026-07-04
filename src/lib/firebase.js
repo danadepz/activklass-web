@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
-import { connectStorageEmulator, getStorage } from 'firebase/storage'
+import { getAuth } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -27,13 +27,3 @@ export const auth = firebaseConfigured ? getAuth(firebaseApp) : null
 export const db = firebaseConfigured ? getFirestore(firebaseApp) : null
 // Cloud Storage holds optional file attachments (e.g. class syllabus uploads).
 export const storage = firebaseConfigured ? getStorage(firebaseApp) : null
-
-// Local development against the Firebase emulator suite
-// (firebase emulators:start). Toggle via VITE_FIREBASE_EMULATOR in .env.local.
-export const usingEmulator =
-  firebaseConfigured && import.meta.env.VITE_FIREBASE_EMULATOR === 'true'
-if (usingEmulator) {
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
-  connectFirestoreEmulator(db, 'localhost', 8080)
-  connectStorageEmulator(storage, 'localhost', 9199)
-}
