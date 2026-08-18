@@ -46,14 +46,17 @@ only one of them says what it is. Label the past-tense ones too -- "Below 85"
 is a fact about the past, "Predicted at risk" is a forecast, and a teacher
 reading both as the same claim will trust the wrong number.
 
-## 4. `PUT` silently unassigns classes **(cross-repo)**
+## 4. ~~`PUT` silently unassigns classes~~ — done
 
-`activklass-backend/app/api/quizzes.py:282-283` replaces `quiz.classes` from
-`data.get('class_ids', [])`, so omitting the field wipes every assignment.
-`save_syllabus` does the same. A teacher editing only a title loses the
-class links unless the client resends them.
+`update_quiz` and `save_syllabus` read `data.get('class_ids', [])` and assigned
+unconditionally, so a request that never mentioned `class_ids` wiped the
+assignment: renaming a quiz detached it from its class and it vanished for
+students, and saving an edited syllabus title unlinked every class using it.
 
-Make omission mean "leave unchanged"; treat an explicit `[]` as "clear".
+Absent now means "leave as it is"; an explicit `[]` still clears, and a non-list
+is a 400. Both paths have regression tests -- the syllabus one asserts through
+`classes.syllabus_id`, which is the field students actually resolve a syllabus
+through.
 
 ## 5. No test suite on the web
 
@@ -197,9 +200,15 @@ not grow.
 noted those pages stay on Flask class ids until steps 8-9. Steps 8 and 9 are
 now done, so the picker is the remaining reason the blueprint exists.
 
-Note the database is still empty -- migrations have never run -- so these three
-are broken right now, not merely legacy. That is also why moving them off is
-cheaper than it looks: **there is no data to migrate.**
+**Correction (2026-08-19):** the earlier note here claimed migrations had never
+run and these endpoints were broken. They are not. The dev database is SQLite at
+`activklass-backend/activklass_dev.db`, migrated, with 28 tables and an
+`alembic_version` row -- the endpoints work when Flask is running.
+
+So the accurate framing is *uncalled*, not *broken*, and that raises the cost of
+item 13: deleting them also deletes the smoke tests that cover them, which are
+currently the best coverage the grading engine has. Neon/Supabase was never set
+up, so there is still no production data to migrate.
 
 ## 12. The parent portal cannot be Firestore-only **(cross-repo)**
 
