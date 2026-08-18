@@ -294,11 +294,146 @@ export async function generateQuiz({
 }
 
 /**
+ * DepEd MELC competency code grammar, e.g. M10AL-Ia-1.
+ *
+ *   M       subject letters      M, S, EN, AP, ESP, MAPEH ...
+ *   10      grade, or a range    "11/12" in EN11/12RWS-IIIbf-3
+ *   AL      content domain       AL algebra, GE geometry, LT living things ...
+ *   I       quarter              I, II, III, IV
+ *   a       week(s)              a | a-b | bf | c-d -- official docs use both
+ *   1       competency number
+ *
+ * Built from codes the model actually returns, not from a spec: S9LT-Ia-b-26,
+ * EN11/12RWS-IIIbf-3 and M10GE-IIc-d-1 are all real shapes, and a stricter
+ * pattern would reject them as fabrications.
+ */
+const MELC_CODE = /^([A-Z]+)(\d+(?:\/\d+)?)([A-Z]+)-(IV|I{1,3})([a-z]+(?:-[a-z]+)*)-(\d+)$/
+
+/**
+ * What we can and cannot say about a generated code.
+ *
+ * `unverified` is named for what it is. No MELC dataset exists in this project,
+ * so nothing here confirms a code is real -- only that it is shaped like one
+ * and does not contradict the requested grade. A page must not render it as
+ * "DepEd verified", which is exactly what the old bare string invited.
+ */
+export const MELC_STATUS = {
+  absent: 'absent',
+  unverified: 'unverified',
+  gradeMismatch: 'grade_mismatch',
+  malformed: 'malformed',
+}
+
+/** Wording a page can show directly, so nobody has to invent a label. */
+export const MELC_STATUS_LABEL = {
+  absent: 'No MELC code',
+  unverified: 'Format valid — not checked against the official MELC list',
+  grade_mismatch: 'Competency belongs to a different grade level',
+  malformed: 'Not a MELC code — cleared',
+}
+
+/** Grades named in a free-text level ("Grade 10", "Grades 11-12"). */
+function gradesIn(gradeLevel) {
+  return String(gradeLevel ?? '').match(/\d+/g) ?? []
+}
+
+function checkMelcCode(code, gradeLevel) {
+  const raw = (code ?? '').trim()
+  if (!raw) return { status: MELC_STATUS.absent }
+
+  const parts = MELC_CODE.exec(raw)
+  if (!parts) return { status: MELC_STATUS.malformed }
+
+  const codeGrades = parts[2].split('/')
+  const wanted = gradesIn(gradeLevel)
+  // No requested grade to compare against is not a mismatch -- college
+  // syllabi have no grade level at all.
+  if (wanted.length && !wanted.some((g) => codeGrades.includes(g))) {
+    return { status: MELC_STATUS.gradeMismatch, code: raw, codeGrades, wanted }
+  }
+  return { status: MELC_STATUS.unverified, code: raw }
+}
+
+/**
+ * Tag every topic with a MELC status and collect what a teacher should see
+ * before publishing.
+ *
+ * Malformed codes are cleared: a string that cannot be a MELC code is a
+ * fabrication, and showing it next to real ones lends it their credibility.
+ *
+ * Grade mismatches are kept. The model returns Grade 9 codes for a Grade 10
+ * request on quadratics and variation -- and those genuinely ARE Grade 9
+ * competencies, so the code may be right and the grade tag merely surprising.
+ * A Grade 10 class reviewing Grade 9 material is normal. Deleting a real code
+ * to tidy the output would be the worse error, so this flags and keeps.
+ */
+function annotateTopics(topics, gradeLevel, where, warnings, seen) {
+  return (topics ?? []).map((topic, i) => {
+    const label = `${where}${topic?.title || `topic ${i + 1}`}`
+    const result = checkMelcCode(topic?.melc_code, gradeLevel)
+    const out = { ...topic, melc_status: result.status }
+
+    if (result.status === MELC_STATUS.malformed) {
+      warnings.push(`${label}: "${topic.melc_code}" is not a MELC code — cleared.`)
+      out.melc_code = ''
+    } else if (result.code !== undefined) {
+      // Store the trimmed form. Stray whitespace passes the pattern but would
+      // make "M10AL-Ia-1 " and "M10AL-Ia-1" different keys everywhere after.
+      out.melc_code = result.code
+    }
+    if (result.status === MELC_STATUS.gradeMismatch) {
+      warnings.push(
+        `${label}: ${topic.melc_code} is a Grade ${result.codeGrades.join('/')} competency, ` +
+          `but this is Grade ${result.wanted.join('/')}. Correct if unintended.`,
+      )
+    }
+
+    // Two topics claiming one competency means at least one is mislabelled.
+    if (out.melc_code) {
+      const prior = seen.get(out.melc_code)
+      if (prior) warnings.push(`${out.melc_code} is on both "${prior}" and "${label}".`)
+      else seen.set(out.melc_code, label)
+    }
+    return out
+  })
+}
+
+/** Annotate a whole syllabus draft. Shape is preserved; codes are never invented. */
+function validateSyllabusDraft(draft, gradeLevel) {
+  const warnings = []
+  const seen = new Map()
+  const modules = (draft?.modules ?? []).map((mod, i) => ({
+    ...mod,
+    topics: annotateTopics(
+      mod?.topics,
+      gradeLevel,
+      `${mod?.title || `Module ${i + 1}`} / `,
+      warnings,
+      seen,
+    ),
+  }))
+  if (warnings.length) console.warn('[ai] syllabus MELC codes:', warnings.join(' '))
+  return { ...draft, modules, melcWarnings: warnings }
+}
+
+/** Annotate a single generated module. */
+function validateModuleDraft(draft, gradeLevel) {
+  const warnings = []
+  const seen = new Map()
+  const topics = annotateTopics(draft?.topics, gradeLevel, '', warnings, seen)
+  if (warnings.length) console.warn('[ai] module MELC codes:', warnings.join(' '))
+  return { ...draft, topics, melcWarnings: warnings }
+}
+
+/**
  * Draft a syllabus. The backend aligns topics to DepEd MELCs (K-12) or CHED
  * CMO (college) based on the subject details given.
  *
  * Requires at least one of subjectCode / subjectDescription; the API rejects
  * the request otherwise.
+ *
+ * Every topic comes back with a `melc_status`, and the draft with
+ * `melcWarnings`. Nothing here confirms a code exists -- see MELC_STATUS.
  */
 export async function generateSyllabus({
   subjectCode = '',
@@ -319,7 +454,7 @@ export async function generateSyllabus({
       },
     }),
   )
-  return draft
+  return validateSyllabusDraft(draft, gradeLevel)
 }
 
 /**
@@ -340,18 +475,20 @@ export async function generateModule({
   existingTitles = [],
   topicCount = 4,
 }) {
-  const { draft } = await api('/api/syllabus/generate-module', {
-    method: 'POST',
-    body: {
-      module_brief: brief,
-      subject_code: subjectCode,
-      subject_description: subjectDescription,
-      grade_level: gradeLevel?.trim() || undefined,
-      existing_titles: existingTitles,
-      topic_count: topicCount,
-    },
-  })
-  return draft
+  const { draft } = await withAIErrors('generating the module', () =>
+    api('/api/syllabus/generate-module', {
+      method: 'POST',
+      body: {
+        module_brief: brief,
+        subject_code: subjectCode,
+        subject_description: subjectDescription,
+        grade_level: gradeLevel?.trim() || undefined,
+        existing_titles: existingTitles,
+        topic_count: topicCount,
+      },
+    }),
+  )
+  return validateModuleDraft(draft, gradeLevel)
 }
 
 /**

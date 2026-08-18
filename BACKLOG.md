@@ -145,14 +145,53 @@ docs/02-database-schema.md)" and points at a document that now opens with
 `01-architecture.md` is superseded by `05-prepare-gap-analysis.md` but says so
 nowhere in itself. Anyone onboarding reads whichever they open first.
 
-## 15. MELC codes are generated, never verified **(cross-repo)**
+## 15. MELC codes are generated, never verified **(cross-repo)** — partly handled
 
-Syllabus generation emits official-looking DepEd competency codes -- spot
-checks are correct (`M10AL-Ia-1` really is Grade 10 arithmetic sequences), but
-nothing validates them, and the model will produce an equally confident wrong
-code for a less common subject. A teacher publishing a syllabus with fabricated
-DepEd codes is worse than a bad quiz question. Validate against a real MELC
-list, or stop presenting unvalidated codes as authoritative.
+Syllabus and module generation emit official-looking DepEd competency codes.
+Spot checks are correct -- `M10AL-Ia-1` really is Grade 10 arithmetic
+sequences -- but nothing confirms it, and the model will produce an equally
+confident wrong code for a less common subject. A teacher publishing a syllabus
+with fabricated DepEd codes is worse than a bad quiz question.
+
+`lib/ai.js` now tags every generated topic with a `melc_status` and returns
+`melcWarnings` on the draft. What that does and does not establish:
+
+- **`malformed` codes are cleared.** A string that cannot be a MELC code is a
+  fabrication, and leaving it beside real ones lends it their credibility.
+- **`grade_mismatch` codes are kept and flagged.** Grade 10 requests come back
+  with `M9AL-*` on quadratics and variation, and those genuinely *are* Grade 9
+  competencies -- a Grade 10 class reviewing them is normal, so the code may be
+  right and only the grade tag surprising. Deleting a real code to tidy the
+  output would be the worse error.
+- **`unverified` means exactly that.** No MELC dataset exists in any of the
+  three repos, so nothing confirms a code is real -- only that it is shaped
+  like one and does not contradict the requested grade.
+
+**Still open, and it is the half that matters:** the syllabus page renders
+`melc_code` as a bare string, so a fabricated-looking code and a plausible one
+are still visually identical. `MELC_STATUS_LABEL` is exported ready to render.
+Until the page uses it, codes are still presented as authoritative.
+
+The real fix remains a MELC list to check against. DepEd publishes the 2020
+MELCs per learning area; even one subject loaded as a JSON lookup would turn
+`unverified` into a real answer for that subject.
+
+## 16. A 429 does not trigger the model fallback **(cross-repo)**
+
+`client.py:122` retries and steps through `FALLBACK_MODELS` only on
+`errors.ServerError` (5xx). Quota exhaustion is a 429 `ClientError`, so it
+propagates immediately and `gemini-3.6-flash` / `gemini-3.7-flash` are never
+tried -- even though each carries its own separate per-model daily quota.
+
+The free tier is **20 requests per day per model**, which is also the default
+`AI_DAILY_LIMIT`, so one teacher can drain the whole project's quota in an
+afternoon. Reached during testing on 2026-08-19.
+
+This is precisely the failure docs/05 warns about under "Ollama availability
+during defense: the procedural fallback is mandatory". The overload path is
+covered; the far likelier one is not. Catching 429 and stepping to the next
+model is a small change, but it should not ship untested, and testing it
+requires quota that is currently spent.
 
 
 ---
