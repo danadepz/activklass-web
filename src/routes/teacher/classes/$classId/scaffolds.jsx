@@ -1,10 +1,19 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { generateQuiz } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
+import {
+  REMEDIATION_PUBLISHED,
+  createRemediationPlan,
+  deleteRemediationPlan,
+  loadClassRemediations,
+  publishRemediation,
+  unpublishRemediation,
+  updateRemediationPlan,
+} from '@/features/classes/remediation'
 import { useAuth } from '@/context/useAuth'
 import { Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -79,21 +88,33 @@ async function loadScaffolds(classId) {
     const pcts = Object.values(bestByStudent)
     if (!pcts.length) continue // no graded submissions yet — can't compute mastery
     const mastery = Math.round(pcts.reduce((s, x) => s + x, 0) / pcts.length)
-    const affected = Object.entries(bestByStudent)
+    const affectedIds = Object.entries(bestByStudent)
       .filter(([, p]) => p < PASS)
-      .map(([sid]) => nameById[sid] ?? sid)
+      .map(([sid]) => sid)
     rows.push({
       ...topic,
       mastery,
       quizCount: tq.length,
       attemptCount,
-      studentsAffected: affected.length,
-      affectedNames: affected,
+      studentsAffected: affectedIds.length,
+      affectedNames: affectedIds.map((sid) => nameById[sid] ?? sid),
+      // Ids as well as names: a remediation plan targets student_ids, and the
+      // display names cannot be turned back into uids.
+      affectedIds,
     })
   }
 
   const linkedQuizzes = quizzes.filter((q) => q.topic_id).length
-  return { rows, topicCount: topics.length, linkedQuizzes, clazz }
+  const remediation = await loadClassRemediations(classId).catch(() => ({ plans: [], legacy: [] }))
+  return {
+    rows,
+    topicCount: topics.length,
+    linkedQuizzes,
+    clazz,
+    nameById,
+    rosterIds: ids,
+    remediation,
+  }
 }
 
 function bucketOf(m) {
@@ -122,20 +143,319 @@ function SectionHead({ dot, title, note }) {
   )
 }
 
+/**
+ * Remediation plans for the class, with their own edit and publish actions.
+ *
+ * A draft reaches nobody: the plan document carries no student_id, so neither
+ * the student query nor the security rule can see it. Publishing is what fans
+ * it out into per-student assignments — see features/classes/remediation.js.
+ */
+function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, onUnpublish, onDelete }) {
+  if (!plans.length && !legacy.length) return null
+
+  return (
+    <div className="mb-[26px]">
+      <SectionHead
+        dot={blueText}
+        title="Remediation"
+        note={`${plans.length} plan${plans.length === 1 ? '' : 's'}`}
+      />
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+        {plans.map((plan) => {
+          const published = plan.status === REMEDIATION_PUBLISHED
+          const reach = (plan.assignments ?? []).length
+          const targets = plan.target_student_ids ?? []
+          // A plan edited after publishing has targets that no longer match what
+          // students actually hold; saying so is the difference between "done"
+          // and "you still have to re-publish".
+          const stale = published && reach !== targets.length
+          return (
+            <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '16px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+              <div style={{ minWidth: 240, flex: 1 }}>
+                <div className="flex items-center gap-2.5">
+                  <span style={{ fontSize: 15, fontWeight: 700, color: ink }}>{plan.title}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 999, color: published ? green : goldDeep, background: published ? 'rgba(39,174,96,0.10)' : 'rgba(212,160,23,0.12)' }}>
+                    {published ? 'Published' : 'Draft'}
+                  </span>
+                  {stale && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: goldDeep }}>
+                      edited — re-publish to apply
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1" style={{ fontSize: 12, color: muted }}>
+                  {published
+                    ? `Visible to ${reach} student${reach === 1 ? '' : 's'}`
+                    : `Targets ${targets.length} student${targets.length === 1 ? '' : 's'} · not visible yet`}
+                  {targets.length > 0 && (
+                    <>
+                      {' · '}
+                      {targets.slice(0, 3).map((id) => nameById[id] ?? id).join(' · ')}
+                      {targets.length > 3 ? ` +${targets.length - 3}` : ''}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => onEdit(plan)}
+                  className="transition hover:brightness-95"
+                  style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.25)`, borderRadius: 9, cursor: 'pointer' }}
+                >
+                  Edit
+                </button>
+                {published ? (
+                  <button
+                    onClick={() => onUnpublish(plan)}
+                    disabled={busy === `unpublish:${plan.id}`}
+                    className="transition hover:brightness-95 disabled:opacity-50"
+                    style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: goldDeep, background: '#FFFFFF', border: '1.5px solid rgba(212,160,23,0.45)', borderRadius: 9, cursor: 'pointer' }}
+                  >
+                    {busy === `unpublish:${plan.id}` ? 'Withdrawing…' : 'Withdraw'}
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => onPublish(plan)}
+                  disabled={busy === `publish:${plan.id}` || targets.length === 0}
+                  title={targets.length === 0 ? 'Pick at least one student first' : undefined}
+                  className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }}
+                >
+                  {busy === `publish:${plan.id}`
+                    ? 'Publishing…'
+                    : published
+                      ? 'Re-publish'
+                      : 'Publish'}
+                </button>
+                <button
+                  onClick={() => onDelete(plan)}
+                  disabled={busy === `delete:${plan.id}`}
+                  className="transition hover:underline disabled:opacity-50"
+                  style={{ padding: '8px 6px', fontSize: 12, fontWeight: 600, fontFamily: sans, color: red, background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )
+        })}
+
+        {legacy.length > 0 && (
+          <div style={{ padding: '12px 22px', fontSize: 12, color: faint, background: 'rgba(14,42,92,0.02)' }}>
+            {legacy.length} older remediation record{legacy.length === 1 ? '' : 's'} from the AI
+            recommender are already live for the students who own them. They predate plans, so they
+            have no draft state to edit here.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Edit a plan: its text, its linked practice quiz, and who receives it. */
+function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz }) {
+  const [title, setTitle] = useState(plan.title ?? '')
+  const [guidance, setGuidance] = useState(plan.guidance ?? '')
+  const [targets, setTargets] = useState(plan.target_student_ids ?? [])
+
+  const working = busy === `save:${plan.id}` || busy === `publish:${plan.id}`
+  const generating = busy === `quiz:${plan.id}`
+  const patch = () => ({
+    title: title.trim() || plan.title,
+    guidance: guidance.trim(),
+    target_student_ids: targets,
+  })
+
+  const toggle = (id) =>
+    setTargets((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 26, width: '100%', maxWidth: 620 }}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit remediation</h3>
+            <p style={{ fontSize: 12.5, color: muted, margin: '4px 0 0' }}>
+              {plan.topic ?? 'Topic'} ·{' '}
+              {plan.status === REMEDIATION_PUBLISHED
+                ? 'published — changes reach students when you re-publish'
+                : 'draft — students cannot see this yet'}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: muted, background: 'none', border: 'none', cursor: 'pointer' }}>
+            Close
+          </button>
+        </div>
+
+        <div className="mt-5">
+          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Title</label>
+          <input
+            className="ak-input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={{ marginTop: 6, width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }}
+          />
+        </div>
+
+        <div className="mt-4">
+          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Guidance for the student</label>
+          <textarea
+            className="ak-input"
+            rows={4}
+            value={guidance}
+            onChange={(e) => setGuidance(e.target.value)}
+            placeholder="What should they review, and how? This is the part a quiz cannot carry."
+            style={{ marginTop: 6, width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, resize: 'vertical' }}
+          />
+        </div>
+
+        <div className="mt-4" style={{ background: 'rgba(63,169,245,0.05)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 11, padding: '12px 14px' }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div style={{ fontSize: 13, color: ink }}>
+              <strong>Practice quiz:</strong>{' '}
+              {plan.recommended_quiz_id ? (
+                <Link to={`/teacher/classes/${plan.class_id}/quizzes/${plan.recommended_quiz_id}`} style={{ color: blueText, fontWeight: 600 }}>
+                  open in quiz editor
+                </Link>
+              ) : (
+                <span style={{ color: muted }}>none attached</span>
+              )}
+            </div>
+            <button
+              onClick={onGenerateQuiz}
+              disabled={generating}
+              className="transition hover:brightness-110 disabled:opacity-50"
+              style={{ padding: '7px 13px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: blueText, background: '#FFFFFF', border: `1.5px solid rgba(63,169,245,0.45)`, borderRadius: 8, cursor: 'pointer' }}
+            >
+              {generating ? 'Generating…' : plan.recommended_quiz_id ? 'Regenerate' : 'Generate with AI'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11.5, color: muted, margin: '8px 0 0', lineHeight: 1.45 }}>
+            Generating a quiz no longer navigates away — it attaches here so you keep the plan you
+            are editing. Publishing the plan does not publish the quiz; open it to do that.
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between">
+            <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Who receives it ({targets.length})
+            </label>
+            <button
+              onClick={() => setTargets(targets.length === rosterIds.length ? [] : [...rosterIds])}
+              style={{ fontSize: 11.5, fontWeight: 600, color: blueText, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              {targets.length === rosterIds.length ? 'Clear all' : 'Select whole class'}
+            </button>
+          </div>
+          <div className="mt-2" style={{ maxHeight: 190, overflowY: 'auto', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 9 }}>
+            {rosterIds.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: faint, padding: '12px 14px', margin: 0 }}>No students on this roster.</p>
+            ) : (
+              rosterIds.map((id) => (
+                <label key={id} className="flex items-center gap-2.5" style={{ padding: '8px 14px', borderBottom: '1px solid rgba(14,42,92,0.05)', fontSize: 13, color: ink, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={targets.includes(id)} onChange={() => toggle(id)} />
+                  {nameById[id] ?? id}
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button
+            onClick={() => onSaveAndPublish(patch())}
+            disabled={working || targets.length === 0}
+            className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ flex: 1, minWidth: 170, padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
+          >
+            {busy === `publish:${plan.id}`
+              ? 'Publishing…'
+              : plan.status === REMEDIATION_PUBLISHED
+                ? 'Save & re-publish'
+                : 'Save & publish'}
+          </button>
+          <button
+            onClick={() => onSave(patch())}
+            disabled={working}
+            className="transition hover:brightness-95 disabled:opacity-50"
+            style={{ flex: 1, minWidth: 140, padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.25)`, borderRadius: 10, cursor: 'pointer' }}
+          >
+            {busy === `save:${plan.id}` ? 'Saving…' : 'Save draft'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ScaffoldTopicsPage() {
   const { classId } = useParams()
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const queryClient = useQueryClient()
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
+  const [editingPlan, setEditingPlan] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['fs-scaffolds', classId],
     queryFn: () => loadScaffolds(classId),
   })
 
-  async function buildPack(topic) {
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['fs-scaffolds', classId] })
+
+  /**
+   * Start a remediation for a weak topic.
+   *
+   * Creates the plan as a DRAFT and opens the editor. It does not navigate to
+   * the quiz builder: that was the old behaviour, and it meant the only thing a
+   * teacher could edit or publish was the quiz. The plan is what carries the
+   * guidance and the target list, and it stays invisible to students until
+   * published.
+   */
+  async function startRemediation(topic) {
     setBusy(topic.id)
+    setError(null)
+    try {
+      const ref = await createRemediationPlan({
+        classId,
+        teacherId: profile.id,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        targetStudentIds: topic.affectedIds ?? [],
+        mastery: topic.mastery,
+      })
+      await refresh()
+      setEditingPlan({
+        id: ref.id,
+        class_id: classId,
+        topic_id: topic.id,
+        topic: topic.title,
+        title: `Remediation · ${topic.title}`,
+        guidance: '',
+        recommended_quiz_id: null,
+        target_student_ids: topic.affectedIds ?? [],
+        status: 'draft',
+        assignments: [],
+      })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * Generate a practice quiz for a plan's topic and attach it.
+   *
+   * Returns the new quiz id instead of navigating. Navigating away was what
+   * made remediation feel like a quiz: the teacher lost the plan they were
+   * building and landed in the quiz editor with no way back to it.
+   */
+  async function buildPack(topic, plan = null) {
+    setBusy(plan ? `quiz:${plan.id}` : topic.id)
     setError(null)
     try {
       const quiz = await generateQuiz({
@@ -166,9 +486,36 @@ export default function ScaffoldTopicsPage() {
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       })
+
+      if (plan) {
+        await updateRemediationPlan(plan.id, { recommended_quiz_id: ref.id })
+        setEditingPlan((p) => (p && p.id === plan.id ? { ...p, recommended_quiz_id: ref.id } : p))
+        await refresh()
+        return ref.id
+      }
+      // No plan in hand (topic has no remediation yet) — the quiz is still
+      // useful on its own, so behave as before and open the builder.
       navigate(`/teacher/classes/${classId}/quizzes/${ref.id}`)
+      return ref.id
     } catch (err) {
       setError(err.message)
+      return null
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function runPlanAction(plan, action, fn) {
+    setBusy(`${action}:${plan.id}`)
+    setError(null)
+    try {
+      await fn()
+      await refresh()
+      return true
+    } catch (err) {
+      setError(err.message)
+      return false
+    } finally {
       setBusy(null)
     }
   }
@@ -282,14 +629,36 @@ export default function ScaffoldTopicsPage() {
                       <span style={{ fontWeight: 700, color: ink }}>Affected:</span> {t.affectedNames.slice(0, 4).join(' · ') || '—'}
                       {t.affectedNames.length > 4 ? ` +${t.affectedNames.length - 4}` : ''}
                     </div>
-                    <button
-                      onClick={() => buildPack(t)}
-                      disabled={busy === t.id}
-                      className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }}
-                    >
-                      {busy === t.id ? 'Building…' : 'Build scaffold pack'}
-                    </button>
+                    {(() => {
+                      // One remediation plan per topic. If one exists, this
+                      // becomes the way back into it rather than a second copy.
+                      const existing = (data.remediation?.plans ?? []).find(
+                        (p) => p.topic_id === t.id,
+                      )
+                      if (existing) {
+                        return (
+                          <button
+                            onClick={() => setEditingPlan(existing)}
+                            className="transition hover:brightness-110"
+                            style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid ${navy}`, borderRadius: 9, cursor: 'pointer' }}
+                          >
+                            {existing.status === REMEDIATION_PUBLISHED
+                              ? 'Edit remediation (published)'
+                              : 'Edit remediation (draft)'}
+                          </button>
+                        )
+                      }
+                      return (
+                        <button
+                          onClick={() => startRemediation(t)}
+                          disabled={busy === t.id}
+                          className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }}
+                        >
+                          {busy === t.id ? 'Creating…' : 'Create remediation'}
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               </div>
@@ -316,6 +685,53 @@ export default function ScaffoldTopicsPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* remediation plans — the edit/publish surface */}
+      <RemediationPanel
+        plans={data.remediation?.plans ?? []}
+        legacy={data.remediation?.legacy ?? []}
+        nameById={data.nameById ?? {}}
+        busy={busy}
+        onEdit={setEditingPlan}
+        onPublish={(plan) =>
+          runPlanAction(plan, 'publish', () => publishRemediation(plan))
+        }
+        onUnpublish={(plan) => {
+          if (!window.confirm(`Withdraw "${plan.title}" from ${plan.assignments?.length ?? 0} student(s)? They lose access to it immediately.`)) return
+          runPlanAction(plan, 'unpublish', () => unpublishRemediation(plan))
+        }}
+        onDelete={(plan) => {
+          if (!window.confirm(`Delete "${plan.title}" and remove it from every student?`)) return
+          runPlanAction(plan, 'delete', () => deleteRemediationPlan(plan))
+        }}
+      />
+
+      {editingPlan && (
+        <RemediationEditor
+          plan={editingPlan}
+          nameById={data.nameById ?? {}}
+          rosterIds={data.rosterIds ?? []}
+          busy={busy}
+          onClose={() => setEditingPlan(null)}
+          onSave={async (patch) => {
+            const ok = await runPlanAction(editingPlan, 'save', () =>
+              updateRemediationPlan(editingPlan.id, patch),
+            )
+            if (ok) setEditingPlan(null)
+          }}
+          onSaveAndPublish={async (patch) => {
+            const merged = { ...editingPlan, ...patch }
+            const ok = await runPlanAction(editingPlan, 'publish', async () => {
+              await updateRemediationPlan(editingPlan.id, patch)
+              await publishRemediation(merged)
+            })
+            if (ok) setEditingPlan(null)
+          }}
+          onGenerateQuiz={() =>
+            buildPack({ id: editingPlan.topic_id, title: editingPlan.topic }, editingPlan)
+          }
+        />
       )}
 
       {/* mastered */}
