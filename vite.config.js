@@ -14,4 +14,14 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    // Same-origin /api so a forwarded port works for remote viewers: their
+    // browser cannot reach our localhost:5000, but it can reach this server.
+    proxy: {
+      '/api': 'http://localhost:5000',
+    },
+    // VS Code port forwarding serves from *.devtunnels.ms; without this Vite
+    // rejects the Host header and the page renders "Blocked request".
+    allowedHosts: ['.devtunnels.ms'],
+  },
 })

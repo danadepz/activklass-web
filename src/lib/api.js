@@ -1,6 +1,8 @@
 import { auth } from './firebase'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
+// Empty by default so requests stay same-origin and go through the Vite proxy
+// (see vite.config.js). Set VITE_API_URL only to point at a deployed API.
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export class ApiError extends Error {
   constructor(status, code, message) {
