@@ -19,11 +19,22 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [status, setStatus] = useState('loading')
   const [errorDetail, setErrorDetail] = useState(null)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
 
   const loadProfile = useCallback(async () => {
     try {
       const uid = auth.currentUser?.uid
       if (!uid) throw new Error('Not signed in')
+
+      /* Super admin is a Firebase custom claim, NOT users/{uid}.role.
+         firestore.rules lets an admin write any profile including its role
+         field, so a role string would be self-grantable by any school admin.
+         The claim is only settable through the Admin SDK — see the backend's
+         `flask grant-superadmin`. It rides in the ID token, so a freshly
+         granted developer must re-login (or wait for a refresh) to see it. */
+      const token = await auth.currentUser.getIdTokenResult()
+      setIsSuperAdmin(token.claims.superadmin === true)
+
       const snap = await getDoc(doc(db, 'users', uid))
       if (!snap.exists()) {
         setProfile(null)
@@ -35,6 +46,7 @@ export function AuthProvider({ children }) {
       setErrorDetail(null)
     } catch (err) {
       setProfile(null)
+      setIsSuperAdmin(false)
       setStatus('error')
       const hint =
         {
@@ -57,6 +69,7 @@ export function AuthProvider({ children }) {
         loadProfile()
       } else {
         setProfile(null)
+        setIsSuperAdmin(false)
         setStatus('signed_out')
       }
     })
@@ -66,7 +79,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ firebaseUser, profile, status, errorDetail, logout, refreshProfile: loadProfile }}
+      value={{ firebaseUser, profile, status, errorDetail, isSuperAdmin, logout, refreshProfile: loadProfile }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/context/useAuth'
+import SignOutButton from '@/components/SignOutButton'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
 import { btnGhost } from './ui'
 import UsersTab from './UsersTab'
@@ -23,7 +24,7 @@ const TABS = [
 ]
 
 export default function AdminPage() {
-  const { profile, logout } = useAuth()
+  const { profile } = useAuth()
   const [tab, setTab] = useState('users')
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
 
@@ -41,10 +42,8 @@ export default function AdminPage() {
                 Signed in as {profile.first_name} {profile.last_name}
               </div>
             </div>
-            <button onClick={logout} style={{ ...btnGhost, background: 'transparent', color: cream,
-                                              borderColor: 'rgba(250,250,246,0.35)' }}>
-              Sign out
-            </button>
+            <SignOutButton style={{ ...btnGhost, background: 'transparent', color: cream,
+                                    borderColor: 'rgba(250,250,246,0.35)' }} />
           </div>
 
           <nav style={{ display: 'flex', gap: 4, marginTop: 18 }}>

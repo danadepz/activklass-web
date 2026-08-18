@@ -115,7 +115,16 @@ export async function loadSyllabus(classId) {
     const syllabusId = classSnap.data().syllabus_id
     if (!syllabusId) return null
     const snap = await getDoc(doc(db, 'syllabi', syllabusId))
-    return snap.exists() ? snap.data() : null
+    if (!snap.exists()) return null
+    const data = snap.data()
+    // Unpublished modules are held back from students. Filtered here rather than
+    // in the page so every student-side reader gets the same answer -- a module
+    // hidden on the class page must not reappear in a quiz picker or a
+    // remediation list.
+    return {
+      ...data,
+      modules: (data.modules ?? []).filter((m) => m.published !== false),
+    }
   } catch {
     return null
   }

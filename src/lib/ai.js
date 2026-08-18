@@ -323,6 +323,38 @@ export async function generateSyllabus({
 }
 
 /**
+ * Draft ONE module to insert into a syllabus that already exists.
+ *
+ * Deliberately not "generate the syllabus again with an extra unit": that would
+ * replace modules the teacher has edited and change the topic ids that quizzes
+ * and remediation point at. Adding a unit must not cost a term's work.
+ *
+ * `existingTitles` is what turns this from a guess into an insertion — without
+ * the surrounding modules the model re-covers ground the class already did.
+ */
+export async function generateModule({
+  brief,
+  subjectCode = '',
+  subjectDescription = '',
+  gradeLevel,
+  existingTitles = [],
+  topicCount = 4,
+}) {
+  const { draft } = await api('/api/syllabus/generate-module', {
+    method: 'POST',
+    body: {
+      module_brief: brief,
+      subject_code: subjectCode,
+      subject_description: subjectDescription,
+      grade_level: gradeLevel?.trim() || undefined,
+      existing_titles: existingTitles,
+      topic_count: topicCount,
+    },
+  })
+  return draft
+}
+
+/**
  * The seven indicators /api/predict scores, mapped to the fitted forest's
  * global feature importances. Weights are measured from the model, not
  * guessed, and sum to 1.0 -- they let us report how much of the signal a

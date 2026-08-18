@@ -58,6 +58,47 @@ function parseSchedule(str = '') {
   return { ...defaults, days }
 }
 
+/* School-day bounds. The pickers are 12-hour, so nothing stops a teacher
+   saving a 6:00 AM class or one ending at 11:30 PM -- these catch it. */
+const DAY_OPENS = 7 * 60      // 7:00 AM
+const DAY_CLOSES = 21 * 60    // 9:00 PM
+const MIN_LENGTH = 60         // one hour
+
+function minutesFromLabel(hour, minute, period) {
+  const h = Number(hour) % 12
+  return (period.toUpperCase() === 'PM' ? h + 12 : h) * 60 + Number(minute)
+}
+
+/** "MWF 8:00 AM – 9:30 AM" -> { start, end } in minutes from midnight. */
+function scheduleRange(str = '') {
+  const m = str.match(/(\d{1,2}):(\d{2})\s*(AM|PM)\s*[–—-]\s*(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!m) return null
+  return {
+    start: minutesFromLabel(m[1], m[2], m[3]),
+    end: minutesFromLabel(m[4], m[5], m[6]),
+  }
+}
+
+function clockLabel(mins) {
+  const h24 = Math.floor(mins / 60)
+  const period = h24 >= 12 ? 'PM' : 'AM'
+  const h = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h}:${String(mins % 60).padStart(2, '0')} ${period}`
+}
+
+function validateSchedule(str) {
+  const range = scheduleRange(str)
+  // Older classes may hold free text that predates the pickers. Unreadable
+  // is not the same as invalid, so do not block a save on it.
+  if (!range) return null
+  const { start, end } = range
+  if (end <= start) return 'A class has to end after it starts.'
+  if (end - start < MIN_LENGTH) return 'A class has to run for at least one hour.'
+  if (start < DAY_OPENS) return `Classes cannot start before ${clockLabel(DAY_OPENS)}.`
+  if (end > DAY_CLOSES) return `Classes cannot end after ${clockLabel(DAY_CLOSES)}.`
+  return null
+}
+
 function validate(form) {
   if (
     !form.subject_code.trim() ||
@@ -68,6 +109,8 @@ function validate(form) {
   ) {
     return 'Subject code, section, description, schedule, and grade/year level are required'
   }
+  const scheduleError = validateSchedule(form.schedule)
+  if (scheduleError) return scheduleError
   const maxStudents = Number.parseInt(form.max_students, 10)
   if (!Number.isInteger(maxStudents) || maxStudents <= 0) {
     return 'Max no. of students must be a positive number'

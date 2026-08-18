@@ -31,6 +31,8 @@ import SyllabusIndexPage  from '@/routes/teacher/syllabus'
 import QuizzesIndexPage   from '@/routes/teacher/quizzes'
 import QuizBuilderPage    from '@/routes/teacher/quizzes.$quizId'
 import AdminUsersPage    from '@/routes/admin/index'
+import SuperAdminLayout  from '@/routes/superadmin/_layout'
+import SuperAdminSubscribersPage from '@/routes/superadmin/index'
 import GradingSetupPage   from '@/routes/teacher/grading'
 import TeacherAccountPage from '@/routes/teacher/account'
 import AnnouncementsPage  from '@/routes/teacher/announcements'
@@ -83,6 +85,16 @@ export default function App() {
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="reports"       element={<ReportsPage />} />
           <Route path="account"       element={<TeacherAccountPage />} />
+        </Route>
+      </Route>
+
+      {/* Developer console. Gated on the Firebase super admin claim rather
+          than a role -- an admin can write any users/{uid} document, so a role
+          string would be self-grantable. Every /api/superadmin route checks the
+          claim again server-side. */}
+      <Route element={<ProtectedRoute superAdmin />}>
+        <Route path="/superadmin" element={<SuperAdminLayout />}>
+          <Route index element={<SuperAdminSubscribersPage />} />
         </Route>
       </Route>
 

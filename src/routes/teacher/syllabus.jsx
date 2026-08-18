@@ -5,10 +5,11 @@ import { db, storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { generateSyllabus } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
-import { Plus, Trash, Edit } from '@/components/icons'
+import { Plus, Trash, Edit, Sparkles } from '@/components/icons'
 import { ink } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
+import GenerateModuleModal from './GenerateModuleModal'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -25,6 +26,7 @@ function toDraftState(tree, source) {
       id: m.id ?? null,
       title: m.title ?? '',
       description: m.description ?? '',
+      published: m.published !== false,
       topics: (m.topics ?? []).map((t) => ({
         _key: newKey(),
         id: t.id ?? null,
@@ -48,7 +50,7 @@ function emptyTopic() {
 }
 
 function emptyModule() {
-  return { _key: newKey(), id: null, title: '', description: '', topics: [emptyTopic()] }
+  return { _key: newKey(), id: null, title: '', description: '', published: true, topics: [emptyTopic()] }
 }
 
 function TopicResourceEditor({ syllabusId, topic, onChange }) {
@@ -411,6 +413,7 @@ function GenerateModal({ onClose, onDraft }) {
 
 function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, onSaved, onCancel }) {
   const [tree, setTree] = useState(initial)
+  const [genModule, setGenModule] = useState(false)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [assignedClassIds, setAssignedClassIds] = useState(initial.class_ids ?? [])
@@ -443,6 +446,9 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
         id: m.id || newId(),
         title: m.title,
         description: m.description,
+        // Per-module release. Defaults to published so existing syllabi do not
+        // silently vanish from students the first time one is re-saved.
+        published: m.published !== false,
         topics: m.topics.map((t) => ({
           id: t.id || newId(),
           title: t.title,
@@ -495,8 +501,24 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
     }
   }
 
+  // Reuses toDraftState so a generated module arrives in exactly the shape the
+  // editor already manipulates -- _key for React, ids null until first save,
+  // objectives as newline text rather than an array.
+  function appendGeneratedModule(draft) {
+    const asTree = toDraftState({ title: tree.title, modules: [draft] }, tree.source)
+    setModules([...tree.modules, ...asTree.modules])
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto pb-12">
+      {genModule && (
+        <GenerateModuleModal
+          tree={tree}
+          subject={{ description: tree.title, code: '' }}
+          onAppend={appendGeneratedModule}
+          onClose={() => setGenModule(false)}
+        />
+      )}
       <div className="lg:col-span-2 space-y-4">
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
           <h3 className="text-lg font-bold text-slate-800">Syllabus Details</h3>
@@ -551,6 +573,14 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                 />
               </div>
               <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => updateModule(mIdx, { published: module.published === false })}
+                  title={module.published === false ? 'Publish this module to students' : 'Unpublish — hides it from students'}
+                  className="px-1 text-xs font-semibold"
+                  style={{ color: module.published === false ? '#9AA6BD' : '#1F8A5B' }}
+                >
+                  {module.published === false ? 'Draft' : 'Live'}
+                </button>
                 <button onClick={() => setModules(move(tree.modules, mIdx, -1))} title="Move up" className="text-slate-400 hover:text-slate-600 px-1">↑</button>
                 <button onClick={() => setModules(move(tree.modules, mIdx, 1))} title="Move down" className="text-slate-400 hover:text-slate-600 px-1">↓</button>
                 <button
@@ -612,12 +642,20 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
         ))}
 
         <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
-          <button
-            onClick={() => setModules([...tree.modules, emptyModule()])}
-            className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
-          >
-            + Add Module
-          </button>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              onClick={() => setModules([...tree.modules, emptyModule()])}
+              className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50"
+            >
+              + Add Module
+            </button>
+            <button
+              onClick={() => setGenModule(true)}
+              className="rounded-lg border border-indigo-200 text-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-50 inline-flex items-center gap-1.5"
+            >
+              <Sparkles className="h-4 w-4" /> Generate Module
+            </button>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={onCancel}
