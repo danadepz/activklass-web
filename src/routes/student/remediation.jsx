@@ -162,7 +162,7 @@ export default function StudentRemediation() {
   const list = remediations ?? []
 
   return (
-    <div style={{ maxWidth: 1040 }}>
+    <div style={{ maxWidth: 1040, margin: '0 auto' }}>
       <h1 className="text-[clamp(28px,4vw,38px)]" style={{ ...serif, lineHeight: 1.1, margin: '0 0 4px', color: ink }}>
         Remediation
       </h1>

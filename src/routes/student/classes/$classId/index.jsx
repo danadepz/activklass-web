@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
@@ -18,12 +18,12 @@ const ATT_META = {
 }
 
 const TABS = [
+  { key: 'announcements', label: 'Announcements', Icon: Megaphone },
   { key: 'topics', label: 'Syllabus', Icon: BookOpen },
-  { key: 'quizzes', label: 'Quizzes', Icon: FileText },
-  { key: 'grades', label: 'Grade Center', Icon: ClipboardList },
   { key: 'analytics', label: 'Analytics', Icon: BarChart },
   { key: 'attendance', label: 'Attendance', Icon: CalendarCheck },
-  { key: 'announcements', label: 'Announcements', Icon: Megaphone },
+  { key: 'quizzes', label: 'Quizzes', Icon: FileText },
+  { key: 'grades', label: 'Grade Center', Icon: ClipboardList },
 ]
 
 const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number(q.points) || 0), 0)
@@ -813,50 +813,214 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz }) {
 
 /* Dependency-free SVG line chart: the student's % vs the class average % across
    graded assessments, with a 75% passing reference line. */
-function PerfChart({ points }) {
-  const W = 600
-  const H = 210
-  const padL = 32
-  const padR = 14
-  const padT = 14
-  const padB = 30
+/* Chart series colours are validated, not picked by eye.
+ *
+ *   you #1C5CAB  ·  class average #8C8C86
+ *   CVD ΔE 19.2 (protan) / 16.8 (tritan), normal-vision ΔE 21.8, both ≥ 3:1 on
+ *   the card. The previous pair — brand navy #0E2A5C with #3FA9F5 — failed:
+ *   navy is an ink colour, too dark and too grey to carry data, and the light
+ *   blue sat at 2.49:1 against white, so a 2px line in it barely showed.
+ *
+ * Only the student's own line carries colour. The class average is deliberately
+ * neutral grey because it is a benchmark, not a competing identity — the reader
+ * should see their own trend first and the comparison second.
+ */
+const C_YOU = '#1C5CAB'
+const C_AVG = '#8C8C86'
+const C_PASS = '#8B6A00'
+const PASS_MARK = 75
+
+/* Sits in the card header rather than under the plot, so the legend costs no
+   vertical space of its own. */
+function PerfLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1" style={{ fontSize: 11.5, color: muted }}>
+      <span className="inline-flex items-center gap-1.5"><span style={{ width: 16, height: 3, borderRadius: 2, background: C_YOU, display: 'inline-block' }} /> You</span>
+      <span className="inline-flex items-center gap-1.5"><span style={{ width: 16, height: 3, borderRadius: 2, background: C_AVG, display: 'inline-block' }} /> Class</span>
+      <span className="inline-flex items-center gap-1.5"><span style={{ width: 16, height: 0, borderTop: `2px dashed ${C_PASS}`, display: 'inline-block' }} /> Pass {PASS_MARK}</span>
+    </div>
+  )
+}
+
+function PerfChart({ points, active, onActive }) {
+  /* A wide, short viewBox. The svg is width:100%, so the rendered height is
+     width ÷ aspect — at 4.5:1 a 900px card gives ~200px of chart instead of the
+     ~315px the old 2.9:1 box produced. maxHeight is the belt-and-braces cap for
+     very wide windows. */
+  const W = 720
+  const H = 186
+  const padL = 28
+  const padR = 12
+  const padT = 12
+  const padB = 20
   const innerW = W - padL - padR
   const innerH = H - padT - padB
   const x = (i) => padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW)
   const y = (v) => padT + (1 - Math.max(0, Math.min(100, v)) / 100) * innerH
+
+  const svgRef = useRef(null)
+
   const youLine = points.map((p, i) => `${x(i)},${y(p.you)}`).join(' ')
-  const avgPts = points.filter((p) => p.avg != null)
+  const youArea = `${padL},${y(0)} ${youLine} ${x(points.length - 1)},${y(0)}`
   const avgLine = points.map((p, i) => (p.avg == null ? null : `${x(i)},${y(p.avg)}`)).filter(Boolean).join(' ')
+  const avgPts = points.filter((p) => p.avg != null)
+  const last = points.length - 1
+
+  /* With a long list the 1..N ticks collide, so thin them out and let the
+     tooltip and the table carry the rest. */
+  const tickEvery = Math.ceil(points.length / 12)
+  const showTick = (i) => points.length <= 12 || i % tickEvery === 0 || i === last
+
+  /* Nearest-point hover across the full plot width, so reading a value never
+     depends on landing on an 8px dot. */
+  function pick(e) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect || !rect.width) return
+    const px = ((e.clientX - rect.left) / rect.width) * W
+    let best = 0
+    let bestD = Infinity
+    for (let i = 0; i < points.length; i++) {
+      const d = Math.abs(x(i) - px)
+      if (d < bestD) { bestD = d; best = i }
+    }
+    onActive(best)
+  }
+
+  function onKey(e) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); onActive(Math.min(last, (active ?? -1) + 1)) }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); onActive(Math.max(0, (active ?? last + 1) - 1)) }
+    else if (e.key === 'Escape') onActive(null)
+  }
+
+  const hot = active == null ? null : points[active]
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} preserveAspectRatio="xMidYMid meet">
-        {[0, 25, 50, 75, 100].map((g) => (
+    <div style={{ position: 'relative' }}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        style={{ display: 'block', maxHeight: 230, touchAction: 'none' }}
+        preserveAspectRatio="xMidYMid meet"
+        tabIndex={0}
+        role="img"
+        aria-label="Your score against the class average on each graded item. The table below lists the same values."
+        onMouseMove={pick}
+        onMouseLeave={() => onActive(null)}
+        onKeyDown={onKey}
+      >
+        <defs>
+          <linearGradient id="ak-you-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C_YOU} stopOpacity="0.15" />
+            <stop offset="100%" stopColor={C_YOU} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Solid hairline grid — dashing a plain gridline reads as a threshold. */}
+        {[0, 50, 100].map((g) => (
           <g key={g}>
-            <line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke={g === 75 ? 'rgba(245,197,24,0.55)' : 'rgba(14,42,92,0.08)'} strokeWidth="1" strokeDasharray={g === 75 ? '5 4' : ''} />
+            <line x1={padL} y1={y(g)} x2={W - padR} y2={y(g)} stroke="rgba(14,42,92,0.07)" strokeWidth="1" />
             <text x={padL - 6} y={y(g) + 3} textAnchor="end" fontSize="9" fill="#9AA6BD" fontFamily="ui-monospace, monospace">{g}</text>
           </g>
         ))}
-        {/* class average (dashed blue) */}
-        {avgPts.length >= 2 && <polyline points={avgLine} fill="none" stroke="#3FA9F5" strokeWidth="2" strokeDasharray="5 4" />}
+
+        {/* Passing threshold: the one line here that genuinely is a threshold,
+            so it is the only dashed rule on the chart. */}
+        <line x1={padL} y1={y(PASS_MARK)} x2={W - padR} y2={y(PASS_MARK)} stroke={C_PASS} strokeWidth="1.25" strokeDasharray="5 4" opacity="0.75" />
+        <text x={padL - 6} y={y(PASS_MARK) + 3} textAnchor="end" fontSize="9" fill={C_PASS} fontFamily="ui-monospace, monospace" fontWeight="700">{PASS_MARK}</text>
+
+        {/* Crosshair for the hovered item, behind the marks. */}
+        {active != null && (
+          <line x1={x(active)} y1={padT} x2={x(active)} y2={H - padB} stroke="rgba(14,42,92,0.22)" strokeWidth="1" />
+        )}
+
+        {/* A whisper of fill under the student's line — enough to give the trend
+            some body without reading as an area chart. */}
+        {points.length >= 2 && <polygon points={youArea} fill="url(#ak-you-fill)" />}
+
+        {/* Class average — recessive benchmark. */}
+        {avgPts.length >= 2 && <polyline points={avgLine} fill="none" stroke={C_AVG} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
         {avgPts.map((p) => {
           const i = points.indexOf(p)
-          return <circle key={`a${i}`} cx={x(i)} cy={y(p.avg)} r="2.5" fill="#3FA9F5" />
+          return <circle key={`a${i}`} cx={x(i)} cy={y(p.avg)} r="3.5" fill="#FFFFFF" stroke={C_AVG} strokeWidth="1.75" />
         })}
-        {/* student (navy line, gold dots) */}
-        {points.length >= 2 && <polyline points={youLine} fill="none" stroke="#0E2A5C" strokeWidth="2.5" />}
+
+        {/* The student's own line, carrying the only colour. */}
+        {points.length >= 2 && <polyline points={youLine} fill="none" stroke={C_YOU} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
         {points.map((p, i) => (
-          <g key={`y${i}`}>
-            <circle cx={x(i)} cy={y(p.you)} r="4" fill="#F5C518" stroke="#0E2A5C" strokeWidth="1.5" />
-            <text x={x(i)} y={H - 10} textAnchor="middle" fontSize="9" fill="#6A7A95" fontFamily="ui-monospace, monospace">{i + 1}</text>
-          </g>
+          <circle key={`y${i}`} cx={x(i)} cy={y(p.you)} r={active === i ? 5 : 3.5} fill={C_YOU} stroke="#FFFFFF" strokeWidth="1.75" />
         ))}
+        {points.map((p, i) => (
+          showTick(i) || active === i ? (
+            <text
+              key={`t${i}`}
+              x={x(i)} y={H - 6}
+              textAnchor="middle" fontSize="9"
+              fill={active === i ? ink : '#9AA6BD'}
+              fontWeight={active === i ? 700 : 400}
+              fontFamily="ui-monospace, monospace"
+            >
+              {i + 1}
+            </text>
+          ) : null
+        ))}
+
+        {/* One direct label, on the latest score — the number a student looks
+            for. Every other value lives in the tooltip and the table below.
+            The y flips below the point when the score would clip off the top. */}
+        {points.length >= 2 && active == null && (
+          <text
+            x={x(last)}
+            y={y(points[last].you) - 9 < padT + 8 ? y(points[last].you) + 15 : y(points[last].you) - 9}
+            textAnchor="end"
+            fontSize="11"
+            fontWeight="700"
+            fill={C_YOU}
+            fontFamily="ui-monospace, monospace"
+          >
+            {points[last].you}%
+          </text>
+        )}
       </svg>
-      <div className="flex items-center gap-5" style={{ marginTop: 6, fontSize: 12, color: muted }}>
-        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 3, borderRadius: 2, background: navy, display: 'inline-block' }} /> You</span>
-        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 0, borderTop: '2px dashed #3FA9F5', display: 'inline-block' }} /> Class average</span>
-        <span className="inline-flex items-center gap-1.5"><span style={{ width: 18, height: 0, borderTop: '2px dashed rgba(245,197,24,0.8)', display: 'inline-block' }} /> Passing (75)</span>
-      </div>
+
+      {hot && (
+        <div
+          role="status"
+          style={{
+            position: 'absolute',
+            left: `${(x(active) / W) * 100}%`,
+            top: 0,
+            transform: active > last / 2 ? 'translateX(calc(-100% - 10px))' : 'translateX(10px)',
+            background: '#FFFFFF',
+            border: `1px solid ${line}`,
+            borderRadius: 10,
+            boxShadow: '0 10px 28px -12px rgba(14,42,92,0.35)',
+            padding: '8px 10px',
+            minWidth: 128,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}
+        >
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: ink, lineHeight: 1.25 }}>
+            {active + 1}. {hot.title}
+          </div>
+          {hot.date && <div style={{ fontSize: 10.5, color: faint, marginTop: 1 }}>{hot.date}</div>}
+          <div className="flex items-center justify-between gap-3" style={{ marginTop: 5, fontSize: 11.5 }}>
+            <span className="inline-flex items-center gap-1.5" style={{ color: muted }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: C_YOU, display: 'inline-block' }} /> You
+            </span>
+            <span style={{ ...mono, fontWeight: 700, color: ink }}>{hot.you}%</span>
+          </div>
+          <div className="flex items-center justify-between gap-3" style={{ marginTop: 2, fontSize: 11.5 }}>
+            <span className="inline-flex items-center gap-1.5" style={{ color: muted }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', border: `2px solid ${C_AVG}`, display: 'inline-block' }} /> Class
+            </span>
+            <span style={{ ...mono, fontWeight: 700, color: hot.avg == null ? faint : ink }}>
+              {hot.avg == null ? '—' : `${hot.avg}%`}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -871,7 +1035,15 @@ function AnalyticsStat({ label, value, sub, color }) {
   )
 }
 
+/* rgba(14,42,92,0.03) flattened over white: a translucent sticky header would
+   let table rows scroll visibly through it. */
+const stickyTh = { position: 'sticky', top: 0, background: '#F8F9FA', zIndex: 1 }
+
 function SubjectAnalyticsTab({ entry, attendance }) {
+  // Held here, not in PerfChart: the table and the chart share it.
+  // Must sit above the early return below -- hooks run unconditionally.
+  const [active, setActive] = useState(null)
+
   const assessments = entry?.assessments ?? []
   const components = entry?.components ?? []
   const graded = assessments
@@ -916,11 +1088,63 @@ function SubjectAnalyticsTab({ entry, attendance }) {
         <AnalyticsStat label="Attendance" value={attendance.rate == null ? '—' : `${attendance.rate}%`} color={blueText} />
       </div>
 
-      {/* Performance trend chart */}
-      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, marginBottom: 4 }}>Performance trend</div>
-        <div style={{ fontSize: 12.5, color: faint, marginBottom: 12 }}>Your score vs the class average on each graded item, over time.</div>
-        <PerfChart points={points} />
+      {/* Trend and the same numbers as a table, side by side.
+          The table is the chart's accessible twin and its row numbers ARE the
+          chart's x-axis ticks, so `active` is held here and hovering either one
+          highlights the other. Stacks below lg, where two columns would squeeze
+          the assessment titles to nothing. */}
+      <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column' }}>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" style={{ marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>Performance trend</div>
+              <div style={{ fontSize: 12.5, color: faint, marginTop: 2 }}>Your score vs the class average on each graded item, over time.</div>
+            </div>
+            <PerfLegend />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: '100%' }}>
+              <PerfChart points={points} active={active} onActive={setActive} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, padding: '18px 20px 10px' }}>Item scores</div>
+          <div className="overflow-auto" style={{ flex: 1, maxHeight: 264 }}>
+            <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {/* Sticky headers need an opaque fill -- the translucent grey
+                      the rest of the app uses would let rows scroll through. */}
+                  <th style={{ ...thStyle, ...stickyTh, width: 34 }}>#</th>
+                  <th style={{ ...thStyle, ...stickyTh }}>Assessment</th>
+                  <th style={{ ...thStyle, ...stickyTh, textAlign: 'right' }}>You</th>
+                  <th style={{ ...thStyle, ...stickyTh, textAlign: 'right' }}>Class</th>
+                </tr>
+              </thead>
+              <tbody>
+                {points.map((p, i) => (
+                  <tr
+                    key={i}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseLeave={() => setActive(null)}
+                    style={{
+                      borderTop: '1px solid rgba(14,42,92,0.05)',
+                      background: active === i ? 'rgba(28,92,171,0.08)' : 'transparent',
+                      transition: 'background 0.12s',
+                    }}
+                  >
+                    <td style={{ ...tdStyle, ...mono, color: active === i ? C_YOU : faint, fontWeight: active === i ? 700 : 400 }}>{i + 1}</td>
+                    <td style={{ ...tdStyle, color: ink }}>{p.title}</td>
+                    <td style={{ ...tdStyle, ...mono, textAlign: 'right', fontWeight: 700, color: gradeColor(p.you) }}>{p.you}%</td>
+                    <td style={{ ...tdStyle, ...mono, textAlign: 'right', color: muted }}>{p.avg == null ? '—' : `${p.avg}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {/* Component breakdown */}
@@ -934,7 +1158,7 @@ function SubjectAnalyticsTab({ entry, attendance }) {
                 <span style={{ ...mono, fontWeight: 700, color: gradeColor(r.pct) }}>{r.pct}%</span>
               </div>
               <div style={{ height: 9, borderRadius: 999, background: 'rgba(14,42,92,0.07)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min(100, r.pct)}%`, background: gradeColor(r.pct), transition: 'width 0.6s' }} />
+                <div style={{ height: '100%', width: `${Math.min(100, r.pct)}%`, background: gradeColor(r.pct), borderRadius: 999, transition: 'width 0.6s' }} />
               </div>
             </div>
           ))}
@@ -949,32 +1173,6 @@ function SubjectAnalyticsTab({ entry, attendance }) {
             </span>
           </div>
         )}
-      </div>
-
-      {/* Per-item table (keyed to the chart numbers) */}
-      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
-                <th style={{ ...thStyle, width: 36 }}>#</th>
-                <th style={thStyle}>Assessment</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>You</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Class</th>
-              </tr>
-            </thead>
-            <tbody>
-              {points.map((p, i) => (
-                <tr key={i} style={{ borderTop: '1px solid rgba(14,42,92,0.05)' }}>
-                  <td style={{ ...tdStyle, ...mono, color: faint }}>{i + 1}</td>
-                  <td style={{ ...tdStyle, color: ink }}>{p.title}</td>
-                  <td style={{ ...tdStyle, ...mono, textAlign: 'right', fontWeight: 700, color: gradeColor(p.you) }}>{p.you}%</td>
-                  <td style={{ ...tdStyle, ...mono, textAlign: 'right', color: muted }}>{p.avg == null ? '—' : `${p.avg}%`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   )

@@ -293,6 +293,7 @@ export default function Landing() {
 
             {/* Back card: skill mastery heatmap */}
             <div
+              className="ak-hero-card"
               style={{
                 position: 'absolute',
                 top: 0,
@@ -305,8 +306,8 @@ export default function Landing() {
                 boxShadow: '0 30px 60px -20px rgba(14,42,92,0.4)',
                 transform: 'rotate(3deg)',
                 '--ak-rot': '3deg',
-                '--ak-lift': '-9px',
-                animation: 'ak-drift 11s ease-in-out infinite',
+                '--ak-lift': '-20px',
+                animation: 'ak-drift 7s ease-in-out infinite',
               }}
             >
               <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
@@ -335,6 +336,7 @@ export default function Landing() {
 
             {/* Front card: gradebook row */}
             <div
+              className="ak-hero-card"
               style={{
                 position: 'absolute',
                 bottom: 0,
@@ -346,8 +348,8 @@ export default function Landing() {
                 boxShadow: '0 30px 60px -15px rgba(14,42,92,0.25), 0 0 0 1px rgba(14,42,92,0.08)',
                 transform: 'rotate(-2deg)',
                 '--ak-rot': '-2deg',
-                '--ak-lift': '-13px',
-                animation: 'ak-drift 9s ease-in-out infinite -4s',
+                '--ak-lift': '-28px',
+                animation: 'ak-drift 5.5s ease-in-out infinite -2.4s',
               }}
             >
               <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>

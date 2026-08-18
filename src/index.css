@@ -45,7 +45,7 @@
 /* Landing-page float/pulse decorations (used only by the marketing Landing). */
 @keyframes ak-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-14px); }
 }
 @keyframes ak-pulse {
   0%, 100% { opacity: 0.85; }
@@ -72,6 +72,24 @@
 @keyframes ak-drift {
   0%, 100% { transform: rotate(var(--ak-rot, 0deg)) translateY(0); }
   50%      { transform: rotate(var(--ak-rot, 0deg)) translateY(var(--ak-lift, -10px)); }
+}
+
+/* Hero card hover -- lift toward the reader.
+ *
+ * This uses the standalone `translate` and `scale` properties rather than a
+ * :hover transform. ak-drift owns `transform` outright, so a hover transform
+ * would just be overwritten by the running animation; translate and scale are
+ * separate properties that compose with it, so the lift lands at any point in
+ * the drift cycle rather than only where the keyframe happens to be.
+ *
+ * Deliberately not on the shared .ak-card-hov: these are decorative mockups,
+ * not clickable cards, so they get a softer, slower response. */
+.ak-hero-card {
+  transition: translate 0.4s ease, scale 0.4s ease;
+}
+.ak-hero-card:hover {
+  translate: 0 -18px;
+  scale: 1.03;
 }
 
 /* Marketing/auth text inputs — navy focus ring (the !important overrides the

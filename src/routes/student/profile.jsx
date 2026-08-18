@@ -5,14 +5,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
-import { ShieldCheck, Check, X } from '@/components/icons'
-import { navy, ink, goldDeep, muted, faint, green, red, line, serif } from '@/theme'
-
-const STATUS_META = {
-  approved: { label: 'Approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
-  pending: { label: 'Pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
-  declined: { label: 'Declined', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
-}
+import ParentalAccessPanel from '@/components/ParentalAccessPanel'
+import { navy, ink, muted, faint, red, line, serif } from '@/theme'
 
 const fieldStyle = { width: '100%', padding: '10px 12px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
@@ -145,17 +139,55 @@ export default function StudentProfile() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['student-consent', profile.id] }),
   })
 
-  const canManage = isAdult === true && consent?.is_minor === false
-  const status = consent?.status ?? null
-  const meta = status ? STATUS_META[status] : null
+  /* A student manages their own access once they are of legal age.
+     This deliberately does NOT require a consent record to exist: under the
+     code flow the student sets permissions and shares their code BEFORE any
+     guardian is linked, so gating on `consent.is_minor === false` locked the
+     panel for exactly the people who need it first. An explicit minor flag on
+     the record still wins when there is one. */
+  const canManage = isAdult === true && consent?.is_minor !== true
+
+  /* Locked for two quite different reasons -- saying "you are a minor" to a
+     student who simply has no birthdate on file would be both wrong and a
+     dead end, since it never says what to do about it. */
+  const lockedReason = canManage
+    ? null
+    : age == null
+      ? 'Add your birthdate above so we can confirm you are of legal age to manage guardian access yourself.'
+      : 'Because you are a minor, your parent or guardian has guardian access to your academic records under RA 10173. This access is managed by your school and cannot be changed here.'
   const parentName = consent
     ? [consent.parent_first_name, consent.parent_last_name].filter(Boolean).join(' ')
     : null
 
+  // --- Parental access -----------------------------------------------------
+  // PLACEHOLDERS. The link code and per-topic permissions do not exist in the
+  // data model yet -- the backend work is pending. They are here so the panel
+  // can be reviewed; swap them for the real consent fields when those land.
+  // Nothing in ParentalAccessPanel changes when you do.
+  const linkCode = 'K7M2Q9'
+  const [permissions, setPermissions] = useState({
+    grades: true, quiz_scores: true, attendance: true, analytics: false,
+  })
+
+  // The record holds one parent, so this is 0 or 1 long. The extra row is a
+  // preview of the pending state and goes away with the placeholders above.
+  const guardians = [
+    ...(consent
+      ? [{
+          id: consent.parent_id,
+          name: parentName || 'Parent/Guardian',
+          email: consent.parent_id,
+          relation: 'Guardian',
+          status: consent.status,
+        }]
+      : []),
+    { id: 'preview-pending', name: 'Preview Guardian', relation: 'Placeholder row', status: 'pending' },
+  ]
+
   const fullName = [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' ')
 
   return (
-    <div style={{ maxWidth: 1040 }}>
+    <div style={{ maxWidth: 1040, margin: '0 auto' }}>
       <h1 className="text-[clamp(28px,4vw,38px)]" style={{ ...serif, lineHeight: 1.1, margin: '0 0 4px', color: ink }}>
         Profile &amp; Settings
       </h1>
@@ -255,81 +287,18 @@ export default function StudentProfile() {
         )}
       </section>
 
-      {/* Parental access / consent management */}
-      <section style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 24, marginTop: 20 }}>
-        <div className="flex items-center gap-3" style={{ marginBottom: 6 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(14,42,92,0.07)', color: navy, display: 'grid', placeItems: 'center' }}>
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: ink, margin: 0 }}>Parental Access</h2>
-            <p style={{ fontSize: 12.5, color: faint, margin: '2px 0 0' }}>RA 10173 — Data Privacy Act of 2012</p>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="animate-pulse" style={{ height: 90, borderRadius: 12, background: 'rgba(14,42,92,0.05)', marginTop: 14 }} />
-        ) : !consent ? (
-          <p style={{ fontSize: 14, color: muted, marginTop: 14 }}>
-            No parent or guardian is currently linked to your account.
-          </p>
-        ) : (
-          <div style={{ marginTop: 16 }}>
-            <div className="flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(14,42,92,0.025)', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px' }}>
-              <div>
-                <div style={{ fontSize: 11, color: faint, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Linked parent / guardian</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: ink, marginTop: 3 }}>{parentName || 'Parent/Guardian'}</div>
-                <div style={{ fontSize: 12, color: faint, marginTop: 1 }}>{consent.parent_id}</div>
-              </div>
-              {meta && (
-                <span style={{ display: 'inline-block', padding: '5px 13px', fontSize: 12, fontWeight: 700, borderRadius: 999, color: meta.fg, background: meta.bg, border: `1px solid ${meta.border}` }}>
-                  {meta.label}
-                </span>
-              )}
-            </div>
-
-            {mutation.isError && (
-              <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
-                Couldn't update consent. {mutation.error?.message}
-              </p>
-            )}
-
-            {canManage ? (
-              <>
-                <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: '16px 0 12px' }}>
-                  {status === 'approved'
-                    ? 'Your parent/guardian can currently view your grades, attendance, and performance. You can revoke this at any time.'
-                    : 'Your parent/guardian is requesting access to view your academic performance. You decide whether to grant it.'}
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => mutation.mutate('approved')}
-                    disabled={mutation.isPending || status === 'approved'}
-                    className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', fontSize: 14, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 11, cursor: 'pointer' }}
-                  >
-                    <Check className="h-4 w-4" /> Approve access
-                  </button>
-                  <button
-                    onClick={() => mutation.mutate('declined')}
-                    disabled={mutation.isPending || status === 'declined'}
-                    className="transition hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', fontSize: 14, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 11, cursor: 'pointer' }}
-                  >
-                    <X className="h-4 w-4" /> {status === 'approved' ? 'Revoke access' : 'Decline'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, marginTop: 14 }}>
-                Because you are a minor, your parent or guardian has guardian access to your
-                academic records under RA 10173. This access is managed by your school and
-                cannot be changed here.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      <ParentalAccessPanel
+        code={linkCode}
+        permissions={permissions}
+        onPermissionChange={(key, next) => setPermissions((prev) => ({ ...prev, [key]: next }))}
+        guardians={guardians}
+        onApprove={() => mutation.mutate('approved')}        onRevoke={() => mutation.mutate('declined')}
+        canManage={canManage}
+        lockedReason={lockedReason}
+        loading={isLoading}
+        busy={mutation.isPending}
+        error={mutation.isError ? "Couldn't update consent. " + (mutation.error?.message ?? '') : null}
+      />
     </div>
   )
 }
