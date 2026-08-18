@@ -100,7 +100,13 @@ export function useClassRisk(classId, students, options = {}) {
   })
 }
 
-/** Wording used wherever a prediction is shown, so it stays consistent. */
+/**
+ * Fallback wording only.
+ *
+ * The real disclosure now travels with each prediction as `training.summary`,
+ * so it cannot drift from what the model was actually fitted on. This string is
+ * what renders if an older backend answers without the field.
+ */
 export const RISK_CAVEAT =
-  'Predicted from attendance, grades and quiz scores by a model trained on ' +
-  'synthetic data. A guide for where to look, not a judgement about a student.'
+  'Predicted from attendance, grades and quiz scores. A guide for where to ' +
+  'look, not a judgement about a student.'

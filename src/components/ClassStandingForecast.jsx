@@ -91,6 +91,14 @@ export default function ClassStandingForecast({ studentId, grade, attendanceRate
           Only part of your record is available, so treat this loosely.
         </p>
       )}
+
+      {data.training?.real_data === false && (
+        <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0', lineHeight: 1.5 }}>
+          This projection comes from a model that has not learned from real
+          ActivKlass results yet, so it can be wrong about you. Your teacher sees
+          the same note.
+        </p>
+      )}
     </div>
   )
 }

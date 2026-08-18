@@ -57,6 +57,7 @@ export default function PredictedRisk({ classId, rows }) {
   // available for all of them -- so report it once rather than per row.
   const coverage = scored[0]?.risk.coverage ?? 0
   const missing = scored[0]?.risk.missing ?? []
+  const training = scored[0]?.risk.training ?? null
 
   return (
     <div style={shell}>
@@ -66,9 +67,22 @@ export default function PredictedRisk({ classId, rows }) {
           {Math.round(coverage * 100)}% of the model’s inputs available
         </span>
       </div>
-      <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 14px', maxWidth: '70ch' }}>
-        {RISK_CAVEAT}
+      <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 10px', maxWidth: '70ch' }}>
+        {training?.summary ?? RISK_CAVEAT}
       </p>
+
+      {/* Only shown while the model is fitted on generated data. The backend
+          flips training.real_data when real exports replace it, and this
+          disappears on its own. */}
+      {training && training.real_data === false && (
+        <p style={{
+          ...mono, fontSize: 11, color: goldDeep, background: 'rgba(245,197,24,0.12)',
+          border: '1px solid rgba(245,197,24,0.3)', borderRadius: 8,
+          padding: '6px 9px', margin: '0 0 14px', display: 'inline-block',
+        }}>
+          not trained on real class data
+        </p>
+      )}
 
       {coverage < 0.7 && (
         <p style={{
