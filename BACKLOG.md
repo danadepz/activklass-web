@@ -166,3 +166,9 @@ list, or stop presenting unvalidated codes as authoritative.
   client-side. Fine at pilot scale; the composite indexes exist for when those
   reads move server-side.
 - `quiz_attempts/pilot-attempt-1` is seeded test data. Delete when convenient.
+- Orphan profile doc `users/DARa7DcdblbFLxLIxuZr78w1wxH3` in Firestore, left
+  from a throwaway student account. The Auth login is deleted, so nothing can
+  sign in as it, but the rules only let a student delete their *own* doc and
+  that token is gone -- so it needs removing by hand from the Firebase
+  Console. Harmless; it just makes the `users` collection lie about how many
+  accounts exist.
