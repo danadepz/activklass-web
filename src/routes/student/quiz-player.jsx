@@ -6,15 +6,8 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { gradeQuiz, matchingChoices } from '@/lib/quizGrading'
 import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
+import { navy, navyDeep, ink, gold, muted, faint, green, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }

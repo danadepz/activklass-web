@@ -5,14 +5,8 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import Markdown from '@/components/Markdown'
 import { TrendingUp, BookOpen, AlertCircle, ArrowRight } from '@/components/icons'
+import { navy, ink, goldDeep, muted, faint, green, blueText } from '@/theme'
 
-const navy = '#0E2A5C'
-const ink = '#0A1733'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }

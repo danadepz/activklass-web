@@ -4,8 +4,10 @@ import { deleteDoc, doc, getDoc, getDocs, collection, query, where, writeBatch, 
 import { db, storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { api } from '@/lib/api'
+import { generateSyllabus } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { Sparkles, Plus, Trash, Edit, Check, ArrowRight } from '@/components/icons'
+import { navy, gold, cream, ink, muted } from '@/theme'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -283,12 +285,6 @@ function move(list, index, delta) {
   return next
 }
 
-const navy = '#0E2A5C'
-const gold = '#F5C518'
-const cream = '#FAFAF6'
-const ink = '#0A1733'
-const muted = '#6A7A95'
-
 function GenerateModal({ onClose, onDraft }) {
   const [subjectCode, setSubjectCode] = useState('')
   const [subjectDesc, setSubjectDesc] = useState('')
@@ -309,17 +305,14 @@ function GenerateModal({ onClose, onDraft }) {
     setGenerating(true)
     setError(null)
     try {
-      const res = await api(`/api/syllabus/generate`, {
-        method: 'POST',
-        body: {
-          subject_code: subjectCode.trim(),
-          subject_description: subjectDesc.trim(),
-          grade_level: gradeLevel.trim() || undefined,
-          duration_weeks: durationWeeks,
-          notes: notes.trim() || undefined,
-        },
+      const draft = await generateSyllabus({
+        subjectCode,
+        subjectDescription: subjectDesc,
+        gradeLevel,
+        durationWeeks,
+        notes,
       })
-      onDraft(res.draft)
+      onDraft(draft)
     } catch (err) {
       setError(err.message)
       setGenerating(false)

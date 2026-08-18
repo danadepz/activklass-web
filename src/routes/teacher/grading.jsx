@@ -6,15 +6,8 @@ import { api } from '@/lib/api'
 import { GRADING_MODES, GRADING_PRESETS } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
+import { navy, navyDeep, ink, gold, muted, faint, green, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const sans = "'Plus Jakarta Sans', sans-serif"

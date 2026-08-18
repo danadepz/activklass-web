@@ -1,3 +1,4 @@
+import { ink, inkMuted as muted, navy } from '@/theme'
 /**
  * Minimal, dependency-free markdown renderer for AI study guides.
  *
@@ -7,9 +8,6 @@
  * `inline code` (also used to show math/equation snippets in monospace).
  */
 
-const ink = '#0A1733'
-const muted = '#3A4A6B'
-const navy = '#0E2A5C'
 const codeBg = 'rgba(14,42,92,0.06)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = "'JetBrains Mono', ui-monospace, monospace"

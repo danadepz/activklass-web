@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
+import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as slate, muted } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.
@@ -13,14 +14,6 @@ import { BrandMark } from '@/components/AuthLayout'
  * keyframes are defined in index.css.
  * ------------------------------------------------------------------ */
 
-const ink = '#0A1733'
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const gold = '#F5C518'
-const goldDeep = '#B58F00'
-const blue = '#3FA9F5'
-const slate = '#3A4A6B'
-const muted = '#6A7A95'
 const line = 'rgba(14,42,92,0.08)'
 
 const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }

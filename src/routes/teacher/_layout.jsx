@@ -6,10 +6,7 @@ import { BrandMark } from '@/components/AuthLayout'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-
-const navy = '#0E2A5C'
-const gold = '#F5C518'
-const cream = '#FAFAF6'
+import { navy, gold, cream } from '@/theme'
 
 const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const sans = "'Plus Jakarta Sans', sans-serif"

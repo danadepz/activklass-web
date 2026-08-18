@@ -5,12 +5,8 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { classToForm } from '@/lib/classForm'
 import ClassFormModal from '@/features/classes/ClassFormModal'
+import { navy, ink, gold, goldDeep, muted } from '@/theme'
 
-const navy = '#0E2A5C'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 const sans = "'Plus Jakarta Sans', sans-serif"

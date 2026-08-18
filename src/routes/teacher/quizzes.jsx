@@ -14,19 +14,11 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
+import { generateQuiz } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
@@ -172,26 +164,14 @@ function GenerateQuizModal({ classes, onClose }) {
     setGenerating(true)
     setError(null)
     try {
-      // aiToQuestions below builds multiple-choice items, so ask for mcq only.
-      // Bloom's level and subject aren't first-class fields on this endpoint —
-      // they ride along as notes, which the prompt builder appends verbatim.
-      const notes = [
-        `Target cognitive level (Bloom's): ${form.blooms_level}.`,
-        selectedClassMeta?.subject && `Subject: ${selectedClassMeta.subject}.`,
-        selectedClassMeta?.subject_code && `Subject code: ${selectedClassMeta.subject_code}.`,
-      ]
-        .filter(Boolean)
-        .join(' ')
-
-      const { draft: quiz } = await api('/api/quizzes/generate', {
-        method: 'POST',
-        body: {
-          topic: topicText,
-          topic_id: form.topic_id || null,
-          num_questions: Number(form.count),
-          types: ['mcq'],
-          difficulty: 'mixed',
-          notes,
+      const quiz = await generateQuiz({
+        topic: topicText,
+        topicId: form.topic_id || null,
+        numQuestions: form.count,
+        hints: {
+          bloomsLevel: form.blooms_level,
+          subject: selectedClassMeta?.subject,
+          subjectCode: selectedClassMeta?.subject_code,
         },
       })
 

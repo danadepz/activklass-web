@@ -15,9 +15,7 @@ import AuthLayout, {
   AuthNotice,
 } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
-
-const navy = '#0E2A5C'
-const ink = '#0A1733'
+import { navy, ink } from '@/theme'
 
 const FRIENDLY_ERRORS = {
   'auth/invalid-credential': 'Incorrect email or password.',

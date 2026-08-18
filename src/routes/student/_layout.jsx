@@ -3,10 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import StudentNotificationBell from '@/components/StudentNotificationBell'
 import { BrandMark } from '@/components/AuthLayout'
-
-const navy = '#0E2A5C'
-const gold = '#F5C518'
-const cream = '#FAFAF6'
+import { navy, gold, cream } from '@/theme'
 
 const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
 const sans = "'Plus Jakarta Sans', sans-serif"

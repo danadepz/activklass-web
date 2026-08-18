@@ -3,21 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { api } from '@/lib/api'
+import { generateQuiz } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { Sparkles } from '@/components/icons'
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
@@ -144,18 +135,11 @@ export default function ScaffoldTopicsPage() {
     setBusy(topic.id)
     setError(null)
     try {
-      // aiToQuestions below builds multiple-choice items, so ask for mcq only.
-      const { draft: quiz } = await api('/api/quizzes/generate', {
-        method: 'POST',
-        body: {
-          topic: topic.title,
-          num_questions: 10,
-          types: ['mcq'],
-          difficulty: 'medium',
-          notes: data?.clazz?.subject
-            ? `Subject: ${data.clazz.subject}. Target level: apply.`
-            : 'Target level: apply.',
-        },
+      const quiz = await generateQuiz({
+        topic: topic.title,
+        numQuestions: 10,
+        difficulty: 'medium',
+        hints: { subject: data?.clazz?.subject, targetLevel: 'apply' },
       })
       const ref = await addDoc(collection(db, 'quizzes'), {
         class_id: classId,

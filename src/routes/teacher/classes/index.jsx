@@ -14,15 +14,10 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { emptyClassForm } from '@/lib/classForm'
 import ClassFormModal from '@/features/classes/ClassFormModal'
+import { navy, navyDeep, gold, goldDeep, ink, muted, faint } from '@/theme'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const ink = '#0A1733'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
+
 const line = 'rgba(14,42,92,0.08)'
 const sans = "'Plus Jakarta Sans', sans-serif"
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }

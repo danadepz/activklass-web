@@ -4,10 +4,10 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { api } from '@/lib/api'
+import { navy, cream } from '@/theme'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
-const navy = '#0E2A5C'
-const cream = '#FAFAF6'
+
 const sans = "'Plus Jakarta Sans', system-ui, sans-serif"
 
 /* ─── Category config ─── */

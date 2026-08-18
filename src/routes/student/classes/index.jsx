@@ -6,15 +6,8 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry } from '@/lib/studentData'
 import { BookOpen, ChevronRight } from '@/components/icons'
+import { navy, ink, gold, muted, faint, green, blueText, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }

@@ -8,16 +8,8 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
+import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }

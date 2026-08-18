@@ -18,17 +18,8 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { ArrowRight, Sparkles } from '@/components/icons'
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
 
-const navy = '#0E2A5C'
-const navyDeep = '#061840'
-const ink = '#0A1733'
-const gold = '#F5C518'
-const goldDeep = '#8B6A00'
-const muted = '#6A7A95'
-const faint = '#9AA6BD'
-const green = '#1F8A5B'
-const blueText = '#1E6FB0'
-const red = '#C0392B'
 const line = 'rgba(14,42,92,0.08)'
 const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
 const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
@@ -676,7 +667,6 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   )
 }
 
-
 function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
   const [selectedNode, setSelectedNode] = useState({ type: 'uncategorized' })
   const [expandedSyllabi, setExpandedSyllabi] = useState({})
@@ -920,7 +910,6 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
     </div>
   )
 }
-
 
 export default function QuizBuilderPage() {
   const { quizId } = useParams()
