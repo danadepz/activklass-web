@@ -599,6 +599,11 @@ function shapeRiskResult(raw, indicators) {
     missing: RISK_FEATURES.filter((f) => !supplied.includes(f)),
     coverage: Math.round(coverage * 100) / 100,
     globalFactors: raw.top_factors ?? [],
+    // What the model learned from, carried through from the backend rather
+    // than restated here. When the synthetic dataset is replaced with real
+    // labelled exports, `real_data` flips server-side and every view stops
+    // disclaiming without anyone editing copy in three files.
+    training: raw.training ?? null,
   }
 }
 
