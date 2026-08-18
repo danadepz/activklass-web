@@ -144,3 +144,23 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Route-level lazy() fallback (components/RouteFallback.jsx)
+ *
+ * Held invisible for 200ms before fading in. A warm chunk resolves in
+ * ~10ms, so without the delay every navigation flashes a spinner that
+ * reads as jank; with it, only loads slow enough to feel slow show one.
+ * `both` fill-mode is what holds opacity at 0 through the delay.
+ *
+ * The reduced-motion block above collapses the duration but not the
+ * delay, so those users still get the flash suppression, just without
+ * the fade.
+ * ------------------------------------------------------------------ */
+@keyframes ak-fallback-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.ak-fallback {
+  animation: ak-fallback-in 0.18s ease-out 0.2s both;
+}
