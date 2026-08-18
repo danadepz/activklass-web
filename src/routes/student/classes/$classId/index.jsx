@@ -9,6 +9,7 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import ClassStandingForecast from '@/components/ClassStandingForecast'
 
 const ATT_META = {
   present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
@@ -1039,7 +1040,7 @@ function AnalyticsStat({ label, value, sub, color }) {
    let table rows scroll visibly through it. */
 const stickyTh = { position: 'sticky', top: 0, background: '#F8F9FA', zIndex: 1 }
 
-function SubjectAnalyticsTab({ entry, attendance }) {
+function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, age }) {
   // Held here, not in PerfChart: the table and the chart share it.
   // Must sit above the early return below -- hooks run unconditionally.
   const [active, setActive] = useState(null)
@@ -1050,8 +1051,23 @@ function SubjectAnalyticsTab({ entry, attendance }) {
     .filter((a) => a.status === 'graded' && a.raw_score != null && a.total_points > 0)
     .sort((a, b) => (a.date_given ?? '').localeCompare(b.date_given ?? '') || a.title.localeCompare(b.title))
 
+  const forecast = (
+    <ClassStandingForecast
+      studentId={studentId}
+      grade={entry?.final_grade ?? null}
+      attendanceRate={attendance?.rate ?? null}
+      quizAverage={quizAverage ?? null}
+      age={age ?? null}
+    />
+  )
+
   if (!entry || entry.final_grade == null || graded.length === 0) {
-    return <Empty icon={<BarChart className="h-6 w-6" />} title="No analytics yet" text="Once your teacher records and saves graded work, your performance trends will appear here." />
+    return (
+      <div className="flex flex-col gap-4">
+        {forecast}
+        <Empty icon={<BarChart className="h-6 w-6" />} title="No analytics yet" text="Once your teacher records and saves graded work, your performance trends will appear here." />
+      </div>
+    )
   }
 
   const points = graded.map((a) => ({
@@ -1256,6 +1272,20 @@ export default function StudentClassDetail() {
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['student-class-detail', classId, profile.id] })
 
+  // Best percentage per quiz, averaged — one input to the standing forecast.
+  // Best rather than latest, matching how the teacher's mastery figures read
+  // attempts, so the two never disagree about the same student.
+  const quizBests = Object.values(attemptsByQuiz)
+    .map((attempts) => {
+      const scored = attempts.filter((a) => a.total_score != null && a.total_possible)
+      if (!scored.length) return null
+      return Math.max(...scored.map((a) => (a.total_score / a.total_possible) * 100))
+    })
+    .filter((v) => v != null)
+  const quizAverage = quizBests.length
+    ? Math.round(quizBests.reduce((s, v) => s + v, 0) / quizBests.length)
+    : null
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -1317,7 +1347,15 @@ export default function StudentClassDetail() {
           onContested={invalidate}
         />
       )}
-      {tab === 'analytics' && <SubjectAnalyticsTab entry={entry} attendance={attendance} />}
+      {tab === 'analytics' && (
+        <SubjectAnalyticsTab
+          entry={entry}
+          attendance={attendance}
+          studentId={profile.id}
+          quizAverage={quizAverage}
+          age={profile.age}
+        />
+      )}
       {tab === 'attendance' && (
         <AttendanceTab
           attendance={attendance}

@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { computeFinalGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import PredictedRisk from '@/components/PredictedRisk'
 
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(2).replace(/\.00$/, '')
@@ -37,6 +38,9 @@ async function loadPerf(classId) {
       first_name: u.first_name,
       last_name: u.last_name,
       lrn: u.lrn ?? u.student_number ?? null,
+      // Only used as a risk-model indicator; it carries ~1% of the model's
+      // weight, so its absence barely moves coverage.
+      age: u.age ?? null,
     }))
     .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`))
 
@@ -316,7 +320,10 @@ export default function PerformancePage() {
             </Card>
 
             <div style={{ background: '#FFFFFF', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 16, padding: '20px 22px', boxShadow: '0 0 0 3px rgba(245,197,24,0.06)' }}>
-              <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 16px' }}>At-risk roster</h3>
+              <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 4px' }}>Below Very Satisfactory</h3>
+              <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
+                Grade under 85 — a record of work already marked, not a forecast.
+              </p>
               {atRisk.length === 0 ? (
                 <EmptyBox>No students below the Very Satisfactory threshold — nice work.</EmptyBox>
               ) : (
@@ -336,6 +343,13 @@ export default function PerformancePage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Deliberately separate from the grade threshold above: one is a
+              record of marked work, the other a forecast. Merging them would
+              let a teacher read a prediction as a result. */}
+          <div className="mt-4">
+            <PredictedRisk classId={classId} rows={graded} />
           </div>
         </>
       )}
