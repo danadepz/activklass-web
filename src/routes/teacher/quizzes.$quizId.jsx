@@ -3,13 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { api } from '@/lib/api'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { ArrowRight, Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
+import { filterBankedQuestions, saveBankedQuestion, useBankedQuestions } from '@/hooks/useBankedQuestions'
 
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
 const fieldStyle = {
@@ -374,6 +374,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
 }
 
 function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
+  const { profile } = useAuth()
   const navigate = useNavigate()
   const [settings, setSettings] = useState({
     title: quiz.title,
@@ -401,10 +402,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         topic_id: quiz.topic_id || null,
       }
       delete payload.id
-      await api('/api/quizzes/bank', {
-        method: 'POST',
-        body: payload
-      })
+      await saveBankedQuestion({ teacherId: profile.id, payload })
       alert('Question saved to Quiz Bank successfully!')
     } catch (err) {
       alert(`Failed to save question to bank: ${err.message}`)
@@ -650,22 +648,8 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
     setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
-  const { data: bankedQuestions = [], isLoading } = useQuery({
-    queryKey: ['import-banked-questions', selectedNode?.type, selectedNode?.syllabusId, selectedNode?.topicId],
-    queryFn: async () => {
-      let url = '/api/quizzes/bank'
-      if (selectedNode?.type === 'uncategorized') {
-        url += '?syllabus_id=uncategorized'
-      } else if (selectedNode?.type === 'topic') {
-        url += `?topic_id=${selectedNode.topicId}`
-      } else if (selectedNode?.type === 'syllabus') {
-        url += `?syllabus_id=${selectedNode.syllabusId}`
-      }
-      const res = await api(url)
-      return res.questions || []
-    },
-    enabled: isOpen && !!selectedNode,
-  })
+  const { data: allBankedQuestions = [], isLoading } = useBankedQuestions({ enabled: isOpen })
+  const bankedQuestions = filterBankedQuestions(allBankedQuestions, selectedNode)
 
   if (!isOpen) return null
 

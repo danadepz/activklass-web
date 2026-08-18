@@ -10,8 +10,18 @@ Two are already done and kept here for context on what the rest assume:
   scaffold mastery calculation outright. Fixed; Firestore indexes also
   repointed from `completed_at` (a field no writer produced) to `submitted_at`.
 - ~~**Dual-write to SQLite and Firestore.**~~ Firestore is now the system of
-  record for quizzes, syllabi and announcements. The quiz bank
-  (`/api/quizzes/bank`) stays on Flask -- it has no Firestore counterpart.
+  record for quizzes, syllabi and announcements.
+- ~~**The quiz bank was the last of the quiz domain on Flask.**~~ Moved to the
+  Firestore `banked_questions` collection (`hooks/useBankedQuestions.js`); the
+  five `/api/quizzes/bank` routes are deleted. Folder filtering is client-side
+  -- the Flask version refetched per folder, which in Firestore would mean a
+  composite index per filter shape for a few hundred documents. Neither quiz
+  page calls Flask any more except for AI generation.
+- ~~**AI generation needed Postgres.**~~ Quiz and syllabus generation sat
+  behind a Postgres user lookup and an `ai_jobs` table write, so both 500'd
+  against the unmigrated database. `services/ai/gate.py` replaces both with
+  Firebase-token auth, a Firestore role read, and a Firestore ledger.
+  `app/services/ai/` now contains no SQLAlchemy.
 
 ---
 
@@ -81,6 +91,69 @@ No shared component, so "change how this button works" and "change its colour"
 are the same file -- which is why the UI/UX lane can only own theme tokens
 today, not components. Extract `components/ui/Button.jsx` opportunistically as
 lanes touch pages, rather than in one sweep.
+
+## 11. Three Postgres endpoints left in the web app **(cross-repo)**
+
+Everything else the web app calls is either Firestore-direct or AI (which no
+longer touches a database):
+
+| Endpoint | Blueprint |
+|---|---|
+| `GET /api/classes` | `classes.py` (48 SQLAlchemy calls) |
+| `POST /api/classes/{id}/students/provision` | `classes.py` |
+| `/api/grading-setup` | `grading.py` |
+
+`/api/classes` is the `ClassPicker` on record/attendance -- docs/05 step 7
+noted those pages stay on Flask class ids until steps 8-9. Steps 8 and 9 are
+now done, so the picker is the remaining reason the blueprint exists.
+
+Note the database is still empty -- migrations have never run -- so these three
+are broken right now, not merely legacy. That is also why moving them off is
+cheaper than it looks: **there is no data to migrate.**
+
+## 12. The parent portal cannot be Firestore-only **(cross-repo)**
+
+`activklass-mobile/src/lib/api.ts` explains why, and it is a real constraint
+rather than a preference: attendance documents hold a records map for the
+whole class, and a Firestore rule can only allow or deny an entire document,
+so nothing but a server can narrow it to one child.
+
+The distinction that matters: that needs a **server**, not **Postgres**. Flask
+can read Firestore and filter, exactly as `app/api/ai.py` does. Guardian links,
+scopes and consent state map cleanly onto documents. So one data store is still
+reachable -- it just does not mean "no backend".
+
+Until that is decided, `guardians.py` (21 SQLAlchemy calls), `parent.py` (5)
+and migration `b1c4e7d92f08` are net-new Postgres surface added *after* the
+decision to retire it, which is worth resolving deliberately rather than by
+drift.
+
+## 13. Dead Flask routes now that the web app has moved
+
+`app/api/quizzes.py` still serves 11 routes; the web app calls none of them,
+and mobile calls Flask only for guardians. Confirm nothing else consumes them
+before deleting -- the same check would have caught that the quiz editor, not
+just the bank page, used `/api/quizzes/bank`.
+
+Same question for `announcements.py`, `records.py` and `attendance.py`.
+
+## 14. The docs contradict each other on the database **(cross-repo)**
+
+`docs/04-setup.md:96` says "Postgres is the real target (see
+docs/02-database-schema.md)" and points at a document that now opens with
+"the system utilizes Google Cloud Firestore as its primary database".
+`01-architecture.md` is superseded by `05-prepare-gap-analysis.md` but says so
+nowhere in itself. Anyone onboarding reads whichever they open first.
+
+## 15. MELC codes are generated, never verified **(cross-repo)**
+
+Syllabus generation emits official-looking DepEd competency codes -- spot
+checks are correct (`M10AL-Ia-1` really is Grade 10 arithmetic sequences), but
+nothing validates them, and the model will produce an equally confident wrong
+code for a less common subject. A teacher publishing a syllabus with fabricated
+DepEd codes is worse than a bad quiz question. Validate against a real MELC
+list, or stop presenting unvalidated codes as authoritative.
+
 
 ---
 

@@ -3,8 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { api } from '@/lib/api'
 import { generateQuiz } from '@/lib/ai'
+import {
+  deleteBankedQuestion,
+  filterBankedQuestions,
+  saveBankedQuestion,
+  useBankedQuestions,
+} from '@/hooks/useBankedQuestions'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -709,6 +714,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
 }
 
 function QuizBankBrowser({ syllabi }) {
+  const { profile } = useAuth()
   const [selectedNode, setSelectedNode] = useState({ type: 'uncategorized' })
   const [expandedSyllabi, setExpandedSyllabi] = useState({})
   const [expandedModules, setExpandedModules] = useState({})
@@ -723,36 +729,19 @@ function QuizBankBrowser({ syllabi }) {
     setExpandedModules(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
-  const { data: bankedQuestions = [], isLoading: isLoadingBank, refetch: refetchBank } = useQuery({
-    queryKey: ['banked-questions', selectedNode?.type, selectedNode?.syllabusId, selectedNode?.topicId],
-    queryFn: async () => {
-      let url = '/api/quizzes/bank'
-      if (selectedNode?.type === 'uncategorized') {
-        url += '?syllabus_id=uncategorized'
-      } else if (selectedNode?.type === 'topic') {
-        url += `?topic_id=${selectedNode.topicId}`
-      } else if (selectedNode?.type === 'syllabus') {
-        url += `?syllabus_id=${selectedNode.syllabusId}`
-      }
-      const res = await api(url)
-      return res.questions || []
-    },
-    enabled: !!selectedNode,
-  })
+  // One fetch of the teacher's whole bank; the folder filter is applied in
+  // memory, so switching folders does not refetch.
+  const { data: allBankedQuestions = [], isLoading: isLoadingBank, refetch: refetchBank } =
+    useBankedQuestions()
+  const bankedQuestions = filterBankedQuestions(allBankedQuestions, selectedNode)
 
   const handleSaveQuestion = async (payload) => {
     try {
-      if (editingQuestion?.id) {
-        await api(`/api/quizzes/bank/${editingQuestion.id}`, {
-          method: 'PUT',
-          body: payload
-        })
-      } else {
-        await api('/api/quizzes/bank', {
-          method: 'POST',
-          body: payload
-        })
-      }
+      await saveBankedQuestion({
+        teacherId: profile.id,
+        id: editingQuestion?.id,
+        payload,
+      })
       setShowQuestionModal(false)
       setEditingQuestion(null)
       refetchBank()
@@ -764,9 +753,7 @@ function QuizBankBrowser({ syllabi }) {
   const handleDeleteQuestion = async (id) => {
     if (!window.confirm('Are you sure you want to delete this question from the bank?')) return
     try {
-      await api(`/api/quizzes/bank/${id}`, {
-        method: 'DELETE'
-      })
+      await deleteBankedQuestion(id)
       refetchBank()
     } catch (err) {
       alert(`Failed to delete: ${err.message}`)
