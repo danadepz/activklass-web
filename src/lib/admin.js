@@ -28,6 +28,19 @@ export function createUser({ email, password, role, firstName, lastName, extra =
 }
 
 /**
+ * Creates many accounts in one request.
+ *
+ * Returns { created, failed, summary } and reports every row by index, because
+ * partial success is the normal outcome of a real upload -- one malformed row
+ * must not discard the rest, and the admin needs to know which line to fix.
+ * A response with zero created rows arrives as a 400; the caller should read
+ * `err.body` for the same per-row detail.
+ */
+export function bulkCreateUsers(users) {
+  return api('/api/admin/users/bulk', { method: 'POST', body: { users } })
+}
+
+/**
  * Sets a new password. Existing sessions keep working -- Firebase does not
  * revoke tokens on a password change. To actually lock someone out, disable
  * the account as well.

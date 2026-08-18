@@ -5,10 +5,14 @@ import { auth } from './firebase'
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, body = null) {
     super(message)
     this.status = status
     this.code = code
+    // The full response body. Some endpoints return per-item detail alongside
+    // a non-2xx status -- bulk user creation reports which rows failed and why
+    // -- and a bare message would throw that away.
+    this.body = body
   }
 }
 
@@ -27,7 +31,7 @@ export async function api(path, { method = 'GET', body, requireAuth = true } = {
   })
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new ApiError(res.status, data?.error ?? 'unknown', data?.message ?? res.statusText)
+    throw new ApiError(res.status, data?.error ?? 'unknown', data?.message ?? res.statusText, data)
   }
   return data
 }
