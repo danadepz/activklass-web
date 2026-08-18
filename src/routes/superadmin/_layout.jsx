@@ -24,6 +24,17 @@ export default function SuperAdminLayout() {
       <header className="border-b border-zinc-800 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto max-w-6xl px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
+            {/* The mark identifies the product; the INTERNAL badge stays beside
+                it at equal weight so a screenshot still reads as ours-not-theirs.
+                Deliberately small and unaccompanied by the wordmark or the navy
+                — this is a build stamp, not the customer brand. */}
+            <img
+              src="/brand-cap.png"
+              alt=""
+              width={28}
+              height={28}
+              className="h-7 w-7 shrink-0 opacity-90"
+            />
             <span className="rounded bg-amber-400/15 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300 border border-amber-400/30">
               Internal
             </span>
@@ -41,13 +52,17 @@ export default function SuperAdminLayout() {
             <span className="font-mono text-[11px] text-zinc-500">
               {profile?.email ?? 'signed in'}
             </span>
-            <Link
-              to="/portal"
-              className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
-            >
-              Exit to app
-            </Link>
-            <SignOutButton className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:border-zinc-700" />
+            {/* Signing out is the only way out of the console, deliberately.
+                There used to be an "Exit to site" link beside this; it pointed
+                at /portal, which RoleHomeRedirect bounces a super admin straight
+                back here from before it ever reads their role
+                (ProtectedRoute.jsx) — so it did nothing. Repointed at the
+                landing page it worked, but then it sat next to this one as a
+                near-identical button for a trip a browser back button already
+                makes. Red hover because this ends the session: coming back
+                costs a re-auth, and for a super admin the claim only returns on
+                a fresh ID token. */}
+            <SignOutButton className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:border-red-500/40 hover:bg-red-500/5 hover:text-red-300" />
           </div>
         </div>
 

@@ -8,6 +8,8 @@ import {
   fetchSubscribers,
   updateSubscriber,
 } from '@/lib/superadmin'
+import { SEGMENTS, STATUSES, analyticsFor, filterRows } from '@/lib/superadminAnalytics'
+import AnalyticsBand from './AnalyticsBand'
 
 /**
  * Subscriber console.
@@ -78,35 +80,89 @@ function Field({ label, hint, children }) {
 const inputCls =
   'mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400/50 focus:outline-none'
 
+/**
+ * One filter row scoping the whole console — the analytics band and the table
+ * both render against the same slice. Per-card filters were the alternative and
+ * they let two panels disagree about what you are looking at.
+ */
+function FilterTabs({ options, value, onChange, label }) {
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label={label}>
+      <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+        {label}
+      </span>
+      {options.map((option) => {
+        const selected = value === option.key
+        return (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange(option.key)}
+            aria-pressed={selected}
+            className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              selected
+                ? 'border-amber-400/40 bg-amber-400/10 text-amber-300'
+                : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+            }`}
+          >
+            {option.label}
+            {option.count != null && (
+              <span className={`ml-1.5 font-mono tabular-nums ${selected ? 'text-amber-400/70' : 'text-zinc-600'}`}>
+                {option.count}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function SuperAdminSubscribersPage() {
   const queryClient = useQueryClient()
   const [showProvision, setShowProvision] = useState(false)
   const [editing, setEditing] = useState(null)
   const [banner, setBanner] = useState(null)
+  const [segment, setSegment] = useState('all')
+  const [status, setStatus] = useState('all')
 
   const { data: plansData } = useQuery({ queryKey: ['sa-plans'], queryFn: fetchPlans })
   const {
     data,
     isLoading,
+    isFetching,
     error,
   } = useQuery({ queryKey: ['sa-subscribers'], queryFn: fetchSubscribers })
 
   const plans = plansData?.plans ?? {}
   // Memoised so the `?? []` fallback is not a fresh array on every render,
-  // which would defeat the totals memo below.
+  // which would defeat the derived memos below.
   const rows = useMemo(() => data?.subscribers ?? [], [data])
 
-  const totals = useMemo(() => {
-    const counts = { institution: 0, teacher: 0, suspended: 0, over: 0 }
-    for (const row of rows) {
-      const sub = row.subscription
-      if (sub.type === 'institution') counts.institution += 1
-      else counts.teacher += 1
-      if (sub.status === 'suspended') counts.suspended += 1
-      if (row.usage?.students?.over || row.usage?.teachers?.over) counts.over += 1
-    }
-    return counts
-  }, [rows])
+  // The slice everything on the page is scoped to.
+  const visible = useMemo(() => filterRows(rows, { segment, status }), [rows, segment, status])
+  const analytics = useMemo(() => analyticsFor(visible), [visible])
+
+  // Tab counts come from the UNFILTERED rows for the axis being chosen, so a
+  // tab always says how many it would show — a count that changed as you
+  // filtered would make the tabs unusable for navigating.
+  const segmentOptions = useMemo(
+    () =>
+      SEGMENTS.map((s) => ({
+        ...s,
+        count: filterRows(rows, { segment: s.key, status }).length,
+      })),
+    [rows, status],
+  )
+  const statusOptions = useMemo(
+    () =>
+      [{ key: 'all', label: 'Any' }, ...STATUSES.map((s) => ({ key: s, label: s }))].map((s) => ({
+        ...s,
+        count: filterRows(rows, { segment, status: s.key }).length,
+      })),
+    [rows, segment],
+  )
+  const filtered = segment !== 'all' || status !== 'all'
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['sa-subscribers'] })
 
@@ -163,14 +219,9 @@ export default function SuperAdminSubscribersPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Subscribers</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {totals.institution} institution{totals.institution === 1 ? '' : 's'} ·{' '}
-            {totals.teacher} solo teacher{totals.teacher === 1 ? '' : 's'}
-            {totals.suspended > 0 && ` · ${totals.suspended} suspended`}
-            {totals.over > 0 && (
-              <span className="text-red-400"> · {totals.over} over seats</span>
-            )}
+            Live from the subscriber roster — no separate analytics store.
           </p>
         </div>
         <button
@@ -179,6 +230,28 @@ export default function SuperAdminSubscribersPage() {
         >
           + New subscriber
         </button>
+      </div>
+
+      {/* One filter row above everything it scopes: band and table alike. */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+        <FilterTabs label="Segment" options={segmentOptions} value={segment} onChange={setSegment} />
+        <FilterTabs label="Status" options={statusOptions} value={status} onChange={setStatus} />
+        {filtered && (
+          <button
+            type="button"
+            onClick={() => {
+              setSegment('all')
+              setStatus('all')
+            }}
+            className="ml-auto text-[11px] font-semibold text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <AnalyticsBand analytics={analytics} total={visible.length} stale={isFetching} />
       </div>
 
       {banner && (
@@ -190,7 +263,17 @@ export default function SuperAdminSubscribersPage() {
       {/* The table renders even with no rows. An empty console should still
           show what it will hold, and headers make it obvious the page loaded
           rather than failed. */}
-      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-800">
+      <div className="mt-8 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          Subscribers
+        </h2>
+        <span className="font-mono text-[11px] text-zinc-600 tabular-nums">
+          {visible.length}
+          {filtered && ` of ${rows.length}`} shown
+        </span>
+      </div>
+
+      <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[54rem] text-left">
           <thead className="bg-zinc-900/60 text-[10px] uppercase tracking-wider text-zinc-500">
             <tr>
@@ -202,25 +285,50 @@ export default function SuperAdminSubscribersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {rows.length === 0 ? (
+            {visible.length === 0 ? (
               <tr>
+                {/* An empty filter result is not an empty console — saying "no
+                    subscribers yet" to someone who just clicked Suspended reads
+                    as data loss. */}
                 <td colSpan={5} className="px-4 py-14 text-center">
-                  <p className="text-sm font-semibold text-zinc-300">No subscribers yet</p>
-                  <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
-                    Provisioning an institution creates its school, its first admin account and its
-                    subscription together, so the customer has something to sign into. A solo
-                    teacher gets an account and a subscription keyed to it.
+                  <p className="text-sm font-semibold text-zinc-300">
+                    {filtered ? 'No subscribers match this filter' : 'No subscribers yet'}
                   </p>
-                  <button
-                    onClick={() => setShowProvision(true)}
-                    className="mt-5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-400/20"
-                  >
-                    + New subscriber
-                  </button>
+                  {filtered ? (
+                    <>
+                      <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
+                        {rows.length} subscriber{rows.length === 1 ? '' : 's'} exist, none in this
+                        slice.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSegment('all')
+                          setStatus('all')
+                        }}
+                        className="mt-5 rounded-lg border border-zinc-700 px-4 py-2 text-xs font-bold text-zinc-300 hover:border-zinc-600"
+                      >
+                        Clear filters
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
+                        Provisioning an institution creates its school, its first admin account and
+                        its subscription together, so the customer has something to sign into. A
+                        solo teacher gets an account and a subscription keyed to it.
+                      </p>
+                      <button
+                        onClick={() => setShowProvision(true)}
+                        className="mt-5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-400/20"
+                      >
+                        + New subscriber
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ) : (
-              rows.map(({ subscription: sub, owner, usage }) => (
+              visible.map(({ subscription: sub, owner, usage }) => (
                 <tr key={sub.id} className="align-middle hover:bg-zinc-900/30">
                   <td className="px-4 py-4">
                     <div className="text-sm font-semibold text-zinc-100">{owner?.name}</div>
