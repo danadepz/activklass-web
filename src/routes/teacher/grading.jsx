@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { GRADING_MODES, GRADING_PRESETS } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
-import { navy, navyDeep, ink, gold, muted, faint, green, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const fieldStyle = {
   padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
@@ -397,16 +394,7 @@ export default function GlobalGradingSetupPage() {
   const { profile } = useAuth()
 
   // Load all classes
-  const { data: classes, isLoading: isClassesLoading } = useQuery({
-    queryKey: ['fs-classes', profile?.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-    enabled: !!profile?.id,
-  })
+  const { data: classes, isLoading: isClassesLoading } = useTeacherClasses()
 
   // Load teacher global preset
   const { data: preset, isLoading: isPresetLoading } = useQuery({

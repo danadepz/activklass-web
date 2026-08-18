@@ -3,10 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import StudentNotificationBell from '@/components/StudentNotificationBell'
 import { BrandMark } from '@/components/AuthLayout'
-import { navy, gold, cream } from '@/theme'
-
-const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
 
 const NAV_ITEMS = [
   { to: '/student', label: 'Dashboard', end: true },

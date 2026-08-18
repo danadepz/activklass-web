@@ -1,4 +1,4 @@
-import { ink, inkMuted as muted, navy } from '@/theme'
+import { ink, inkMuted as muted, navy, serif, monoFamily as mono } from '@/theme'
 /**
  * Minimal, dependency-free markdown renderer for AI study guides.
  *
@@ -9,9 +9,6 @@ import { ink, inkMuted as muted, navy } from '@/theme'
  */
 
 const codeBg = 'rgba(14,42,92,0.06)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = "'JetBrains Mono', ui-monospace, monospace"
-
 /** Inline: split on `code`, then **bold** within the plain runs. */
 function parseInline(text, keyBase) {
   const out = []

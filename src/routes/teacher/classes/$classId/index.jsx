@@ -24,7 +24,7 @@ import {
   parseCsv,
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
 const STATUS_STYLE = {
   active: 'bg-green-50 text-green-700',
@@ -742,11 +742,6 @@ function CsvUploadModal({ classId, onClose, onDone }) {
 }
 
 // --- navy+gold Overview surface (matches the DC mock: stat cards + roster) ---
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
 
 // Shared modal chrome for the roster dialogs (navy+gold, matches PostModal).
 const overlayStyle = { position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }

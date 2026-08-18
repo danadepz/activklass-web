@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Check, Eye, EyeOff, AlertCircle, ArrowRight } from './icons'
-import { ink, navy, gold, muted, cream } from '@/theme'
+import { ink, navy, gold, muted, cream, serifAlt as serif, mono, sansFamily as sans } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * AuthLayout — two-panel shell for Login / Register.
@@ -16,10 +16,6 @@ import { ink, navy, gold, muted, cream } from '@/theme'
  * exported so Login and Register share one styling source. Brand fonts and
  * the .ak-input / .ak-primary helpers live in index.html / index.css.
  * ------------------------------------------------------------------ */
-
-const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
 
 const PERKS = [
   'Computed, lockable DepEd & CHED gradebooks',

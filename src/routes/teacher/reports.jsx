@@ -5,12 +5,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
 import { BarChart, FileText, Users, Notebook, AlertCircle, ArrowRight } from '@/components/icons'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
 const MODE_LABEL = { deped_k12: 'DepEd K-12', ched_percentage: 'CHED %', ched_point: 'CHED point' }
 

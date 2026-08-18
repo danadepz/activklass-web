@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
-import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as slate, muted } from '@/theme'
+import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.
@@ -13,11 +13,6 @@ import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as sla
  * stays in Tailwind so the page is responsive. The ak-float / ak-pulse
  * keyframes are defined in index.css.
  * ------------------------------------------------------------------ */
-
-const line = 'rgba(14,42,92,0.08)'
-
-const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
 // --- content -------------------------------------------------------------
 

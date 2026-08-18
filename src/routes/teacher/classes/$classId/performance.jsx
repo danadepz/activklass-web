@@ -5,12 +5,7 @@ import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { computeFinalGrade } from '@/lib/grading'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(2).replace(/\.00$/, '')

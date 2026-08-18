@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { useAuth } from '@/context/useAuth'
 import { api } from '@/lib/api'
-import { navy, cream } from '@/theme'
+import { navy, cream, sansUiFamily as sans } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
-
-const sans = "'Plus Jakarta Sans', system-ui, sans-serif"
 
 /* ─── Category config ─── */
 const CATEGORIES = [
@@ -168,7 +164,6 @@ function AnnouncementCard({ item, onDelete, deleting }) {
 
 /* ─── Main Page ─── */
 export default function AnnouncementsPage() {
-  const { profile } = useAuth()
   const qc = useQueryClient()
 
   /* filter state */
@@ -188,15 +183,7 @@ export default function AnnouncementsPage() {
   const [deletingId, setDeletingId] = useState(null)
 
   /* ── fetch classes from Firestore (same source as ClassesPage) ── */
-  const { data: classes = [] } = useQuery({
-    queryKey: ['fs-classes', profile.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id))
-      )
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    },
-  })
+  const { data: classes = [] } = useTeacherClasses()
 
   /* ── fetch announcements ── */
   const { data: announcements = [], isLoading } = useQuery({

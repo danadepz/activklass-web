@@ -8,20 +8,15 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { useQueryClient } from '@tanstack/react-query'
+import { deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { useAuth } from '@/context/useAuth'
 import { emptyClassForm } from '@/lib/classForm'
 import ClassFormModal from '@/features/classes/ClassFormModal'
-import { navy, navyDeep, gold, goldDeep, ink, muted, faint } from '@/theme'
+import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-
-const line = 'rgba(14,42,92,0.08)'
-const sans = "'Plus Jakarta Sans', sans-serif"
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'Last accessed' },
@@ -381,7 +376,6 @@ function DeleteConfirmModal({ cls, onClose, onDeleted }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ClassesPage() {
-  const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [warning, setWarning] = useState(null)
@@ -391,15 +385,7 @@ export default function ClassesPage() {
   // 2026-06-20: Tracks which class the delete confirmation modal targets
   const [deleteTarget, setDeleteTarget] = useState(null)
 
-  const { data: classes, isLoading } = useQuery({
-    queryKey: ['fs-classes', profile.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-  })
+  const { data: classes, isLoading } = useTeacherClasses()
 
   // 2026-06-20: Persist chosen badge colour to Firestore
   async function handleColorChange(cls, color) {

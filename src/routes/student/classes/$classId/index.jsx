@@ -8,11 +8,7 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
-import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 
 const ATT_META = {
   present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },

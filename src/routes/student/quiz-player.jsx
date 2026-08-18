@@ -6,11 +6,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { gradeQuiz, matchingChoices } from '@/lib/quizGrading'
 import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
-import { navy, navyDeep, ink, gold, muted, faint, green, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono } from '@/theme'
 
 function isAnswered(q, a) {
   switch (q.qtype) {

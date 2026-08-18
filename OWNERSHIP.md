@@ -6,137 +6,135 @@ same time. **If you are a pane: read this before your first edit.**
 ## The one rule
 
 > A pane may edit only the files listed under its lane.
-> Everything under **Locked** needs a heads-up first.
+> Everything under **Shared** needs a heads-up in the other panes first.
 
 Two panes editing the same file is the only thing that reliably breaks
 parallel work. Everything below exists to make that impossible.
 
-## Why lanes are pages, not concerns
+## How the lanes work
 
-The obvious split — one pane for UI/UX, one for AI, one for functionality —
-does not work in this codebase, and it is worth knowing why before someone
-tries it again.
+There are **concern lanes** for cross-cutting work and **page lanes** for work
+inside a single screen. Most tasks are one or the other, and which one decides
+who does it.
 
-Every route here is a single 800–1200 line `.jsx` holding markup, colors, data
-fetching, AI calls and navigation together. So "change how this button works"
-and "change that button's color" are the *same file*. Concern-based lanes
-would collide on their first task.
+A task is **concern-lane** work if it changes something everywhere at once — a
+brand colour, a font, what we ask the AI for, how class data is loaded. Those
+now live in dedicated modules, so one pane owns them and no one else opens
+them.
 
-Splitting by page instead means each pane does **all** concerns — styling, AI,
-logic, navigation — for the pages it owns. You still get four things happening
-at once; the boundary is just *where* you work rather than *what kind* of work
-it is.
+A task is **page-lane** work if it changes one screen — this table's columns,
+that form's validation, this page's layout. Route files still hold markup and
+logic together, so a page belongs to exactly one pane at a time.
 
-(The alternative is extracting `components/ui/`, `hooks/` and `lib/ai.js` so
-concerns live in separate files. That is a real refactor across ~90 data-fetch
-call sites in 26 files, and it only pays back over months of maintenance.
-Deliberately not done — this is a one-semester project.)
+---
 
-## Lanes
+# Concern lanes
 
-### Pane A — Quizzes, end to end
-
-Teacher authoring and student taking, because a quiz change usually needs both.
+## UI/UX lane
 
 ```
-src/routes/teacher/quizzes.jsx
-src/routes/teacher/quizzes.$quizId.jsx
-src/routes/student/quiz-player.jsx
-src/routes/student/quiz-feedback.jsx
-src/lib/quizGrading.js
+src/theme.js          ← all colour + typography tokens
+src/index.css         ← global styles
+src/components/**     ← shared presentational components
 ```
 
-### Pane B — Classes, records, grading, attendance
+`theme.js` is the whole palette and type system. Changing `navy` there
+restyles all 31 files that use it. Before this existed every page redeclared
+`const navy = '#0E2A5C'` — 30 copies of that one token — which is why colour
+changes used to mean editing 25 files.
+
+Two tokens are deliberate duplicates, preserved so the extraction changed no
+pixels: `goldAmber` (routes/index.jsx used it as `goldDeep`) and `inkMuted`
+(Markdown.jsx used it as `muted`). Deciding whether those were mistakes and
+collapsing them into `goldDeep` / `muted` is this lane's call.
+
+## AI lane
 
 ```
-src/routes/teacher/classes/**          (index + all $classId pages)
-src/routes/teacher/grading.jsx
-src/routes/teacher/record.jsx
-src/routes/teacher/reports.jsx
-src/routes/teacher/attendance.jsx
-src/features/classes/ClassFormModal.jsx
-src/lib/grading.js
-src/lib/classForm.js
-src/lib/notifications.js
+src/lib/ai.js
 ```
 
-### Pane C — Syllabus, announcements, teacher home
+Every call to the Gemini-backed endpoints, plus the prompt shaping around
+them. `generateQuiz` assembles the Bloom's-level / subject / target-level
+hints into the notes string the backend appends verbatim, so tuning what the
+model is asked happens here — not in the pages that render the result.
+
+The backend also exposes `/api/predict`, `/api/map_struggle`, `/api/remediate`,
+`/api/grade_essay` and `/api/generate_scaffold`. Wrappers for those belong in
+this file as the UI grows into them.
+
+## Data/logic lane
 
 ```
-src/routes/teacher/syllabus.jsx
-src/routes/teacher/announcements.jsx
-src/routes/teacher/index.jsx
+src/hooks/**
+src/lib/roster.js        src/lib/grading.js       src/lib/studentData.js
+src/lib/quizGrading.js   src/lib/classForm.js     src/lib/notifications.js
 ```
 
-### Pane D — Student experience
+Fetching and domain rules. `useTeacherClasses()` replaced the same Firestore
+query written inline in 8 pages; invalidation still works through the
+`['fs-classes']` prefix that existing `invalidateQueries` calls use.
 
-```
-src/routes/student/index.jsx
-src/routes/student/classes/**
-src/routes/student/profile.jsx
-src/routes/student/remediation.jsx
-src/lib/studentData.js
-```
+New shared queries go in `src/hooks/`, not into a route file.
 
-## Locked
+---
 
-Shared by every lane. **Say so in the other panes before editing**, and keep
-the change small and self-contained.
+# Page lanes
 
-| Path | Why it is locked |
+For work inside one screen. Each page belongs to one pane at a time.
+
+| Pane | Pages |
 |---|---|
-| `src/App.jsx` | every route is registered here — navigation changes land here |
+| **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
+| **Classes** | `teacher/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `features/classes/**` |
+| **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx` |
+| **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
+
+## Shared
+
+Announce before editing. Keep the change small.
+
+| Path | Why |
+|---|---|
+| `src/App.jsx` | every route is registered here — navigation lands here |
 | `src/main.jsx` | app bootstrap |
-| `src/index.css` | global styles; a change here affects all four lanes |
 | `src/lib/api.js` | every request goes through it |
 | `src/lib/firebase.js` | auth + Firestore client |
-| `src/lib/roster.js` | imported by 10 files across all four lanes |
 | `src/context/**` | auth state for the whole app |
-| `src/components/**` | shared components |
-| `src/routes/teacher/_layout.jsx` | teacher nav shell |
-| `src/routes/student/_layout.jsx` | student nav shell |
+| `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
 | `src/routes/index.jsx`, `login.jsx`, `register.jsx` | landing + auth |
 
-**Navigation is the common trap.** "Make this page go to that page" usually
-means a `<Route>` in `App.jsx` or a link in a `_layout.jsx` — both locked. Only
-the `navigate()` call inside an owned page is lane-local.
+**Navigation is the usual trap.** "Make this page go to that page" is normally
+a `<Route>` in `App.jsx` or a link in a `_layout.jsx` — both shared. Only a
+`navigate()` call inside a page you own is lane-local.
 
 ## How to work
 
-**One dev server, not four.** Run `npm run dev` in any single pane. Every
-pane's edits hot-reload into the same browser tab, so you see the combined
-result live.
+**One dev server, not four.** Run `npm run dev` in a single pane; every pane's
+edits hot-reload into the same browser tab, so you watch the combined app.
 
-**Name the page in your request.** Say "the Generate button on the teacher
-quizzes page", not "the Generate button". Without the page, a pane goes
-hunting and may wander into another lane.
+**Name the target.** "The Generate button on the teacher quizzes page" — not
+"the Generate button". Say the page for page work, or the token for theme work.
 
 **Commit per lane, often.** Small commits make a bad interleaving recoverable
-with `git revert` instead of by hand.
-
-**Check before a locked edit:**
-
-```
-git status --short          # is another pane mid-change?
-```
+with `git revert` rather than by hand.
 
 ## If two panes collide anyway
 
 Claude Code tracks file state — if a file changed since a pane read it, the
-edit **fails** rather than silently overwriting. So the normal failure is an
-error message, not lost work. When it happens: re-read the file, re-apply on
-top of the newer content, and check whether the other pane already did it.
-
-Git is the real safety net. `git diff` before committing, always.
+edit **fails** rather than silently overwriting. The normal failure is an error
+message, not lost work. Re-read, re-apply on top, check whether the other pane
+already did it. `git diff` before committing, always.
 
 ## Known state
 
-- `npm run lint` reports **43 pre-existing errors** (mostly `no-unused-vars`).
-  Not caused by lane work — do not treat a non-zero lint exit as your bug.
-- There is **no web test suite** (`dev`, `build`, `lint`, `preview` only).
-  `npm run build` compiling is the only automated check; click through the
-  page you changed before committing.
-- Backend API is the flat, teacher-owned shape: `/api/quizzes`,
-  `/api/syllabus`. The class-nested routes are gone. `PUT` on a quiz or
-  syllabus **replaces** its `class_ids` — always resend them on update or the
-  assignment is wiped.
+- `npm run lint` reports **39 pre-existing errors**, nearly all
+  `no-unused-vars`. Not caused by lane work — a non-zero lint exit is not
+  necessarily your bug.
+- **No test suite.** `npm run build` compiling is the only automated check;
+  click through the page you changed before committing.
+- `/api` is proxied to Flask on port 5000 by `vite.config.js`, so a forwarded
+  VS Code port works for remote viewers. Both servers must be running.
+- Backend API is flat and teacher-owned: `/api/quizzes`, `/api/syllabus`. The
+  class-nested routes are gone. `PUT` on a quiz or syllabus **replaces** its
+  `class_ids` — always resend them, or the assignment is wiped.

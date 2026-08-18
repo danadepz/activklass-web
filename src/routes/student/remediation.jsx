@@ -5,11 +5,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import Markdown from '@/components/Markdown'
 import { TrendingUp, BookOpen, AlertCircle, ArrowRight } from '@/components/icons'
-import { navy, ink, goldDeep, muted, faint, green, blueText } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { navy, ink, goldDeep, muted, faint, green, blueText, line, serif, mono } from '@/theme'
 
 async function loadRemediations(studentId) {
   const snap = await getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentId)))

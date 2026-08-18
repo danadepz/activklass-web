@@ -5,11 +5,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { Check, X, Clock, Sparkles } from '@/components/icons'
-import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 
 async function loadFeedback(attemptId) {
   const aSnap = await getDoc(doc(db, 'quiz_attempts', attemptId))

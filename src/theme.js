@@ -41,6 +41,31 @@ export const blueText = '#1E6FB0'
 export const goldAmber = '#B58F00'
 export const inkMuted = '#3A4A6B'
 
+// ---------------------------------------------------------------------------
+// Typography
+//
+// Same story as the palette: `const serif = {...}` was redeclared in 25 files,
+// mono in 21, sans in 18. Ready-made style objects (serif/mono) spread
+// straight into style={{ ...serif }}; the *Family strings are for when a
+// fontFamily value is needed on its own.
+// ---------------------------------------------------------------------------
+
+export const serifFamily = "'DM Serif Display', Georgia, serif"
+export const monoFamily = "'JetBrains Mono', ui-monospace, monospace"
+export const sansFamily = "'Plus Jakarta Sans', sans-serif"
+
+/** Used by routes/index.jsx only; a different display face from the rest. */
+export const serifAltFamily = "'Lexend', 'Inter', sans-serif"
+/** Same stack as sansFamily plus a system-ui fallback. */
+export const sansUiFamily = "'Plus Jakarta Sans', system-ui, sans-serif"
+
+export const serif = { fontFamily: serifFamily }
+export const mono = { fontFamily: monoFamily }
+export const serifAlt = { fontFamily: serifAltFamily }
+
+/** Hairline border colour used for card and table edges throughout. */
+export const line = 'rgba(14,42,92,0.08)'
+
 /** Everything at once, for spreading into a style object. */
 export const palette = {
   navy,

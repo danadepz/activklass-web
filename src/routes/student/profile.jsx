@@ -6,10 +6,7 @@ import { db, storage } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
 import { ShieldCheck, Check, X } from '@/components/icons'
-import { navy, ink, goldDeep, muted, faint, green, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
+import { navy, ink, goldDeep, muted, faint, green, red, line, serif } from '@/theme'
 
 const STATUS_META = {
   approved: { label: 'Approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },

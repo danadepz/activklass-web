@@ -5,9 +5,7 @@ import { collection, doc, getDocs, query, updateDoc, where, writeBatch } from 'f
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { Bell } from '@/components/icons'
-import { navy, ink, muted, faint } from '@/theme'
-
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, ink, muted, faint, sansFamily as sans } from '@/theme'
 
 const ICON_FOR = {
   attendance_contest: '🗓️',

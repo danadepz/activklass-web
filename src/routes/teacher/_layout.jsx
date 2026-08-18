@@ -6,10 +6,8 @@ import { BrandMark } from '@/components/AuthLayout'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { navy, gold, cream } from '@/theme'
-
-const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
@@ -80,16 +78,7 @@ export default function TeacherLayout() {
   const notifRef = useRef(null)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
 
-  const { data: classes } = useQuery({
-    queryKey: ['fs-classes', profile?.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-    enabled: !!profile?.id,
-  })
+  const { data: classes } = useTeacherClasses()
 
   const classIds = (classes ?? []).map((c) => c.id)
   const classById = Object.fromEntries((classes ?? []).map((c) => [c.id, c]))

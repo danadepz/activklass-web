@@ -5,11 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { classToForm } from '@/lib/classForm'
 import ClassFormModal from '@/features/classes/ClassFormModal'
-import { navy, ink, gold, goldDeep, muted } from '@/theme'
-
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, ink, gold, goldDeep, muted, serif, mono, sansFamily as sans } from '@/theme'
 
 // Sub-navbar shown at the top of every page inside a specific class.
 // Paths are relative to /teacher/classes/:classId. The Overview tab is the

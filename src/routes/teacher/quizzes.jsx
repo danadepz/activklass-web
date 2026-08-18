@@ -1,28 +1,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-  deleteDoc,
-} from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { generateQuiz } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
@@ -1002,16 +988,7 @@ export default function QuizzesIndexPage() {
   const [showGenerate, setShowGenerate] = useState(false)
 
   // Fetch classes
-  const { data: classes } = useQuery({
-    queryKey: ['fs-classes', profile?.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-    enabled: !!profile?.id,
-  })
+  const { data: classes } = useTeacherClasses()
 
   // Fetch quizzes
   const { data: sqliteQuizzes, isLoading, refetch } = useQuery({

@@ -4,12 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
-import { navy, ink, goldDeep, muted, faint, blueText, green, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
-const sans = "'Plus Jakarta Sans', sans-serif"
+import { navy, ink, goldDeep, muted, faint, blueText, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
 const KIND = {
   attendance: { tag: 'Attendance', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.4)' },

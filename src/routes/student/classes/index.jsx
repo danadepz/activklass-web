@@ -6,11 +6,7 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry } from '@/lib/studentData'
 import { BookOpen, ChevronRight } from '@/components/icons'
-import { navy, ink, gold, muted, faint, green, blueText, red } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-const serif = { fontFamily: "'DM Serif Display', Georgia, serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { navy, ink, gold, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 
 function gradeColor(g) {
   if (g == null) return faint

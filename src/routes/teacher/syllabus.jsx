@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteDoc, doc, getDoc, getDocs, collection, query, where, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db, storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { api } from '@/lib/api'
 import { generateSyllabus } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
-import { Sparkles, Plus, Trash, Edit, Check, ArrowRight } from '@/components/icons'
-import { navy, gold, cream, ink, muted } from '@/theme'
+import { Plus, Trash, Edit } from '@/components/icons'
+import { ink } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -687,16 +688,7 @@ export default function SyllabusIndexPage() {
   const [showGenerate, setShowGenerate] = useState(false)
 
   // Fetch SQLite class data
-  const { data: classes } = useQuery({
-    queryKey: ['fs-classes', profile?.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-    enabled: !!profile?.id,
-  })
+  const { data: classes } = useTeacherClasses()
 
   // Fetch SQLite syllabi
   const { data: sqliteSyllabiData = [], isLoading: syllabiLoading, refetch } = useQuery({

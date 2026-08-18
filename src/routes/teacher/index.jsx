@@ -1,27 +1,8 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import {
-  Layers,
-  Users,
-  TrendingUp,
-  AlertCircle,
-  Check,
-  Plus,
-  CalendarCheck,
-  FileText,
-  BarChart,
-  ChevronRight,
-  ArrowRight,
-} from '@/components/icons'
-import { navy, ink, gold, goldDeep, muted, faint, blueText } from '@/theme'
-
-const line = 'rgba(14,42,92,0.08)'
-
-const serif = { fontFamily: "'Lexend', 'Inter', sans-serif" }
-const mono = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" }
+import { Layers, Users, TrendingUp, AlertCircle, Check, Plus, CalendarCheck, FileText, BarChart, ChevronRight, ArrowRight } from '@/components/icons'
+import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serifAlt as serif, mono } from '@/theme'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const QUICK_ACTIONS = [
   { to: '/teacher/classes', label: 'New class', hint: 'Add a section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
@@ -101,15 +82,7 @@ function ClassCard({ c }) {
 
 export default function TeacherDashboard() {
   const { profile } = useAuth()
-  const { data: classes, isLoading } = useQuery({
-    queryKey: ['fs-classes', profile.id],
-    queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'classes'), where('teacher_id', '==', profile.id)),
-      )
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    },
-  })
+  const { data: classes, isLoading } = useTeacherClasses()
 
   const list = classes ?? []
   const totalStudents = list.reduce((sum, c) => sum + (c.student_ids?.length ?? 0), 0)
