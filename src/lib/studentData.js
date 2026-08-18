@@ -53,7 +53,12 @@ export async function loadStudentAttendance(classId, studentId) {
         excuse_url: rec.excuse_url ?? null,
       })
     })
-    log.sort((a, b) => b.date.localeCompare(a.date))
+    // Sort through a string key: a Firestore Timestamp in `date` has no
+    // localeCompare, and the throw would hit the catch below and blank the
+    // student's entire attendance view instead of just misordering it.
+    const sortKey = (v) =>
+      v && typeof v.toDate === 'function' ? v.toDate().toISOString() : String(v ?? '')
+    log.sort((a, b) => sortKey(b.date).localeCompare(sortKey(a.date)))
     const counted = tally.present + tally.late + tally.absent + tally.excused
     const rate = counted ? Math.round((tally.present / counted) * 100) : null
     return { log, tally, rate }

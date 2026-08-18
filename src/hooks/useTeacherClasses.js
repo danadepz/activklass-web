@@ -24,10 +24,15 @@ export async function fetchTeacherClasses(teacherId) {
 
 export function useTeacherClasses(options = {}) {
   const { profile } = useAuth()
+  const teacherId = profile?.id
+  // options spreads FIRST so a caller can't override queryKey (which would
+  // silently opt out of ['fs-classes'] invalidation) or clear `enabled` (which
+  // would run queryFn with no teacher id). A caller-supplied `enabled` still
+  // narrows the query -- it just can't widen it past the signed-in check.
   return useQuery({
-    queryKey: teacherClassesKey(profile?.id),
-    queryFn: () => fetchTeacherClasses(profile.id),
-    enabled: !!profile?.id,
     ...options,
+    queryKey: teacherClassesKey(teacherId),
+    queryFn: () => fetchTeacherClasses(teacherId),
+    enabled: !!teacherId && (options.enabled ?? true),
   })
 }

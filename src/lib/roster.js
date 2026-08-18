@@ -1,11 +1,18 @@
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore'
 import { db } from './firebase'
 
-/** Fetch users docs by uid list (chunked — Firestore 'in' caps at 30 ids). */
+/**
+ * Fetch users docs by uid list (chunked — Firestore 'in' caps at 30 ids).
+ *
+ * Ids are deduped and emptied first: a blank or non-string entry in a class's
+ * student_ids makes the documentId() query throw outright, and most callers
+ * don't catch, so one bad roster entry took the whole page's query down.
+ */
 export async function fetchUsersByIds(ids) {
+  const clean = [...new Set(ids ?? [])].filter((id) => typeof id === 'string' && id.trim() !== '')
   const users = []
-  for (let i = 0; i < ids.length; i += 30) {
-    const chunk = ids.slice(i, i + 30)
+  for (let i = 0; i < clean.length; i += 30) {
+    const chunk = clean.slice(i, i + 30)
     const snap = await getDocs(
       query(collection(db, 'users'), where(documentId(), 'in', chunk)),
     )
@@ -16,10 +23,12 @@ export async function fetchUsersByIds(ids) {
 
 /** Find a registered student by exact email. Returns the user doc or null. */
 export async function findStudentByEmail(email) {
+  const needle = String(email ?? '').trim().toLowerCase()
+  if (!needle) return null
   const snap = await getDocs(
     query(
       collection(db, 'users'),
-      where('email', '==', email.trim().toLowerCase()),
+      where('email', '==', needle),
       where('role', '==', 'student'),
     ),
   )

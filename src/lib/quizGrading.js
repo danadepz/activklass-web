@@ -18,7 +18,14 @@ function round2(n) {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
-/** Grade one objective question → { earned, correct }. Essays handled by caller. */
+/**
+ * Grade one objective question → { earned, correct }. Essays handled by caller.
+ *
+ * Every comparison coerces to string first. Answer keys reach us from the
+ * builder, the AI draft path and the API, and a single non-string entry (a
+ * number in answers[], say) used to throw `a.trim is not a function` mid-grade
+ * -- which loses the student's whole submission, not just that question.
+ */
 export function gradeAnswer(q, answer) {
   const points = Number(q.points) || 0
   switch (q.qtype) {
@@ -32,8 +39,11 @@ export function gradeAnswer(q, answer) {
       return { earned: correct ? points : 0, correct }
     }
     case 'short_answer': {
-      const accepted = (q.answer_key?.answers ?? []).map((a) => a.trim().toLowerCase())
-      const correct = typeof answer === 'string' && accepted.includes(answer.trim().toLowerCase())
+      const accepted = (q.answer_key?.answers ?? [])
+        .map((a) => String(a ?? '').trim().toLowerCase())
+        .filter(Boolean)
+      const given = String(answer ?? '').trim().toLowerCase()
+      const correct = given !== '' && accepted.includes(given)
       return { earned: correct ? points : 0, correct }
     }
     case 'matching': {
@@ -41,7 +51,7 @@ export function gradeAnswer(q, answer) {
       if (pairs.length === 0) return { earned: 0, correct: false }
       let hit = 0
       pairs.forEach((p, i) => {
-        if ((answer?.[i] ?? '') === p.right) hit += 1
+        if (String(answer?.[i] ?? '') === String(p.right ?? '')) hit += 1
       })
       return { earned: round2((points * hit) / pairs.length), correct: hit === pairs.length }
     }
@@ -58,6 +68,7 @@ export function gradeQuiz(quiz, answers) {
   let total_score = 0
   let total_possible = 0
   let has_essays = false
+  const submitted = answers ?? {}
   const per_question = (quiz.questions ?? []).map((q) => {
     const possible = Number(q.points) || 0
     total_possible += possible
@@ -65,7 +76,7 @@ export function gradeQuiz(quiz, answers) {
       has_essays = true
       return { id: q.id, qtype: 'essay', earned: 0, possible, correct: null, pending: true }
     }
-    const { earned, correct } = gradeAnswer(q, answers[q.id])
+    const { earned, correct } = gradeAnswer(q, submitted[q.id])
     total_score += earned
     return { id: q.id, qtype: q.qtype, earned, possible, correct, pending: false }
   })
@@ -104,13 +115,13 @@ export function studentAnswerText(q, answer) {
     case 'true_false':
       return typeof answer === 'boolean' ? (answer ? 'True' : 'False') : '— (no answer)'
     case 'short_answer':
-      return answer?.trim() ? answer : '— (no answer)'
+      return String(answer ?? '').trim() ? String(answer) : '— (no answer)'
     case 'matching':
       return (q.answer_key?.pairs ?? [])
         .map((p, i) => `${p.left} → ${answer?.[i] || '?'}`)
         .join('; ')
     case 'essay':
-      return answer?.trim() ? answer : '— (no answer)'
+      return String(answer ?? '').trim() ? String(answer) : '— (no answer)'
     default:
       return '— (no answer)'
   }

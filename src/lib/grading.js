@@ -61,18 +61,31 @@ function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
-/** Percent earned for one student in one component, or null if no data. */
+/**
+ * Percent earned for one student in one component, or null if no data.
+ *
+ * An assessment whose total_points is missing or non-numeric is skipped rather
+ * than added, which would poison the sum with NaN. NaN survived every guard
+ * downstream -- `NaN != null` is true, and transmuteDepEd's bands all compare
+ * false -- so one malformed assessment used to hand every student a saved
+ * final grade of 60 / "Did Not Meet Expectations". Skipping matches the
+ * existing "no score yet" semantics: excluded from both sides.
+ */
 export function componentPercent(assessments, studentScores) {
   let earned = 0
   let possible = 0
-  for (const assessment of assessments) {
-    const score = studentScores[assessment.id]
+  for (const assessment of assessments ?? []) {
+    const score = studentScores?.[assessment.id]
     if (!score || score.status === 'excused') continue
+    const points = Number(assessment.total_points)
+    if (!Number.isFinite(points)) continue
     if (score.status === 'missing') {
-      possible += assessment.total_points
+      possible += points
     } else if (score.status === 'graded' && score.raw_score != null) {
-      possible += assessment.total_points
-      earned += score.raw_score
+      const raw = Number(score.raw_score)
+      if (!Number.isFinite(raw)) continue
+      possible += points
+      earned += raw
     }
   }
   if (possible === 0) return null
@@ -84,12 +97,14 @@ export function periodGrade(components, studentScores) {
   let weighted = 0
   let weightTotal = 0
   const breakdown = {}
-  for (const component of components) {
+  for (const component of components ?? []) {
     const pct = componentPercent(component.assessments, studentScores)
-    breakdown[component.id] = pct == null ? null : round2(pct)
-    if (pct != null) {
-      weighted += component.weight_percent * pct
-      weightTotal += component.weight_percent
+    const usable = pct != null && Number.isFinite(pct)
+    breakdown[component.id] = usable ? round2(pct) : null
+    const weight = Number(component.weight_percent)
+    if (usable && Number.isFinite(weight)) {
+      weighted += weight * pct
+      weightTotal += weight
     }
   }
   if (weightTotal === 0) return { grade: null, breakdown }
@@ -115,9 +130,12 @@ const DEPED_TRANSMUTATION_BANDS = [
 
 /** Initial grade (0–100) → DepEd transmuted grade (60–100). */
 export function transmuteDepEd(initialGrade) {
-  if (initialGrade == null) return null
+  const value = Number(initialGrade)
+  // Without the finite check a NaN falls past every band to the 60 floor,
+  // which reads as a real failing grade rather than as missing data.
+  if (initialGrade == null || !Number.isFinite(value)) return null
   for (const [lowerBound, transmuted] of DEPED_TRANSMUTATION_BANDS) {
-    if (initialGrade >= lowerBound) return transmuted
+    if (value >= lowerBound) return transmuted
   }
   return 60
 }
@@ -134,7 +152,7 @@ export function depEdDescriptor(transmutedGrade) {
 
 /** Percentage → CHED collegiate point scale (1.0 highest … 5.0 failed). */
 export function chedPointEquivalent(percent) {
-  if (percent == null) return null
+  if (percent == null || !Number.isFinite(Number(percent))) return null
   if (percent >= 96) return 1.0
   if (percent >= 94) return 1.25
   if (percent >= 91) return 1.5
@@ -153,22 +171,32 @@ export function chedPointEquivalent(percent) {
  */
 export function computeFinalGrade(components, studentScores, mode = 'deped_k12') {
   const { grade: initial, breakdown } = periodGrade(components, studentScores)
-  if (initial == null) return { initial: null, final: null, descriptor: null, breakdown }
+  if (initial == null || !Number.isFinite(initial)) {
+    return { initial: null, final: null, descriptor: null, breakdown }
+  }
   if (mode === 'deped_k12') {
     const final = transmuteDepEd(initial)
-    return { initial, final, descriptor: depEdDescriptor(final), breakdown }
+    return { initial, final, descriptor: final == null ? null : depEdDescriptor(final), breakdown }
   }
   if (mode === 'ched_point') {
     const final = chedPointEquivalent(initial)
+    if (final == null) return { initial, final: null, descriptor: null, breakdown }
     return { initial, final, descriptor: final <= 3.0 ? 'Passed' : 'Failed', breakdown }
   }
   // ched_percentage: the weighted percent is the final grade.
   return { initial, final: initial, descriptor: initial >= 75 ? 'Passed' : 'Failed', breakdown }
 }
 
-/** Weights must sum to exactly 100 before settings can be saved (§1.7). */
+/**
+ * Weights must sum to 100 before settings can be saved (§1.7).
+ *
+ * Tolerance, not equality: 20.5 + 20.5 + 59 is 99.99999999999999 in floating
+ * point, so `=== 100` rejected weight sets that are correct. The 0.01 window
+ * matches the `balanced()` check routes/teacher/grading.jsx already uses.
+ */
 export function weightsValid(components) {
-  return components.reduce((sum, c) => sum + Number(c.weight_percent || 0), 0) === 100
+  const sum = (components ?? []).reduce((total, c) => total + (Number(c.weight_percent) || 0), 0)
+  return Math.abs(sum - 100) < 0.01
 }
 
 /**
@@ -179,11 +207,13 @@ export function weightsValid(components) {
 export function finalAcrossPeriods(periodGrades, periods, mode = 'deped_k12') {
   let weighted = 0
   let weightTotal = 0
-  for (const p of periods) {
-    const g = periodGrades[p.id]
-    if (g != null) {
-      weighted += p.weight_percent * g
-      weightTotal += p.weight_percent
+  for (const p of periods ?? []) {
+    const raw = periodGrades?.[p.id]
+    const g = Number(raw)
+    const weight = Number(p.weight_percent)
+    if (raw != null && Number.isFinite(g) && Number.isFinite(weight)) {
+      weighted += weight * g
+      weightTotal += weight
     }
   }
   if (weightTotal === 0) return null

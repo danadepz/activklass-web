@@ -10,20 +10,24 @@ import { db } from './firebase'
  * type: 'attendance_contest' | 'grade_contest' | 'score' | string
  */
 export async function notifyStudents({ studentIds, classId, createdBy, type, message, link }) {
-  const ids = [...new Set(studentIds)].filter(Boolean)
+  const ids = [...new Set(studentIds ?? [])].filter(Boolean)
   if (!ids.length) return
-  const batch = writeBatch(db)
-  for (const sid of ids) {
-    batch.set(doc(collection(db, 'notifications')), {
-      user_id: sid,
-      class_id: classId,
-      created_by: createdBy,
-      type,
-      message,
-      link: link ?? null,
-      read: false,
-      created_at: serverTimestamp(),
-    })
+  // A writeBatch caps at 500 operations; past that commit() rejects and NOBODY
+  // gets notified. Chunked so a large roster degrades into several commits.
+  for (let i = 0; i < ids.length; i += 500) {
+    const batch = writeBatch(db)
+    for (const sid of ids.slice(i, i + 500)) {
+      batch.set(doc(collection(db, 'notifications')), {
+        user_id: sid,
+        class_id: classId,
+        created_by: createdBy,
+        type,
+        message,
+        link: link ?? null,
+        read: false,
+        created_at: serverTimestamp(),
+      })
+    }
+    await batch.commit()
   }
-  await batch.commit()
 }
