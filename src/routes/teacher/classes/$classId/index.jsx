@@ -1,19 +1,10 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  arrayRemove,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore'
+import { arrayRemove, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
+import { setAccountDisabled } from '@/lib/admin'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -26,7 +17,18 @@ import {
 import { X, Users, FileText } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
+/* users/{uid}.status carries TWO meanings in this codebase, which is worth
+   knowing before changing anything here. The backend treats it as account state
+   -- middleware/auth.py rejects a request when it is not 'active', and the seat
+   counters only count 'active' users. This roster also renders it through
+   STATUS_LABELS as academic progress. Nothing ever writes the academic values,
+   so in practice the column has always read "Active"; the account meaning is
+   the real one, and the disable action below writes it. 'inactive' and
+   'pending' are listed so a disabled account renders as itself instead of
+   `undefined`. */
 const STATUS_STYLE = {
+  inactive: 'bg-slate-100 text-slate-500',
+  pending: 'bg-amber-50 text-amber-700',
   active: 'bg-green-50 text-green-700',
   needs_remediation: 'bg-amber-50 text-amber-700',
   mastered: 'bg-indigo-50 text-indigo-700',
@@ -35,6 +37,15 @@ const STATUS_STYLE = {
 const ENROLLMENT_STYLE = {
   AC: 'bg-green-50 text-green-700',
   IN: 'bg-slate-100 text-slate-500',
+}
+
+/* Account-state labels, kept here rather than added to STATUS_LABELS in
+   lib/roster.js — that file is the logic lane's, and its map is the academic
+   one. See the note above STATUS_STYLE about the overloaded field. */
+const ACCOUNT_STATUS_LABELS = {
+  active: 'Active',
+  inactive: 'Disabled',
+  pending: 'Pending',
 }
 
 const inputCls =
@@ -797,6 +808,7 @@ export default function ClassDetailPage() {
   const [rosterSearch, setRosterSearch] = useState('')
   const [rosterFilter, setRosterFilter] = useState('all')
   const [rosterSort, setRosterSort] = useState('az')
+  const [accountBusy, setAccountBusy] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['class-detail', classId],
@@ -842,10 +854,63 @@ export default function ClassDetailPage() {
     if (!window.confirm(`Remove ${s.first_name} ${s.last_name} from this class? Their student account is kept.`)) return
     try {
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(s.id) })
-      queryClient.invalidateQueries({ queryKey: ['fs-class', classId] })
+      queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  /**
+   * Enable or disable a student's account from the roster.
+   *
+   * Both halves are required. users/{uid}.status keeps them out of the app --
+   * the backend rejects any request from a non-active user -- but Firebase Auth
+   * still accepts their password, so status alone leaves a working login.
+   * setAccountDisabled is what actually closes it, and it revokes live sessions
+   * rather than waiting for the token to expire.
+   *
+   * The order is chosen so a half-completed change fails CLOSED:
+   *   disabling -> Auth first, so a failure after it leaves them locked out but
+   *                still shown as active (safe, and visibly wrong)
+   *   enabling  -> status first, so a failure after it leaves them still unable
+   *                to sign in rather than signed in with no access
+   */
+  async function handleToggleAccount(s) {
+    const currentlyActive = (s.status ?? 'active') === 'active'
+    const who = `${s.first_name} ${s.last_name}`.trim()
+    const message = currentlyActive
+      ? `Disable ${who}'s account? They will be signed out and cannot log in until you re-enable it. They stay on this roster.`
+      : `Re-enable ${who}'s account? They will be able to sign in again.`
+    if (!window.confirm(message)) return
+
+    setAccountBusy(s.id)
+    setError(null)
+    try {
+      if (currentlyActive) {
+        await setAccountDisabled(s.id, true)
+        await updateDoc(doc(db, 'users', s.id), { status: 'inactive' })
+      } else {
+        await updateDoc(doc(db, 'users', s.id), { status: 'active' })
+        await setAccountDisabled(s.id, false)
+      }
+      queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
+    } catch (err) {
+      /* The /api/admin endpoint is gated on the admin role, so a solo teacher
+         gets 403 here. Say which half failed rather than showing a bare error:
+         the Firestore write may already have gone through. */
+      if (err.status === 403) {
+        setError(
+          `Could not change ${who}'s login. Disabling an account currently requires an ` +
+            'administrator — /api/admin/users/<uid>/disabled rejects teachers. Ask an admin, or ' +
+            'have the endpoint allow a teacher to act on their own roster.',
+        )
+      } else {
+        setError(err.message)
+      }
+      queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
+    } finally {
+      setAccountBusy(null)
     }
   }
 
@@ -1014,7 +1079,10 @@ export default function ClassDetailPage() {
                     </td>
                     <td className="px-5 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
-                        {STATUS_LABELS[status]}
+                        {/* Falls back for the account values ('inactive',
+                            'pending') that STATUS_LABELS does not carry —
+                            otherwise a disabled student rendered as blank. */}
+                        {STATUS_LABELS[status] ?? ACCOUNT_STATUS_LABELS[status] ?? status}
                       </span>
                     </td>
                     {/* 2026-06-20: Edit opens modal with name + roster fields; Remove immediately removes from class */}
@@ -1026,6 +1094,21 @@ export default function ClassDetailPage() {
                           style={{ color: '#0E2A5C' }}
                         >
                           Edit
+                        </button>
+                        {/* Enable/Disable the login itself. Writes users.status
+                            AND toggles the Auth account -- status alone leaves
+                            a working password. */}
+                        <button
+                          onClick={() => handleToggleAccount(s)}
+                          disabled={accountBusy === s.id}
+                          className="text-xs font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ color: status === 'active' ? goldDeep : green }}
+                        >
+                          {accountBusy === s.id
+                            ? 'Working…'
+                            : status === 'active'
+                              ? 'Disable'
+                              : 'Enable'}
                         </button>
                         <button
                           onClick={() => handleRemoveStudent(s)}
