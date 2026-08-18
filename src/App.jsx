@@ -30,6 +30,7 @@ import AttendanceIndexPage from '@/routes/teacher/attendance'
 import SyllabusIndexPage  from '@/routes/teacher/syllabus'
 import QuizzesIndexPage   from '@/routes/teacher/quizzes'
 import QuizBuilderPage    from '@/routes/teacher/quizzes.$quizId'
+import AdminUsersPage    from '@/routes/admin/index'
 import GradingSetupPage   from '@/routes/teacher/grading'
 import AnnouncementsPage  from '@/routes/teacher/announcements'
 import ReportsPage        from '@/routes/teacher/reports'
@@ -85,7 +86,7 @@ export default function App() {
 
       {/* Other roles (placeholders until their portals are built) */}
       <Route element={<ProtectedRoute roles={['admin']} />}>
-        <Route path="/admin" element={<RolePlaceholder title="Admin" />} />
+        <Route path="/admin" element={<AdminUsersPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={['student']} />}>
         <Route path="/student" element={<StudentLayout />}>
