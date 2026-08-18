@@ -35,14 +35,16 @@ Three definitions will be on screen at once, disagreeing, all labelled the same:
 | `teacher/reports.jsx:147` | assessed but not passing |
 | `lib/ai.js` `predictRisk` | Random Forest via `/api/predict` |
 
-Decide before the `classes` lane renders the model's output. Recommended:
-keep them separate and label them for what they are -- "Below 85" is a fact
-about the past, "Predicted at risk" is a forecast. Collapsing them loses that
-distinction and invites a teacher to trust the wrong number.
+The forecast half has since shipped (`7c8fee6`) as `PredictedRisk.jsx` and
+`ClassStandingForecast.jsx` -- named as forecasts, and both gate on
+`coverage < 0.7`, so the "render the flag only when coverage is meaningful"
+part is handled.
 
-Also note `predictRisk` returns `coverage`: the model fills missing indicators
-with healthy cohort defaults, so a student with only a failing grade still
-scores `on_track`. Render the flag only when coverage is meaningful.
+What is still open is the *other two*: `performance.jsx` and `reports.jsx` keep
+their own unlabelled definitions. Three rules can now be on screen at once, and
+only one of them says what it is. Label the past-tense ones too -- "Below 85"
+is a fact about the past, "Predicted at risk" is a forecast, and a teacher
+reading both as the same claim will trust the wrong number.
 
 ## 4. `PUT` silently unassigns classes **(cross-repo)**
 
@@ -61,6 +63,11 @@ both are pure functions:
 
 - `lib/grading.js` -- `computeFinalGrade`, `finalAcrossPeriods`
 - `lib/quizGrading.js` -- `gradeQuiz`, partial credit on matching
+- `lib/ai.js` -- the MELC code checker and the quiz draft validator. Both were
+  developed against ~30 hand-run cases (real codes, fabrications, whitespace,
+  grade ranges, duplicates) that live nowhere in the repo. They are pure and
+  need no Firestore or Gemini, so they are the cheapest tests here to write and
+  the easiest to lose. A regression in either is silent by construction.
 
 ## 6. Mobile and web write different attempt shapes **(cross-repo)**
 
@@ -172,6 +179,12 @@ with fabricated DepEd codes is worse than a bad quiz question.
 are still visually identical. `MELC_STATUS_LABEL` is exported ready to render.
 Until the page uses it, codes are still presented as authoritative.
 
+**Unverified today:** the checker was exercised against real generated codes
+captured earlier in the session, but the final end-to-end run -- generate fresh,
+pipe straight through `generateSyllabus` -- never happened, because the Gemini
+free-tier daily quota ran out first (see 16). Worth doing once on a fresh day's
+quota before trusting it blind.
+
 The real fix remains a MELC list to check against. DepEd publishes the 2020
 MELCs per learning area; even one subject loaded as a JSON lookup would turn
 `unverified` into a real answer for that subject.
@@ -192,6 +205,25 @@ during defense: the procedural fallback is mandatory". The overload path is
 covered; the far likelier one is not. Catching 429 and stepping to the next
 model is a small change, but it should not ship untested, and testing it
 requires quota that is currently spent.
+
+## 17. Syllabus and module drafts get no structural validation
+
+`generateQuiz` drops questions that cannot be answered -- no correct option,
+duplicate options, blank text. `generateSyllabus` and `generateModule` check
+only MELC codes, so the structure around them passes through untouched:
+
+- a topic with an empty `title`
+- a topic with an empty `objectives` array, or objectives that are blank strings
+- a module with zero topics
+- duplicate topic titles inside one module
+
+None of these are hypothetical in the way a malformed MELC code is -- they are
+just unobserved, because nothing looks. A blank topic title becomes a blank row
+in the syllabus tree, and quizzes generated against that topic inherit it.
+
+**Not blocked by anything.** Pure logic in `lib/ai.js`, no Gemini quota and no
+Firestore needed -- roughly the same shape as `validateQuizDraft`. Left undone
+today only because item 15 was the ask.
 
 
 ---
