@@ -48,7 +48,7 @@ reading both as the same claim will trust the wrong number.
 
 ## 4. `PUT` silently unassigns classes **(cross-repo)**
 
-`activklass-backend/app/api/quizzes.py:284` replaces `quiz.classes` from
+`activklass-backend/app/api/quizzes.py:282-283` replaces `quiz.classes` from
 `data.get('class_ids', [])`, so omitting the field wipes every assignment.
 `save_syllabus` does the same. A teacher editing only a title loses the
 class links unless the client resends them.
@@ -82,15 +82,84 @@ breakdown. Same family as the `total_score` bug -- two writers drifting.
 ActivKlass history exists yet. Fine as triage, not evidence about a student.
 Anything user-facing should say so. Revisit once real attempt history exists.
 
-## 8. Lint: 34 pre-existing errors
+## 8. Lint: 35 pre-existing errors
 
-Mostly `no-unused-vars`, down from 43. Worth clearing so a non-zero lint exit
-means something. Low risk, mechanical.
+**None are in the UI/UX lane** — `theme.js`, `index.css` and `components/**`
+lint clean. Every error sits in a page-lane file, so each pane clears its own;
+a single pane doing the lot means editing four files it does not own.
 
-## 9. One 1.1 MB JS chunk
+Snapshot below taken 2026-08-19. Treat the counts as indicative, not exact —
+the total moved 34 → 36 → 35 over one working session as panes landed new code,
+so re-run `npx eslint .` before starting rather than trusting these lines.
 
-No code splitting; Vite warns every build. Route-level `lazy()` would cut
-first load noticeably, which matters on school wifi.
+| Owner | File | Errors |
+|---|---|---|
+| **Classes** | `teacher/classes/$classId/index.jsx` | 27 |
+| **Classes** | `teacher/classes/$classId/_layout.jsx` | 1 |
+| **Quizzes** | `teacher/quizzes.jsx` | 3 |
+| **Quizzes** | `teacher/quizzes.$quizId.jsx` | 3 |
+| **Syllabus** | `teacher/syllabus.jsx` | 1 |
+
+**Classes** — `$classId/index.jsx` is the bulk of the backlog item and is
+mostly one thing: a dead inline style block at lines 768–800 (`overlayStyle`,
+`cardStyle`, `modalHeaderStyle`, `iconSquare`, `modalTitle`, `closeBtn`,
+`modalBodyStyle`, `modalFooterStyle`, `alertStyle`, `codeStyle`,
+`btnModalPrimary`, `btnModalGhost`, `th`, `td`, `btnGhost`, `btnPrimary`,
+`btnDanger`, `pillStyle`, `statusTone`) left behind when that modal moved to
+Tailwind classes. Plus four unused Firestore imports (`arrayUnion`,
+`collection`, `setDoc`, `writeBatch`) and three unused icons (`X`, `Users`,
+`FileText`). `_layout.jsx` has one, `tabStyle` at 22:10.
+
+Worth a look before deleting: those style objects are the pre-Tailwind version
+of a modal that still renders. If it drifted visually during the port, they are
+the record of what it used to look like.
+
+**Quizzes** — `quizzes.jsx`: `totalPoints` (61:10), `queryClient` (949:9),
+`profile` (950:11). `quizzes.$quizId.jsx`: `navigate` (871:9), **plus the two
+that are not `no-unused-vars`** — `react-hooks/set-state-in-effect` at 296 and
+905, both `setState` called synchronously in an effect body. Line 905 is the
+"default the class filter to the first assigned class" effect, which is the
+derive-during-render case, not a real effect. These two need actual
+refactoring, so **clearing every unused variable still leaves lint exiting
+non-zero.** Item 8 is not done until they are addressed.
+
+**Syllabus** — `isNewDraft` at 414:59, one error.
+
+## 9. One 1.1 MB JS chunk — split, with a caveat
+
+**Done for app source.** `App.jsx` now builds every screen through
+`lazyRoute()` (`components/lazyRoute.jsx`), which pairs `lazy()` with a
+per-route `Suspense` boundary. Measured:
+
+| | raw | gzip |
+|---|---|---|
+| before | 1,198.82 kB | 324.00 kB |
+| after | 639.54 kB | 197.88 kB |
+
+56 chunks; largest route chunk is 49.8 kB (`teacher/classes/$classId`).
+
+**The remaining 640 kB is almost entirely vendor, and route splitting cannot
+touch it:**
+
+| | raw | gzip |
+|---|---|---|
+| `firebase/firestore` | 265.6 kB | 82.0 kB |
+| `react` + `react-dom` | 189.6 kB | 59.7 kB |
+| `firebase/auth` | 87.0 kB | 25.5 kB |
+| `react-router` | 41.3 kB | 14.7 kB |
+| `@tanstack/react-query` | 35.4 kB | 10.4 kB |
+| `firebase/storage` | 21.8 kB | 7.9 kB |
+
+`lib/firebase.js` calls `getFirestore()` and `getStorage()` at module scope, and
+`main.jsx` imports it eagerly, so **287 kB of Firestore + Storage downloads
+before the login form paints** — on a route that only needs `firebase/auth`.
+That is the next-largest win available and it is a `lib/firebase.js` change
+(Shared), not a routing one: make `db` and `storage` lazy accessors behind
+`await import('firebase/firestore')`, or split the module so the auth path does
+not pull the other two. Worth ~82 kB gzip off first paint for every visitor.
+
+Note the Vite >500 kB warning stays on until that happens — the entry is still
+639 kB. The warning is now about vendor, not about missing code splitting.
 
 ## 10. 189 hand-written `<button>` elements
 
@@ -101,14 +170,28 @@ lanes touch pages, rather than in one sweep.
 
 ## 11. Three Postgres endpoints left in the web app **(cross-repo)**
 
-Everything else the web app calls is either Firestore-direct or AI (which no
-longer touches a database):
+The web app now calls 19 Flask paths, in three groups. Only the first touches
+Postgres:
+
+| Group | Count | Backing store |
+|---|---|---|
+| **Postgres** — see table below | 3 | SQLAlchemy |
+| Flask-over-Firestore — `admin` (5), `subscriptions` (4), `superadmin` (3) | 12 | Firestore only, 0 SQLAlchemy calls |
+| AI — `predict`, `quizzes/generate`, `syllabus/generate`, `syllabus/generate-module` | 4 | no database |
+
+The three on Postgres:
 
 | Endpoint | Blueprint |
 |---|---|
 | `GET /api/classes` | `classes.py` (48 SQLAlchemy calls) |
 | `POST /api/classes/{id}/students/provision` | `classes.py` |
 | `/api/grading-setup` | `grading.py` |
+
+The middle group is new and matters: `admin.py`, `subscriptions.py` and
+`superadmin.py` import `firebase_admin.firestore` and nothing from
+`app.models`. So "Flask endpoint" no longer implies "Postgres" — the count of
+Flask paths growing is not the same as the Postgres surface growing, and it did
+not grow.
 
 `/api/classes` is the `ClassPicker` on record/attendance -- docs/05 step 7
 noted those pages stay on Flask class ids until steps 8-9. Steps 8 and 9 are
@@ -130,6 +213,13 @@ can read Firestore and filter, exactly as `app/api/ai.py` does. Guardian links,
 scopes and consent state map cleanly onto documents. So one data store is still
 reachable -- it just does not mean "no backend".
 
+**This is no longer a proposal.** `admin.py`, `subscriptions.py` and
+`superadmin.py` were all written this way -- Flask blueprints holding zero
+SQLAlchemy calls, reading and writing Firestore through the Admin SDK. The
+pattern is now the house style for new backend work, which removes the main
+argument against porting guardians: there is nothing left to invent, only an
+existing shape to follow.
+
 Until that is decided, `guardians.py` (21 SQLAlchemy calls), `parent.py` (5)
 and migration `b1c4e7d92f08` are net-new Postgres surface added *after* the
 decision to retire it, which is worth resolving deliberately rather than by
@@ -137,10 +227,22 @@ drift.
 
 ## 13. Dead Flask routes now that the web app has moved
 
-`app/api/quizzes.py` still serves 11 routes; the web app calls none of them,
-and mobile calls Flask only for guardians. Confirm nothing else consumes them
-before deleting -- the same check would have caught that the quiz editor, not
-just the bank page, used `/api/quizzes/bank`.
+`app/api/quizzes.py` still serves 11 routes. The web app calls exactly one of
+them -- `/api/quizzes/generate` -- and mobile calls Flask only for the parent
+portal (`/api/guardian-links/*`, `/api/parent/*`), so the other ten have no
+known consumer:
+
+```
+/api/classes/<class_id>/quizzes      /api/quizzes/<id>/attempts
+/api/quizzes            (GET, POST)  /api/quizzes/<id>/close
+/api/quizzes/<id>       (3 methods)  /api/quizzes/<id>/publish
+                                     /api/quizzes/<id>/results
+```
+
+Confirm nothing else consumes them before deleting -- the same check would have
+caught that the quiz editor, not just the bank page, used `/api/quizzes/bank`.
+Note `/api/quizzes/<id>` PUT is the one carrying the item 4 bug, so deleting it
+closes that too.
 
 Same question for `announcements.py`, `records.py` and `attendance.py`.
 
