@@ -13,6 +13,7 @@
  * and /api/generate_scaffold; add wrappers here as the UI grows into them.
  */
 import { api, ApiError } from './api'
+import { validateModuleStructure, validateSyllabusStructure } from './aiDrafts'
 
 /**
  * Teacher-readable text for the failures these endpoints actually return.
@@ -402,27 +403,38 @@ function annotateTopics(topics, gradeLevel, where, warnings, seen) {
 function validateSyllabusDraft(draft, gradeLevel) {
   const warnings = []
   const seen = new Map()
-  const modules = (draft?.modules ?? []).map((mod, i) => ({
+  // Structure first (see aiDrafts.js). A topic dropped for having no title must
+  // not still claim its MELC code in `seen` -- that would raise a duplicate-code
+  // warning against the kept topic that legitimately holds it.
+  const { modules: shaped, warnings: structureWarnings } = validateSyllabusStructure(draft)
+  const modules = shaped.map((mod, i) => ({
     ...mod,
     topics: annotateTopics(
-      mod?.topics,
+      mod.topics,
       gradeLevel,
-      `${mod?.title || `Module ${i + 1}`} / `,
+      `${mod.title || `Module ${i + 1}`} / `,
       warnings,
       seen,
     ),
   }))
+  if (structureWarnings.length) {
+    console.warn('[ai] syllabus structure:', structureWarnings.join(' '))
+  }
   if (warnings.length) console.warn('[ai] syllabus MELC codes:', warnings.join(' '))
-  return { ...draft, modules, melcWarnings: warnings }
+  return { ...draft, modules, melcWarnings: warnings, structureWarnings }
 }
 
 /** Annotate a single generated module. */
 function validateModuleDraft(draft, gradeLevel) {
   const warnings = []
   const seen = new Map()
-  const topics = annotateTopics(draft?.topics, gradeLevel, '', warnings, seen)
+  const { topics: shaped, warnings: structureWarnings } = validateModuleStructure(draft)
+  const topics = annotateTopics(shaped, gradeLevel, '', warnings, seen)
+  if (structureWarnings.length) {
+    console.warn('[ai] module structure:', structureWarnings.join(' '))
+  }
   if (warnings.length) console.warn('[ai] module MELC codes:', warnings.join(' '))
-  return { ...draft, topics, melcWarnings: warnings }
+  return { ...draft, topics, melcWarnings: warnings, structureWarnings }
 }
 
 /**

@@ -809,6 +809,7 @@ export default function ClassDetailPage() {
   const [rosterFilter, setRosterFilter] = useState('all')
   const [rosterSort, setRosterSort] = useState('az')
   const [accountBusy, setAccountBusy] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['class-detail', classId],
@@ -886,24 +887,40 @@ export default function ClassDetailPage() {
 
     setAccountBusy(s.id)
     setError(null)
+    setNotice(null)
     try {
+      let result
       if (currentlyActive) {
-        await setAccountDisabled(s.id, true)
+        result = await setAccountDisabled(s.id, true)
         await updateDoc(doc(db, 'users', s.id), { status: 'inactive' })
       } else {
         await updateDoc(doc(db, 'users', s.id), { status: 'active' })
-        await setAccountDisabled(s.id, false)
+        result = await setAccountDisabled(s.id, false)
       }
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
+
+      /* Disabling is an ACCOUNT action, not a class one: it signs them out of
+         the whole platform. The backend reports how many other teachers' classes
+         they are in so we can say so rather than letting it surprise someone. */
+      if (currentlyActive && result?.also_enrolled_elsewhere > 0) {
+        setNotice(
+          `${who} is also enrolled in ${result.also_enrolled_elsewhere} class(es) taught by ` +
+            'someone else. Disabling the account signs them out of those too.',
+        )
+      }
     } catch (err) {
-      /* The /api/admin endpoint is gated on the admin role, so a solo teacher
-         gets 403 here. Say which half failed rather than showing a bare error:
-         the Firestore write may already have gone through. */
-      if (err.status === 403) {
+      /* The Firestore write and the Auth call are separate, so say which half
+         failed -- one of them may already have gone through. */
+      if (err.code === 'not_on_your_roster') {
+        setError(`${who} is not in any of your classes, so you cannot change their login.`)
+      } else if (err.status === 403) {
         setError(
-          `Could not change ${who}'s login. Disabling an account currently requires an ` +
-            'administrator — /api/admin/users/<uid>/disabled rejects teachers. Ask an admin, or ' +
-            'have the endpoint allow a teacher to act on their own roster.',
+          `Could not change ${who}'s login: ${err.message}. Their roster status was not changed.`,
+        )
+      } else if (err.code === 'no_auth_account') {
+        setError(
+          `${who} has no sign-in account yet — they were added to the roster but have never ` +
+            'signed up, so there is no login to disable.',
         )
       } else {
         setError(err.message)
@@ -976,6 +993,10 @@ export default function ClassDetailPage() {
 
       {error && (
         <p role="alert" className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
+      )}
+
+      {notice && (
+        <p role="status" className="mt-4" style={{ fontSize: 13, color: goldDeep, background: 'rgba(212,160,23,0.10)', border: '1px solid rgba(212,160,23,0.35)', borderRadius: 10, padding: '10px 12px' }}>{notice}</p>
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 mt-6 overflow-x-auto">
