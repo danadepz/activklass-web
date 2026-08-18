@@ -4,6 +4,7 @@ import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
 import { btnGhost } from './ui'
 import UsersTab from './UsersTab'
 import ClassesTab from './ClassesTab'
+import SubscriptionTab from './SubscriptionTab'
 
 /**
  * Admin console.
@@ -12,13 +13,13 @@ import ClassesTab from './ClassesTab'
  * upload, enable/disable) and Class Oversight (all classes, class records,
  * school-wide statistics), with CSV export on both tables.
  *
- * Subscription Management is specified there too and is deliberately absent --
- * no subscription, plan or storage concept exists anywhere in the system yet,
- * so a screen for it would be a mock rather than a feature.
+ * Subscription Management covers plan status, seat usage and storage. Seat
+ * usage is counted live from the users collection; nothing is enforced.
  */
 const TABS = [
   { key: 'users', label: 'Users', hint: 'Create, upload, enable and disable accounts' },
   { key: 'classes', label: 'Class oversight', hint: 'All classes, records and school statistics' },
+  { key: 'subscription', label: 'Subscription', hint: 'Plan, seat usage and storage' },
 ]
 
 export default function AdminPage() {
@@ -71,7 +72,9 @@ export default function AdminPage() {
 
       <main style={{ maxWidth: 1100, margin: '0 auto', padding: '22px 24px 60px' }}>
         <p style={{ fontSize: 13, color: faint, margin: '0 0 18px' }}>{active.hint}</p>
-        {tab === 'users' ? <UsersTab /> : <ClassesTab />}
+        {tab === 'users' && <UsersTab />}
+        {tab === 'classes' && <ClassesTab />}
+        {tab === 'subscription' && <SubscriptionTab />}
       </main>
     </div>
   )

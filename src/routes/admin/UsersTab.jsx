@@ -30,7 +30,10 @@ function Pill({ tint, children }) {
 /* ─────────────────────────── create user ─────────────────────────── */
 
 function CreateUserForm({ onCreated }) {
-  const blank = { email: '', password: '', role: 'teacher', firstName: '', lastName: '' }
+  // No default role: 'teacher' meant an admin who never opened the dropdown
+  // silently created a teacher, which is the most privileged non-admin role
+  // here. Picking one is now deliberate.
+  const blank = { email: '', password: '', role: '', firstName: '', lastName: '' }
   const [form, setForm] = useState(blank)
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
@@ -52,6 +55,7 @@ function CreateUserForm({ onCreated }) {
     if (!form.firstName.trim() || !form.lastName.trim()) return setError('First and last name are required.')
     if (!form.email.trim()) return setError('Email is required.')
     if (form.password.length < MIN_PASSWORD) return setError(`Password must be at least ${MIN_PASSWORD} characters.`)
+    if (!form.role) return setError('Pick a role for this user.')
     setError('')
     mut.mutate(form)
   }
@@ -82,6 +86,7 @@ function CreateUserForm({ onCreated }) {
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
           Role
           <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.role} onChange={set('role')}>
+            <option value="">— none —</option>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
