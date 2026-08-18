@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
-import { db, storage } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
 import { useAuth } from '@/context/useAuth'
+import { uploadAttachment } from '@/lib/attachments'
 
 const inputCls =
   'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 bg-white text-slate-800 text-sm'
@@ -283,9 +283,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
       if (syllabusFile) {
         try {
           const path = `syllabi/${targetId}/${syllabusFile.name}`
-          const sref = storageRef(storage, path)
-          await uploadBytes(sref, syllabusFile, { contentType: syllabusFile.type })
-          const url = await getDownloadURL(sref)
+          const url = await uploadAttachment(path, syllabusFile)
           await updateDoc(targetRef, {
             syllabus_file: {
               name: syllabusFile.name,
@@ -297,7 +295,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             },
           })
         } catch (err) {
-          warning = `Class saved, but the syllabus file couldn't be uploaded (${err.message}). Please re-attach it and try again.`
+          warning = `Class saved, but the syllabus file was not attached. ${err.message}`
         }
       }
       onSaved({ warning })

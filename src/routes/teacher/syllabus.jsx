@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { deleteDoc, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
-import { db, storage } from '@/lib/firebase'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db } from '@/lib/firebase'
 import { generateSyllabus } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { Plus, Trash, Edit, Sparkles } from '@/components/icons'
@@ -10,6 +9,8 @@ import { ink } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
+import { uploadAttachment } from '@/lib/attachments'
+import AttachmentField from '@/components/AttachmentField'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -105,10 +106,10 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
     setUploading(true)
     setError(null)
     try {
-      const uniqueName = `${newId()}-${file.name}`
-      const fileRef = ref(storage, `learning_materials/${syllabusId}/${uniqueName}`)
-      await uploadBytes(fileRef, file)
-      const downloadUrl = await getDownloadURL(fileRef)
+      const downloadUrl = await uploadAttachment(
+        `learning_materials/${syllabusId}/${newId()}-${file.name}`,
+        file,
+      )
 
       const newRes = {
         _key: newKey(),
@@ -122,7 +123,7 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
       onChange([...resources, newRes])
       resetForm()
     } catch (err) {
-      setError(`Upload failed: ${err.message}`)
+      setError(err.message)
     } finally {
       setUploading(false)
     }
@@ -186,6 +187,30 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
               className="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
             />
             {uploading && <span className="text-xs text-indigo-600 animate-pulse">Uploading...</span>}
+          </div>
+          <div className="border-t border-slate-200/70 pt-2">
+            <p className="text-[11px] text-slate-500 mb-1.5">
+              No file uploads on this project yet — attach it by link instead.
+            </p>
+            <AttachmentField
+              compact
+              label=""
+              storagePath={`learning_materials/${syllabusId}`}
+              onAttached={(url, meta) => {
+                onChange([...resources, {
+                  _key: newKey(),
+                  id: null,
+                  title: title.trim() || meta?.name || 'Attachment',
+                  // A pasted link is stored as a link resource, not a file: the
+                  // reader renders them the same but only 'file' implies we hold
+                  // the bytes, and we do not.
+                  resource_type: meta?.kind === 'file' ? 'file' : 'link',
+                  url,
+                  content_markdown: '',
+                }])
+                resetForm()
+              }}
+            />
           </div>
         </div>
       )}
