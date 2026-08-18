@@ -1,4 +1,7 @@
 import { useState } from 'react'
+// TEMPORARY dev helper — remove this import and the <DevQuickLogin /> below
+// when the seeded test accounts are no longer needed.
+import DevQuickLogin from '@/components/DevQuickLogin'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   signInWithEmailAndPassword,
@@ -72,6 +75,11 @@ export default function Login() {
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your ActivKlass account.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <DevQuickLogin
+          disabled={submitting}
+          onPick={(a) => { setEmail(a.email); setPassword(a.password); setError(null); setNotice(null) }}
+        />
+
         {error && <AuthError>{error}</AuthError>}
         {notice && <AuthNotice>{notice}</AuthNotice>}
 
