@@ -10,8 +10,8 @@ import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as sla
  * identity (Lexend / Plus Jakarta Sans / JetBrains Mono),
  * distinct from the indigo product UI. The palette lives here as inline
  * styles because the values are bespoke to this page; structural layout
- * stays in Tailwind so the page is responsive. The ak-float / ak-pulse
- * keyframes are defined in index.css.
+ * stays in Tailwind so the page is responsive. The ak-float / ak-pulse /
+ * ak-drift keyframes are defined in index.css.
  * ------------------------------------------------------------------ */
 
 // --- content -------------------------------------------------------------
@@ -304,6 +304,9 @@ export default function Landing() {
                 color: '#FAFAF6',
                 boxShadow: '0 30px 60px -20px rgba(14,42,92,0.4)',
                 transform: 'rotate(3deg)',
+                '--ak-rot': '3deg',
+                '--ak-lift': '-9px',
+                animation: 'ak-drift 11s ease-in-out infinite',
               }}
             >
               <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
@@ -342,6 +345,9 @@ export default function Landing() {
                 padding: 22,
                 boxShadow: '0 30px 60px -15px rgba(14,42,92,0.25), 0 0 0 1px rgba(14,42,92,0.08)',
                 transform: 'rotate(-2deg)',
+                '--ak-rot': '-2deg',
+                '--ak-lift': '-13px',
+                animation: 'ak-drift 9s ease-in-out infinite -4s',
               }}
             >
               <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>

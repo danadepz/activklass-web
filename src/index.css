@@ -56,6 +56,24 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* Hero card drift.
+ *
+ * The stacked hero cards carry a static `transform: rotate(Ndeg)` inline, and
+ * an animation's transform replaces that property outright rather than adding
+ * to it -- so a plain translateY keyframe would silently flatten the rotation.
+ * The angle is therefore passed in as --ak-rot and re-applied on every frame.
+ *
+ *   --ak-rot   the card resting angle, matching its inline transform
+ *   --ak-lift  how far it rises at mid-cycle (negative = upward)
+ *
+ * Each card gets its own duration so they never sync into a lockstep bob, and
+ * a negative animation-delay starts one mid-cycle instead of idling first.
+ */
+@keyframes ak-drift {
+  0%, 100% { transform: rotate(var(--ak-rot, 0deg)) translateY(0); }
+  50%      { transform: rotate(var(--ak-rot, 0deg)) translateY(var(--ak-lift, -10px)); }
+}
+
 /* Marketing/auth text inputs — navy focus ring (the !important overrides the
    inline base border these fields carry). Used by the Login/Register shell. */
 .ak-input::placeholder { color: #9AA6BD; }
