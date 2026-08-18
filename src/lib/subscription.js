@@ -9,7 +9,17 @@
  */
 import { api } from './api'
 
-export const INSTITUTION_ID = 'pilot-school'
+/**
+ * Which subscription applies to the signed-in user, resolved server-side.
+ *
+ * An admin's is their school's, found through users/{uid}.school_id; a solo
+ * teacher's is keyed by their own uid. Asking the server means the client never
+ * hardcodes a school id -- it used to, which worked only while a single school
+ * existed.
+ */
+export function fetchMyOwnerId() {
+  return api('/api/subscription/mine')
+}
 
 /** The plan catalogue, so the UI never invents a plan name or seat count. */
 export function fetchPlans() {

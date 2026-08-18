@@ -7,6 +7,7 @@ import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
 import ParentalAccessPanel from '@/components/ParentalAccessPanel'
 import { navy, ink, muted, faint, red, line, serif } from '@/theme'
+import ChangePassword from '@/components/ChangePassword'
 
 const fieldStyle = { width: '100%', padding: '10px 12px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
@@ -292,13 +293,16 @@ export default function StudentProfile() {
         permissions={permissions}
         onPermissionChange={(key, next) => setPermissions((prev) => ({ ...prev, [key]: next }))}
         guardians={guardians}
-        onApprove={() => mutation.mutate('approved')}        onRevoke={() => mutation.mutate('declined')}
+        onApprove={() => mutation.mutate('approved')}
+        onRevoke={() => mutation.mutate('declined')}
         canManage={canManage}
         lockedReason={lockedReason}
         loading={isLoading}
         busy={mutation.isPending}
         error={mutation.isError ? "Couldn't update consent. " + (mutation.error?.message ?? '') : null}
       />
+
+      <ChangePassword />
     </div>
   )
 }

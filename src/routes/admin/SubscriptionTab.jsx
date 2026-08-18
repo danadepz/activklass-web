@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  INSTITUTION_ID, changePlan, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
+  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
 } from '@/lib/subscription'
 import { ink, muted, faint, green, red, gold, navy, line, serif, mono } from '@/theme'
 import { card, field, th } from './ui'
 import Notice from './Notice'
+import ChangePassword from '@/components/ChangePassword'
 
 const GB = 1024 ** 3
 
@@ -150,9 +151,16 @@ function StorageMeter({ limitBytes }) {
 export default function SubscriptionTab() {
   const qc = useQueryClient()
   const { data: plansRes } = useQuery({ queryKey: ['subscription-plans'], queryFn: fetchPlans })
+  const { data: mine, isLoading: resolving, isError: resolveFailed, error: resolveError } = useQuery({
+    queryKey: ['subscription-owner'],
+    queryFn: fetchMyOwnerId,
+    retry: false,
+  })
+  const ownerId = mine?.owner_id
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['subscription', INSTITUTION_ID],
-    queryFn: () => fetchSubscription(INSTITUTION_ID),
+    queryKey: ['subscription', ownerId],
+    queryFn: () => fetchSubscription(ownerId),
+    enabled: !!ownerId,
     retry: false,
   })
 
@@ -161,12 +169,21 @@ export default function SubscriptionTab() {
     qc.invalidateQueries({ queryKey: ['admin-storage'] })
   }
 
+  if (resolving) return <p style={{ color: faint }}>Loading subscription…</p>
+  if (resolveFailed) {
+    return (
+      <Notice>
+        {resolveError?.message
+          ?? 'Could not work out which subscription applies to your account.'}
+      </Notice>
+    )
+  }
   if (isLoading) return <p style={{ color: faint }}>Loading subscription…</p>
   if (isError) {
     return (
       <Notice>
         {error?.status === 404
-          ? 'No subscription record yet. Run seed_subscriptions.py in the backend to create one.'
+          ? `No subscription record for ${ownerId} yet. Run seed_subscriptions.py in the backend to create one.`
           : error?.message ?? 'Could not load the subscription.'}
       </Notice>
     )
@@ -177,8 +194,10 @@ export default function SubscriptionTab() {
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <PlanCard ownerId={INSTITUTION_ID} sub={subscription} usage={usage} plans={plans}
+      <PlanCard ownerId={ownerId} sub={subscription} usage={usage} plans={plans}
                 onChanged={refresh} />
+
+      <ChangePassword />
 
       {plans && (
         <section style={{ ...card, overflow: 'hidden' }}>

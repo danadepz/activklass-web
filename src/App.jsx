@@ -32,6 +32,7 @@ import QuizzesIndexPage   from '@/routes/teacher/quizzes'
 import QuizBuilderPage    from '@/routes/teacher/quizzes.$quizId'
 import AdminUsersPage    from '@/routes/admin/index'
 import GradingSetupPage   from '@/routes/teacher/grading'
+import TeacherAccountPage from '@/routes/teacher/account'
 import AnnouncementsPage  from '@/routes/teacher/announcements'
 import ReportsPage        from '@/routes/teacher/reports'
 
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="grading"       element={<GradingSetupPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="reports"       element={<ReportsPage />} />
+          <Route path="account"       element={<TeacherAccountPage />} />
         </Route>
       </Route>
 

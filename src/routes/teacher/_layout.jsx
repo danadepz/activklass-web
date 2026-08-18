@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/teacher/quizzes', label: 'Quizzes' },
   { to: '/teacher/grading', label: 'Grade Config' },
   { to: '/teacher/reports', label: 'Reports' },
+  { to: '/teacher/account', label: 'Account' },
 ]
 
 function HamburgerIcon({ open }) {
