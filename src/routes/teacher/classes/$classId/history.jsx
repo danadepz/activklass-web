@@ -52,7 +52,13 @@ async function loadHistory(classId) {
   const nameById = {}
   users.forEach((u) => { nameById[u.id] = `${u.last_name}, ${u.first_name}` })
 
-  const qSnap = await getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId)))
+  // class_ids (array) is the canonical link; scalar class_id is the legacy
+  // shape. Both are queried because array-contains cannot match a scalar.
+  const [qNew, qOld] = await Promise.all([
+    getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
+    getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+  ])
+  const qSnap = { docs: [...qNew.docs, ...qOld.docs.filter((d) => !qNew.docs.some((n) => n.id === d.id))] }
   const quizzes = qSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const quizTitle = {}
   quizzes.forEach((q) => { quizTitle[q.id] = q.title })

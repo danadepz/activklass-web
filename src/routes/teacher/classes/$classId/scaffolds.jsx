@@ -32,7 +32,15 @@ async function loadScaffolds(classId) {
     (m.topics ?? []).map((t) => ({ id: t.id, title: t.title, moduleTitle: m.title })),
   )
 
-  const qSnap = await getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId)))
+  // class_ids (array) is the canonical link -- a quiz can belong to several
+  // classes. Older docs carried a scalar class_id; both are queried until the
+  // backfill is confirmed everywhere, since array-contains cannot match a
+  // scalar field and would silently return nothing for them.
+  const [qNew, qOld] = await Promise.all([
+    getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
+    getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+  ])
+  const qSnap = { docs: [...qNew.docs, ...qOld.docs.filter((d) => !qNew.docs.some((n) => n.id === d.id))] }
   const quizzes = qSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   // Attempts per quiz (quiz_attempts carry quiz_id, student_id, total_score).
@@ -137,7 +145,10 @@ export default function ScaffoldTopicsPage() {
         hints: { subject: data?.clazz?.subject, targetLevel: 'apply' },
       })
       const ref = await addDoc(collection(db, 'quizzes'), {
-        class_id: classId,
+        // Canonical link. Writing the scalar class_id here is what made
+        // remediation quizzes invisible to the student class page, which
+        // queries class_ids with array-contains.
+        class_ids: [classId],
         teacher_id: profile.id,
         title: `Remediation · ${topic.title}`,
         status: 'draft',
