@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
 import { navy, cream, sansUiFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
@@ -15,9 +17,12 @@ const CATEGORIES = [
 const catMap = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
 
 /* ─── Helpers ─── */
-function timeAgo(iso) {
-  if (!iso) return ''
-  const diff = Date.now() - new Date(iso).getTime()
+/** Accepts an ISO string or a Firestore Timestamp ({ seconds }). */
+function timeAgo(value) {
+  if (!value) return ''
+  const ms = value.seconds != null ? value.seconds * 1000 : new Date(value).getTime()
+  if (!Number.isFinite(ms)) return ''
+  const diff = Date.now() - ms
   const mins  = Math.floor(diff / 60000)
   const hours = Math.floor(diff / 3600000)
   const days  = Math.floor(diff / 86400000)
@@ -59,7 +64,10 @@ function EmptyState({ filtered }) {
 function AnnouncementCard({ item, onDelete, deleting }) {
   const [expanded, setExpanded] = useState(false)
   const cat = catMap[item.category] ?? catMap.general
-  const isLong = item.content.length > 160
+  // Documents written before this page moved to Firestore -- and the seeded
+  // ones -- carry `body` with no `content`, so read through both.
+  const text = item.content ?? item.body ?? ''
+  const isLong = text.length > 160
 
   return (
     <div
@@ -99,7 +107,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A', lineHeight: 1.3 }}>
               {item.title}
             </div>
-            {item.class_id === null && (
+            {item.class_id == null && (
               <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
                 📣 All classes
               </div>
@@ -135,9 +143,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
 
         {/* content */}
         <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.65, marginBottom: 10 }}>
-          {isLong && !expanded
-            ? item.content.slice(0, 160) + '…'
-            : item.content}
+          {isLong && !expanded ? text.slice(0, 160) + '…' : text}
         </div>
         {isLong && (
           <button
@@ -185,17 +191,36 @@ export default function AnnouncementsPage() {
   /* ── fetch classes from Firestore (same source as ClassesPage) ── */
   const { data: classes = [] } = useTeacherClasses()
 
-  /* ── fetch announcements ── */
+  const { profile } = useAuth()
+
+  /* ── fetch announcements ──
+     Firestore, not /api/announcements. The Flask copy is written by nobody
+     else and read by nobody: students (web and mobile) load announcements
+     straight from this collection, so anything posted to the API was
+     invisible to every student it was addressed to. */
   const { data: announcements = [], isLoading } = useQuery({
-    queryKey: ['announcements'],
-    queryFn: () => api('/api/announcements'),
+    queryKey: ['fs-announcements', profile?.id],
+    queryFn: async () => {
+      const snap = await getDocs(
+        query(collection(db, 'announcements'), where('teacher_id', '==', profile.id)),
+      )
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
+    },
+    enabled: !!profile?.id,
   })
 
   /* ── create ── */
   const createMut = useMutation({
-    mutationFn: (body) => api('/api/announcements', { method: 'POST', body }),
+    mutationFn: (fields) =>
+      addDoc(collection(db, 'announcements'), {
+        ...fields,
+        teacher_id: profile.id,
+        created_at: serverTimestamp(),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['announcements'] })
+      qc.invalidateQueries({ queryKey: ['fs-announcements'] })
       setForm({ title: '', content: '', category: 'general', class_id: '', expires_at: '', linked_resource_type: '', linked_resource_id: '' })
       setFormErr('')
     },
@@ -204,8 +229,8 @@ export default function AnnouncementsPage() {
 
   /* ── delete ── */
   const deleteMut = useMutation({
-    mutationFn: (id) => api(`/api/announcements/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+    mutationFn: (id) => deleteDoc(doc(db, 'announcements', id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fs-announcements'] }),
     onError: () => setDeletingId(null),
     onSettled: () => setDeletingId(null),
   })
@@ -224,6 +249,9 @@ export default function AnnouncementsPage() {
     }
     const body = {
       title: form.title.trim(),
+      // Students and the mobile app render `body`; `content` was the shape the
+      // Flask endpoint used. Both are written so neither side goes blank.
+      body: form.content.trim(),
       content: form.content.trim(),
       category: form.category,
       class_id: form.class_id || null,

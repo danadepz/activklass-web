@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { deleteDoc, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db, storage } from '@/lib/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { api } from '@/lib/api'
 import { generateSyllabus } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { Plus, Trash, Edit } from '@/components/icons'
 import { ink } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { useSyllabi } from '@/hooks/useSyllabi'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -468,13 +468,6 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
         class_ids: assignedClassIds,
       }
 
-      // Save to SQLite backend (Flask) for AI + sync
-      await api(`/api/syllabus/${syllabusId}`, {
-        method: 'PUT',
-        body: payload,
-      })
-
-      // Save to Firestore top-level /syllabi/{syllabusId}
       await setDoc(doc(db, 'syllabi', syllabusId), {
         ...payload,
         id: syllabusId,
@@ -691,18 +684,11 @@ export default function SyllabusIndexPage() {
   const { data: classes } = useTeacherClasses()
 
   // Fetch SQLite syllabi
-  const { data: sqliteSyllabiData = [], isLoading: syllabiLoading, refetch } = useQuery({
-    queryKey: ['sqlite-syllabi'],
-    queryFn: async () => {
-      const res = await api('/api/syllabus')
-      return res.syllabi || []
-    },
-  })
+  const { data: sqliteSyllabiData = [], isLoading: syllabiLoading, refetch } = useSyllabi()
 
   async function handleDelete(syllabusId) {
     if (!window.confirm('Are you sure you want to delete this syllabus? All assigned classes will lose their link to it.')) return
     try {
-      await api(`/api/syllabus/${syllabusId}`, { method: 'DELETE' })
       await deleteDoc(doc(db, 'syllabi', syllabusId))
 
       // Clear syllabus_id on any classes pointing to this syllabus in Firestore

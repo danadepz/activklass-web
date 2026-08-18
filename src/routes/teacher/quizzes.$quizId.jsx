@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { useAuth } from '@/context/useAuth'
@@ -9,6 +9,7 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { ArrowRight, Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { useSyllabi } from '@/hooks/useSyllabi'
 
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
 const fieldStyle = {
@@ -436,13 +437,6 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       ...extra,
     }
 
-    // Save to SQLite
-    await api(`/api/quizzes/${quiz.id}`, {
-      method: 'PUT',
-      body: payload,
-    })
-
-    // Save to Firestore
     await updateDoc(doc(db, 'quizzes', quiz.id), {
       ...payload,
       updated_at: serverTimestamp(),
@@ -483,13 +477,6 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       // First save draft state changes to both db
       await persist()
 
-      // Call Flask publish endpoint
-      await api(`/api/quizzes/${quiz.id}/publish`, {
-        method: 'POST',
-        body: { class_mappings: classMappings },
-      })
-
-      // Update Firestore quiz status to published and store class mappings
       await updateDoc(doc(db, 'quizzes', quiz.id), {
         status: 'published',
         published_at: serverTimestamp(),
@@ -507,9 +494,6 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   async function deleteQuiz() {
     if (!window.confirm('Delete this draft quiz?')) return
     try {
-      await api(`/api/quizzes/${quiz.id}`, {
-        method: 'DELETE',
-      })
       await deleteDoc(doc(db, 'quizzes', quiz.id))
       navigate(`/teacher/quizzes`)
     } catch (err) {
@@ -912,13 +896,7 @@ export default function QuizBuilderPage() {
   })
 
   // Load all syllabi
-  const { data: syllabi } = useQuery({
-    queryKey: ['api-syllabus'],
-    queryFn: async () => {
-      const res = await api('/api/syllabus')
-      return res.syllabi || []
-    },
-  })
+  const { data: syllabi } = useSyllabi()
 
   // Load all teacher classes
   const { data: classes } = useTeacherClasses()
@@ -955,9 +933,6 @@ export default function QuizBuilderPage() {
   async function closeQuiz() {
     if (!window.confirm('Close this quiz? Students will no longer be able to take it.')) return
     try {
-      await api(`/api/quizzes/${quizId}/close`, {
-        method: 'POST',
-      })
       await updateDoc(doc(db, 'quizzes', quizId), { status: 'closed', updated_at: serverTimestamp() })
       refetch()
     } catch (err) {

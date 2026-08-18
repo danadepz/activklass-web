@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { generateQuiz } from '@/lib/ai'
@@ -9,6 +9,8 @@ import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { useQuizzes } from '@/hooks/useQuizzes'
+import { useSyllabi } from '@/hooks/useSyllabi'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
@@ -175,18 +177,6 @@ function GenerateQuizModal({ classes, onClose }) {
         },
       })
 
-      // Save to SQLite
-      await api(`/api/quizzes`, {
-        method: 'POST',
-        body: {
-          id: quizId,
-          title: payload.title,
-          class_ids: selectedClassId ? [selectedClassId] : [],
-          generated_by: 'ai_generated',
-        },
-      })
-
-      // Save to Firestore
       await setDoc(doc(db, 'quizzes', quizId), {
         ...payload,
         id: quizId,
@@ -307,17 +297,6 @@ function CreateQuizModal({ classes, onClose }) {
         title: title.trim(),
       })
 
-      // SQLite
-      await api('/api/quizzes', {
-        method: 'POST',
-        body: {
-          id: quizId,
-          title: payload.title,
-          class_ids: selectedClassIds,
-        },
-      })
-
-      // Firestore
       await setDoc(doc(db, 'quizzes', quizId), {
         ...payload,
         id: quizId,
@@ -991,27 +970,14 @@ export default function QuizzesIndexPage() {
   const { data: classes } = useTeacherClasses()
 
   // Fetch quizzes
-  const { data: sqliteQuizzes, isLoading, refetch } = useQuery({
-    queryKey: ['sqlite-quizzes'],
-    queryFn: async () => {
-      const res = await api('/api/quizzes')
-      return res.quizzes || []
-    },
-  })
+  const { data: sqliteQuizzes, isLoading, refetch } = useQuizzes()
 
   // Fetch syllabi for the Quiz Bank structure
-  const { data: syllabi } = useQuery({
-    queryKey: ['api-syllabus'],
-    queryFn: async () => {
-      const res = await api('/api/syllabus')
-      return res.syllabi || []
-    },
-  })
+  const { data: syllabi } = useSyllabi()
 
   async function handleDelete(quizId) {
     if (!window.confirm('Are you sure you want to delete this quiz? This cannot be undone.')) return
     try {
-      await api(`/api/quizzes/${quizId}`, { method: 'DELETE' })
       await deleteDoc(doc(db, 'quizzes', quizId))
       refetch()
     } catch (err) {
