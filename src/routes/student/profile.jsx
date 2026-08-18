@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
 import ParentalAccessPanel from '@/components/ParentalAccessPanel'
 import { navy, ink, muted, faint, red, line, serif } from '@/theme'
 import ChangePassword from '@/components/ChangePassword'
+import AttachmentField from '@/components/AttachmentField'
 
 const fieldStyle = { width: '100%', padding: '10px 12px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
@@ -21,7 +21,7 @@ function InfoCell({ label, value }) {
   )
 }
 
-function Avatar({ profile, uploading, onPick }) {
+function Avatar({ profile, busy, open, onToggle }) {
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
   return (
     <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
@@ -32,14 +32,17 @@ function Avatar({ profile, uploading, onPick }) {
           {initials}
         </div>
       )}
-      <label
-        htmlFor="avatar-input"
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={busy}
         title="Change photo"
-        style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: navy, color: '#FFFFFF', display: 'grid', placeItems: 'center', cursor: uploading ? 'wait' : 'pointer', border: '2px solid #FFFFFF', fontSize: 12 }}
+        aria-label="Change photo"
+        aria-expanded={open}
+        style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: navy, color: '#FFFFFF', display: 'grid', placeItems: 'center', cursor: busy ? 'wait' : 'pointer', border: '2px solid #FFFFFF', fontSize: 12, padding: 0 }}
       >
-        {uploading ? '…' : '📷'}
-      </label>
-      <input id="avatar-input" type="file" accept="image/*" onChange={onPick} disabled={uploading} style={{ display: 'none' }} />
+        {busy ? '…' : '📷'}
+      </button>
     </div>
   )
 }
@@ -51,24 +54,23 @@ export default function StudentProfile() {
   const age = ageFromBirthdate(profile.birthdate) ?? profile.age ?? null
   const isAdult = age != null ? age >= 18 : null
 
-  // --- Profile photo upload ---
+  // --- Profile photo ---
+  // The camera badge opens the shared attachment field rather than a file
+  // dialog: Cloud Storage is not provisioned, so pasting a Photos or Drive
+  // link is the only route that currently produces a usable photo_url.
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [photoError, setPhotoError] = useState(null)
 
-  async function handlePhoto(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function attachPhoto(url) {
     setUploading(true)
     setPhotoError(null)
     try {
-      const safe = file.name.replace(/[^\w.-]/g, '_')
-      const r = ref(storage, `avatars/${profile.id}/${Date.now()}-${safe}`)
-      await uploadBytes(r, file)
-      const url = await getDownloadURL(r)
       await updateDoc(doc(db, 'users', profile.id), { photo_url: url })
       await refreshProfile()
+      setPhotoOpen(false)
     } catch (err) {
-      setPhotoError(err.message || 'Could not upload the image.')
+      setPhotoError(err.message || 'Could not save the photo.')
     } finally {
       setUploading(false)
     }
@@ -200,7 +202,12 @@ export default function StudentProfile() {
       <section style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 24 }}>
         <div className="flex items-center justify-between gap-4" style={{ marginBottom: 18 }}>
           <div className="flex items-center gap-4" style={{ minWidth: 0 }}>
-            <Avatar profile={profile} uploading={uploading} onPick={handlePhoto} />
+            <Avatar
+              profile={profile}
+              busy={uploading}
+              open={photoOpen}
+              onToggle={() => setPhotoOpen((v) => !v)}
+            />
             <div style={{ minWidth: 0 }}>
               <div style={{ ...serif, fontSize: 22, color: ink, lineHeight: 1.1 }}>{fullName || 'Your name'}</div>
               <div style={{ fontSize: 13, color: muted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
@@ -216,6 +223,18 @@ export default function StudentProfile() {
             </button>
           )}
         </div>
+
+        {photoOpen && (
+          <div style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 14, marginBottom: 14, background: 'rgba(14,42,92,0.02)' }}>
+            <AttachmentField
+              storagePath={`avatars/${profile.id}`}
+              accept="image/*"
+              onAttached={(url) => attachPhoto(url)}
+              label="Profile photo"
+              compact
+            />
+          </div>
+        )}
 
         {photoError && (
           <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>{photoError}</p>
