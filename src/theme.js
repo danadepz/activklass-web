@@ -6,7 +6,8 @@
  * through 25 route files.
  *
  * Before this existed each page redeclared its own `const navy = '#0E2A5C'`,
- * which had already drifted in two places -- see goldAmber and inkMuted below.
+ * which had already drifted in two places. One was a genuine mistake and is
+ * gone; the other turned out to be load-bearing -- see inkMuted below.
  */
 
 // Core brand
@@ -18,28 +19,31 @@ export const cream = '#FAFAF6'
 
 // Text
 export const ink = '#0A1733'
+/**
+ * The third text tone, between `ink` and `muted`.
+ *
+ * Kept, and no longer flagged as a drift. It was listed as one on the
+ * suspicion that Markdown.jsx had merely misspelled `muted`, but the value is
+ * written out as a raw `#3A4A6B` literal 22 times across 14 other files that
+ * never import it -- body copy in the class pages, and the text colour of
+ * every muted "Cancel" in a modal footer. It is load-bearing, and collapsing
+ * it into `muted` (#6A7A95) would lighten text in 16 files.
+ *
+ * The real defect is the reverse: those 22 literals should import this token.
+ * Left alone here rather than swept, since most of those files are held by
+ * other panes -- see BACKLOG #10.
+ */
+export const inkMuted = '#3A4A6B'
 export const muted = '#6A7A95'
 export const faint = '#9AA6BD'
 
 // Status
 export const green = '#1F8A5B'
 export const red = '#C0392B'
+/** Slab under a filled danger button, as navyDeep is to navy. */
+export const redDeep = '#922B21'
 export const blue = '#3FA9F5'
 export const blueText = '#1E6FB0'
-
-/**
- * Drifted variants, kept so the extraction changed no pixels.
- *
- * goldAmber: routes/index.jsx called this `goldDeep`, but lighter than the
- * value the other 17 files use.
- * inkMuted: Markdown.jsx called this `muted` and one file called it `slate`,
- * both darker than the `muted` everywhere else.
- *
- * If the UI lane decides these were mistakes, collapse them into goldDeep and
- * muted and delete these two exports.
- */
-export const goldAmber = '#B58F00'
-export const inkMuted = '#3A4A6B'
 
 // ---------------------------------------------------------------------------
 // Typography
@@ -72,7 +76,6 @@ export const palette = {
   navyDeep,
   gold,
   goldDeep,
-  goldAmber,
   cream,
   ink,
   inkMuted,
@@ -80,6 +83,7 @@ export const palette = {
   faint,
   green,
   red,
+  redDeep,
   blue,
   blueText,
 }

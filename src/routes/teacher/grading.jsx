@@ -6,26 +6,13 @@ import { api } from '@/lib/api'
 import { GRADING_MODES, GRADING_PRESETS, weightsValid } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
-import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
+import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
+import { navy, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const fieldStyle = {
   padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
   border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, transition: 'border-color 0.15s, box-shadow 0.15s',
-}
-const iconBtn = { color: faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontSize: 18, lineHeight: 1 }
-const btnPrimary = {
-  display: 'inline-flex', alignItems: 'center', gap: 9, padding: '12px 20px', fontSize: 14,
-  fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none',
-  borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
-}
-
-function GoldArrow() {
-  return (
-    <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
-      <ArrowRight className="h-3 w-3" />
-    </span>
-  )
 }
 
 function Banner({ tone, children }) {
@@ -168,16 +155,15 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
               />
               <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
             </div>
-            <button
-              type="button"
+            <IconButton
               onClick={() => setRows(rows.filter((_, j) => j !== i))}
               disabled={rows.length === 1}
-              title="Remove"
+              label="Remove"
               className="transition hover:text-[#C0392B] disabled:cursor-not-allowed"
-              style={{ ...iconBtn, opacity: rows.length === 1 ? 0.3 : 1 }}
+              style={{ color: faint, fontSize: 18, opacity: rows.length === 1 ? 0.3 : 1 }}
             >
               ×
-            </button>
+            </IconButton>
           </div>
         ))}
       </div>
@@ -298,15 +284,12 @@ function GlobalGradingForm({ setup, classes }) {
             Define grading periods and components. Save as preset template and apply it to target classes.
           </p>
         </div>
-        <button
-          onClick={() => save.mutate()}
-          disabled={save.isPending}
-          className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={btnPrimary}
-        >
+        <Button onClick={() => save.mutate()} disabled={save.isPending} radius={11}>
           {save.isPending ? 'Saving…' : 'Save & Sync'}
-          <GoldArrow />
-        </button>
+          <GoldArrowDot>
+            <ArrowRight className="h-3 w-3" />
+          </GoldArrowDot>
+        </Button>
       </div>
 
       <div className="mt-4" style={{ background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 18px' }}>

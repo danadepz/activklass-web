@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/useAuth'
-import { ink, muted, red, sansFamily, serifFamily } from '@/theme'
+import { ink, muted, sansFamily, serifFamily } from '@/theme'
+import Button from '@/components/ui/Button'
 
 /**
  * Sign-out trigger with a confirmation step.
@@ -71,29 +72,19 @@ export default function SignOutButton({ children = 'Sign out', className, style 
               Are you sure you want to sign out of your ActivKlass account?
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setAsking(false)}
-                style={{
-                  flex: 1, padding: '12px 20px', fontSize: 14, fontWeight: 600, fontFamily: sansFamily,
-                  color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)',
-                  borderRadius: 12, cursor: 'pointer',
-                }}
-              >
+              <Button type="button" variant="quiet" radius={12} onClick={() => setAsking(false)} style={{ flex: 1 }}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="dangerSolid"
+                radius={12}
                 autoFocus
                 onClick={() => { setAsking(false); logout() }}
-                style={{
-                  flex: 1, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sansFamily,
-                  color: '#FAFAF6', background: red, border: 'none', borderRadius: 12,
-                  cursor: 'pointer', boxShadow: '0 3px 0 #922B21',
-                }}
+                style={{ flex: 1 }}
               >
                 Sign out
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
-import { ink, navy, navyDeep, gold, goldAmber as goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono } from '@/theme'
+import { ink, navy, navyDeep, gold, goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.

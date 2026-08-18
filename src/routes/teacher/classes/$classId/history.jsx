@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
+import Button from '@/components/ui/Button'
 import { navy, ink, goldDeep, muted, faint, blueText, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 
 const KIND = {
@@ -14,11 +15,6 @@ const KIND = {
   config: { tag: 'Settings', fg: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
 }
 
-const btnGhost = {
-  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', fontSize: 13,
-  fontWeight: 600, fontFamily: sans, color: navy, background: '#FFFFFF',
-  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer',
-}
 
 function toDate(ts) {
   if (!ts) return null
@@ -165,12 +161,12 @@ export default function HistoryPage() {
         </p>
       </div>
       <div className="flex flex-wrap gap-2.5">
-        <button onClick={() => setShowFilters((s) => !s)} className="transition hover:brightness-105" style={{ ...btnGhost, ...(showFilters ? { color: navy, borderColor: navy } : {}) }}>
+        <Button variant="ghost" size="sm" radius={11} onClick={() => setShowFilters((s) => !s)} style={showFilters ? { borderColor: navy } : undefined}>
           Filter
-        </button>
-        <button onClick={exportLog} disabled={!events?.length} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
+        </Button>
+        <Button variant="ghost" size="sm" radius={11} onClick={exportLog} disabled={!events?.length}>
           Export log
-        </button>
+        </Button>
       </div>
     </div>
   )

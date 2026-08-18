@@ -4,9 +4,10 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
+import Button from '@/components/ui/Button'
 import { changePlan, fetchPlans, fetchSubscription, formatBytes } from '@/lib/subscription'
 import {
-  navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono, sansFamily as sans,
+  ink, gold, muted, faint, green, red, line, serif, mono, sansFamily as sans,
 } from '@/theme'
 
 const GB = 1024 ** 3
@@ -15,11 +16,6 @@ const card = { background: '#FFFFFF', border: `1px solid ${line}`, borderRadius:
 const field = {
   width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink,
   background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10,
-}
-const btnPrimary = {
-  padding: '10px 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6',
-  background: navy, border: 'none', borderRadius: 10, cursor: 'pointer',
-  boxShadow: `0 3px 0 ${navyDeep}`,
 }
 
 function Notice({ tone = 'error', children }) {
@@ -116,9 +112,9 @@ function ProfileCard() {
         </label>
       </div>
       <div style={{ marginTop: 16 }}>
-        <button type="submit" style={btnPrimary} disabled={mut.isPending}>
+        <Button type="submit" disabled={mut.isPending}>
           {mut.isPending ? 'Saving…' : 'Save profile'}
-        </button>
+        </Button>
       </div>
       <Notice>{err}</Notice>
       <Notice tone="ok">{msg}</Notice>
