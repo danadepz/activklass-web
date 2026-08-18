@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
-import { GRADING_MODES, GRADING_PRESETS } from '@/lib/grading'
+import { GRADING_MODES, GRADING_PRESETS, weightsValid } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
@@ -62,27 +62,56 @@ function newRow() {
   return { id: null, name: '', weight_percent: '' }
 }
 
-function weightSum(rows) {
-  return rows.reduce((sum, r) => sum + (parseFloat(r.weight_percent) || 0), 0)
+/* A GRADING_PRESETS row -> an editable form row.
+   Preset entries are objects ({ name, weight_percent }). Reading them as
+   tuples (p[0]/p[1]) is what crashed "Quick-start with a preset": name came
+   back undefined and withIds() below calls .trim() on it. One converter now,
+   used by both the preset buttons and the first-run default. */
+function presetRows(rows) {
+  return (rows ?? []).map((r) => ({
+    id: null,
+    name: r.name,
+    weight_percent: String(r.weight_percent),
+  }))
 }
 
+// Same coercion weightsValid uses, so the badge total can never disagree with
+// the check that gates the save.
+function weightSum(rows) {
+  return rows.reduce((sum, r) => sum + (Number(r.weight_percent) || 0), 0)
+}
+
+/* Rows that survive the save. withIds() drops anything without a name, so an
+   unnamed row must not count toward the 100% check either — otherwise you can
+   park 20% on a nameless row, pass validation, and save a config that really
+   only totals 80%. Every weight check below runs on these rows, not the raw ones. */
+function namedRows(rows) {
+  return rows.filter((r) => String(r.name ?? '').trim())
+}
+
+/* The 100% rule has exactly one definition: weightsValid in lib/grading.js.
+   It used to be restated here and again inside EditorCard, which is how the
+   lib copy drifted into a float-equality bug nobody noticed — it was dead. */
 function balanced(rows) {
-  return Math.abs(weightSum(rows) - 100) < 0.01
+  return weightsValid(namedRows(rows))
 }
 
 function withIds(rows, extraKeys = []) {
-  return rows
-    .filter((r) => r.name.trim())
+  return namedRows(rows)
     .map((r) => {
-      const out = { id: r.id || newId(), name: r.name.trim(), weight_percent: Number(r.weight_percent) || 0 }
+      const out = { id: r.id || newId(), name: String(r.name).trim(), weight_percent: Number(r.weight_percent) || 0 }
       for (const k of extraKeys) out[k] = r[k] ?? false
       return out
     })
 }
 
 function EditorCard({ title, hint, rows, setRows, addLabel }) {
-  const sum = weightSum(rows)
-  const ok = Math.abs(sum - 100) < 0.01
+  // Badge reflects what would actually be saved, so it agrees with the check
+  // in persist() rather than counting weights on unnamed rows.
+  const counted = namedRows(rows)
+  const sum = weightSum(counted)
+  const ok = balanced(rows)
+  const ignored = rows.length - counted.length
 
   const update = (index, key, value) =>
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
@@ -96,6 +125,13 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
         </div>
         <WeightBadge ok={ok}>{sum.toFixed(sum % 1 === 0 ? 0 : 2)}%</WeightBadge>
       </div>
+
+      {ignored > 0 && (
+        <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
+          {ignored} row{ignored === 1 ? '' : 's'} without a name {ignored === 1 ? 'is' : 'are'} not
+          counted and will not be saved.
+        </p>
+      )}
 
       <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
 
@@ -241,8 +277,8 @@ function GlobalGradingForm({ setup, classes }) {
 
   const applyPreset = useMutation({
     mutationFn: async (preset) => {
-      const nextP = preset.periods.map((p) => ({ id: null, name: p[0], weight_percent: String(p[1]) }))
-      const nextC = preset.components.map((c) => ({ id: null, name: c[0], weight_percent: String(c[1]) }))
+      const nextP = presetRows(preset.periods)
+      const nextC = presetRows(preset.components)
       setPeriods(nextP)
       setComponents(nextC)
       await persist(nextP, nextC, gradingMode)
@@ -409,18 +445,14 @@ export default function GlobalGradingSetupPage() {
 
   if (isClassesLoading || isPresetLoading) return <p style={{ color: faint }}>Loading grading setup…</p>
 
+  /* First-run default is the DepEd K-12 preset itself, not a second copy of it.
+     The copy that used to live here said 40/40/20; DepEd Order No. 8 s. 2015
+     is 30/50/20, which is what lib/grading.js has always used. Deriving it
+     means the button and the default can no longer disagree. */
+  const depedPreset = GRADING_PRESETS.find((p) => p.key === 'deped_k12') ?? GRADING_PRESETS[0]
   const initialSetup = preset || {
-    periods: [
-      { id: null, name: 'Quarter 1', weight_percent: '25' },
-      { id: null, name: 'Quarter 2', weight_percent: '25' },
-      { id: null, name: 'Quarter 3', weight_percent: '25' },
-      { id: null, name: 'Quarter 4', weight_percent: '25' },
-    ],
-    components: [
-      { id: null, name: 'Written Works', weight_percent: '40' },
-      { id: null, name: 'Performance Tasks', weight_percent: '40' },
-      { id: null, name: 'Quarterly Assessment', weight_percent: '20' },
-    ],
+    periods: presetRows(depedPreset.periods),
+    components: presetRows(depedPreset.components),
     grading_mode: 'deped_k12',
   }
 
