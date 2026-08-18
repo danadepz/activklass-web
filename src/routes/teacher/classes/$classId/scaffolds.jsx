@@ -144,14 +144,17 @@ export default function ScaffoldTopicsPage() {
     setBusy(topic.id)
     setError(null)
     try {
-      const quiz = await api('/api/generate_quiz', {
+      // aiToQuestions below builds multiple-choice items, so ask for mcq only.
+      const { draft: quiz } = await api('/api/quizzes/generate', {
         method: 'POST',
         body: {
           topic: topic.title,
-          count: 10,
-          blooms_level: 'apply',
-          subject_code: data?.clazz?.subject_code || '',
-          subject_description: data?.clazz?.subject || '',
+          num_questions: 10,
+          types: ['mcq'],
+          difficulty: 'medium',
+          notes: data?.clazz?.subject
+            ? `Subject: ${data.clazz.subject}. Target level: apply.`
+            : 'Target level: apply.',
         },
       })
       const ref = await addDoc(collection(db, 'quizzes'), {
@@ -169,7 +172,7 @@ export default function ScaffoldTopicsPage() {
         generated_by: 'ai_generated',
         questions: aiToQuestions(quiz),
         topic_id: topic.id,
-        ai_source: quiz.source ?? null,
+        ai_source: 'anthropic',
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       })

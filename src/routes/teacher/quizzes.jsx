@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   where,
   deleteDoc,
 } from 'firebase/firestore'
@@ -172,14 +172,26 @@ function GenerateQuizModal({ classes, onClose }) {
     setGenerating(true)
     setError(null)
     try {
-      const quiz = await api('/api/quizzes/generate', {
+      // aiToQuestions below builds multiple-choice items, so ask for mcq only.
+      // Bloom's level and subject aren't first-class fields on this endpoint —
+      // they ride along as notes, which the prompt builder appends verbatim.
+      const notes = [
+        `Target cognitive level (Bloom's): ${form.blooms_level}.`,
+        selectedClassMeta?.subject && `Subject: ${selectedClassMeta.subject}.`,
+        selectedClassMeta?.subject_code && `Subject code: ${selectedClassMeta.subject_code}.`,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      const { draft: quiz } = await api('/api/quizzes/generate', {
         method: 'POST',
         body: {
           topic: topicText,
-          count: Number(form.count),
-          blooms_level: form.blooms_level,
-          subject_code: selectedClassMeta?.subject_code || '',
-          subject_description: selectedClassMeta?.subject || '',
+          topic_id: form.topic_id || null,
+          num_questions: Number(form.count),
+          types: ['mcq'],
+          difficulty: 'mixed',
+          notes,
         },
       })
 
