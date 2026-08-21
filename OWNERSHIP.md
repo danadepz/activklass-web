@@ -134,12 +134,18 @@ Everything else is creating and configuring classes. `teacher/record.jsx` and
 lanes; check which one you have open.
 
 **Admin was missing entirely.** `routes/admin/**` and `routes/superadmin/**` —
-ten files, including `admin/BulkUpload.jsx`, which a pane was actively editing
-with no lane to cover it — were in no lane and not Shared, so nothing said who
-owned them or whether to announce. `teacher/account.jsx` had the same gap and
-is settings-shaped, so it lands here. A file in no lane is worse than a file in
+ten files — were in no lane and not Shared, so nothing said who owned them or
+whether to announce. `teacher/account.jsx` had the same gap and is
+settings-shaped, so it lands here. A file in no lane is worse than a file in
 the wrong lane: the wrong lane gets argued about, the missing one gets edited
 by two panes in silence.
+
+The gap was found because `admin/BulkUpload.jsx` sat on a pane's task list with
+nothing in this document covering it. To be accurate about what did *not*
+happen: that pane read the file and committed nothing to it. The hole was real
+and unguarded, and it was not a near miss — worth recording as both, because
+"we got away with it" and "it could not have bitten" are different claims and
+only the first one is true here.
 
 **If a file is not in this table or under Shared, it has no owner.** Say so in
 the other panes before you touch it, and add it here in the same commit. The
@@ -161,10 +167,12 @@ Announce before editing. Keep the change small.
 | `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
 
 **Shared is not a lane, and nobody owns one of these.** A pane that does most
-of the work in a shared file still does not own it — this has already been
-misread once, with `lib/api.js` described as one pane's file. Doing the work is
-not the same as holding the lane; announce every time, including the second
-time.
+of the work in a shared file still does not own it. This has already been
+misread once: `lib/api.js` was announced correctly and then described as that
+pane's file afterwards. Note which half went wrong, because the fix is not
+"announce more" — the announcement happened. Shared has no unowned state to
+claim, so there was nothing to take; announcing buys you one edit, not the
+lane, and the next edit needs announcing again.
 
 **Repo docs, because four panes append to them.** Add your own section, do not
 restructure anyone else's, and re-read before you write — `BACKLOG.md` moved
