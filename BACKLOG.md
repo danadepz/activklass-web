@@ -834,6 +834,88 @@ alongside it.
 
 ---
 
+## 26. AI generation items from the teacher walkthrough — NOT reproducible; cause not yet established
+
+Source: AI-services pane, measured first-hand against Flask on :5000 and live Firestore
+on 2026-08-21. Numbers below are direct observations, not inferences.
+
+### Status: both items OPEN as "cause unknown", not closed as "Flask was down"
+
+Walkthrough feedback said "cannot generate a syllabus with AI" and "cannot generate a
+quiz with AI". Neither reproduces with the backend running.
+
+**What was ruled out:**
+
+- *Not connection-refused at test time.* With Flask up, `/api/syllabus/generate` and
+  `/api/quizzes/generate` are reachable through the Vite proxy and return correct JSON.
+  (Note: there is no `/api/ai/*` generation route; `app/api/ai.py` holds only
+  risk/struggle/essay/scaffold.)
+- *Not a model failure.* Real calls through the real prompt builders succeed on the
+  PRIMARY model, `gemini-3.5-flash`: syllabus at 12 weeks (980 output tokens) and at the
+  40-week clamp (2022), quiz at the 30-question clamp with all four question types
+  (3251) — all well inside the 16000 `max_output_tokens` budget.
+- *Not a 429.* The Firestore `ai_usage` ledger holds two documents only, both for
+  `teacher.maria`, at 2/20 on 2026-08-18 and 2/20 on 2026-08-19. Nothing for today.
+- *Not the fallback path failing.* The 429 model-stepping added in 7834aa0 was verified
+  firing, not assumed: with the SDK stubbed to 429, it steps
+  `gemini-3.5-flash -> gemini-3.6-flash -> gemini-3.7-flash` and returns the fallback's
+  result. `tests/test_ai_fallback.py` covers this and passes.
+
+**The decisive evidence:** the newest document in the Firestore `ai_jobs` collection is
+dated **2026-08-19**. The walkthrough left zero server-side records. Whatever happened,
+no request reached the point where a job row is written.
+
+### The open question — read this before closing either item
+
+Absence of `ai_jobs` rows proves the request never got past the **auth gate**, which is
+weaker than "Flask was down". `require_ai_teacher` (app/services/ai/gate.py) rejects
+before any ledger write and requires `role == "teacher"` **exactly**. Firestore currently
+holds 2 accounts with role `developer`, and the sign-in page offers preset accounts via
+`DevQuickLogin`.
+
+A tester who clicked a developer preset would get a silent 403 that leaves no `ai_jobs`
+row — **indistinguishable from a dead backend on the evidence available**, and not
+disambiguated by the improved "Cannot reach the ActivKlass server" message from f8ed1fd
+either, since that only covers the unreachable case.
+
+ACTION: ask the testers which account they signed in with before closing these items.
+
+### Pattern worth naming: three independent causes, one reported symptom
+
+This walkthrough produced three unrelated mechanisms that all reached the tester as
+"nothing happened / no error shown":
+
+1. A dead backend surfacing as the browser's raw "Failed to fetch" (fixed, f8ed1fd).
+2. A real client-side publish refusal rendered a screenful from the control that
+   triggered it (quiz-builder pane).
+3. A silent 403 from a role mismatch, described above (open).
+
+A fourth candidate of shape (2), unverified visually and worth a look:
+`src/routes/teacher/syllabus.jsx` — the AI generate modal renders its error banner at the
+top of a `max-h-[90vh] overflow-y-auto` panel, with 5 labelled fields and a notes
+textarea between it and the "✨ Generate" button at the bottom. On a viewport where the
+modal scrolls, a teacher who scrolls down to click Generate gets the button reset to
+its idle label with the reason off-screen above. Same failure shape, and it sits on one
+of the two flows this section is about.
+
+The generalisation: any handler whose only failure path is `setError()` into a distant
+banner is a candidate. That is the finding — not any individual fix.
+
+### Related backend change (uncommitted at time of writing)
+
+`app/services/ai/client.py` gained a truncation guard. `json.loads` on an empty or
+truncated stream previously raised a bare `JSONDecodeError` that neither `except` arm
+caught — no retry, no model fallback, and an opaque 502 reading "AI generation failed.
+Please try again." It now raises `AITruncatedError`, handled like a 503 (retry, then step
+models), with a message naming `finish_reason`, `reasoning_tokens` and the budget.
+
+Not the cause of the walkthrough failures — only reachable above the endpoints' own
+input clamps. But `gemini-3.5-flash` is a thinking model and reasoning tokens are billed
+against `max_output_tokens`, so the margin is invisible: a trivial prompt at a 100-token
+budget spent 97 on reasoning and returned no answer text at all.
+
+---
+
 ## Smaller notes
 
 - Top-level Firestore `syllabi` is empty; the seed writes
