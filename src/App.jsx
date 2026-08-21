@@ -3,7 +3,7 @@ import ProtectedRoute, { RoleHomeRedirect } from '@/components/ProtectedRoute'
 import { lazyRoute } from '@/components/lazyRoute'
 
 // ─── Shared components ───────────────────────────────────────────────────────
-import RolePlaceholder from '@/components/RolePlaceholder'
+import ParentOnMobile from '@/components/ParentOnMobile'
 
 // Every screen below is fetched on first visit. lazyRoute() returns a ready
 // route element wrapped in its own Suspense boundary — see the note in
@@ -105,7 +105,8 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Other roles (placeholders until their portals are built) */}
+      {/* Guardians are mobile-only by design -- /parent points them at the app
+         rather than pretending a web portal is on its way. */}
       <Route element={<ProtectedRoute roles={['admin']} />}>
         <Route path="/admin" element={AdminUsersPage} />
       </Route>
@@ -121,7 +122,7 @@ export default function App() {
         </Route>
       </Route>
       <Route element={<ProtectedRoute roles={['parent']} />}>
-        <Route path="/parent" element={<RolePlaceholder title="Parent" />} />
+        <Route path="/parent" element={<ParentOnMobile />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
