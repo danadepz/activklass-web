@@ -56,7 +56,16 @@ is a 400. Both paths have regression tests -- the syllabus one asserts through
 `classes.syllabus_id`, which is the field students actually resolve a syllabus
 through.
 
-## 5. No test suite on the web
+## 5. ~~No test suite on the web~~ — done
+
+Done. `npm run test` runs 408 tests across 14 files, and all three targets
+named below are covered: `grading.test.js`, `quizGrading.test.js`,
+`aiDrafts.test.js` and `ai.risk.test.js`. `portParity.test.js` additionally
+holds the mobile TypeScript ports to the web originals across the repo
+boundary, and `firestoreRules.test.js` runs the real rules engine behind
+`npm run test:rules` (27 cases, needs the emulator + Java).
+
+Original note kept for what it aimed at:
 
 ~16k lines, and `npm run build` compiling is the only automated check. Start
 where the cost of being wrong is highest and the code is easiest to test --
@@ -70,7 +79,12 @@ both are pure functions:
   need no Firestore or Gemini, so they are the cheapest tests here to write and
   the easiest to lose. A regression in either is silent by construction.
 
-## 6. Mobile and web write different attempt shapes **(cross-repo)**
+## 6. ~~Mobile and web write different attempt shapes~~ — done **(cross-repo)**
+
+Mobile now writes both: `attempt_number` in `attemptSession.ts` when the
+sitting opens, `per_question` when it is submitted. The shapes are held in
+step by `portParity.test.js`, which imports the mobile ports directly and
+fails if they drift -- so this cannot silently come back.
 
 Mobile's quiz player omits `per_question` and `attempt_number`, which the web
 player writes. Web's quiz-feedback page reads `per_question`, so a student who
@@ -79,27 +93,63 @@ breakdown. Same family as the `total_score` bug -- two writers drifting.
 
 ## 7. The risk model is trained on synthetic data **(cross-repo)**
 
-`/api/predict` fits a Random Forest on data generated at startup; no labelled
-ActivKlass history exists yet. Fine as triage, not evidence about a student.
-Anything user-facing should say so. Revisit once real attempt history exists.
+Still open, but both halves have moved.
 
-## 8. Lint: 35 pre-existing errors
+The disclosure shipped (`6c9eae1`): `predict_risk` returns a `training`
+block -- `real_data: false`, the source, the sample count and one sentence of
+plain English -- so the caveat reaches the teacher reading the number rather
+than living in a module docstring. `real_data` is the field to branch on when
+real exports arrive.
 
-**None are in the UI/UX lane** — `theme.js`, `index.css` and `components/**`
-lint clean. Every error sits in a page-lane file, so each pane clears its own;
-a single pane doing the lot means editing four files it does not own.
+The model was also rebuilt: `age`, `study_hours_per_week`,
+`has_internet_access` and `household_income_bracket` are GONE -- a risk flag
+raised partly on a household's income bracket is not measuring the learner --
+and half the features are now rates of change, so it fires before the
+gradebook does instead of alongside it.
 
-Snapshot below taken 2026-08-19. Treat the counts as indicative, not exact —
-the total moved 34 → 36 → 35 over one working session as panes landed new code,
-so re-run `npx eslint .` before starting rather than trusting these lines.
+What remains: it is still synthetic. `_synthetic_dataset` is the single seam
+to replace once a pilot term produces labelled history.
 
-| Owner | File | Errors |
-|---|---|---|
-| **Classes** | `teacher/classes/$classId/index.jsx` | 27 |
-| **Classes** | `teacher/classes/$classId/_layout.jsx` | 1 |
-| **Quizzes** | `teacher/quizzes.jsx` | 3 |
-| **Quizzes** | `teacher/quizzes.$quizId.jsx` | 3 |
-| **Syllabus** | `teacher/syllabus.jsx` | 1 |
+## 8. Lint: 41 errors on web, 13 on mobile
+
+Snapshot re-taken 2026-08-21. Treat the counts as indicative, not exact — the
+total has moved 34 → 36 → 35 → 41 as panes landed new code, so re-run
+`npx eslint .` before starting rather than trusting these lines.
+
+### Web — 41 errors, all `no-unused-vars`
+
+| File (under `src/`) | Errors |
+|---|---|
+| `routes/teacher/classes/$classId/index.jsx` | 22 |
+| `lib/attachments.js` | 5 |
+| `routes/teacher/quizzes.$quizId.jsx` | 3 |
+| `routes/teacher/quizzes.jsx` | 3 |
+| `routes/student/profile.jsx` | 2 |
+| `components/SignOutButton.jsx` | 1 |
+| `lib/guardianCodes.js` | 1 |
+| `routes/index.jsx` | 1 |
+| `routes/teacher/classes/$classId/_layout.jsx` | 1 |
+| `routes/teacher/classes/$classId/attendance.jsx` | 1 |
+| `routes/teacher/syllabus.jsx` | 1 |
+
+### Mobile — 13 errors, 11 warnings **(cross-repo)**
+
+New: the mobile app had NO eslint config at all until `04e35d0`, leaving
+`tsc --noEmit` as its only automated check over ~2,800 lines. It now runs
+`eslint-config-expo` (`npx eslint .`).
+
+Ten of the thirteen errors are react-hooks findings, and **five sit in
+`app/student/quiz-player.tsx`** — the exam timer:
+
+| Rule | Count |
+|---|---|
+| `react-hooks/immutability` (all in quiz-player) | 5 |
+| `react-hooks/set-state-in-effect` | 5 |
+| `react/no-unescaped-entities` (Expo boilerplate) | 3 |
+
+These are questions about render behaviour, not formatting, and the screen
+they cluster in governs how long a student gets in an exam. Read before
+rewriting. This is the highest-value unreviewed code in the project.
 
 **Classes** — `$classId/index.jsx` is the bulk of the backlog item and is
 mostly one thing: a dead inline style block at lines 768–800 (`overlayStyle`,
@@ -253,7 +303,16 @@ closes that too.
 
 Same question for `announcements.py`, `records.py` and `attendance.py`.
 
-## 14. The docs contradict each other on the database **(cross-repo)**
+## 14. ~~The docs contradict each other on the database~~ — done **(cross-repo)**
+
+Fixed in backend `991d8d2`. `04-setup.md` no longer claims Postgres is the
+target, `01-architecture.md` opens with a superseded banner naming Firestore
+as the system of record, and `02-database-schema.md` states that its
+collections are the record while the SQLAlchemy schema is not authoritative.
+The SQL side is uncalled, not gone: four endpoint groups still read it, and
+04-setup.md now lists which.
+
+Original note:
 
 `docs/04-setup.md:96` says "Postgres is the real target (see
 docs/02-database-schema.md)" and points at a document that now opens with
@@ -298,7 +357,12 @@ The real fix remains a MELC list to check against. DepEd publishes the 2020
 MELCs per learning area; even one subject loaded as a JSON lookup would turn
 `unverified` into a real answer for that subject.
 
-## 16. A 429 does not trigger the model fallback **(cross-repo)**
+## 16. ~~A 429 does not trigger the model fallback~~ — done **(cross-repo)**
+
+Fixed in `7834aa0`. `client.py` now catches `errors.ClientError`, checks for
+code 429 and steps to the next model, because each carries its own daily
+quota. Anything that is not a 429 still propagates rather than burning the
+fallbacks on an error they cannot fix.
 
 `client.py:122` retries and steps through `FALLBACK_MODELS` only on
 `errors.ServerError` (5xx). Quota exhaustion is a 429 `ClientError`, so it
