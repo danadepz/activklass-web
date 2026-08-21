@@ -85,6 +85,12 @@ function rosterPatch(fields) {
   return patch
 }
 
+/* A birthdate cannot be in the future. `max` both blocks a later date and makes
+   the picker open on the current month instead of wherever it last landed --
+   testers reported it opening on advanced dates. Computed once at module load;
+   a session left open across midnight is not worth a re-render for. */
+const TODAY_ISO = new Date().toISOString().slice(0, 10)
+
 /* Shared roster field inputs (ID Number, Middle Name, Course, Year, Remarks,
    enrollment status, LRN, birthdate). Last/first name come from the account. */
 function StudentFields({ fields, setFields }) {
@@ -103,8 +109,8 @@ function StudentFields({ fields, setFields }) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>Course <span style={optHint}>(opt)</span></label>
-          <input className="ak-input" placeholder="e.g. BSIT" value={fields.course} onChange={set('course')} style={fieldStyle} />
+          <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
+          <input className="ak-input" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} />
         </div>
         <div>
           <label style={labelStyle}>Year</label>
@@ -132,12 +138,12 @@ function StudentFields({ fields, setFields }) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>DepEd LRN <span style={optHint}>(opt)</span></label>
+          <label style={labelStyle}>LRN <span style={optHint}>(basic ed, opt)</span></label>
           <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} />
         </div>
         <div>
           <label style={labelStyle}>Birthdate</label>
-          <input className="ak-input" type="date" value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+          <input className="ak-input" type="date" max={TODAY_ISO} value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
         </div>
       </div>
     </div>
@@ -316,8 +322,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={labelStyle}>Course <span style={optHint}>(opt)</span></label>
-            <input className="ak-input" placeholder="e.g. BSIT" value={f.course} onChange={handleSet('course')} style={fieldStyle} />
+            <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
+            <input className="ak-input" placeholder="e.g. BSIT / JHS / Grade School" value={f.course} onChange={handleSet('course')} style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>Year</label>
@@ -348,12 +354,12 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={labelStyle}>DepEd LRN <span style={optHint}>(opt)</span></label>
+            <label style={labelStyle}>LRN <span style={optHint}>(basic ed, opt)</span></label>
             <input className="ak-input" placeholder="12-digit LRN" value={f.lrn} onChange={handleSet('lrn')} style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>Birthdate</label>
-            <input className="ak-input" type="date" value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+            <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
           </div>
         </div>
       </>
@@ -1105,7 +1111,7 @@ export default function ClassDetailPage() {
               <tr className="text-left text-slate-500 border-b border-slate-100">
                 <th className="px-5 py-2.5 font-medium">ID No.</th>
                 <th className="px-5 py-2.5 font-medium">Name</th>
-                <th className="px-5 py-2.5 font-medium">Course / Year</th>
+                <th className="px-5 py-2.5 font-medium">Program / Year</th>
                 <th className="px-5 py-2.5 font-medium">Remarks</th>
                 <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
                 <th className="px-5 py-2.5 font-medium">Progress</th>
