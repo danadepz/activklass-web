@@ -80,6 +80,15 @@ export default function App() {
             <Route path="performance"      element={PerformancePage} />
             <Route path="scaffolds"        element={ScaffoldTopicsPage} />
             <Route path="history"          element={HistoryPage} />
+            {/* Where the "Open Grading Setup" buttons on Class Record and
+                Performance point. It is deliberately not one of ClassLayout's
+                TABS -- it is a prerequisite you get sent to, not a tab you
+                browse. Until this existed those buttons matched no route and
+                fell through to the catch-all below, which replaces the URL with
+                "/" -- the public landing page, whose header reads "Sign in".
+                The Firebase session was never touched; it only looked like a
+                logout, which is exactly how it got reported. */}
+            <Route path="grading"          element={GradingSetupPage} />
           </Route>
 
           {/* Navbar: cross-class index pages */}

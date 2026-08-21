@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -10,6 +11,7 @@ import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
 import { navy, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
 
 const fieldStyle = {
   padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
@@ -82,6 +84,24 @@ function namedRows(rows) {
    lib copy drifted into a float-equality bug nobody noticed — it was dead. */
 function balanced(rows) {
   return weightsValid(namedRows(rows))
+}
+
+/* Why a selected class did not get the setup. The API skips both cases on
+   purpose, so these are explanations rather than errors -- but they have to
+   reach the teacher, because the class they picked is not configured. */
+const SKIP_REASONS = {
+  locked: 'a grading period is already locked',
+  not_found: 'the class could not be found',
+}
+
+function describeSkips(skipped, classes) {
+  const nameOf = (id) => {
+    const match = classes.find((c) => c.id === id)
+    return match ? `${match.section} · ${match.subject}` : id
+  }
+  return skipped
+    .map((s) => `${nameOf(s.class_id)} (${SKIP_REASONS[s.reason] ?? s.reason})`)
+    .join(', ')
 }
 
 function withIds(rows, extraKeys = []) {
@@ -181,15 +201,33 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
   )
 }
 
-function GlobalGradingForm({ setup, classes }) {
+function GlobalGradingForm({ setup, classes, focusClassId }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
+  /* Reached from a class ("Open Grading Setup" on Class Record or Performance)
+     means that class is the one they came to configure, so tick it rather than
+     making them find it in the list they just came from. Resolved against their
+     own classes so a stale or hand-typed id cannot preselect something the API
+     would only skip. */
+  const focusClass = focusClassId ? classes.find((c) => c.id === focusClassId) : null
   const [periods, setPeriods] = useState(setup.periods?.length ? setup.periods : [newRow()])
   const [components, setComponents] = useState(setup.components?.length ? setup.components : [newRow()])
   const [gradingMode, setGradingMode] = useState(setup.grading_mode ?? 'deped_k12')
-  const [selectedClassIds, setSelectedClassIds] = useState([])
+  const [selectedClassIds, setSelectedClassIds] = useState(focusClass ? [focusClass.id] : [])
   const [error, setError] = useState(null)
-  const [saved, setSaved] = useState(false)
+  // The message itself, not a flag: what synced varies per save, and the fixed
+  // "saved and synced successfully" line was printed even when the API had
+  // applied the setup to none of the selected classes.
+  const [saved, setSaved] = useState('')
+
+  /* Banner and Save button are both near the top here, so the banner is
+     usually in view -- but a partial sync is the one message the teacher has to
+     act on, and the toast holds until dismissed rather than depending on where
+     the page happens to be scrolled. */
+  const reportError = (message) => {
+    setError(message)
+    toast.error(message)
+  }
 
   const toggleClass = (id) => {
     setSelectedClassIds((prev) =>
@@ -213,9 +251,10 @@ function GlobalGradingForm({ setup, classes }) {
       updated_at: serverTimestamp(),
     })
 
+    let skipped = []
     if (selectedClassIds.length > 0) {
       // 1. Sync classes SQLite
-      await api('/api/grading-setup', {
+      const res = await api('/api/grading-setup', {
         method: 'POST',
         body: {
           class_ids: selectedClassIds,
@@ -223,6 +262,7 @@ function GlobalGradingForm({ setup, classes }) {
           components: processedComponents,
         },
       })
+      skipped = res?.skipped ?? []
 
       // 2. Sync classes Firestore
       const batch = writeBatch(db)
@@ -245,20 +285,37 @@ function GlobalGradingForm({ setup, classes }) {
       queryClient.invalidateQueries({ queryKey: ['fs-grading-setup', cid] })
       queryClient.invalidateQueries({ queryKey: ['fs-record', cid] })
     }
+
+    return { skipped, requested: selectedClassIds.length }
   }
 
-  const flash = () => {
+  const flash = ({ skipped = [], requested = 0 } = {}) => {
     setError(null)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    if (skipped.length) {
+      // Left on screen. A partial sync is something the teacher has to act on,
+      // and a banner that clears itself after 2.5s is one they can miss.
+      reportError(
+        `Preset saved, but ${skipped.length} of ${requested} `
+        + `${requested === 1 ? 'class was' : 'classes were'} not updated: `
+        + `${describeSkips(skipped, classes)}.`,
+      )
+      setSaved('')
+      return
+    }
+    setSaved(
+      requested
+        ? `Grading setup saved and applied to ${requested} ${requested === 1 ? 'class' : 'classes'}.`
+        : 'Preset saved. Tick target classes below to apply it to a class.',
+    )
+    setTimeout(() => setSaved(''), 2500)
   }
 
   const save = useMutation({
     mutationFn: () => persist(periods, components, gradingMode),
     onSuccess: flash,
     onError: (err) => {
-      setError(err.message)
-      setSaved(false)
+      reportError(err.message)
+      setSaved('')
     },
   })
 
@@ -268,10 +325,10 @@ function GlobalGradingForm({ setup, classes }) {
       const nextC = presetRows(preset.components)
       setPeriods(nextP)
       setComponents(nextC)
-      await persist(nextP, nextC, gradingMode)
+      return persist(nextP, nextC, gradingMode)
     },
     onSuccess: flash,
-    onError: (err) => setError(err.message),
+    onError: (err) => reportError(err.message),
   })
 
   return (
@@ -284,6 +341,17 @@ function GlobalGradingForm({ setup, classes }) {
           <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
             Define grading periods and components. Save as preset template and apply it to target classes.
           </p>
+          {focusClass && (
+            <p style={{ fontSize: 13, color: muted, margin: '6px 0 0' }}>
+              <strong style={{ color: ink }}>{focusClass.section} · {focusClass.subject}</strong>
+              {' '}is ticked below — saving applies this setup to it.
+            </p>
+          )}
+          {focusClassId && !focusClass && (
+            <p style={{ fontSize: 13, color: red, margin: '6px 0 0' }}>
+              That class is not in your list, so nothing was preselected.
+            </p>
+          )}
         </div>
         <Button onClick={() => save.mutate()} disabled={save.isPending} radius={11}>
           {save.isPending ? 'Saving…' : 'Save & Sync'}
@@ -325,7 +393,7 @@ function GlobalGradingForm({ setup, classes }) {
       </div>
 
       {error && <Banner tone="err">{error}</Banner>}
-      {saved && <Banner tone="ok">Grading setup saved and synced successfully.</Banner>}
+      {saved && <Banner tone="ok">{saved}</Banner>}
 
       {/* Target Classes Selection */}
       <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
@@ -416,6 +484,8 @@ function GlobalGradingForm({ setup, classes }) {
 
 export default function GlobalGradingSetupPage() {
   const { profile } = useAuth()
+  // Present under /teacher/classes/:classId/grading, absent under /teacher/grading.
+  const { classId } = useParams()
 
   // Load all classes
   const { data: classes, isLoading: isClassesLoading } = useTeacherClasses()
@@ -444,5 +514,15 @@ export default function GlobalGradingSetupPage() {
     grading_mode: 'deped_k12',
   }
 
-  return <GlobalGradingForm setup={initialSetup} classes={classes ?? []} />
+  /* Keyed on the class so navigating straight from one class's grading setup to
+     another re-seeds the ticked box; without it the form stays mounted and keeps
+     the first class selected. */
+  return (
+    <GlobalGradingForm
+      key={classId ?? 'global'}
+      setup={initialSetup}
+      classes={classes ?? []}
+      focusClassId={classId}
+    />
+  )
 }
