@@ -108,6 +108,76 @@ const TYPE_LABELS = {
   essay: 'Essay',
 }
 
+/**
+ * The durations a quiz may be given, in minutes.
+ *
+ * A free-text number box was wrong here in a way that reached students. It was
+ * `min="1"`, but `min` on a bare input is only checked by form validation and
+ * this field is not in a validated form -- so `0` and `-30` were accepted and
+ * `0` is the dangerous one: `persist()` reads the raw string, and the string
+ * `'0'` is truthy, so it stored `time_limit_minutes: 0`. The mobile player
+ * coalesces with `??`, which passes 0 straight through to a 0-second
+ * countdown -- a quiz that auto-submits the instant a student opens it.
+ *
+ * The range is bounded by the sitting a quiz has to fit inside. Below 5
+ * minutes a student cannot read and answer even one question, and 180 minutes
+ * is the longest block any of these schools timetable -- Philippine K-12
+ * periods run 40-60 minutes, college lectures 60-90, a final exam block 3
+ * hours. A "limit" outside those is not limiting anything.
+ */
+const TIME_LIMIT_CHOICES = [5, 10, 15, 20, 25, 30, 40, 45, 50, 60, 75, 90, 120, 150, 180]
+
+/**
+ * The options to offer for a quiz whose stored limit may predate this list.
+ *
+ * An existing value that is not a choice is kept and shown rather than snapped
+ * to the nearest one: opening an old quiz and saving it must not quietly
+ * change how long students get. A teacher who set 37 minutes meant 37.
+ *
+ * Zero and negatives are the exception and are deliberately not offered back.
+ * They are the free-text bug above rather than a decision anyone made, so they
+ * fall through to "No time limit" -- which is what an unsittable 0-minute quiz
+ * should have been all along. It is the only stored value this can change, and
+ * only on a save the teacher chooses to make.
+ */
+function timeLimitOptions(current) {
+  const value = Number(current)
+  if (!Number.isFinite(value) || value <= 0 || TIME_LIMIT_CHOICES.includes(value)) {
+    return TIME_LIMIT_CHOICES
+  }
+  return [...TIME_LIMIT_CHOICES, value].sort((a, b) => a - b)
+}
+
+/**
+ * A comparable image of everything the builder would write.
+ *
+ * Used to answer one question: would leaving this page cost the teacher work?
+ * A boolean flipped by every onChange cannot answer it -- typing a character
+ * and deleting it would leave the page "dirty" forever, and teachers would
+ * learn to click through the warning, which is the same as not having one.
+ *
+ * Question `id` and `_key` are excluded deliberately. `toPayload` mints an id
+ * for any question that lacks one, so a payload-shaped snapshot would differ
+ * from itself on every call and report a brand-new draft as unsaved.
+ */
+function builderSnapshot(settings, classIds, questions) {
+  return JSON.stringify({
+    settings,
+    classIds: [...classIds].sort(),
+    questions: questions.map((q) => ({
+      qtype: q.qtype,
+      text: q.text,
+      points: q.points,
+      ai_generated: q.ai_generated,
+      options: (q.options ?? []).map((o) => ({ text: o.text, is_correct: o.is_correct })),
+      tfValue: q.tfValue,
+      answersText: q.answersText,
+      pairs: (q.pairs ?? []).map((p) => ({ left: p.left, right: p.right })),
+      rubric: q.rubric,
+    })),
+  })
+}
+
 function sumPoints(questions) {
   return (questions ?? []).reduce((sum, q) => sum + (Number(q.points) || 0), 0)
 }
@@ -679,7 +749,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
 function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
-  const [settings, setSettings] = useState({
+  const initialSettings = {
     title: quiz.title,
     instructions: quiz.instructions ?? '',
     time_limit_minutes: quiz.time_limit_minutes ?? '',
@@ -697,15 +767,77 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     scoring_attempt: quiz.scoring_attempt ?? 'best',
     pool_enabled: quiz.pool_enabled ?? false,
     pool_draw_count: quiz.pool_draw_count ?? '',
-  })
-  const [assignedClassIds, setAssignedClassIds] = useState(quiz.class_ids ?? [])
-  const [questions, setQuestions] = useState((quiz.questions ?? []).map(toEditable))
+  }
+  const initialClassIds = quiz.class_ids ?? []
+  const initialQuestions = (quiz.questions ?? []).map(toEditable)
+
+  const [settings, setSettings] = useState(initialSettings)
+  const [assignedClassIds, setAssignedClassIds] = useState(initialClassIds)
+  const [questions, setQuestions] = useState(initialQuestions)
+  /* What was last written to Firestore. Compared against the live form to
+     decide whether leaving costs the teacher anything -- see builderSnapshot
+     for why this is a snapshot rather than a flag flipped by every onChange.
+     State rather than a ref because `dirty` is read during render, and it has
+     to re-render the Save row the moment a save lands. BuilderForm is keyed on
+     quiz.id, so this resets per quiz. */
+  const [savedSnapshot, setSavedSnapshot] = useState(
+    () => builderSnapshot(initialSettings, initialClassIds, initialQuestions),
+  )
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+
+  const dirty = builderSnapshot(settings, assignedClassIds, questions) !== savedSnapshot
+
+  /* Everything below exists because the most expensive thing this screen can
+     do is lose questions a teacher typed by hand. Authoring a quiz is twenty
+     minutes of work that lives only in React state until Save draft is
+     pressed, and there was nothing between that state and a stray click. */
+
+  // Reload, tab close, and navigation out of the SPA. The browser shows its
+  // own wording; assigning returnValue is what still arms it in Chrome.
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  /* In-app navigation -- the sidebar, the breadcrumb, any <Link> on the page.
+     React Router's own useBlocker needs a data router and main.jsx mounts
+     <BrowserRouter>, so this intercepts the click instead: capture phase, so
+     it runs before Link's handler and can stop the navigation rather than
+     undo it. Only armed while there is something to lose. */
+  useEffect(() => {
+    if (!dirty) return
+    const intercept = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const anchor = e.target.closest?.('a[href]')
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return
+      const href = anchor.getAttribute('href')
+      // In-app routes only: '//host' is another origin, and a link back to
+      // this same quiz is not leaving.
+      if (!href?.startsWith('/') || href.startsWith('//') || href === window.location.pathname) return
+      e.preventDefault()
+      e.stopPropagation()
+      confirmDialog({
+        title: 'Leave without saving?',
+        message: 'This quiz has changes that have not been saved. Leaving now discards them.',
+        confirmLabel: 'Discard changes',
+        tone: 'danger',
+      }).then((leave) => {
+        if (leave) navigate(href)
+      })
+    }
+    document.addEventListener('click', intercept, true)
+    return () => document.removeEventListener('click', intercept, true)
+  }, [dirty, navigate])
 
   // Goes through the same path as auto-banking, so one 💾 click and a whole
   // generated quiz obey the same duplicate rule. It used to file the question
@@ -779,6 +911,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     setSaved(false)
     try {
       await persist()
+      setSavedSnapshot(builderSnapshot(settings, assignedClassIds, questions))
       refetch()
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -789,21 +922,41 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     }
   }
 
+  /**
+   * Refuse to publish, where the teacher is looking.
+   *
+   * The inline banner renders at the top of the form and Publish sits below
+   * the last question, so on any quiz worth publishing the two are a screenful
+   * or more apart. Setting only the banner is why "I press Publish and nothing
+   * happens" was reported as a manually-created quiz being unpublishable: the
+   * refusal was real, correct, and off-screen. The toast is the part the
+   * teacher actually sees; the banner stays for the detail.
+   */
+  function refusePublish(message) {
+    setError(message)
+    toast.error(message)
+  }
+
   async function publish() {
-    if (questions.length === 0) return
+    // Reachable by keyboard even though the button is disabled, and silence
+    // here reads exactly like the bug above.
+    if (questions.length === 0) {
+      refusePublish('Add at least one question before publishing.')
+      return
+    }
     if (assignedClassIds.length === 0) {
-      setError('Please assign this quiz to at least one class before publishing.')
+      refusePublish('Assign this quiz to at least one class before publishing — use "Assign to Classes" above.')
       return
     }
     /* Both are recoverable-by-editing problems, so they block publishing
        rather than saving: a draft is allowed to be half-configured, a quiz
        students can sit is not. */
     if (poolWarning) {
-      setError(poolWarning)
+      refusePublish(poolWarning)
       return
     }
     if (feedbackWarning) {
-      setError(feedbackWarning)
+      refusePublish(feedbackWarning)
       return
     }
     // Open publish mapping modal
@@ -823,6 +976,10 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         published_at: serverTimestamp(),
         class_mappings: classMappings,
       })
+      // Everything on screen is now in Firestore, so leaving costs nothing and
+      // the unsaved-changes guard must stand down before the view swaps to the
+      // published one.
+      setSavedSnapshot(builderSnapshot(settings, assignedClassIds, questions))
 
       // What the mapping was always collected for. The row is created now,
       // empty, so the quiz appears in the record the moment it is published
@@ -837,7 +994,9 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
 
       refetch()
     } catch (err) {
-      setError(err.message)
+      // The mapping modal has closed by now, so the banner alone would be the
+      // same invisible refusal the validation above had.
+      refusePublish(err.message)
     } finally {
       setPublishing(false)
     }
@@ -878,8 +1037,13 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             <input className="ak-input" value={settings.title} onChange={set('title')} style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Time limit (min)</label>
-            <input className="ak-input" type="number" min="1" placeholder="None" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} style={fieldStyle} />
+            <label style={labelStyle}>Time limit</label>
+            <select className="ak-input" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+              <option value="">No time limit</option>
+              {timeLimitOptions(settings.time_limit_minutes).map((minutes) => (
+                <option key={minutes} value={minutes}>{minutes} minutes</option>
+              ))}
+            </select>
           </div>
         </div>
         <div>
@@ -1043,7 +1207,19 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             {removingDraft ? 'Deleting…' : 'Delete draft'}
           </button>
         </div>
-        <div className="flex gap-2.5">
+        <div className="flex items-center gap-2.5">
+          {/* Next to Save draft rather than at the top of the form: this is
+              where a teacher looks when they are deciding whether they are
+              finished, and it is the one place the answer is actionable. */}
+          {dirty && !saving && (
+            <span style={{ ...mono, fontSize: 11.5, color: goldDeep }}>Unsaved changes</span>
+          )}
+          {/* Says why Publish will refuse before it is pressed. The refusal
+              itself now toasts, but a reason shown up front is a better loop
+              than a reason shown after a click. */}
+          {!dirty && assignedClassIds.length === 0 && questions.length > 0 && (
+            <span style={{ ...mono, fontSize: 11.5, color: faint }}>Assign a class to publish</span>
+          )}
           <button onClick={save} disabled={saving} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
             {saving ? 'Saving…' : 'Save draft'}
           </button>
