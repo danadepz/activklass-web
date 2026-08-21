@@ -69,7 +69,30 @@ this file as the UI grows into them.
 src/hooks/**
 src/lib/roster.js        src/lib/grading.js       src/lib/studentData.js
 src/lib/quizGrading.js   src/lib/classForm.js     src/lib/notifications.js
+src/lib/gradebook.js     src/lib/quizToRecord.js  src/lib/questionBank.js
+src/lib/remediationRecovery.js
+src/lib/quizPool.js      src/lib/quizFeedback.js
+src/lib/quizAttempts.js
 ```
+
+**`quizPool.js`, `quizFeedback.js` and `quizAttempts.js` exist twice.** Each has a TypeScript port
+in `activklass-mobile/src/lib/`, because the two apps have separate builds and
+no shared package. Edit one, edit the other — `src/lib/portParity.test.js`
+imports both copies across the repo boundary and fails if they diverge. Do not
+"fix" a parity failure by editing the test.
+
+**An attempt is created at Start, not at submit.** `quiz_attempts` documents
+now begin life as `in_progress`, stamped with a server `started_at`, and are
+updated on submit. Anything that counts attempts must count *finished* ones —
+`finishedAttempts()` — or a student mid-sitting is locked out of the attempt
+they are in. `firestore.rules` was widened to match, narrowly: a student may
+update their own attempt only while it is still `in_progress`.
+
+`gradebook.js` holds `loadBundle` and `syncEntries`, lifted out of the record
+page once it stopped being the only writer of scores. `entries` is the only
+grade document a student may read and it is derived — anything that changes a
+score must call `syncEntries` after, or the student keeps reading the old
+grade.
 
 Fetching and domain rules. `useTeacherClasses()` replaced the same Firestore
 query written inline in 8 pages; invalidation still works through the
@@ -131,8 +154,22 @@ already did it. `git diff` before committing, always.
 - `npm run lint` reports **39 pre-existing errors**, nearly all
   `no-unused-vars`. Not caused by lane work — a non-zero lint exit is not
   necessarily your bug.
-- **No test suite.** `npm run build` compiling is the only automated check;
-  click through the page you changed before committing.
+- **Tests exist now** — `npm run test` (vitest) covers the pure modules:
+  grading, quiz grading, risk signals, AI draft validation, the bank
+  fingerprint, the quiz→record rules, the recovery policies, the per-student
+  quiz draw and the feedback-release rules, plus cross-repo parity with the
+  mobile ports. Everything with Firestore or React in it is still only checked
+  by `npm run build` and by clicking through the page you changed.
+- **`npm run test:rules` tests firestore.rules for real.** It starts the
+  Firestore emulator (needs Java) and runs `src/lib/firestoreRules.test.js`
+  against `../activklass-backend/firestore.rules` — the deployed file, read
+  across the repo boundary. Excluded from `npm run test` because it needs the
+  emulator. The last block in that file deliberately loads a *weakened* copy of
+  the rules in memory and proves the forbidden write then succeeds; that is
+  what stops the suite quietly passing while enforcing nothing.
+- **Mobile has no test runner.** `npx tsc --noEmit` in `activklass-mobile` is
+  its only automated check. Logic that has to match the web belongs in a ported
+  module covered by `portParity.test.js`, not inline in a screen.
 - `/api` is proxied to Flask on port 5000 by `vite.config.js`, so a forwarded
   VS Code port works for remote viewers. Both servers must be running.
 - Backend API is flat and teacher-owned: `/api/quizzes`, `/api/syllabus`. The

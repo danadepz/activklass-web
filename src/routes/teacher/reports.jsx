@@ -6,6 +6,7 @@ import { useAuth } from '@/context/useAuth'
 import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
 import { BarChart, FileText, Users, Notebook, AlertCircle, ArrowRight } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 
 const MODE_LABEL = { deped_k12: 'DepEd K-12', ched_percentage: 'CHED %', ched_point: 'CHED point' }
 
@@ -144,7 +145,10 @@ export default function ReportsPage() {
   const totalAssessed = list.reduce((s, r) => s + r.assessedCount, 0)
   const totalPassing = list.reduce((s, r) => s + r.passingCount, 0)
   const passRate = totalAssessed ? Math.round((totalPassing / totalAssessed) * 100) : null
-  const atRisk = totalAssessed - totalPassing
+  /* Not "at risk": this is a count of a thing that has already happened, and
+     it disagrees with both the below-85 rule on the class performance tab and
+     the forecast in PredictedRisk. Labelled for what it measures. BACKLOG #3. */
+  const notPassing = totalAssessed - totalPassing
 
   function exportCsv() {
     const header = ['Class', 'Subject', 'Grading mode', 'Students', 'Assessed', 'Average', 'Passing', 'Passing rate']
@@ -192,7 +196,15 @@ export default function ReportsPage() {
     </div>
   )
 
-  if (isLoading) return <div>{header}<p style={{ color: faint }}>Loading reports…</p></div>
+  if (isLoading) {
+    return (
+      <div>
+        {header}
+        <div className="mb-4"><SkeletonStats count={4} label="Loading reports" /></div>
+        <SkeletonTable rows={6} cols={5} label="Loading class summaries" />
+      </div>
+    )
+  }
   if (isError) return <div>{header}<p style={{ color: red }}>Could not load reports.</p></div>
 
   if (list.length === 0) {
@@ -222,7 +234,7 @@ export default function ReportsPage() {
         <Kpi label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} with grading set up`} Icon={Notebook} />
         <Kpi label="Students" value={totalStudents} sub={`${totalAssessed} assessed across classes`} Icon={Users} />
         <Kpi label="Passing rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} color={green} Icon={BarChart} />
-        <Kpi label="At risk" value={atRisk} sub="assessed students not passing" color={goldDeep} Icon={AlertCircle} highlight={atRisk > 0} />
+        <Kpi label="Not yet passing" value={notPassing} sub="of the students already assessed" color={goldDeep} Icon={AlertCircle} highlight={notPassing > 0} />
       </div>
 
       {/* Per-class breakdown */}

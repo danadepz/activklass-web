@@ -109,7 +109,7 @@ const Button = forwardRef(function Button(
     <button
       ref={ref}
       disabled={disabled}
-      className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2 disabled:cursor-not-allowed ${className}`}
+      className={`ak-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2 disabled:cursor-not-allowed ${className}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setPress(false) }}
       onMouseDown={() => setPress(true)}
@@ -183,7 +183,7 @@ export function IconButton({ label, className = '', style, children, ...rest }) 
       title={label}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className={`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2 ${className}`}
+      className={`ak-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2 ${className}`}
       style={{
         display: 'grid',
         placeItems: 'center',

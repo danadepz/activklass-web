@@ -17,6 +17,8 @@ import {
   resourceState,
   topicMastery,
 } from './scaffolding'
+import { SkeletonList } from '@/components/ui/Skeleton'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 /**
  * Scaffolded Learning, student side.
@@ -141,7 +143,7 @@ function MaterialCard({ m }) {
         <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink }}>{m.title}</span>
         {m.description && <span style={{ display: 'block', fontSize: 12.5, color: muted, marginTop: 1 }}>{m.description}</span>}
       </span>
-      <ArrowRight className="h-4 w-4 shrink-0" style={{ color: '#C3CCDB' }} />
+      <ArrowRight className="h-4 w-4 shrink-0" style={{ color: '#CBD5E1' }} />
     </a>
   )
 }
@@ -160,7 +162,7 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz }) {
   if (!r.topic_id) {
     return (
       <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '14px 16px', margin: 0 }}>
-        This review guide isn&apos;t linked to a syllabus topic, so there&apos;s no mastery test to take.
+        This review guide isn&apos;t linked to a module topic, so there&apos;s no mastery test to take.
       </p>
     )
   }
@@ -296,7 +298,7 @@ function ResourceRow({ res, onOpenNote }) {
           {res.title}
         </span>
       </span>
-      <ArrowRight className="h-4 w-4 shrink-0" style={{ color: '#C3CCDB' }} />
+      <ArrowRight className="h-4 w-4 shrink-0" style={{ color: '#CBD5E1' }} />
     </>
   )
 
@@ -329,8 +331,8 @@ function ReviewMaterials({ syllabus, topicId, onOpenNote }) {
     return (
       <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '14px 16px', margin: 0 }}>
         {syllabus
-          ? 'This topic is no longer in the published syllabus, so its materials cannot be shown.'
-          : 'The syllabus for this class has not been published yet.'}
+          ? 'This topic is no longer in the published modules, so its materials cannot be shown.'
+          : 'The modules for this class have not been published yet.'}
       </p>
     )
   }
@@ -440,6 +442,8 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, onOpenNote }) {
 export default function StudentRemediation() {
   const { profile } = useAuth()
   const [activeNote, setActiveNote] = useState(null)
+  const { panelProps: notePanel } =
+    useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Practice note' })
 
   const { data, isLoading } = useQuery({
     queryKey: ['student-scaffolding', profile.id],
@@ -459,11 +463,7 @@ export default function StudentRemediation() {
       </p>
 
       {isLoading ? (
-        <div className="flex flex-col gap-4">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="animate-pulse" style={{ height: 220, borderRadius: 18, background: '#FFFFFF', border: `1px solid ${line}` }} />
-          ))}
-        </div>
+        <SkeletonList count={2} height={220} label="Loading your practice plans" />
       ) : list.length === 0 ? (
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 48, textAlign: 'center' }}>
           <div style={{ display: 'inline-grid', placeItems: 'center', width: 52, height: 52, borderRadius: 13, background: 'rgba(31,138,91,0.12)', color: green }}>
@@ -492,12 +492,10 @@ export default function StudentRemediation() {
 
       {activeNote && (
         <div
-          role="dialog"
-          aria-modal="true"
           onClick={(e) => { if (e.target === e.currentTarget) setActiveNote(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}
         >
-          <div style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+          <div {...notePanel} style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
             <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
               <div className="flex items-center gap-2">
                 <span style={{ fontSize: 19 }}>✍️</span>

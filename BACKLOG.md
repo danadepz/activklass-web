@@ -25,27 +25,25 @@ Two are already done and kept here for context on what the rest assume:
 
 ---
 
-## 3. Three different meanings of "at risk"
+## 3. ~~Three different meanings of "at risk"~~ — mostly done
 
-Three definitions will be on screen at once, disagreeing, all labelled the same:
+Three rules could be on screen at once, all labelled the same, and only one of
+them said what it was:
 
-| Source | Rule |
-|---|---|
-| `teacher/classes/$classId/performance.jsx:182` | grade < 85 |
-| `teacher/reports.jsx:147` | assessed but not passing |
-| `lib/ai.js` `predictRisk` | Random Forest via `/api/predict` |
+| Source | Rule | Now labelled |
+|---|---|---|
+| `teacher/classes/$classId/performance.jsx` | grade < 85 | **Below VS** — "grade below 85 this period" |
+| `teacher/reports.jsx` | assessed but not passing | **Not yet passing** — "of the students already assessed" |
+| `lib/ai.js` `predictRisk` | Random Forest via `/api/predict` | **Predicted at risk** (unchanged) |
 
-The forecast half has since shipped (`7c8fee6`) as `PredictedRisk.jsx` and
-`ClassStandingForecast.jsx` -- named as forecasts, and both gate on
-`coverage < 0.7`, so the "render the flag only when coverage is meaningful"
-part is handled.
+The forecast half shipped earlier (`7c8fee6`) as `PredictedRisk.jsx` and
+`ClassStandingForecast.jsx`, both gating on `coverage < 0.7`. The two
+past-tense counters are now named for what they measure, in the KPI label and
+in the variable behind it (`atRiskCount` -> `belowVsCount`, `atRisk` ->
+`notPassing`), so "risk" appears only on the thing that is actually a forecast.
 
-What is still open is the *other two*: `performance.jsx` and `reports.jsx` keep
-their own unlabelled definitions. Three rules can now be on screen at once, and
-only one of them says what it is. Label the past-tense ones too -- "Below 85"
-is a fact about the past, "Predicted at risk" is a forecast, and a teacher
-reading both as the same claim will trust the wrong number.
-
+What is left: item 7 below. The model's synthetic training basis is disclosed
+by `shapeRiskResult` but not next to the number a teacher reads.
 ## 4. ~~`PUT` silently unassigns classes~~ — done
 
 `update_quiz` and `save_syllabus` read `data.get('class_ids', [])` and assigned
@@ -336,6 +334,377 @@ in the syllabus tree, and quizzes generated against that topic inherit it.
 Firestore needed -- roughly the same shape as `validateQuizDraft`. Left undone
 today only because item 15 was the ask.
 
+
+---
+
+## 18. UI: 36 native browser dialogs, no toasts — done
+
+The app used the operating system's own chrome for 36 interactions: 23
+`window.confirm`, 13 `alert()` and 3 `window.prompt`. They print the origin
+above the message, block the JS thread, cannot be styled, and `window.prompt`
+was being used to collect a new account password.
+
+Replaced by three files in the UI/UX lane:
+
+- `components/ui/Modal.jsx` — the dialog shell. `role="dialog"` + `aria-modal`,
+  Escape to close, a real focus trap, focus restored to the trigger on close,
+  and ref-counted body-scroll lock. Ten route files still render their own
+  `position: fixed` overlay; those are the migration that is left.
+- `components/ui/dialogs.js` + `DialogHost.jsx` — `confirmDialog()`,
+  `promptDialog()`, `alertDialog()`. Promise-based and imperative on purpose:
+  it made each call site a one-line change (`if (!(await confirmDialog(...)))`)
+  in files owned by other panes, where a hook would have meant restructuring
+  every handler.
+- `components/ui/toast.js` + `Toaster.jsx` — `toast.success/error/info`, in an
+  `aria-live="polite"` region. Errors persist until dismissed; successes fade.
+  `action: { label: 'Undo', onClick }` is there for the undo work in the
+  smaller notes below, unused so far.
+
+Two behaviour changes fell out of it, both fixes:
+
+- **Rejecting a contest could not be cancelled.** `attendance.jsx` `reject()`
+  and `record.jsx` `resolve()` both read `window.prompt(...) ?? ''`, so
+  cancelling the reason box was coerced into "no reason given" and the
+  rejection went through anyway. Cancel now aborts.
+- **Quiz-bank validation no longer alerts.** The five `alert()`s in
+  `quizzes.jsx` `handleSubmit` are an inline `role="alert"` message in the
+  modal footer, beside the Save button that was just pressed.
+
+Also in this pass: `admin/UsersTab.jsx`'s password prompt validates the length
+inside the dialog instead of throwing the typed password away and reporting the
+error back on the row.
+
+## 19. UI: the quiz player could lose a student's attempt — done
+
+`student/quiz-player.jsx` held answers in component state only. A refresh, a
+back swipe or a crash lost the whole attempt, and on a timed quiz the clock
+kept running. Answers now mirror into `sessionStorage` under
+`activklass:quiz-draft:{quizId}:{studentId}:{attemptNumber}` on every change,
+restore in the lazy state initialiser, and are cleared on a successful submit.
+A `beforeunload` guard warns before a reload while an attempt is unsubmitted.
+
+Keyed by student and attempt so a second attempt never inherits the first
+one's answers, and by question id so the shuffled order does not matter.
+`sessionStorage`, not `localStorage`: the draft should not outlive the tab.
+
+## 20. ~~UI: the rest of the pass~~ — done
+
+Everything listed here as open on 2026-08-19 has since landed. What each one
+turned out to be, because in three cases the diagnosis was wrong:
+
+**Keyboard focus was the real accessibility hole, not hover.** The claim was
+"232 buttons have no hover state". Measured: 236 raw `<button>` elements, of
+which 165 already carry a Tailwind `hover:` variant. Only **71** were inert.
+But *four* of the 236 showed a focus ring — Button/IconButton and the auth key
+— so a keyboard user could tab through an entire gradebook with no idea where
+they were. `index.css` now has a zero-specificity `:focus-visible` outline on
+every interactive element, and a `filter: brightness()` hover/active floor for
+the 71. `filter` is the lever because every one of them sets `background`
+inline, and an inline style beats a stylesheet — but none set `filter`, so it
+composes instead of fighting. Written with `:where()` so any Tailwind
+`hover:brightness-*` overrides it, and `.ak-btn`/`.ak-primary`/`.ak-nav`/
+`.ak-action`/`.ak-card-hov`/`.ak-ann-del` opt out entirely. No pixels moved.
+
+**The modals kept their markup.** There were 22 hand-rolled overlays, not ten —
+seven more render `fixed inset-0` in Tailwind. Moving them onto `Modal.jsx`
+meant rewriting each one's header/body/footer in five panes' files, so the
+behaviour was extracted instead: `components/ui/useDialogBehavior.js` returns
+`overlayProps`/`panelProps` that spread onto whatever markup is already there.
+Every dialog now has `role="dialog"` + `aria-modal` + a name, Escape, a focus
+trap, focus restored to the trigger, and a ref-counted body-scroll lock.
+`Modal.jsx` uses the same hook, so there is one focus trap rather than two that
+drift. Backdrop-click closing was left **off** where it never existed — several
+are forms with unsaved input, and quietly adding "click outside to discard" is
+not a fix.
+
+**Skeletons.** `components/ui/Skeleton.jsx` — `SkeletonTable`, `SkeletonCards`,
+`SkeletonList`, `SkeletonStats`, matched per screen to the shape that actually
+arrives, across 15 routes. Row widths are ragged rather than uniform, because
+real names are. The shimmer is a CSS animation, so the existing reduced-motion
+block flattens it. `SkeletonTable` takes `tone="dark"` for the superadmin
+console, which is the one dark surface in the app.
+
+**Double submits.** `components/ui/useAsyncAction.js` — a ref guard that stops
+the second call synchronously, plus a `pending` flag so the button can go
+disabled and say what it is doing. A ref alone leaves the button looking inert;
+state alone leaves a gap between the click and the re-render. Applied to the
+eight controls that actually write.
+
+**Icon-only buttons.** 14 had no accessible name — the earlier "75 aria
+attributes across 236 buttons" count was noise, since most buttons have visible
+text. Each got `aria-label` *and* `title`; the title is a hover tooltip, so it
+helps sighted readers too. The syllabus-tree chevrons also got `aria-expanded`.
+
+**Responsive grids.** Only five inline `gridTemplateColumns` were actually
+broken — the announcements form (three) and the scaffold rows (two, carrying
+480px of fixed columns). The landing page's are all fractional and shrink
+correctly; `performance.jsx`'s `repeat(5, 1fr)` histogram likewise. Fixed, not
+swept.
+
+**Undo, where undo is honest.** Class archive and quiz close are single-field
+flips, so Undo restores them exactly; both now offer it in the toast. Real
+deletes do not, and should not until there is somewhere to restore from —
+an Undo that silently recreates a *different* document is worse than none.
+
+**The two-display-faces problem was a missing font.** `theme.js` has declared
+`serifFamily = "'DM Serif Display', Georgia, serif"` all along and 88 headings
+spread it — but the face was never in `index.html`, so all 88 rendered as
+**Georgia**. Meanwhile `--font-display` was Lexend, which the other 28 headings
+inherited. Same split on body copy: `--font-sans` was Inter while `sansFamily`
+(imported by 26 files) asked for Plus Jakarta Sans. DM Serif Display is now
+loaded, and both CSS tokens point at what `theme.js` declares. The landing page
+is untouched — all ten of its headings spread `serifAlt` explicitly, which
+`theme.js` documents as deliberate.
+
+To reverse the typography call, change `serifFamily`/`sansFamily` in `theme.js`
+and the two `@theme` lines in `index.css` **together**. Changing one without the
+other is what produced the split.
+
+---
+
+## 21. UI: what is genuinely still open
+
+- **The 71 inert buttons have a floor, not a design.** They get a cursor and a
+  brightness shift now; they still do not share `Button.jsx`'s slab, padding or
+  type scale. Migrating them is worth doing per page, not in a sweep.
+- **Two colour systems.** `index.css` documents `indigo` as the primary action
+  colour; `theme.js` says `navy`. `syllabus.jsx` and `quizzes.jsx` are full of
+  `bg-indigo-600` buttons sitting next to navy ones. Same class of drift as the
+  fonts, and it needs the same kind of decision.
+- **Empty states are inconsistent.** Some have an illustration and a next step
+  ("Use the form above to post your first announcement"), some are one grey
+  line. Worth one pass to give each a verb.
+
+---
+
+## 22. Quiz bank and class record: what shipped, and what is left — mostly done
+
+Three gaps that all had the same shape: a feature existed, and the thing that
+would have made it useful was never wired to it.
+
+- ~~**The bank never filled.**~~ Generation wrote questions straight onto the
+  quiz doc, so the bank only grew when a teacher clicked the per-question 💾 --
+  which nobody does twenty times. The generate dialog now has *Also save these
+  to my Quiz Bank* (on by default) and writes the whole set in one `writeBatch`
+  (`hooks/useBankedQuestions.js` → `bankQuestions`).
+- ~~**Auto-banking would have poisoned the bank.**~~ Generating twice on one
+  topic returns near-identical stems, so banking everything makes the bank
+  worse the more it is used. `lib/questionBank.js` fingerprints an item as
+  `qtype + normalised stem` -- punctuation, case and spacing collapsed, digits
+  kept, options ignored -- and skips anything already there, including
+  duplicates *within* one draft. Fingerprints are computed from the stored
+  `text`/`qtype`, so pre-existing rows de-duplicate with no backfill. The
+  per-question 💾 goes through the same path and now files under `syllabus_id`
+  too; it used to leave everything in **Uncategorized**.
+- ~~**Publishing a quiz did not reach the gradebook.**~~ On Flask,
+  `POST /quizzes/<id>/publish` created an `Assessment` row. After the move to
+  Firestore the publish modal kept collecting the component/period mapping --
+  and kept telling the teacher it would "create score records in their
+  gradebooks" -- but wrote it to `quizzes/{id}.class_mappings`, which nothing
+  read. Publishing now creates the row (derived id `quiz-{quizId}`, so
+  re-publishing cannot duplicate it), and *Post scores to class record* on the
+  results tab fills it from each student's **best graded** attempt.
+  `lib/quizToRecord.js` refuses three cases rather than writing a wrong number:
+  no attempt (blank, not zero), essays still unmarked, and an attempt sat
+  against a different version of the quiz. Each refusal is counted and named in
+  the toast.
+- ~~**Remediation demonstrated competency the record never recognised.**~~ A
+  low score raised a topic, the teacher published a plan with an AI practice
+  quiz, the student passed it -- and the failing mark stood. *Recover marks* on
+  a published plan (`features/classes/gradeRecovery.js`) repairs the original
+  score under one of three policies from `lib/remediationRecovery.js`, default
+  **replace capped at 75**: passing the re-teach earns the passing mark, not an
+  A. A recovery can only raise a mark. Nothing is written until the teacher has
+  seen the per-student preview.
+- ~~**`syncEntries` was trapped in `record.jsx`.**~~ `entries` is the only
+  grade document a student may read and it is derived, so anything that changes
+  a score has to re-derive it. The record page used to be the only writer; it
+  is not any more. Moved verbatim to `lib/gradebook.js` with `loadBundle` and
+  the period/summary builders, and both new write paths call it.
+
+Still open:
+
+- **The audit trail is write-and-revert, not a log.** `recovery.{studentId}`
+  holds one entry per student per assessment; applying a second recovery over
+  the first overwrites it. `revertRecovery` exists and restores the original,
+  but nothing in the UI calls it yet -- a teacher undoes a recovery by typing
+  over the cell, which clears the entry. A real log would be a subcollection.
+- **Bank-first generation is not built.** The obvious next step: pull banked
+  questions for the topic first and ask the AI only for the shortfall
+  (*"6 from your bank, 4 newly generated"*). Cheaper, faster, and it reuses
+  items the teacher already vetted. Its prerequisite -- a bank with anything in
+  it -- now exists.
+- **No item analytics.** `quiz_attempts` already store `per_question`, so
+  per-item difficulty could roll back onto the banked question: flag items
+  everyone gets right (too easy) and everyone gets wrong (probably badly
+  worded), and let a remediation quiz pull the items *those* students missed.
+  This is the piece that turns the bank from a CRUD list into an assessment
+  instrument.
+- **Nothing posts scores automatically.** Both new write paths are buttons.
+  That is deliberate -- attempts arrive over days and a record that rewrites
+  itself under the teacher is worse than one they press -- but it does mean a
+  quiz whose scores are never posted stays out of the grade.
+
+---
+
+## 23. Quiz settings: the teacher's controls, and the two clients — mostly done
+
+The settings existed; the phone ignored them. `activklass-mobile`'s player read
+exactly one of the six (`time_limit_minutes`) and got that one backwards.
+
+- ~~**An untimed quiz was a 15-minute quiz on mobile.**~~
+  `setTimeLeft((quizData.time_limit_minutes || quizData.time_limit || 15) * 60)`
+  — an `||` chain ending in a hardcoded fallback, so a quiz the teacher
+  deliberately left untimed got a 15:00 countdown that auto-submitted. The class
+  list on the same app said "No time limit" beside it. Now `??` to null, no
+  countdown, no chip, no auto-submit.
+- ~~**`prevent_backtracking`, `opens_at`, `closes_at` and `attempts_allowed`
+  were unenforced on mobile.**~~ A student with a link could sit a closed quiz
+  an unlimited number of times from their phone and skip back and forth while
+  the web refused all four. `gateFor()` mirrors the web player's `windowState`
+  and attempts check.
+- ~~**The feedback screens were the answer key.**~~ Both clients showed the
+  correct answer for every item the student got wrong, immediately, on every
+  attempt, with no setting — while `attempts_allowed` goes to 10. Attempt 1 was
+  the key, attempt 2 was transcription. Now `feedback_release` (immediate /
+  when it closes / after their last attempt / never) × `feedback_detail`
+  (score → wrong items → answers → AI rationale), in `lib/quizFeedback.js`.
+  Defaults are the old behaviour, so no published quiz changed.
+- ~~**Shuffling reshuffled on refresh.**~~ `Math.random()` in a lazy state
+  initialiser. Harmless while everyone answered every question — answers are
+  keyed by question id — and fatal with a pool draw. Replaced by a seeded
+  draw on (quiz, student, attempt) in `lib/quizPool.js`: stable across
+  refreshes and across devices, different per student and per retake.
+- ~~**Question pools.**~~ `pool_enabled` + `pool_draw_count` turn the question
+  list into a pool and hand each student a different subset. `question_ids` on
+  the attempt records which paper they sat, so feedback shows their ten rather
+  than the pool's thirty. Pool items must be worth equal points — enforced at
+  publish — so every paper is out of the same total and the class record has
+  one column to put them in.
+- ~~**Shuffle options.**~~ Separate from `shuffle_questions`; MCQ choices were
+  never reordered before.
+- ~~**Which attempt counts.**~~ `scoring_attempt` (best / last / first /
+  average), read by the record sync and by the remediation recovery. It was
+  hardcoded to best, which quietly made every retake score-farming. `average`
+  averages *ratios*, not raw marks, so a quiz edited between sittings does not
+  produce a meaningless number.
+
+Still open:
+
+- **None of it is enforced server-side.** `firestore.rules:331` allows any
+  student to create an attempt under their own uid: no attempt cap, no window
+  check, no time check. Every setting above is advisory — it shapes what an
+  honest student sees and stops nobody else. Fine for the pilot, but say it
+  before a panelist finds it.
+- **The timer still resets on refresh.** `remaining` is client state seeded
+  from `time_limit_minutes`; nothing writes a `started_at`. Answers survive in
+  `sessionStorage`, the clock does not, so a refresh returns the full time with
+  the answers intact. Fixing it needs an `in_progress` attempt document with a
+  server timestamp — which is also the prerequisite for a resume policy and for
+  counting attempts honestly.
+- **Mobile keeps one legacy feedback rule.** That app used to hide the
+  breakdown whenever `prevent_backtracking` was on — a rule the web never had.
+  Quizzes carrying no `feedback_release` keep it, so nothing a teacher relied
+  on suddenly opened up; anything saved since obeys the real setting on both
+  clients. Worth removing once the old quizzes have aged out.
+- **Answer keys are still readable by clients.** Pooling means a student can
+  now read the *whole* pool from the quiz document, not just their own paper.
+  That was already true and is not made worse in kind, but it is made worse in
+  degree. The fix is the same known follow-up: split answer keys out of the
+  client-readable quiz document.
+
+---
+
+## 24. The attempt became a real object — mostly done
+
+Everything here follows from one change: a `quiz_attempts` document is now
+created when the student presses **Start**, not when they submit.
+
+- ~~**The timer reset on refresh.**~~ The countdown was device state seeded at
+  mount, and nothing recorded when the student began — so reloading returned
+  the full clock with the answers still in `sessionStorage`. A timed quiz was
+  untimed for anyone who pressed reload, on both clients. The attempt is now
+  stamped with a server `started_at`, `expires_at_ms` is derived from it, and
+  every tick re-derives the remainder. Closing the tab, locking the phone or
+  killing the app no longer buys a second.
+- ~~**There was no moment of consent.**~~ A green **Start** now sits behind a
+  briefing screen listing every rule that will govern the sitting: the limit,
+  whether backtracking is allowed, how many questions are drawn, which attempt
+  this is, and that leaving is recorded. `startBriefing()` returns it as data,
+  so both clients show the same sentences. Nothing is written until Start.
+- ~~**Reopening was invisible.**~~ Coming back to an open attempt increments
+  `reopen_count` and appends to `reopens[]` with the question and the time
+  left. Recorded, never blocked — a dropped connection and a deliberate
+  walk-away are indistinguishable from the client, and which one it was is the
+  teacher's call.
+- ~~**Leaving the page was invisible.**~~ `visibilitychange` on web and
+  `AppState` on mobile record an away-event per switch: when, which question,
+  and how long. Capped at 100 stored events with the tail counted in
+  `focus_events_dropped`.
+- ~~**Attempts could not be changed once published.**~~ `editable` is
+  `status === 'draft'`, so the whole builder vanished on publish and the
+  allowance was frozen with it. A **Change while it is live** panel now edits
+  `attempts_allowed` and `closes_at` on a published quiz, and **+1 attempt** on
+  a student's row writes `extra_attempts.{studentId}` — additive, so raising
+  the class-wide allowance later cannot revoke an individual grant.
+- ~~**The quiz list sorted by status, not by life.**~~ A quiz opening next
+  Monday and one open right now were both "published". Tabs are now
+  **Ongoing / Scheduled / Drafts / Past**, derived by `lifecycleOf()` from
+  `opens_at` / `closes_at` / `status`, with counts.
+- ~~**The student class page counted open attempts as used.**~~ Pressing Start
+  and coming back showed the quiz greyed out with the attempt still running.
+- ~~**Abandoned attempts blocked the student forever.**~~ Start an *untimed*
+  quiz and never submit, and that `in_progress` document stayed open — and
+  because Start resumes an open attempt rather than beginning a new one, the
+  student could never sit that quiz again. A timed quiz recovers by itself
+  (reopening past the deadline submits it); the untimed case could not.
+  **Discard** on the student's row in the results table ends it.
+
+  Marked `discarded`, not deleted, for two reasons: the reopen history and the
+  away-events on that document are the only explanation anyone will have for
+  why the sitting was abandoned, and a teacher who discards the wrong row
+  should be able to see that they did. A discarded attempt is inert in
+  `lib/quizAttempts` — neither open nor used — so the slot comes back, while
+  `nextAttemptNumber` still counts it so two sittings never share a label.
+
+  The security rule needed no change: teachers may already update any attempt,
+  and the student clause requires the stored status to still be `in_progress`,
+  so a discarded attempt cannot be submitted over. Both players turn the
+  resulting permissions error into *"Your teacher ended this attempt"* rather
+  than showing a raw Firestore message mid-exam.
+
+Deployed and tested:
+
+- The rule change is **live** on `activklass1` (ruleset `752e1d75…`, released
+  21 Aug), verified by re-reading the released ruleset back from the Rules API
+  and diffing it against the file.
+- `npm run test:rules` in `activklass-web` now exercises it against the real
+  rules engine in the emulator: 21 cases covering what a student may and may
+  not do to their own attempt, what a teacher may do, the billing-field guard
+  on `users`, and the four closed collections. Its last case loads a weakened
+  copy of the rules in memory and shows the forbidden write succeeding, which
+  is the only way to know the suite is enforcing rather than decorating.
+
+Still open:
+
+- **Enforcement is still client-side.** The rule now lets a student finish
+  their own `in_progress` attempt; it still does not check the deadline, the
+  window, or the allowance, and the score is still client-written. A student
+  who wants to defeat the timer can. What changed is that ordinary use —
+  reloading, closing a tab, switching apps — no longer defeats it by accident,
+  and every departure is on the record. Real enforcement means grading and
+  expiry in a Cloud Function.
+- **Away-events are best-effort by construction.** They are written by the
+  client, so a client that does not send them produces a clean record. They are
+  evidence of attention leaving the page, and blind to a second device, a phone
+  on the desk, or notes on paper. Every string that renders them says so; keep
+  it that way.
+- **No teacher view of the away-event detail yet.** The results table shows the
+  roll-up (`describeFocus`) — count, total time, worst question. The per-event
+  list with timestamps is stored but nothing renders it.
+- **`reopens[]` and `focus_events[]` grow unbounded per attempt document** —
+  the second is capped, the first is not. A pathological reconnect loop would
+  bloat the document.
 
 ---
 

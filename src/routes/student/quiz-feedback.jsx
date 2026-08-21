@@ -1,9 +1,12 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { doc, getDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
+import { feedbackVisibility } from '@/lib/quizFeedback'
+import { questionsOfAttempt } from '@/lib/quizPool'
+import { finishedAttempts } from '@/lib/quizAttempts'
 import { Check, X, Clock, Sparkles } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 
@@ -13,7 +16,32 @@ async function loadFeedback(attemptId) {
   const attempt = { id: aSnap.id, ...aSnap.data() }
   const qSnap = await getDoc(doc(db, 'quizzes', attempt.quiz_id))
   const quiz = qSnap.exists() ? { id: qSnap.id, ...qSnap.data() } : null
-  return { attempt, quiz }
+
+  /* How many attempts this student has *finished*, for the "release after
+     their last attempt" rule.
+
+     Counted rather than read off attempt_number: that field is assigned at
+     start time and a deleted attempt would leave a gap, releasing the results
+     a try early. Finished only, because an attempt they are still sitting is
+     not one they have used -- counting it would show them the answer key while
+     the retake was open in another tab, which is the exact leak this setting
+     exists to close. */
+  let attemptCount = attempt.attempt_number ?? 1
+  try {
+    const priorSnap = await getDocs(
+      query(
+        collection(db, 'quiz_attempts'),
+        where('quiz_id', '==', attempt.quiz_id),
+        where('student_id', '==', attempt.student_id),
+      ),
+    )
+    const finished = finishedAttempts(priorSnap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    attemptCount = Math.max(finished.length, attemptCount)
+  } catch {
+    /* Fall back to attempt_number. Failing the page over a count that only
+       affects when results unlock would be the worse trade. */
+  }
+  return { attempt, quiz, attemptCount }
 }
 
 function ResultIcon({ state }) {
@@ -41,7 +69,7 @@ export default function QuizFeedback() {
     )
   }
 
-  const { attempt, quiz } = data
+  const { attempt, quiz, attemptCount } = data
   // Ownership guard (security rules also enforce this server-side).
   if (attempt.student_id !== profile.id) {
     return (
@@ -52,6 +80,7 @@ export default function QuizFeedback() {
     )
   }
 
+  const visible = feedbackVisibility({ quiz, attemptCount })
   const pct = Math.round((attempt.score_ratio ?? 0) * 100)
   const pending = attempt.has_essays_pending
   const passed = pct >= 75
@@ -66,26 +95,37 @@ export default function QuizFeedback() {
       </Link>
 
       {/* Score summary */}
-      <div style={{ background: 'linear-gradient(135deg, #0E2A5C, #061840)', borderRadius: 20, padding: 'clamp(22px, 4vw, 32px)', color: '#FFFFFF', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg, #0E2A5C, #061840)', borderRadius: 20, padding: 'clamp(22px, 4vw, 32px)', color: '#FAFAF6', position: 'relative', overflow: 'hidden' }}>
         <div aria-hidden="true" style={{ position: 'absolute', top: -60, right: -40, width: 180, height: 180, border: '1px solid rgba(245,197,24,0.14)', borderRadius: '50%' }} />
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between" style={{ position: 'relative' }}>
           <div>
             <div style={{ fontSize: 12.5, color: 'rgba(250,250,246,0.6)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{quiz.title}</div>
-            <div className="flex items-baseline gap-2" style={{ marginTop: 8 }}>
-              <span style={{ ...serif, fontSize: 52, lineHeight: 1 }}>{attempt.total_score}</span>
-              <span style={{ fontSize: 20, color: 'rgba(250,250,246,0.7)' }}>/ {attempt.total_possible}</span>
+            {visible.showScore ? (
+              <>
+                <div className="flex items-baseline gap-2" style={{ marginTop: 8 }}>
+                  <span style={{ ...serif, fontSize: 52, lineHeight: 1 }}>{attempt.total_score}</span>
+                  <span style={{ fontSize: 20, color: 'rgba(250,250,246,0.7)' }}>/ {attempt.total_possible}</span>
+                </div>
+                <div style={{ fontSize: 14, color: 'rgba(250,250,246,0.82)', marginTop: 4 }}>{pct}% score</div>
+              </>
+            ) : (
+              <>
+                <div style={{ ...serif, fontSize: 40, lineHeight: 1.1, marginTop: 8 }}>Answers submitted</div>
+                <div style={{ fontSize: 14, color: 'rgba(250,250,246,0.82)', marginTop: 6, maxWidth: 420 }}>{visible.waitingOn}</div>
+              </>
+            )}
+          </div>
+          {visible.showScore && (
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ display: 'inline-block', padding: '8px 18px', fontSize: 14, fontWeight: 800, borderRadius: 999, color: navy, background: accent === green ? gold : '#FFFFFF', border: `2px solid ${accent}` }}>
+                {descriptor}
+              </span>
             </div>
-            <div style={{ fontSize: 14, color: 'rgba(250,250,246,0.82)', marginTop: 4 }}>{pct}% score</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <span style={{ display: 'inline-block', padding: '8px 18px', fontSize: 14, fontWeight: 800, borderRadius: 999, color: navy, background: accent === green ? gold : '#FFFFFF', border: `2px solid ${accent}` }}>
-              {descriptor}
-            </span>
-          </div>
+          )}
         </div>
       </div>
 
-      {pending && (
+      {pending && visible.showScore && (
         <div style={{ display: 'flex', gap: 10, background: 'rgba(63,169,245,0.1)', border: '1px solid rgba(63,169,245,0.4)', borderRadius: 12, padding: '12px 16px', marginTop: 16 }}>
           <Clock className="h-4 w-4" style={{ color: blueText, flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
@@ -94,14 +134,26 @@ export default function QuizFeedback() {
         </div>
       )}
 
+      {/* A released score with no item detail still needs to say so, or the
+          page reads as broken rather than as deliberately withheld. */}
+      {visible.showScore && !visible.showItems && (
+        <p style={{ fontSize: 13.5, color: muted, background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px', marginTop: 16 }}>
+          Your teacher is releasing the score for this quiz, not the per-question breakdown.
+        </p>
+      )}
+
       {/* Question breakdown */}
+      {visible.showItems && (
+      <>
       <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '26px 0 14px' }}>Question breakdown</h2>
       <div className="flex flex-col gap-3">
-        {(quiz.questions ?? []).map((q, i) => {
+        {questionsOfAttempt(quiz, attempt).map((q, i) => {
           const pq = byId[q.id] ?? {}
           const state = pq.pending ? 'pending' : pq.correct ? 'correct' : 'incorrect'
           const studentText = studentAnswerText(q, attempt.answers?.[q.id])
-          const showExplanation = state === 'incorrect' || state === 'pending'
+          // The AI rationale restates the correct answer in prose, so it is
+          // gated on its own switch rather than riding on showCorrectAnswers.
+          const showExplanation = visible.showRationale && (state === 'incorrect' || state === 'pending')
           return (
             <div key={q.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
               <div className="flex items-start gap-3">
@@ -121,7 +173,7 @@ export default function QuizFeedback() {
                       <span style={{ fontWeight: 700, color: ink }}>Your answer:</span>{' '}
                       <span style={{ color: state === 'correct' ? green : state === 'pending' ? ink : red }}>{studentText}</span>
                     </div>
-                    {state !== 'correct' && q.qtype !== 'essay' && (
+                    {visible.showCorrectAnswers && state !== 'correct' && q.qtype !== 'essay' && (
                       <div style={{ color: muted, marginTop: 4 }}>
                         <span style={{ fontWeight: 700, color: ink }}>Correct answer:</span>{' '}
                         <span style={{ color: green }}>{correctAnswerText(q)}</span>
@@ -147,8 +199,13 @@ export default function QuizFeedback() {
           )
         })}
       </div>
+      </>
+      )}
 
-      {!passed && !pending && (
+      {/* Gated on the score, not on the items: "you need remediation" states
+          the result in words, so showing it beside a withheld score would
+          hand over exactly what was being withheld. */}
+      {visible.showScore && !passed && !pending && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(245,197,24,0.14)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 14, padding: '14px 18px', marginTop: 18 }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: '#FFFFFF', color: goldDeep, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Sparkles className="h-5 w-5" /></span>
           <div style={{ flex: 1 }}>

@@ -13,9 +13,32 @@
  * The full default Tailwind palette is available — these tokens only add
  * the brand typography and base styling.
  * ------------------------------------------------------------------ */
+/*
+ * These two must agree with theme.js, which OWNERSHIP.md names as the single
+ * source of truth for typography. They did not, and the app rendered three
+ * faces where it meant to render two:
+ *
+ *   --font-display was Lexend, while theme.js's `serif` (spread onto 88
+ *   headings) asked for DM Serif Display. So a heading's face depended on
+ *   whether its file happened to spread the token -- 88 said DM Serif (and got
+ *   Georgia, since the face was not loaded; it is now, see index.html) and 28
+ *   inherited Lexend.
+ *
+ *   --font-sans was Inter, while theme.js's `sansFamily` -- imported by 26
+ *   files -- asked for Plus Jakarta Sans. Same split, on body copy.
+ *
+ * Both now point at what theme.js declares. Lexend is still loaded and still
+ * the landing page's face: routes/index.jsx spreads `serifAlt` explicitly on
+ * all ten of its headings, which theme.js documents as deliberate.
+ *
+ * To go the other way instead -- standardise on Lexend and Inter -- change
+ * serifFamily/sansFamily in theme.js and these two lines together. Changing
+ * one without the other is what produced the split in the first place.
+ */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Lexend", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "DM Serif Display", Georgia, serif;
+
 }
 
 @layer base {
@@ -163,4 +186,108 @@
 }
 .ak-fallback {
   animation: ak-fallback-in 0.18s ease-out 0.2s both;
+}
+
+/* ------------------------------------------------------------------ *
+ * Toast entry (components/ui/toast.jsx)
+ *
+ * Slides up a few pixels rather than in from the edge: the region sits
+ * bottom-right and a horizontal slide reads as a notification from the
+ * operating system, which is the thing the toasts replaced.
+ *
+ * The reduced-motion block above collapses the duration to nothing, so
+ * these appear instantly for readers who asked for that.
+ * ------------------------------------------------------------------ */
+@keyframes ak-toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ------------------------------------------------------------------ *
+ * Keyboard focus, everywhere.
+ *
+ * 236 interactive elements existed and four of them showed a focus ring:
+ * Button/IconButton (which set their own via focus-visible:ring-*) and the
+ * .ak-primary auth key. Everything else was invisible to a keyboard — you
+ * could tab through a whole gradebook with no idea where you were.
+ *
+ * :focus-visible rather than :focus, so a mouse click does not leave a ring
+ * behind. `outline` rather than a box-shadow ring, because most of these
+ * elements carry an inline `boxShadow` that a ring would fight with; outline
+ * is a separate property and composes with anything.
+ *
+ * Button.jsx opts out with focus-visible:outline-none and draws its own ring,
+ * so the two never double up.
+ * ------------------------------------------------------------------ */
+:where(button, a[href], summary, [role="button"], [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid #3FA9F5;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Form controls get the same treatment. .ak-input keeps its navy ring, which
+   is the marketing/auth shell's own language -- this is for the several
+   hundred fields that never got that class. */
+:where(input, select, textarea):not(.ak-input):focus-visible {
+  outline: 2px solid #3FA9F5;
+  outline-offset: 1px;
+}
+
+/* A disabled control should say so under the cursor. Several dozen carry
+   `disabled` with no cursor rule, so they still read as clickable. */
+:where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ *
+ * Skeleton shimmer (components/ui/Skeleton.jsx)
+ *
+ * Opacity, not a moving gradient: a gradient sweep needs a background-size
+ * hack per element and reads as busier than the content it stands in for.
+ * The reduced-motion block above collapses this to a flat grey, which is the
+ * correct result rather than a degraded one.
+ * ------------------------------------------------------------------ */
+@keyframes ak-skeleton {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Baseline button affordances.
+ *
+ * 236 raw <button> elements exist. 165 of them carry a Tailwind `hover:`
+ * variant and look alive; the other 71 are styled inline and were completely
+ * inert under the cursor — no colour change, no pointer, nothing to say they
+ * could be pressed.
+ *
+ * Migrating those 71 onto components/ui/Button.jsx is the eventual answer, but
+ * Button brings its own padding and fill, so a blanket swap would move pixels
+ * on 30 screens nobody asked to have redesigned. This gives all 236 the floor
+ * instead, and moves no layout at all.
+ *
+ * `filter` is the lever, deliberately: every one of these buttons sets its own
+ * `background` inline, and an inline style beats any stylesheet rule — but
+ * none of them set `filter`, so this composes rather than fights. Written with
+ * :where() so it has zero specificity: any Tailwind `hover:brightness-*`
+ * utility overrides it outright, and the buttons that already had a considered
+ * hover state keep exactly the one they had.
+ * ------------------------------------------------------------------ */
+/* The opt-outs are the elements that already own a considered hover:
+   Button/IconButton (.ak-btn, which varies its slab per variant), the auth key,
+   the teacher sidebar and card affordances, and the announcement delete. They
+   would otherwise get this darkening stacked on top of their own. */
+:where(button:not(:disabled)) {
+  cursor: pointer;
+}
+
+:where(
+  button:not(:disabled):not(.ak-btn):not(.ak-primary):not(.ak-nav):not(.ak-action):not(.ak-card-hov):not(.ak-ann-del):hover
+) {
+  filter: brightness(0.96);
+}
+
+:where(
+  button:not(:disabled):not(.ak-btn):not(.ak-primary):not(.ak-nav):not(.ak-action):not(.ak-card-hov):not(.ak-ann-del):active
+) {
+  filter: brightness(0.92);
 }

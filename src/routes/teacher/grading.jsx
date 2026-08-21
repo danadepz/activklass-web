@@ -9,6 +9,7 @@ import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
 import { navy, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { confirmDialog } from '@/components/ui/dialogs'
 
 const fieldStyle = {
   padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
@@ -301,8 +302,12 @@ function GlobalGradingForm({ setup, classes }) {
           {GRADING_PRESETS.map((p) => (
             <button
               key={p.key}
-              onClick={() => {
-                if (window.confirm('Replace your current setup with this preset?')) {
+              onClick={async () => {
+                if (await confirmDialog({
+                  title: `Apply the "${p.label}" preset?`,
+                  message: 'Your current periods and components are replaced by this preset. Grades already recorded are not affected.',
+                  confirmLabel: 'Apply preset',
+                })) {
                   applyPreset.mutate(p)
                 }
               }}

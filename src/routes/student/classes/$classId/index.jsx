@@ -2,14 +2,17 @@ import { useState, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { attemptsAllowedFor, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
+import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicMastery } from '../../scaffolding'
 import ClassStandingForecast from '@/components/ClassStandingForecast'
+import AttachmentField from '@/components/AttachmentField'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const ATT_META = {
   present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
@@ -20,7 +23,7 @@ const ATT_META = {
 
 const TABS = [
   { key: 'announcements', label: 'Announcements', Icon: Megaphone },
-  { key: 'topics', label: 'Syllabus', Icon: BookOpen },
+  { key: 'topics', label: 'Modules', Icon: BookOpen },
   { key: 'analytics', label: 'Analytics', Icon: BarChart },
   { key: 'attendance', label: 'Attendance', Icon: CalendarCheck },
   { key: 'quizzes', label: 'Quizzes', Icon: FileText },
@@ -28,13 +31,6 @@ const TABS = [
 ]
 
 const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number(q.points) || 0), 0)
-
-/* A quiz is visible to a student if it's assigned to everyone ('all' or legacy
-   undefined) or the student's id is in its assigned_to list. */
-function assignedToStudent(quiz, studentId) {
-  const a = quiz.assigned_to
-  return !a || a === 'all' || (Array.isArray(a) && a.includes(studentId))
-}
 
 function gradeColor(g) {
   if (g == null) return faint
@@ -111,10 +107,14 @@ function Pill({ meta }) {
 }
 
 function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
+  // Needed for the per-student attempt grant below.
+  const { profile } = useAuth()
   const [activeNote, setActiveNote] = useState(null)
+  const { overlayProps: noteOverlay, panelProps: notePanel } =
+    useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Lesson note' })
 
   if (!syllabus || !(syllabus.modules?.length)) {
-    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No syllabus yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
+    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No modules yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
   }
 
   return (
@@ -130,13 +130,39 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
           </div>
           <div className="flex flex-col gap-6 pl-2">
             {(m.topics ?? []).map((t, ti) => {
-              const linkedQuizzes = quizzes.filter((q) => q.topic_id === t.id)
+              const linkedQuizzes = quizzesForTopic(t.id, quizzes)
               const resources = t.resources ?? []
+              // Derived from this student's own best attempt, so it moves the
+              // moment they finish a quiz linked to this topic.
+              const mastery = topicMastery(t.id, quizzes, attemptsByQuiz)
+              const bucket = BUCKETS[mastery.bucket]
 
               return (
                 <div key={t.id ?? ti} className="border-l-2 border-slate-200 pl-4 relative">
                   <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300" />
-                  <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Sub-module ${ti + 1}`}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Sub-module ${ti + 1}`}</div>
+                    {linkedQuizzes.length > 0 && (
+                      <span
+                        title={mastery.pct == null
+                          ? 'Take a quiz on this topic to see your mastery.'
+                          : `Your best result across ${mastery.attempts} attempt${mastery.attempts === 1 ? '' : 's'} on this topic.`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                          fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px',
+                          color: bucket.fg, background: bucket.bg, border: `1px solid ${bucket.border}`,
+                        }}
+                      >
+                        {mastery.pct == null ? bucket.label : `${bucket.label} · ${mastery.pct}%`}
+                      </span>
+                    )}
+                  </div>
+
+                  {linkedQuizzes.length > 0 && mastery.pct != null && (
+                    <div style={{ height: 6, borderRadius: 999, background: 'rgba(14,42,92,0.07)', overflow: 'hidden', marginTop: 7, maxWidth: 260 }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, mastery.pct)}%`, background: bucket.fg, borderRadius: 999, transition: 'width 0.6s' }} />
+                    </div>
+                  )}
                   
                   {(t.learning_objectives ?? t.objectives ?? []).length > 0 && (
                     <div className="mt-2.5">
@@ -155,30 +181,45 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
                   {(resources.length > 0 || linkedQuizzes.length > 0) && (
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {resources.map((res) => {
-                        let icon = '📄'
-                        let typeLabel = 'File'
-                        let action = () => window.open(res.url, '_blank')
+                        const meta = RESOURCE_META[res.resource_type] ?? RESOURCE_META.file
+                        const state = resourceState(res)
 
-                        if (res.resource_type === 'link') {
-                          icon = '🔗'
-                          typeLabel = 'Link'
-                        } else if (res.resource_type === 'rich_text') {
-                          icon = '✍️'
-                          typeLabel = 'Study Note'
-                          action = () => setActiveNote(res)
+                        /* Storage is off, so a file resource has no object to
+                           fetch. Rendering it as a dead button would look like a
+                           bug; this says what happened and what to do. */
+                        if (!state.available) {
+                          return (
+                            <div
+                              key={res.id ?? res._key}
+                              className="flex items-start gap-3 p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/40 w-full"
+                            >
+                              <span className="text-lg bg-white w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center flex-shrink-0 opacity-45">
+                                {meta.icon}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{meta.label} · unavailable</div>
+                                <div className="text-sm font-bold text-slate-500 truncate" title={res.title}>{res.title}</div>
+                                <div className="text-[11px] text-slate-400 mt-1 leading-snug">{state.reason}</div>
+                              </div>
+                            </div>
+                          )
                         }
+
+                        const open = res.resource_type === 'rich_text'
+                          ? () => setActiveNote(res)
+                          : () => window.open(res.url, '_blank', 'noopener,noreferrer')
 
                         return (
                           <button
                             key={res.id ?? res._key}
-                            onClick={action}
+                            onClick={open}
                             className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 text-left transition w-full cursor-pointer"
                           >
                             <span className="text-lg bg-white w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center shadow-sm flex-shrink-0">
-                              {icon}
+                              {meta.icon}
                             </span>
                             <div className="min-w-0 flex-1">
-                              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{typeLabel}</div>
+                              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{meta.label}</div>
                               <div className="text-sm font-bold text-slate-800 truncate" title={res.title}>{res.title}</div>
                             </div>
                           </button>
@@ -187,15 +228,27 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
 
                       {linkedQuizzes.map((quiz) => {
                         const attempts = attemptsByQuiz[quiz.id] ?? []
-                        const latest = attempts[0] ?? null
-                        const allowed = quiz.attempts_allowed ?? 1
-                        const used = attempts.length
+                        /* An attempt that is still open is not a used one. It
+                           used to be counted here, so a student who pressed
+                           Start and came back found the quiz greyed out with
+                           their attempt still running — locked out of the
+                           sitting they were in. */
+                        const finished = finishedAttempts(attempts)
+                        const live = openAttempt(attempts)
+                        const latest = finished[finished.length - 1] ?? null
+                        const allowed = attemptsAllowedFor(quiz, profile.id)
+                        const used = finished.length
                         const points = quizPoints(quiz)
-                        const canTake = quiz.status === 'published' && used < allowed
-                        const best = attempts.length ? Math.max(...attempts.map((a) => a.total_score ?? 0)) : null
+                        const canTake = quiz.status === 'published' && (live || used < allowed)
+                        const scored = finished
+                          .map((a) => a.total_score)
+                          .filter((v) => v != null)
+                        const best = scored.length ? Math.max(...scored) : null
 
                         let statusText = 'Not taken'
-                        if (best != null) {
+                        if (live) {
+                          statusText = 'In progress — carry on'
+                        } else if (best != null) {
                           statusText = `Best: ${best}/${quiz.total_possible ?? points} pts`
                         }
 
@@ -209,7 +262,9 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
                                 📝
                               </span>
                               <div className="min-w-0">
-                                <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">Quiz · {statusText}</div>
+                                <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">
+                                  {isRemediationQuiz(quiz) ? 'Mastery test' : 'Quiz'} · {statusText}
+                                </div>
                                 <div className="text-sm font-bold text-slate-800 truncate" title={quiz.title}>{quiz.title}</div>
                               </div>
                             </div>
@@ -248,8 +303,8 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
 
       {/* Note view modal */}
       {activeNote && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-          <div style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+        <div {...noteOverlay} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+          <div {...notePanel} style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
             <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
               <div className="flex items-center gap-2">
                 <span className="text-xl">✍️</span>
@@ -335,8 +390,9 @@ function ContestCellGrade({ contest, onContest }) {
 }
 
 function GradeContestModal({ classId, studentId, studentName, assessment, onClose, onSubmitted }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Contest a score', closeOnBackdrop: false })
   const [reason, setReason] = useState('')
-  const [file, setFile] = useState(null)
+  const [excuseUrl, setExcuseUrl] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -348,13 +404,6 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
     setBusy(true)
     setError(null)
     try {
-      let excuse_url = null
-      if (file) {
-        const safeName = file.name.replace(/[^\w.-]/g, '_')
-        const fileRef = ref(storage, `contest_files/${classId}/${studentId}/${assessment.id}-${safeName}`)
-        await uploadBytes(fileRef, file)
-        excuse_url = await getDownloadURL(fileRef)
-      }
       await setDoc(doc(db, 'grade_contests', `${classId}_${assessment.id}_${studentId}`), {
         class_id: classId,
         student_id: studentId,
@@ -366,7 +415,7 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
         current_score: assessment.status === 'graded' ? assessment.raw_score : null,
         total_points: assessment.total_points ?? null,
         reason: reason.trim(),
-        excuse_url,
+        excuse_url: excuseUrl,
         status: 'pending',
         created_at: serverTimestamp(),
       })
@@ -379,8 +428,8 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
 
   const scoreText = assessment.status === 'graded' ? `${assessment.raw_score}/${assessment.total_points}` : assessment.status
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
           <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest score</h3>
           <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
@@ -405,15 +454,14 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
             style={{ width: '100%', padding: '11px 13px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, resize: 'vertical' }}
           />
 
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, margin: '16px 0 7px' }}>
-            Attach supporting file <span style={{ color: faint, fontWeight: 400 }}>(optional — PDF, Word, or image)</span>
-          </label>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx,image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
-          />
+          <div style={{ margin: '16px 0 0' }}>
+            <AttachmentField
+              storagePath={`contest_files/${classId}/${studentId}/${assessment.id}`}
+              accept=".pdf,.doc,.docx,image/*"
+              onAttached={(url) => setExcuseUrl(url)}
+              label="Attach supporting evidence (optional)"
+            />
+          </div>
 
           {error && (
             <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>{error}</p>
@@ -558,8 +606,9 @@ const CONTEST_TONE = {
 }
 
 function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitted }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Contest an attendance record', closeOnBackdrop: false })
   const [reason, setReason] = useState('')
-  const [file, setFile] = useState(null)
+  const [excuseUrl, setExcuseUrl] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -571,13 +620,6 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
     setBusy(true)
     setError(null)
     try {
-      let excuse_url = null
-      if (file) {
-        const safeName = file.name.replace(/[^\w.-]/g, '_')
-        const fileRef = ref(storage, `excuse_letters/${classId}/${studentId}/${day.date}-${safeName}`)
-        await uploadBytes(fileRef, file)
-        excuse_url = await getDownloadURL(fileRef)
-      }
       // Deterministic id → one active dispute per date per student.
       await setDoc(doc(db, 'attendance_contests', `${classId}_${day.date}_${studentId}`), {
         class_id: classId,
@@ -586,7 +628,7 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
         date: day.date,
         current_status: day.status,
         reason: reason.trim(),
-        excuse_url,
+        excuse_url: excuseUrl,
         status: 'pending',
         created_at: serverTimestamp(),
       })
@@ -599,8 +641,8 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
 
   const meta = ATT_META[day.status] ?? ATT_META.absent
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
           <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest attendance</h3>
           <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
@@ -625,15 +667,14 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
             style={{ width: '100%', padding: '11px 13px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, resize: 'vertical' }}
           />
 
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink, margin: '16px 0 7px' }}>
-            Attach excuse document <span style={{ color: faint, fontWeight: 400 }}>(optional — PDF, Word, or image)</span>
-          </label>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx,image/*"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
-          />
+          <div style={{ margin: '16px 0 0' }}>
+            <AttachmentField
+              storagePath={`excuse_letters/${classId}/${studentId}/${day.date}`}
+              accept=".pdf,.doc,.docx,image/*"
+              onAttached={(url) => setExcuseUrl(url)}
+              label="Attach excuse document (optional)"
+            />
+          </div>
 
           {error && (
             <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>{error}</p>
@@ -1040,7 +1081,7 @@ function AnalyticsStat({ label, value, sub, color }) {
    let table rows scroll visibly through it. */
 const stickyTh = { position: 'sticky', top: 0, background: '#F8F9FA', zIndex: 1 }
 
-function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, age }) {
+function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attempts, quizzes, attemptedQuizIds }) {
   // Held here, not in PerfChart: the table and the chart share it.
   // Must sit above the early return below -- hooks run unconditionally.
   const [active, setActive] = useState(null)
@@ -1057,7 +1098,11 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, age })
       grade={entry?.final_grade ?? null}
       attendanceRate={attendance?.rate ?? null}
       quizAverage={quizAverage ?? null}
-      age={age ?? null}
+      attendanceLog={attendance?.log}
+      attempts={attempts}
+      assessments={assessments}
+      quizzes={quizzes}
+      attemptedQuizIds={attemptedQuizIds}
     />
   )
 
@@ -1286,6 +1331,16 @@ export default function StudentClassDetail() {
     ? Math.round(quizBests.reduce((s, v) => s + v, 0) / quizBests.length)
     : null
 
+  // Flat and chronological, unlike quizBests: the forecast needs to see which
+  // way scores are moving, and a per-quiz maximum hides a decline behind one
+  // good early attempt.
+  const allAttempts = Object.values(attemptsByQuiz).flat()
+
+  // Which quizzes this student actually sat. An attempt document only exists
+  // once submitted, so the quizzes NOT in here are the ones they never opened —
+  // which is the half of disengagement that leaves no trace in quiz_attempts.
+  const attemptedQuizIds = new Set(Object.keys(attemptsByQuiz))
+
   return (
     <div>
       {/* Breadcrumb */}
@@ -1294,7 +1349,7 @@ export default function StudentClassDetail() {
       </Link>
 
       {/* Course header */}
-      <div style={{ background: 'linear-gradient(135deg, #0E2A5C, #061840)', borderRadius: 20, padding: 'clamp(20px, 3.5vw, 28px)', color: '#FFFFFF', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(135deg, #0E2A5C, #061840)', borderRadius: 20, padding: 'clamp(20px, 3.5vw, 28px)', color: '#FAFAF6', position: 'relative', overflow: 'hidden' }}>
         <div aria-hidden="true" style={{ position: 'absolute', top: -60, right: -40, width: 180, height: 180, border: '1px solid rgba(245,197,24,0.14)', borderRadius: '50%' }} />
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" style={{ position: 'relative' }}>
           <div>
@@ -1326,7 +1381,7 @@ export default function StudentClassDetail() {
               key={key}
               onClick={() => setTab(key)}
               className="transition"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', color: active ? '#FFFFFF' : muted, background: active ? navy : 'transparent' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, borderRadius: 10, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', color: active ? '#FAFAF6' : muted, background: active ? navy : 'transparent' }}
             >
               <Icon className="h-4 w-4" style={{ color: active ? gold : faint }} />
               {label}
@@ -1353,7 +1408,9 @@ export default function StudentClassDetail() {
           attendance={attendance}
           studentId={profile.id}
           quizAverage={quizAverage}
-          age={profile.age}
+          attempts={allAttempts}
+          quizzes={quizzes}
+          attemptedQuizIds={attemptedQuizIds}
         />
       )}
       {tab === 'attendance' && (

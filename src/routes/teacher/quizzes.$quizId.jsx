@@ -9,7 +9,34 @@ import { ArrowRight, Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
-import { filterBankedQuestions, saveBankedQuestion, useBankedQuestions } from '@/hooks/useBankedQuestions'
+import { bankQuestions, filterBankedQuestions, useBankedQuestions } from '@/hooks/useBankedQuestions'
+import { describeBankResult } from '@/lib/questionBank'
+import { SCORING_POLICIES, describeSyncResult } from '@/lib/quizToRecord'
+import {
+  DETAIL_OPTIONS,
+  DETAIL_RATIONALE,
+  RELEASE_IMMEDIATE,
+  RELEASE_OPTIONS,
+  describeFeedback,
+  feedbackProblem,
+} from '@/lib/quizFeedback'
+import { drawTotalPoints, poolProblem } from '@/lib/quizPool'
+import {
+  attemptsAllowedFor,
+  describeAttemptActivity,
+  describeFocus,
+  finishedAttempts,
+  formatAway,
+  hasExpired,
+  openAttempt,
+  openForMs,
+} from '@/lib/quizAttempts'
+import { discardAttempt, grantExtraAttempt } from '@/hooks/useAttemptSession'
+import { syncQuizToAllRecords, syncQuizToClassRecord } from '@/hooks/useQuizRecordSync'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
 const fieldStyle = {
@@ -56,9 +83,13 @@ function GoldArrow() {
   )
 }
 
-function AlertBox({ children }) {
+function AlertBox({ tone = 'error', children }) {
+  const t =
+    tone === 'warn'
+      ? { color: goldDeep, bg: 'rgba(245,197,24,0.12)', border: 'rgba(245,197,24,0.45)' }
+      : { color: red, bg: 'rgba(192,57,43,0.07)', border: 'rgba(192,57,43,0.3)' }
   return (
-    <div role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>
+    <div role="alert" style={{ fontSize: 13, color: t.color, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 12px' }}>
       {children}
     </div>
   )
@@ -129,6 +160,7 @@ function toPayload(q) {
 }
 
 function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }) {
+  const [bankIt, banking] = useAsyncAction(saveToBank)
   const setOptions = (options) => update({ options })
   return (
     <div className="mt-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 18 }}>
@@ -143,8 +175,8 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
           <input type="number" min="0.5" step="0.5" value={q.points} onChange={(e) => update({ points: e.target.value })} className="ak-input" style={{ ...fieldStyle, width: 80, paddingRight: 30, textAlign: 'right' }} />
           <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: faint }}>pts</span>
         </div>
-        <button type="button" onClick={saveToBank} title="Save to Quiz Bank" style={{ ...iconBtn, fontSize: 14 }} className="transition hover:text-indigo-600 flex items-center gap-0.5">
-          💾 <span className="text-[10px] font-bold">Save</span>
+        <button type="button" onClick={bankIt} disabled={banking} title="Save to Quiz Bank" style={{ ...iconBtn, fontSize: 14 }} className="transition hover:text-indigo-600 flex items-center gap-0.5 disabled:opacity-40">
+          💾 <span className="text-[10px] font-bold">{banking ? 'Saving…' : 'Save'}</span>
         </button>
         <button onClick={moveUp} title="Move up" style={iconBtn} className="transition hover:text-[#0A1733]">↑</button>
         <button onClick={moveDown} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
@@ -159,7 +191,7 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
             <div key={o._key} className="flex items-center gap-2">
               <input type="radio" name={`correct-${q._key}`} checked={o.is_correct} onChange={() => setOptions(q.options.map((x, j) => ({ ...x, is_correct: j === i })))} title="Correct answer" style={{ accentColor: navy, width: 16, height: 16 }} />
               <input placeholder={`Option ${i + 1}`} value={o.text} onChange={(e) => setOptions(q.options.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
-              <button onClick={() => setOptions(q.options.filter((_, j) => j !== i))} disabled={q.options.length <= 2} style={{ ...iconBtn, opacity: q.options.length <= 2 ? 0.3 : 1 }} className="transition hover:text-[#C0392B] disabled:cursor-not-allowed">×</button>
+              <button onClick={() => setOptions(q.options.filter((_, j) => j !== i))} disabled={q.options.length <= 2} title={`Remove option ${i + 1}`} aria-label={`Remove option ${i + 1}`} style={{ ...iconBtn, opacity: q.options.length <= 2 ? 0.3 : 1 }} className="transition hover:text-[#C0392B] disabled:cursor-not-allowed">×</button>
             </div>
           ))}
           <button onClick={() => setOptions([...q.options, { _key: newKey(), id: null, text: '', is_correct: false }])} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
@@ -168,14 +200,22 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
         </div>
       )}
 
+      {/* Reads as the two choices the student is shown, with the radio marking
+          the key -- the same shape as the MCQ editor above. Labelling them
+          "True is correct" / "False is correct" made the answer key look like
+          the question's choices, so an AI-drafted item appeared to be asking
+          the student to pick between two statements about correctness. */}
       {q.qtype === 'true_false' && (
-        <div className="mt-2 flex gap-4" style={{ fontSize: 13, color: '#3A4A6B' }}>
-          {[true, false].map((v) => (
-            <label key={String(v)} className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
-              <input type="radio" name={`tf-${q._key}`} checked={q.tfValue === v} onChange={() => update({ tfValue: v })} style={{ accentColor: navy }} />
-              {v ? 'True' : 'False'} is correct
-            </label>
-          ))}
+        <div className="mt-2 flex flex-col gap-1.5">
+          <span style={{ fontSize: 11, color: faint }}>Select the correct answer</span>
+          <div className="flex gap-4" style={{ fontSize: 13, color: '#3A4A6B' }}>
+            {[true, false].map((v) => (
+              <label key={String(v)} className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
+                <input type="radio" name={`tf-${q._key}`} checked={q.tfValue === v} onChange={() => update({ tfValue: v })} title="Correct answer" style={{ accentColor: navy, width: 16, height: 16 }} />
+                {v ? 'True' : 'False'}
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
@@ -190,7 +230,7 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
               <input placeholder="Left item" value={p.left} onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, left: e.target.value } : x)) })} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
               <span style={{ color: faint }}>→</span>
               <input placeholder="Matches with" value={p.right} onChange={(e) => update({ pairs: q.pairs.map((x, j) => (j === i ? { ...x, right: e.target.value } : x)) })} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
-              <button onClick={() => update({ pairs: q.pairs.filter((_, j) => j !== i) })} style={iconBtn} className="transition hover:text-[#C0392B]">×</button>
+              <button onClick={() => update({ pairs: q.pairs.filter((_, j) => j !== i) })} title={`Remove pair ${i + 1}`} aria-label={`Remove pair ${i + 1}`} style={iconBtn} className="transition hover:text-[#C0392B]">×</button>
             </div>
           ))}
           <button onClick={() => update({ pairs: [...q.pairs, { _key: newKey(), left: '', right: '' }] })} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
@@ -206,9 +246,223 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
   )
 }
 
+/**
+ * The settings a teacher can still change once students are sitting the quiz.
+ *
+ * The whole builder is hidden after publishing, which is right for questions
+ * and answer keys — editing those under someone mid-attempt would change the
+ * paper they are being marked on. It is wrong for these two. Extending a
+ * deadline and granting another attempt are exactly the things a teacher needs
+ * during an exam, and unpublishing the quiz to reach them would throw every
+ * student out of it.
+ */
+function LiveSettings({ quiz, refetch }) {
+  const [attemptsAllowed, setAttemptsAllowed] = useState(String(quiz.attempts_allowed ?? 1))
+  const [closesAt, setClosesAt] = useState(quiz.closes_at?.slice(0, 16) ?? '')
+  const [error, setError] = useState(null)
+  const [saved, setSaved] = useState(false)
+
+  const dirty =
+    String(quiz.attempts_allowed ?? 1) !== attemptsAllowed ||
+    (quiz.closes_at?.slice(0, 16) ?? '') !== closesAt
+
+  const [save, saving] = useAsyncAction(async () => {
+    const parsed = Number(attemptsAllowed)
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      setError('Attempts must be at least 1.')
+      return
+    }
+    setError(null)
+    try {
+      await updateDoc(doc(db, 'quizzes', quiz.id), {
+        attempts_allowed: parsed,
+        closes_at: closesAt || null,
+        updated_at: serverTimestamp(),
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+      refetch()
+    } catch (err) {
+      setError(err.message)
+    }
+  })
+
+  return (
+    <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Change while it is live</h3>
+        <span style={{ fontSize: 12, color: faint }}>
+          Questions and answer keys stay locked — students are sitting them.
+        </span>
+      </div>
+
+      {error && <div className="mt-3"><AlertBox>{error}</AlertBox></div>}
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div style={{ width: 130 }}>
+          <label style={labelStyle}>Attempts</label>
+          <input
+            className="ak-input"
+            type="number"
+            min="1"
+            max="10"
+            value={attemptsAllowed}
+            onChange={(e) => setAttemptsAllowed(e.target.value)}
+            style={{ ...fieldStyle, ...mono }}
+          />
+        </div>
+        <div style={{ minWidth: 230, flex: '0 1 260px' }}>
+          <label style={labelStyle}>Closes</label>
+          <input
+            className="ak-input"
+            type="datetime-local"
+            value={closesAt}
+            onChange={(e) => setClosesAt(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+        <button
+          onClick={save}
+          disabled={saving || !dirty}
+          className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ ...btnPrimary, padding: '12px 20px', marginBottom: 1 }}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {saved && <span style={{ fontSize: 13, fontWeight: 700, color: green, marginBottom: 12 }}>Saved.</span>}
+      </div>
+
+      <p style={{ fontSize: 12.5, color: muted, margin: '12px 0 0', lineHeight: 1.5 }}>
+        Raising the class-wide allowance never removes an individual grant — the two add up. To give
+        one student another try, use <strong>+1 attempt</strong> on their row below.
+      </p>
+    </div>
+  )
+}
+
 const thHead = { padding: '13px 18px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase' }
 
-function ResultsView({ classId, quizId, totalPoints, assignedTo }) {
+/**
+ * Posts the class on screen into its gradebook column.
+ *
+ * Manual rather than automatic on submit: attempts arrive over days, essays
+ * are marked later still, and a record that rewrites itself under the teacher
+ * is worse than one they press a button to update. Pressing it twice is
+ * harmless -- the assessment row has a derived id and merges.
+ */
+function PostScoresButton({ quiz, classId }) {
+  const mapping = quiz.class_mappings?.[classId]
+  const [post, posting] = useAsyncAction(async () => {
+    if (!mapping) {
+      toast.error('This quiz has no grading component mapped for this class. Add the scores on the class record, or republish to map it.')
+      return
+    }
+    try {
+      const result = await syncQuizToClassRecord({ quiz, classId, mapping })
+      if (result.skipped) toast.info(result.skipped)
+      else toast.success(describeSyncResult(result))
+    } catch (err) {
+      toast.error(`Could not post to the class record: ${err.message}`)
+    }
+  })
+  return (
+    <button
+      type="button"
+      onClick={post}
+      disabled={posting}
+      title="Write each student's best graded attempt into the class record"
+      className="transition hover:brightness-105 disabled:opacity-50"
+      style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy, marginLeft: 'auto' }}
+    >
+      {posting ? 'Posting…' : 'Post scores to class record'}
+    </button>
+  )
+}
+
+/**
+ * End a sitting the student walked away from.
+ *
+ * The case this exists for: a student presses Start on an *untimed* quiz and
+ * never submits. That attempt stays open forever, and because Start resumes an
+ * open attempt rather than beginning a new one, it blocks them permanently. A
+ * timed quiz recovers by itself -- reopening it past its deadline submits it --
+ * so this is the manual equivalent for the case that cannot.
+ *
+ * The confirmation states how long it has been open and whether the clock has
+ * run out, because that is the whole judgement: four minutes is someone still
+ * working, yesterday is not. Discarding someone mid-sitting is the mistake this
+ * dialog exists to prevent.
+ */
+function DiscardAttemptButton({ attempt, studentName, refetch }) {
+  const { profile } = useAuth()
+  const [discard, discarding] = useAsyncAction(async () => {
+    const openFor = openForMs(attempt)
+    const age = openFor == null ? 'an unknown length of time' : formatAway(openFor)
+    const expired = hasExpired(attempt)
+    if (!(await confirmDialog({
+      title: `Discard ${studentName}'s attempt?`,
+      message:
+        `It has been open for ${age}${expired ? ', and its time has already run out' : ''}. ` +
+        'Nothing they typed was ever saved to the server, so there is no work to lose — but if they ' +
+        'are sitting it right now, they will lose the sitting. ' +
+        'The attempt is kept on record as discarded, and their attempt is given back.',
+      confirmLabel: 'Discard attempt',
+      tone: 'danger',
+    }))) return
+    try {
+      await discardAttempt(attempt.id, { teacherId: profile.id })
+      toast.success(`${studentName}'s attempt was discarded. They can start again.`)
+      refetch?.()
+    } catch (err) {
+      toast.error(`Could not discard the attempt: ${err.message}`)
+    }
+  })
+  return (
+    <button
+      type="button"
+      onClick={discard}
+      disabled={discarding}
+      title="End this open attempt and give the student their attempt back"
+      className="transition hover:brightness-105 disabled:opacity-40"
+      style={{ ...mono, fontSize: 11, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.3)', borderRadius: 8, padding: '5px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+    >
+      {discarding ? '…' : 'Discard'}
+    </button>
+  )
+}
+
+/**
+ * Give one student one more try.
+ *
+ * The answer to "they lost connection halfway through" and to a student asking
+ * to retake. Additive and per-student, so it neither disturbs the rest of the
+ * class nor gets wiped by a later change to the class-wide allowance.
+ */
+function GrantAttemptButton({ quizId, studentId, refetch }) {
+  const [grant, granting] = useAsyncAction(async () => {
+    try {
+      await grantExtraAttempt(quizId, studentId)
+      toast.success('One more attempt granted.')
+      refetch?.()
+    } catch (err) {
+      toast.error(`Could not grant the attempt: ${err.message}`)
+    }
+  })
+  return (
+    <button
+      type="button"
+      onClick={grant}
+      disabled={granting}
+      title="Give this student one more attempt at this quiz"
+      className="transition hover:brightness-105 disabled:opacity-40"
+      style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.2)`, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+    >
+      {granting ? '…' : '+1 attempt'}
+    </button>
+  )
+}
+
+function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
   const { data, isLoading } = useQuery({
     queryKey: ['fs-quiz-results', classId, quizId, Array.isArray(assignedTo) ? assignedTo.join(',') : 'all'],
     queryFn: async () => {
@@ -247,23 +501,71 @@ function ResultsView({ classId, quizId, totalPoints, assignedTo }) {
             <th style={{ ...thHead, textAlign: 'center' }}>Attempts</th>
             <th style={{ ...thHead, textAlign: 'center' }}>Best Score</th>
             <th style={thHead}>Status</th>
+            <th style={thHead}>Activity</th>
+            <th style={thHead}></th>
           </tr>
         </thead>
         <tbody>
           {data.students.map((s) => {
             const studentAttempts = data.attempts[s.student_id] ?? []
-            const scores = studentAttempts.filter((a) => a.total_score != null).map((a) => a.total_score)
+            const finished = finishedAttempts(studentAttempts)
+            const scores = finished.filter((a) => a.total_score != null).map((a) => a.total_score)
             const best = scores.length ? Math.max(...scores) : null
-            const pendingEssay = studentAttempts.some((a) => a.status === 'submitted')
+            const pendingEssay = finished.some((a) => a.status === 'submitted')
+            const live = openAttempt(studentAttempts)
+            /* The attempt worth reporting on: the one still open if there is
+               one, otherwise the most recent finished one. */
+            const notable = live ?? finished[finished.length - 1] ?? null
+            const activity = [describeAttemptActivity(notable), describeFocus(notable)]
+              .filter(Boolean)
+              .join(' · ')
+            const allowed = attemptsAllowedFor(quiz, s.student_id)
+            const granted = Number(quiz?.extra_attempts?.[s.student_id]) || 0
             return (
               <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <td style={{ padding: '12px 18px', fontWeight: 700, color: ink }}>{s.last_name}, {s.first_name}</td>
-                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>{studentAttempts.length || '—'}</td>
+                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>
+                  {finished.length || '—'}<span style={{ color: faint }}> / {allowed}</span>
+                  {granted > 0 && (
+                    <span title={`You granted ${granted} extra attempt(s)`} style={{ color: green, fontSize: 11 }}> +{granted}</span>
+                  )}
+                </td>
                 <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', fontWeight: 700, color: best !== null ? ink : faint }}>
                   {best !== null ? `${best} / ${totalPoints}` : '—'}
                 </td>
                 <td style={{ padding: '12px 18px', color: muted }}>
-                  {studentAttempts.length === 0 ? 'Not taken' : pendingEssay ? 'Essay pending review' : 'Graded'}
+                  {live ? (
+                    <>
+                      Taking it now
+                      {/* The number the discard decision turns on. */}
+                      {openForMs(live) != null && (
+                        <span style={{ ...mono, fontSize: 11, color: faint, display: 'block' }}>
+                          open {formatAway(openForMs(live))}
+                        </span>
+                      )}
+                    </>
+                  ) : finished.length === 0 ? 'Not taken' : pendingEssay ? 'Essay pending review' : 'Graded'}
+                </td>
+                {/* Reopens and away-events, stated as observations. A dropped
+                    connection and a deliberate walk-away look identical from
+                    here, so the wording describes rather than accuses. */}
+                <td style={{ padding: '12px 18px', fontSize: 12, color: activity ? goldDeep : faint }}>
+                  {activity || '—'}
+                </td>
+                <td style={{ padding: '12px 18px', textAlign: 'right' }}>
+                  <div className="flex items-center justify-end gap-1.5">
+                    {/* Only for an attempt that is actually open — there is
+                        nothing to discard otherwise, and the button would read
+                        as "delete this result". */}
+                    {live && (
+                      <DiscardAttemptButton
+                        attempt={live}
+                        studentName={`${s.first_name} ${s.last_name}`}
+                        refetch={refetch}
+                      />
+                    )}
+                    <GrantAttemptButton quizId={quizId} studentId={s.student_id} refetch={refetch} />
+                  </div>
                 </td>
               </tr>
             )
@@ -275,6 +577,7 @@ function ResultsView({ classId, quizId, totalPoints, assignedTo }) {
 }
 
 function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfirm, isPublishing }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Publish quiz', closeOnBackdrop: false })
   const [mappings, setMappings] = useState({})
   const [error, setError] = useState(null)
 
@@ -310,8 +613,8 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 500, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 500, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Publish Quiz</h2>
         </div>
@@ -382,9 +685,18 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     time_limit_minutes: quiz.time_limit_minutes ?? '',
     attempts_allowed: quiz.attempts_allowed ?? 1,
     shuffle_questions: quiz.shuffle_questions ?? false,
+    shuffle_options: quiz.shuffle_options ?? false,
     prevent_backtracking: quiz.prevent_backtracking ?? false,
     opens_at: quiz.opens_at?.slice(0, 16) ?? '',
     closes_at: quiz.closes_at?.slice(0, 16) ?? '',
+    // Defaults match what the product did before these settings existed, so
+    // opening and re-saving an old quiz cannot change what it reveals or how
+    // it is marked.
+    feedback_release: quiz.feedback_release ?? RELEASE_IMMEDIATE,
+    feedback_detail: quiz.feedback_detail ?? DETAIL_RATIONALE,
+    scoring_attempt: quiz.scoring_attempt ?? 'best',
+    pool_enabled: quiz.pool_enabled ?? false,
+    pool_draw_count: quiz.pool_draw_count ?? '',
   })
   const [assignedClassIds, setAssignedClassIds] = useState(quiz.class_ids ?? [])
   const [questions, setQuestions] = useState((quiz.questions ?? []).map(toEditable))
@@ -395,17 +707,25 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
+  // Goes through the same path as auto-banking, so one 💾 click and a whole
+  // generated quiz obey the same duplicate rule. It used to file the question
+  // under topic_id alone, which left it in the bank browser's Uncategorized
+  // folder even when the quiz belonged to a syllabus.
   const handleSaveToBank = async (q) => {
     try {
-      const payload = {
-        ...toPayload(q),
-        topic_id: quiz.topic_id || null,
-      }
-      delete payload.id
-      await saveBankedQuestion({ teacherId: profile.id, payload })
-      alert('Question saved to Quiz Bank successfully!')
+      const result = await bankQuestions({
+        teacherId: profile.id,
+        questions: [toPayload(q)],
+        topicId: quiz.topic_id || null,
+        syllabusId: quiz.syllabus_id || null,
+        origin: q.ai_generated ? 'ai_generated' : 'manual',
+        sourceQuizId: quiz.id ?? null,
+      })
+      const message = describeBankResult(result)
+      if (result.saved) toast.success(message)
+      else toast.info(message)
     } catch (err) {
-      alert(`Failed to save question to bank: ${err.message}`)
+      toast.error(`Could not save to the bank: ${err.message}`)
     }
   }
 
@@ -413,6 +733,12 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     setSettings((s) => ({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
   const totalPoints = questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0)
+
+  /* Shown while editing rather than only on publish: a pool whose points do
+     not match is fixed by editing the questions right below this panel, and
+     finding that out only when the Publish button refuses is a worse loop. */
+  const poolWarning = poolProblem({ ...settings, questions: questions.map(toPayload) })
+  const feedbackWarning = feedbackProblem(settings)
 
   const toggleClass = (id) => {
     setAssignedClassIds(prev =>
@@ -427,9 +753,15 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       time_limit_minutes: settings.time_limit_minutes ? Number(settings.time_limit_minutes) : null,
       attempts_allowed: Number(settings.attempts_allowed) || 1,
       shuffle_questions: !!settings.shuffle_questions,
+      shuffle_options: !!settings.shuffle_options,
       prevent_backtracking: !!settings.prevent_backtracking,
       opens_at: settings.opens_at || null,
       closes_at: settings.closes_at || null,
+      feedback_release: settings.feedback_release,
+      feedback_detail: settings.feedback_detail,
+      scoring_attempt: settings.scoring_attempt,
+      pool_enabled: !!settings.pool_enabled,
+      pool_draw_count: settings.pool_enabled ? Number(settings.pool_draw_count) || null : null,
       class_ids: assignedClassIds,
       questions: questions.map(toPayload),
       ...extra,
@@ -463,6 +795,17 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       setError('Please assign this quiz to at least one class before publishing.')
       return
     }
+    /* Both are recoverable-by-editing problems, so they block publishing
+       rather than saving: a draft is allowed to be half-configured, a quiz
+       students can sit is not. */
+    if (poolWarning) {
+      setError(poolWarning)
+      return
+    }
+    if (feedbackWarning) {
+      setError(feedbackWarning)
+      return
+    }
     // Open publish mapping modal
     setIsPublishModalOpen(true)
   }
@@ -481,6 +824,17 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         class_mappings: classMappings,
       })
 
+      // What the mapping was always collected for. The row is created now,
+      // empty, so the quiz appears in the record the moment it is published
+      // rather than only once someone has taken it -- and the teacher can see
+      // the column their scores are going to land in.
+      const synced = await syncQuizToAllRecords({
+        quiz: { id: quiz.id, title: settings.title, questions: questions.map(toPayload) },
+        classMappings,
+      })
+      if (synced.skipped.length) toast.info(`Published. ${synced.skipped.join(' ')}`)
+      else toast.success('Published and added to the class record.')
+
       refetch()
     } catch (err) {
       setError(err.message)
@@ -489,8 +843,15 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     }
   }
 
+  const [removeDraft, removingDraft] = useAsyncAction(deleteQuiz)
+
   async function deleteQuiz() {
-    if (!window.confirm('Delete this draft quiz?')) return
+    if (!(await confirmDialog({
+      title: 'Delete this draft quiz?',
+      message: 'It has never been published, so no student has seen it. This cannot be undone.',
+      confirmLabel: 'Delete draft',
+      tone: 'danger',
+    }))) return
     try {
       await deleteDoc(doc(db, 'quizzes', quiz.id))
       navigate(`/teacher/quizzes`)
@@ -543,11 +904,95 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
               <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
               Shuffle questions
             </label>
+            <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }} title="Reorders the choices within each multiple-choice question">
+              <input type="checkbox" checked={settings.shuffle_options} onChange={set('shuffle_options')} style={{ accentColor: navy, width: 16, height: 16 }} />
+              Shuffle options
+            </label>
             <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
               <input type="checkbox" checked={settings.prevent_backtracking} onChange={set('prevent_backtracking')} style={{ accentColor: navy, width: 16, height: 16 }} />
               Prevent backtracking
             </label>
           </div>
+        </div>
+
+        {/* Delivery, marking and feedback.
+            Kept as one block rather than folded into the grid above because
+            these four decide what the quiz *is* — how it is drawn, how it is
+            marked, and what comes back — while the fields above are only when
+            and how long. */}
+        <div style={{ borderTop: `1px solid ${line}`, paddingTop: 14 }} className="flex flex-col gap-3.5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label style={labelStyle}>Marks count from</label>
+              <select className="ak-input" value={settings.scoring_attempt} onChange={set('scoring_attempt')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+                {SCORING_POLICIES.map((sp) => (
+                  <option key={sp.id} value={sp.id}>{sp.label}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
+                {SCORING_POLICIES.find((sp) => sp.id === settings.scoring_attempt)?.hint}
+              </p>
+            </div>
+            <div>
+              <label style={labelStyle}>Release results</label>
+              <select className="ak-input" value={settings.feedback_release} onChange={set('feedback_release')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+                {RELEASE_OPTIONS.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
+                {RELEASE_OPTIONS.find((r) => r.id === settings.feedback_release)?.hint}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Students see</label>
+            <select className="ak-input" value={settings.feedback_detail} onChange={set('feedback_detail')} disabled={settings.feedback_release === 'never'} style={{ ...fieldStyle, cursor: 'pointer', opacity: settings.feedback_release === 'never' ? 0.5 : 1 }}>
+              {DETAIL_OPTIONS.map((d) => (
+                <option key={d.id} value={d.id}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* The two dropdowns combine into something neither of them says on
+              its own, so state the result rather than leave it to be inferred. */}
+          <p style={{ fontSize: 12.5, color: ink, background: 'rgba(63,169,245,0.06)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 10, padding: '9px 12px', margin: 0 }}>
+            {describeFeedback(settings)}
+          </p>
+          {feedbackWarning && <AlertBox tone="warn">{feedbackWarning}</AlertBox>}
+
+          <label className="flex items-start gap-2.5" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={settings.pool_enabled} onChange={set('pool_enabled')} style={{ accentColor: navy, width: 16, height: 16, marginTop: 2 }} />
+            <span>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Draw a random subset for each student</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: faint, marginTop: 2 }}>
+                The questions below become a pool. Every student gets a different paper from it, stable if they refresh.
+              </span>
+            </span>
+          </label>
+
+          {settings.pool_enabled && (
+            <div className="flex flex-wrap items-end gap-3" style={{ paddingLeft: 26 }}>
+              <div style={{ width: 150 }}>
+                <label style={labelStyle}>Questions to draw</label>
+                <input
+                  className="ak-input"
+                  type="number"
+                  min="1"
+                  max={questions.length || 1}
+                  value={settings.pool_draw_count}
+                  onChange={set('pool_draw_count')}
+                  style={{ ...fieldStyle, ...mono }}
+                />
+              </div>
+              <p style={{ fontSize: 12.5, color: muted, margin: '0 0 10px', flex: 1, minWidth: 200 }}>
+                Pool of {questions.length}. Each paper is marked out of{' '}
+                <strong style={{ ...mono, color: ink }}>{drawTotalPoints({ ...settings, questions: questions.map(toPayload) })}</strong>.
+              </p>
+            </div>
+          )}
+          {poolWarning && <AlertBox tone="warn">{poolWarning}</AlertBox>}
         </div>
 
         {/* Class assignments checklist */}
@@ -594,8 +1039,8 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
             📚 Import from Bank
           </button>
-          <button onClick={deleteQuiz} className="transition hover:brightness-105" style={btnDanger}>
-            Delete draft
+          <button onClick={removeDraft} disabled={removingDraft} className="transition hover:brightness-105 disabled:opacity-50" style={btnDanger}>
+            {removingDraft ? 'Deleting…' : 'Delete draft'}
           </button>
         </div>
         <div className="flex gap-2.5">
@@ -635,6 +1080,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
 }
 
 function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Import questions from the quiz bank', closeOnBackdrop: false })
   const [selectedNode, setSelectedNode] = useState({ type: 'uncategorized' })
   const [expandedSyllabi, setExpandedSyllabi] = useState({})
   const [expandedModules, setExpandedModules] = useState({})
@@ -675,8 +1121,8 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 760, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 760, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Import Questions from Quiz Bank</h2>
         </div>
@@ -721,6 +1167,9 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                         <button
                           type="button"
                           onClick={() => toggleSyllabus(s.id)}
+                          aria-expanded={!!expandedSyllabi[s.id]}
+                          title={expandedSyllabi[s.id] ? `Collapse ${s.title}` : `Expand ${s.title}`}
+                          aria-label={expandedSyllabi[s.id] ? `Collapse ${s.title}` : `Expand ${s.title}`}
                           className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                         >
                           <span className={`block text-[8px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
@@ -742,6 +1191,9 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                               <button
                                 type="button"
                                 onClick={() => toggleModule(m.id)}
+                                aria-expanded={!!expandedModules[m.id]}
+                                title={expandedModules[m.id] ? `Collapse ${m.title}` : `Expand ${m.title}`}
+                                aria-label={expandedModules[m.id] ? `Collapse ${m.title}` : `Expand ${m.title}`}
                                 className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                               >
                                 <span className={`block text-[6px] transition-transform duration-200 ${isModExpanded ? 'rotate-90' : ''}`}>
@@ -915,12 +1367,33 @@ export default function QuizBuilderPage() {
   }
 
   async function closeQuiz() {
-    if (!window.confirm('Close this quiz? Students will no longer be able to take it.')) return
+    if (!(await confirmDialog({
+      title: 'Close this quiz?',
+      message: 'Students can no longer take it. Attempts already submitted are kept and stay in the gradebook.',
+      confirmLabel: 'Close quiz',
+      tone: 'danger',
+    }))) return
     try {
+      const previous = quiz.status
       await updateDoc(doc(db, 'quizzes', quizId), { status: 'closed', updated_at: serverTimestamp() })
       refetch()
+      // Closing flips one field, so reopening restores exactly what was there.
+      toast.success('Quiz closed. Students can no longer take it.', {
+        action: {
+          label: 'Reopen',
+          onClick: async () => {
+            try {
+              await updateDoc(doc(db, 'quizzes', quizId), { status: previous, updated_at: serverTimestamp() })
+              refetch()
+              toast.success('Quiz reopened.')
+            } catch (err) {
+              toast.error(`Could not reopen the quiz: ${err.message}`)
+            }
+          },
+        },
+      })
     } catch (err) {
-      alert(err.message)
+      toast.error(`Could not close the quiz: ${err.message}`)
     }
   }
 
@@ -976,6 +1449,7 @@ export default function QuizBuilderPage() {
         </>
       ) : (
         <div className="max-w-3xl mt-6">
+          {quiz.status === 'published' && <LiveSettings quiz={quiz} refetch={refetch} />}
           {assignedClasses.length > 0 ? (
             <div>
               <div className="flex items-center gap-3 mb-4">
@@ -990,9 +1464,12 @@ export default function QuizBuilderPage() {
                     <option key={c.id} value={c.id}>{c.section} ({c.subject})</option>
                   ))}
                 </select>
+                {selectedResultsClassId && (
+                  <PostScoresButton quiz={quiz} classId={selectedResultsClassId} />
+                )}
               </div>
               {selectedResultsClassId && (
-                <ResultsView classId={selectedResultsClassId} quizId={quizId} totalPoints={totalPoints} assignedTo={quiz.assigned_to} />
+                <ResultsView classId={selectedResultsClassId} quizId={quizId} quiz={quiz} totalPoints={totalPoints} assignedTo={quiz.assigned_to} refetch={refetch} />
               )}
             </div>
           ) : (

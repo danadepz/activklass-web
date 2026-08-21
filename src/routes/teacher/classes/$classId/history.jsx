@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import Button from '@/components/ui/Button'
 import { navy, ink, goldDeep, muted, faint, blueText, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { SkeletonList } from '@/components/ui/Skeleton'
 
 const KIND = {
   attendance: { tag: 'Attendance', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.4)' },
@@ -154,7 +155,7 @@ export default function HistoryPage() {
     <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
-          History &amp; Activity
+          Class Logs
         </h1>
         <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
           Quizzes, submissions, attendance, and setup changes — reconstructed from this class's records.
@@ -171,7 +172,7 @@ export default function HistoryPage() {
     </div>
   )
 
-  if (isLoading) return <p style={{ color: faint }}>Loading activity…</p>
+  if (isLoading) return <SkeletonList count={6} height={68} label="Loading activity" />
   if (isError) return <p style={{ color: red }}>Could not load activity.</p>
 
   const present = ['all', ...Object.keys(KIND).filter((k) => events.some((e) => e.kind === k))]

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
-import { ink, navy, navyDeep, gold, goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono } from '@/theme'
+import { ink, navy, navyDeep, gold, goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono, cream } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.
@@ -177,13 +177,13 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-5 md:gap-7">
-            <a href="#features" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#4A5A7A' }}>
+            <a href="#features" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#3A4A6B' }}>
               Features
             </a>
-            <a href="#how" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#4A5A7A' }}>
+            <a href="#how" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#3A4A6B' }}>
               How it works
             </a>
-            <a href="#compliance" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#4A5A7A' }}>
+            <a href="#compliance" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#3A4A6B' }}>
               Compliance
             </a>
             <Link to="/login" className="text-sm font-semibold transition hover:opacity-70" style={{ color: navy }}>

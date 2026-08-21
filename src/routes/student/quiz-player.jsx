@@ -1,12 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
+import { questionsForAttempt, questionsForStudent } from '@/lib/quizPool'
+import {
+  attemptsAllowedFor,
+  canStart,
+  focusEvent,
+  hasExpired,
+  nextAttemptNumber,
+  openAttempt,
+  secondsRemaining,
+  startBriefing,
+} from '@/lib/quizAttempts'
+import {
+  finishAttempt,
+  recordFocusEvent,
+  recordReopen,
+  startAttempt,
+} from '@/hooks/useAttemptSession'
 import { gradeQuiz, matchingChoices } from '@/lib/quizGrading'
 import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
 import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono } from '@/theme'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 function isAnswered(q, a) {
   switch (q.qtype) {
@@ -44,14 +62,6 @@ async function loadPlayerData(classId, quizId, studentId) {
   )
   const attempts = attemptsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
   return { quiz, attempts }
-}
-
-/** Optional open/close window check (datetime-local strings, local time). */
-function windowState(quiz) {
-  const now = Date.now()
-  if (quiz.opens_at && now < new Date(quiz.opens_at).getTime()) return 'not_open'
-  if (quiz.closes_at && now > new Date(quiz.closes_at).getTime()) return 'closed'
-  return 'open'
 }
 
 function fmtTime(secs) {
@@ -161,25 +171,177 @@ function QuestionView({ q, answer, setAnswer }) {
   return null
 }
 
-function Runner({ classId, quiz, attemptNumber }) {
+/**
+ * The rules, then a green Start.
+ *
+ * This screen exists because the clock is now real. Once Start is pressed the
+ * attempt is written and the deadline is fixed on the server, so closing the
+ * tab no longer stops it — which is only fair if the student was told first.
+ * Every rule that will govern the sitting is listed here, in the same words on
+ * both clients, and nothing is written until they press the button.
+ */
+function StartCard({ quiz, attempts, classId, onStarted }) {
   const { profile } = useAuth()
-  const navigate = useNavigate()
-  // Shuffle once, in a lazy state initializer (impure work belongs here, not in
-  // render/useMemo — keeps the order stable across re-renders).
-  const [questions] = useState(() => {
-    const qs = [...(quiz.questions ?? [])]
-    if (quiz.shuffle_questions) {
-      for (let i = qs.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[qs[i], qs[j]] = [qs[j], qs[i]]
-      }
-    }
-    return qs
+  const [starting, setStarting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const attemptNumber = nextAttemptNumber(attempts)
+  const questions = useMemo(
+    () => questionsForStudent(quiz, { studentId: profile.id, attemptNumber }),
+    [quiz, profile.id, attemptNumber],
+  )
+  const rules = startBriefing({
+    quiz,
+    attempts,
+    studentId: profile.id,
+    drawCount: quiz.pool_enabled ? questions.length : null,
   })
 
-  const [answers, setAnswers] = useState({})
+  async function begin() {
+    setStarting(true)
+    setError(null)
+    try {
+      await startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber })
+      onStarted()
+    } catch (err) {
+      setError(err.message)
+      setStarting(false)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      <Link to={`/student/classes/${classId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: muted, textDecoration: 'none', marginBottom: 14 }}>
+        ← Back to class
+      </Link>
+
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, overflow: 'hidden' }}>
+        <div style={{ background: navy, color: '#FAFAF6', padding: '22px 26px' }}>
+          <div style={{ ...mono, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: gold }}>
+            Before you start
+          </div>
+          <h1 style={{ ...serif, fontSize: 26, lineHeight: 1.15, margin: '8px 0 0' }}>{quiz.title}</h1>
+        </div>
+
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {rules.map((rule) => (
+            <li key={rule.key} style={{ display: 'flex', gap: 14, padding: '15px 26px', borderBottom: '1px solid rgba(14,42,92,0.06)' }}>
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: gold, flexShrink: 0, marginTop: 7 }} />
+              <span>
+                <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: ink }}>{rule.label}</span>
+                <span style={{ display: 'block', fontSize: 13, color: muted, marginTop: 2, lineHeight: 1.5 }}>{rule.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div style={{ padding: '20px 26px' }}>
+          {error && (
+            <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', margin: '0 0 14px' }}>
+              {error}
+            </p>
+          )}
+          <button
+            onClick={begin}
+            disabled={starting}
+            className="transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              width: '100%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+              padding: '15px 22px',
+              fontSize: 16,
+              fontWeight: 800,
+              fontFamily: 'inherit',
+              color: '#FFFFFF',
+              background: green,
+              border: 'none',
+              borderRadius: 12,
+              cursor: 'pointer',
+              boxShadow: '0 3px 0 #14663F',
+            }}
+          >
+            {starting ? 'Starting…' : 'Start'}
+          </button>
+          <p style={{ fontSize: 12, color: faint, textAlign: 'center', margin: '12px 0 0' }}>
+            Your timer begins the moment you press this.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Turn a failed submission into something a student can act on.
+ *
+ * Only the discarded case can be named with certainty; everything else is
+ * reported as itself rather than guessed at.
+ */
+async function explainSubmitFailure(attemptId, err) {
+  try {
+    const snap = await getDoc(doc(db, 'quiz_attempts', attemptId))
+    const status = snap.data()?.status
+    if (status === 'discarded') {
+      return 'Your teacher ended this attempt. Nothing was saved — go back to your class and start again.'
+    }
+    if (status && status !== 'in_progress') {
+      return 'This attempt has already been submitted. Check your results from your class page.'
+    }
+  } catch {
+    /* If the check itself fails, the original error is still the best answer. */
+  }
+  return err.message
+}
+
+function Runner({ quiz, attempt, isResume }) {
+  const { profile } = useAuth()
+  const navigate = useNavigate()
+  const attemptNumber = attempt.attempt_number ?? 1
+  /* The paper this student sits: the pool draw, the question order and the
+     option order, all derived from (quiz, student, attempt).
+
+     Read from the attempt's own `question_ids`, fixed when Start was pressed,
+     rather than re-derived from the quiz. A teacher editing the quiz mid-quiz
+     cannot make questions appear or vanish under someone halfway through it.
+     Option order is still derived from the same seed, so it reproduces. */
+  const questions = useMemo(
+    () => questionsForAttempt(quiz, attempt, { studentId: profile.id }),
+    [quiz, attempt, profile.id],
+  )
+
+  /* Answers used to live only in component state, so a refresh, a stray back
+     swipe or a browser crash lost the whole attempt with nothing written
+     anywhere — and on a timed quiz the student had no way to get the minutes
+     back either. They are mirrored into sessionStorage now.
+
+     The key carries the student and the attempt number, so a second attempt
+     never inherits the first one's answers, and two students sharing a machine
+     never see each other's. sessionStorage rather than localStorage: the draft
+     should not outlive the tab. Answers are keyed by question id, so the
+     shuffled order above does not have to be restored with them. */
+  const draftKey = `activklass:quiz-draft:${quiz.id}:${profile.id}:${attemptNumber}`
+  const [answers, setAnswers] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(draftKey) ?? '{}') ?? {}
+    } catch {
+      return {} // private mode, or a draft written by an older shape
+    }
+  })
   const [idx, setIdx] = useState(0)
+  /* Mirrors for the visibility and reopen listeners below. Those are
+     registered once for the whole attempt; reading idx/questions directly
+     would either capture the first render's values forever or force the
+     listener to re-subscribe on every keystroke. */
+  const idxRef = useRef(0)
+  const questionsRef = useRef(questions)
+  useEffect(() => { idxRef.current = idx }, [idx])
+  useEffect(() => { questionsRef.current = questions }, [questions])
   const [confirm, setConfirm] = useState(false)
+  const { overlayProps: confirmOverlay, panelProps: confirmPanel } =
+    useDialogBehavior(() => setConfirm(false), { open: confirm, label: 'Submit assessment' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const submittedRef = useRef(false)
@@ -189,38 +351,52 @@ function Runner({ classId, quiz, attemptNumber }) {
   const answeredCount = questions.filter((qq) => isAnswered(qq, answers[qq.id])).length
   const unanswered = total - answeredCount
 
-  async function submit() {
+  /* Closes the attempt that already exists rather than creating one. The
+     document was written when Start was pressed, which is what anchors the
+     deadline to the server clock instead of to whenever this tab opened. */
+  async function submit({ expired = false } = {}) {
     if (submittedRef.current) return
     submittedRef.current = true
     setSubmitting(true)
     setError(null)
     try {
-      const result = gradeQuiz(quiz, answers)
-      const ref = await addDoc(collection(db, 'quiz_attempts'), {
-        quiz_id: quiz.id,
-        class_id: classId,
-        student_id: profile.id,
-        module_id: quiz.module_id ?? null,
-        attempt_number: attemptNumber,
-        answers,
-        per_question: result.per_question,
-        // total_score is what the teacher results screen reads; score mirrors
-        // the documented quiz_attempts schema.
-        total_score: result.total_score,
-        score: result.total_score,
-        total_possible: result.total_possible,
-        score_ratio: result.score_ratio,
-        has_essays_pending: result.has_essays,
-        status: result.has_essays ? 'submitted' : 'graded',
-        submitted_at: serverTimestamp(),
-      })
-      navigate(`/student/quizzes/${ref.id}/result`)
+      // The drawn paper, not the whole pool: grading `quiz` directly would
+      // mark a pooled student against 30 questions they never saw.
+      const result = gradeQuiz({ ...quiz, questions }, answers)
+      await finishAttempt(attempt.id, { result, answers, expired })
+      try { sessionStorage.removeItem(draftKey) } catch { /* nothing to clean up */ }
+      navigate(`/student/quizzes/${attempt.id}/result`)
     } catch (err) {
       submittedRef.current = false
-      setError(err.message)
+      /* The security rule refuses an update once the attempt is no longer
+         `in_progress`, so a teacher discarding it lands here as a permissions
+         error. "Missing or insufficient permissions" is the wrong thing to
+         read halfway through an exam; one extra read buys the real reason. */
+      setError(await explainSubmitFailure(attempt.id, err))
       setSubmitting(false)
     }
   }
+
+  // Mirror every change into the draft. Cheap enough at this size that
+  // debouncing would only add a window in which the last answer is lost.
+  useEffect(() => {
+    if (submittedRef.current) return
+    try { sessionStorage.setItem(draftKey, JSON.stringify(answers)) } catch { /* quota, or private mode */ }
+  }, [draftKey, answers])
+
+  /* Warn before a reload or a tab close mid-attempt. The draft above means the
+     answers survive either way, but a timed quiz keeps counting down while the
+     tab is gone, so leaving still costs the student — which is exactly the
+     thing worth asking about. */
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (submittedRef.current) return
+      e.preventDefault()
+      e.returnValue = '' // required by Chrome to show its own generic prompt
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // Keep a ref to the latest submit so the timer always calls the current one.
   const submitRef = useRef(submit)
@@ -228,24 +404,86 @@ function Runner({ classId, quiz, attemptNumber }) {
     submitRef.current = submit
   })
 
-  // Countdown timer (auto-submits at zero). The auto-submit is fired from the
-  // interval callback via a microtask, not synchronously in the effect body.
-  const hasTimer = quiz.time_limit_minutes != null
-  const [remaining, setRemaining] = useState(hasTimer ? quiz.time_limit_minutes * 60 : null)
+  /* Countdown, measured against the deadline the server stamped on the
+     attempt rather than counted down from a number held in this tab. Every
+     tick re-derives the remainder, so a reload, a sleeping laptop or a
+     backgrounded tab all resume at the right number instead of at the number
+     this tab last saw. Reaching zero submits what the student has. */
+  const hasTimer = secondsRemaining(attempt) !== null
+  const [remaining, setRemaining] = useState(() => secondsRemaining(attempt))
   useEffect(() => {
     if (!hasTimer) return
-    const id = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(id)
-          queueMicrotask(() => submitRef.current())
-          return 0
-        }
-        return r - 1
-      })
-    }, 1000)
+    const tick = () => {
+      const left = secondsRemaining(attempt)
+      setRemaining(left)
+      if (left <= 0) {
+        clearInterval(id)
+        // Marked expired: an attempt the clock ended and one the student ended
+        // are both real marks, but a teacher reading a low score should be able
+        // to tell which happened.
+        queueMicrotask(() => submitRef.current({ expired: true }))
+      }
+    }
+    const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [hasTimer])
+  }, [hasTimer, attempt])
+
+  /* An attempt whose deadline passed while nobody was looking -- the tab was
+     closed at 4 minutes left and reopened an hour later. Submitting on sight
+     is the honest reading: the time was spent, and the answers in the draft
+     are what the student had when it ran out. */
+  useEffect(() => {
+    if (hasExpired(attempt)) queueMicrotask(() => submitRef.current({ expired: true }))
+  }, [attempt])
+
+  /* Coming back to an attempt that was already open is a reopen. Recorded, not
+     prevented: a dropped connection and a deliberate walk-away look identical
+     from here, and which of the two it was is the teacher's call. */
+  const reopenLogged = useRef(false)
+  useEffect(() => {
+    if (!isResume || reopenLogged.current) return
+    reopenLogged.current = true
+    recordReopen(attempt.id, {
+      questionIndex: idxRef.current,
+      remainingSeconds: secondsRemaining(attempt),
+    }).catch(() => { /* best effort: never interrupt a student mid-quiz */ })
+  }, [isResume, attempt])
+
+  /* Leaving the page: tab switch, app switch, minimise, screen lock. Recorded
+     with the question that was on screen and how long they were gone.
+
+     `visibilitychange` rather than window blur: blur also fires for clicking
+     the devtools or another window on a second monitor, which would report a
+     student who never looked away. This sees the tab actually being hidden.
+
+     What it cannot see, and what the teacher's screen must therefore not
+     claim: a second device, a phone on the desk, or notes on paper. It is
+     evidence that attention left the page, and nothing more. */
+  const awayRef = useRef(null)
+  const focusCountRef = useRef(
+    Array.isArray(attempt.focus_events) ? attempt.focus_events.length : 0,
+  )
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) {
+        awayRef.current = { at: Date.now(), index: idxRef.current }
+        return
+      }
+      const left = awayRef.current
+      awayRef.current = null
+      if (!left || submittedRef.current) return
+      const event = focusEvent({
+        at: new Date(left.at).toISOString(),
+        questionIndex: left.index,
+        questionId: questionsRef.current[left.index]?.id ?? null,
+        awayMs: Date.now() - left.at,
+      })
+      recordFocusEvent(attempt.id, event, focusCountRef.current).catch(() => {})
+      focusCountRef.current += 1
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [attempt.id])
 
   const lowTime = remaining != null && remaining <= 30
 
@@ -327,7 +565,7 @@ function Runner({ classId, quiz, attemptNumber }) {
               key={qq.id}
               onClick={quiz.prevent_backtracking ? undefined : () => setIdx(i)}
               title={quiz.prevent_backtracking ? `Question ${i + 1}` : `Question ${i + 1}${done ? ' (answered)' : ''}`}
-              style={{ width: 30, height: 30, borderRadius: 8, fontSize: 12, fontWeight: 700, ...mono, cursor: quiz.prevent_backtracking ? 'default' : 'pointer', color: active ? '#FFFFFF' : done ? green : muted, background: active ? navy : done ? 'rgba(31,138,91,0.12)' : '#FFFFFF', border: active ? `1.5px solid ${navy}` : done ? '1.5px solid rgba(31,138,91,0.4)' : '1.5px solid rgba(14,42,92,0.14)' }}
+              style={{ width: 30, height: 30, borderRadius: 8, fontSize: 12, fontWeight: 700, ...mono, cursor: quiz.prevent_backtracking ? 'default' : 'pointer', color: active ? '#FAFAF6' : done ? green : muted, background: active ? navy : done ? 'rgba(31,138,91,0.12)' : '#FFFFFF', border: active ? `1.5px solid ${navy}` : done ? '1.5px solid rgba(31,138,91,0.4)' : '1.5px solid rgba(14,42,92,0.14)' }}
             >
               {i + 1}
             </button>
@@ -337,8 +575,8 @@ function Runner({ classId, quiz, attemptNumber }) {
 
       {/* Submit confirmation modal */}
       {confirm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-          <div style={{ width: '100%', maxWidth: 420, background: '#FFFFFF', borderRadius: 18, padding: 28, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)' }}>
+        <div {...confirmOverlay} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+          <div {...confirmPanel} style={{ width: '100%', maxWidth: 420, background: '#FFFFFF', borderRadius: 18, padding: 28, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)' }}>
             <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 8px' }}>Submit assessment?</h3>
             {unanswered > 0 ? (
               <div style={{ display: 'flex', gap: 10, background: 'rgba(245,197,24,0.14)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 12, padding: '12px 14px', margin: '4px 0 16px' }}>
@@ -368,12 +606,18 @@ function Runner({ classId, quiz, attemptNumber }) {
 export default function QuizPlayer() {
   const { classId, quizId } = useParams()
   const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  /* Set when this tab is the one that pressed Start, so the Runner does not
+     record its own opening as a reopen. State rather than a ref because it is
+     read during render, and it only ever flips once per mount. */
+  const [startedNow, setStartedNow] = useState(false)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['quiz-player', quizId, profile.id],
     queryFn: () => loadPlayerData(classId, quizId, profile.id),
     retry: false,
     refetchOnWindowFocus: false,
   })
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ['quiz-player', quizId, profile.id] })
 
   if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
   if (isError) {
@@ -383,32 +627,51 @@ export default function QuizPlayer() {
   }
 
   const { quiz, attempts } = data
-  const allowed = quiz.attempts_allowed ?? 1
-  const taken = attempts.length
+  const last = attempts.find((a) => a.status !== 'in_progress')
 
-  if (quiz.status !== 'published') {
-    const last = attempts[0]
-    return (
-      <Gate title="Quiz unavailable" classId={classId}>
-        This quiz isn't open right now.
-        {last && <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your last result</Link>.</>}
-      </Gate>
+  /* One shared decision, from lib/quizAttempts, rather than four checks
+     written out here and a different four in the phone app. */
+  const gate = canStart({ quiz, attempts, studentId: profile.id })
+  if (!gate.ok) {
+    const resultLink = last && (
+      <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your result</Link>.</>
     )
-  }
-
-  const win = windowState(quiz)
-  if (win === 'not_open') return <Gate title="Not open yet" classId={classId}>This quiz opens at {new Date(quiz.opens_at).toLocaleString()}.</Gate>
-  if (win === 'closed') return <Gate title="Quiz closed" classId={classId}>The window for this quiz has passed.</Gate>
-
-  if (taken >= allowed) {
-    const last = attempts[0]
+    if (gate.reason === 'not_published') {
+      return <Gate title="Quiz unavailable" classId={classId}>This quiz isn&apos;t open right now.{resultLink}</Gate>
+    }
+    if (gate.reason === 'not_assigned') {
+      return <Gate title="Not assigned to you" classId={classId}>Your teacher assigned this quiz to specific students, and you&apos;re not on the list.</Gate>
+    }
+    if (gate.reason === 'not_open') {
+      return <Gate title="Not open yet" classId={classId}>This quiz opens at {new Date(quiz.opens_at).toLocaleString()}.</Gate>
+    }
+    if (gate.reason === 'closed') {
+      return <Gate title="Quiz closed" classId={classId}>The window for this quiz has passed.</Gate>
+    }
+    const allowed = attemptsAllowedFor(quiz, profile.id)
     return (
       <Gate title="No attempts left" classId={classId}>
-        You've used all {allowed} attempt{allowed === 1 ? '' : 's'} for this quiz.
-        {last && <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your result</Link>.</>}
+        You&apos;ve used all {allowed} attempt{allowed === 1 ? '' : 's'} for this quiz. Ask your
+        teacher if you need another.{resultLink}
       </Gate>
     )
   }
 
-  return <Runner classId={classId} quiz={quiz} attemptNumber={taken + 1} />
+  const open = openAttempt(attempts)
+  if (!open) {
+    return (
+      <StartCard
+        quiz={quiz}
+        attempts={attempts}
+        classId={classId}
+        onStarted={() => {
+          // Remembered so the Runner does not log its own opening as a reopen.
+          setStartedNow(true)
+          refetch()
+        }}
+      />
+    )
+  }
+
+  return <Runner quiz={quiz} attempt={open} isResume={!startedNow} />
 }

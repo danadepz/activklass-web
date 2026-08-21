@@ -195,9 +195,9 @@ function questionProblem(q, allowedTypes) {
  * the other 29 and the ~30s they waited for them. Throwing beats returning
  * nothing: a zero-question quiz would otherwise be created and navigated to.
  *
- * Note for future call sites: this validates every type the schema allows, but
- * both current pages coerce whatever they receive to `qtype: 'mcq'`, so asking
- * for other types needs a page-side change to actually render.
+ * Note for future call sites: this validates every type the schema allows, and
+ * `draftToQuestions` below now maps all five faithfully -- a page only needs to
+ * ask for them via `types`.
  */
 function validateQuizDraft(draft, allowedTypes, requestedCount) {
   if (!Array.isArray(draft?.questions)) {
@@ -245,9 +245,10 @@ function validateQuizDraft(draft, allowedTypes, requestedCount) {
  * the topic picker is built from the Firestore syllabus doc, which carries
  * `objectives` on every topic.
  *
- * Only 'mcq' is requested by default: every current call site coerces whatever
- * it receives to `qtype: 'mcq'`, so asking for other types needs a page-side
- * change to render them, not just a different argument here.
+ * Only 'mcq' is requested by default, which is the conservative choice rather
+ * than a limitation: `draftToQuestions` maps every type the schema allows, so a
+ * page can pass any subset of QUIZ_TYPES. The teacher quizzes page exposes this
+ * as a picker; the remediation scaffolds page still asks for plain MCQ drill.
  *
  * Invalid `types` / `difficulty` throw rather than being quietly corrected --
  * the backend's own coercion turns a typo into a differently-shaped quiz with
@@ -292,6 +293,75 @@ export async function generateQuiz({
     }),
   )
   return validateQuizDraft(draft, types, count)
+}
+
+const newQuestionId = () =>
+  globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+/**
+ * Turn a validated draft into questions the quiz builder and player understand.
+ *
+ * The pages used to each keep their own `aiToQuestions`, and both hardcoded
+ * `qtype: 'mcq'` while reading only `options`. Everything else the schema can
+ * return -- `answer`, `accepted_answers`, `pairs`, `rubric` -- was dropped on
+ * the floor, so a true/false item arrived in the builder as a multiple choice
+ * question with zero options: unanswerable, and impossible to grade. The AI's
+ * own `points` was discarded too, flattening a 5-point essay to 1.
+ *
+ * Shapes below mirror the builder's toEditable/toPayload and lib/quizGrading
+ * exactly. They are the same field names the mobile player reads, so a quiz
+ * generated here grades identically on both clients.
+ */
+export function draftToQuestions(draft) {
+  return (draft?.questions ?? []).map((q) => {
+    const base = {
+      id: newQuestionId(),
+      qtype: q.type,
+      text: q.text ?? '',
+      // The schema asks for 1-5 by difficulty. Falling back to 1 keeps a
+      // missing or unparseable value from making the question worthless.
+      points: Number(q.points) > 0 ? Number(q.points) : 1,
+      ai_generated: true,
+    }
+    switch (q.type) {
+      case 'mcq':
+        return {
+          ...base,
+          options: (q.options ?? []).map((o) => ({
+            id: newQuestionId(),
+            text: o.text ?? '',
+            is_correct: !!o.correct,
+          })),
+        }
+      case 'true_false':
+        return { ...base, answer_key: { value: !!q.answer } }
+      case 'short_answer':
+        return {
+          ...base,
+          answer_key: {
+            answers: (q.accepted_answers ?? [])
+              .map((a) => String(a ?? '').trim())
+              .filter(Boolean),
+          },
+        }
+      case 'matching':
+        return {
+          ...base,
+          answer_key: {
+            pairs: (q.pairs ?? [])
+              .filter((pair) => (pair?.left ?? '').trim() && (pair?.right ?? '').trim())
+              .map((pair) => ({ left: pair.left, right: pair.right })),
+          },
+        }
+      case 'essay':
+        return { ...base, rubric: q.rubric ?? '' }
+      default:
+        // validateQuizDraft drops unknown types before this runs; coercing to
+        // an empty MCQ rather than throwing keeps one odd item from costing
+        // the teacher the whole generated set.
+        return { ...base, qtype: 'mcq', options: [] }
+    }
+  })
 }
 
 /**
@@ -504,20 +574,77 @@ export async function generateModule({
 }
 
 /**
- * The seven indicators /api/predict scores, mapped to the fitted forest's
- * global feature importances. Weights are measured from the model, not
- * guessed, and sum to 1.0 -- they let us report how much of the signal a
- * caller actually supplied. Missing `age` costs ~1% of the model's basis;
- * missing `attendance_rate` costs ~42%.
+ * The six indicators /api/predict scores, mapped to the fitted forest's global
+ * feature importances. Weights are measured from the model, not guessed, and
+ * sum to 1.0 -- they let us report how much of the signal a caller supplied.
+ *
+ * Three levels and three trends. The trends are the half that makes this an
+ * early warning rather than a second opinion: a student on 80 who is sliding
+ * and a student on 80 who is steady look identical on the levels alone, and
+ * the model separates them 0.99 vs 0.10. Together the trends are 53% of the
+ * basis, so a caller that supplies only levels is under half-covered however
+ * complete its gradebook looks.
+ *
+ * tests/test_risk_model.py in the backend asserts these stay in step with the
+ * fitted forest, so a retrain that shifts them fails the backend suite rather
+ * than silently skewing the coverage figure a teacher reads.
  */
 const RISK_FEATURE_WEIGHTS = {
-  attendance_rate: 0.42,
-  prior_average_grade: 0.24,
-  quiz_average: 0.21,
-  study_hours_per_week: 0.09,
-  household_income_bracket: 0.02,
-  age: 0.01,
-  has_internet_access: 0.01,
+  prior_average_grade: 0.26,
+  attendance_trend: 0.21,
+  missing_work_rate: 0.17,
+  quiz_trend: 0.15,
+  quiz_average: 0.13,
+  attendance_rate: 0.08,
+}
+
+/** The leading half -- what lets the model fire before the gradebook does. */
+export const RISK_LEADING_FEATURES = ['attendance_trend', 'quiz_trend', 'missing_work_rate']
+
+/**
+ * Plain-language reasons, keyed by the `code` the backend attaches to each
+ * out-of-band indicator it was actually given.
+ *
+ * Two audiences, two wordings, one source. "Needs attention" is not something
+ * a student can act on; "your attendance has fallen" is, and it names the one
+ * thing that would move the projection back. `student` is second person and
+ * avoids verdict language; `teacher` is terse enough to scan down a list.
+ */
+export const RISK_SIGNAL_COPY = {
+  attendance_falling: {
+    student: (v) => `your attendance has dropped about ${Math.round(Math.abs(v) * 100)} points recently`,
+    teacher: (v) => `attendance down ~${Math.round(Math.abs(v) * 100)} pts`,
+  },
+  work_not_submitted: {
+    // "work", not "assessments": this pools assessments a teacher marked
+    // missing with quizzes that closed unattempted, and a student who skipped
+    // three quizzes should not be told their assessments are the problem.
+    student: (v) => `you have not turned in ${Math.round(v * 100)}% of your work so far`,
+    teacher: (v) => `${Math.round(v * 100)}% of work not submitted`,
+  },
+  quiz_scores_falling: {
+    student: (v) => `your recent quiz scores are about ${Math.round(Math.abs(v))} points below your earlier ones`,
+    teacher: (v) => `quiz scores down ~${Math.round(Math.abs(v))} pts`,
+  },
+  attendance_low: {
+    student: (v) => `your attendance is at ${Math.round(v * 100)}%`,
+    teacher: (v) => `attendance ${Math.round(v * 100)}%`,
+  },
+  quiz_average_low: {
+    student: (v) => `your quiz average is ${Math.round(v)}%`,
+    teacher: (v) => `quiz average ${Math.round(v)}%`,
+  },
+  grade_low: {
+    student: (v) => `your current grade is ${Math.round(v)}`,
+    teacher: (v) => `grade ${Math.round(v)}`,
+  },
+}
+
+/** Signals rendered for one audience, worst-first as the backend ranked them. */
+export function riskReasons(signals, audience = 'teacher') {
+  return (signals ?? [])
+    .map((s) => RISK_SIGNAL_COPY[s.code]?.[audience]?.(s.value))
+    .filter(Boolean)
 }
 
 const RISK_FEATURES = Object.keys(RISK_FEATURE_WEIGHTS)
@@ -553,19 +680,20 @@ function buildRiskIndicators({
   attendanceRate,
   priorAverageGrade,
   quizAverage,
-  studyHoursPerWeek,
-  hasInternetAccess,
-  householdIncomeBracket,
-  age,
+  attendanceTrend,
+  quizTrend,
+  missingWorkRate,
 } = {}) {
   const candidates = {
     attendance_rate: attendanceRate == null ? undefined : toAttendanceRate(attendanceRate),
     prior_average_grade: priorAverageGrade,
     quiz_average: quizAverage,
-    study_hours_per_week: studyHoursPerWeek,
-    has_internet_access: hasInternetAccess == null ? undefined : Number(Boolean(hasInternetAccess)),
-    household_income_bracket: householdIncomeBracket,
-    age,
+    // Trends are already differences, so they are NOT run through
+    // toAttendanceRate -- a -0.26 drop is not a percentage to normalise, and
+    // halving it would understate exactly the signal we added it for.
+    attendance_trend: attendanceTrend,
+    quiz_trend: quizTrend,
+    missing_work_rate: missingWorkRate,
   }
 
   const indicators = {}
@@ -599,6 +727,10 @@ function shapeRiskResult(raw, indicators) {
     missing: RISK_FEATURES.filter((f) => !supplied.includes(f)),
     coverage: Math.round(coverage * 100) / 100,
     globalFactors: raw.top_factors ?? [],
+    // Per-student, unlike globalFactors: which of THIS student's indicators are
+    // out of band. This is what the two panels name to a reader; the
+    // probability alone is not something anyone can act on.
+    signals: raw.signals ?? [],
     // What the model learned from, carried through from the backend rather
     // than restated here. When the synthetic dataset is replaced with real
     // labelled exports, `real_data` flips server-side and every view stops

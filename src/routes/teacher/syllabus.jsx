@@ -11,6 +11,11 @@ import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
 import { uploadAttachment } from '@/lib/attachments'
 import AttachmentField from '@/components/AttachmentField'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
+import { SkeletonList } from '@/components/ui/Skeleton'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 let keyCounter = 0
 const newKey = () => `k${++keyCounter}`
@@ -170,7 +175,7 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
         <div className="bg-white border border-indigo-100 rounded-lg p-3 space-y-3 shadow-sm">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700">📄 Upload File</span>
-            <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
+            <button onClick={resetForm} title="Cancel" aria-label="Cancel adding this resource" className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
           </div>
           <input
             type="text"
@@ -219,7 +224,7 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
         <div className="bg-white border border-indigo-100 rounded-lg p-3 space-y-2 shadow-sm">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700">🔗 Add Link</span>
-            <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
+            <button onClick={resetForm} title="Cancel" aria-label="Cancel adding this resource" className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
           </div>
           <input
             type="text"
@@ -246,7 +251,7 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
         <div className="bg-white border border-indigo-100 rounded-lg p-3 space-y-2 shadow-sm">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700">✍️ Write Note (Markdown)</span>
-            <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
+            <button onClick={resetForm} title="Cancel" aria-label="Cancel adding this resource" className="text-slate-400 hover:text-slate-600 font-bold text-sm">×</button>
           </div>
           <input
             type="text"
@@ -314,6 +319,7 @@ function move(list, index, delta) {
 }
 
 function GenerateModal({ onClose, onDraft }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a syllabus with AI', closeOnBackdrop: false })
   const [subjectCode, setSubjectCode] = useState('')
   const [subjectDesc, setSubjectDesc] = useState('')
   const [gradeLevel, setGradeLevel] = useState('')
@@ -348,8 +354,8 @@ function GenerateModal({ onClose, onDraft }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-50">
+      <div {...panelProps} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
           Specify your subject details below. The AI will dynamically align the topics to DepEd MELCs (for K-12) or CHED CMO (for college) standards.
@@ -609,8 +615,13 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                 <button onClick={() => setModules(move(tree.modules, mIdx, -1))} title="Move up" className="text-slate-400 hover:text-slate-600 px-1">↑</button>
                 <button onClick={() => setModules(move(tree.modules, mIdx, 1))} title="Move down" className="text-slate-400 hover:text-slate-600 px-1">↓</button>
                 <button
-                  onClick={() => {
-                    if (window.confirm(`Remove module "${module.title || mIdx + 1}" and its sub-modules?`)) {
+                  onClick={async () => {
+                    if (await confirmDialog({
+                      title: `Remove module "${module.title || mIdx + 1}"?`,
+                      message: 'Its sub-modules go with it. Nothing is written until you save the syllabus, so leaving without saving still undoes this.',
+                      confirmLabel: 'Remove module',
+                      tone: 'danger',
+                    })) {
                       setModules(tree.modules.filter((_, i) => i !== mIdx))
                     }
                   }}
@@ -749,8 +760,15 @@ export default function SyllabusIndexPage() {
   // Fetch SQLite syllabi
   const { data: sqliteSyllabiData = [], isLoading: syllabiLoading, refetch } = useSyllabi()
 
+  const [runDelete, deleting] = useAsyncAction(handleDelete)
+
   async function handleDelete(syllabusId) {
-    if (!window.confirm('Are you sure you want to delete this syllabus? All assigned classes will lose their link to it.')) return
+    if (!(await confirmDialog({
+      title: 'Delete this syllabus?',
+      message: 'Every class currently linked to it loses that link, and students stop seeing it. This cannot be undone.',
+      confirmLabel: 'Delete syllabus',
+      tone: 'danger',
+    }))) return
     try {
       await deleteDoc(doc(db, 'syllabi', syllabusId))
 
@@ -766,12 +784,12 @@ export default function SyllabusIndexPage() {
       refetch()
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
     } catch (err) {
-      alert(`Delete failed: ${err.message}`)
+      toast.error(`Could not delete the syllabus: ${err.message}`)
     }
   }
 
   if (syllabiLoading) {
-    return <div className="p-8 text-slate-500">Loading Syllabi...</div>
+    return <SkeletonList count={4} height={96} label="Loading syllabi" />
   }
 
   if (editingSyllabus) {
@@ -898,8 +916,11 @@ export default function SyllabusIndexPage() {
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end gap-2">
                   <button
-                    onClick={() => handleDelete(syllabus.id)}
-                    className="p-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+                    onClick={() => runDelete(syllabus.id)}
+                    disabled={deleting}
+                    title="Delete syllabus"
+                    aria-label="Delete syllabus"
+                    className="p-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40"
                   >
                     <Trash className="h-4 w-4" />
                   </button>

@@ -7,7 +7,9 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, line, serif, mono } from '@/theme'
 import { ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
 import Notice from './Notice'
+import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import BulkUpload from './BulkUpload'
+import { SkeletonTable } from '@/components/ui/Skeleton'
 
 const ROLE_TINT = {
   admin: { fg: navy, bg: 'rgba(14,42,92,0.08)' },
@@ -123,11 +125,14 @@ function UserRow({ user, isSelf, onChanged }) {
     try { await fn(); onChanged() } catch (e) { setError(e.message) } finally { setBusy('') }
   }
 
-  function toggleActive() {
+  async function toggleActive() {
     const next = active ? 'inactive' : 'active'
-    if (active && !window.confirm(
-      `Deactivate ${user.first_name} ${user.last_name}? They will be hidden from rosters and unable to sign in.`,
-    )) return
+    if (active && !(await confirmDialog({
+      title: `Deactivate ${user.first_name} ${user.last_name}?`,
+      message: 'They will be hidden from rosters and unable to sign in. You can reactivate them at any time.',
+      confirmLabel: 'Deactivate',
+      tone: 'danger',
+    }))) return
     // Both halves: status hides them from the app, disabled stops the login.
     // Doing only the first leaves a working account.
     run('status', async () => {
@@ -136,16 +141,32 @@ function UserRow({ user, isSelf, onChanged }) {
     })
   }
 
-  function changeRole(e) {
-    const role = e.target.value
-    if (!window.confirm(`Change ${user.first_name}'s role to ${role}?`)) return
+  async function changeRole(e) {
+    const select = e.target
+    const role = select.value
+    if (!(await confirmDialog({
+      title: `Change role to ${role}?`,
+      message: `${user.first_name} ${user.last_name} will get the ${role} portal the next time they sign in.`,
+      confirmLabel: 'Change role',
+    }))) { select.value = user.role; return }
     run('role', () => setUserRole(user.id, role))
   }
 
-  function doReset() {
-    const pw = window.prompt(`New password for ${user.email} (min ${MIN_PASSWORD} characters):`)
+  async function doReset() {
+    // The length rule now blocks inside the dialog instead of failing after
+    // it closes — the old prompt() sent you back to the row with an error and
+    // an empty field, having thrown the typed password away.
+    const pw = await promptDialog({
+      title: 'Set a new password',
+      message: `This replaces the password for ${user.email} immediately.`,
+      label: 'New password',
+      placeholder: `At least ${MIN_PASSWORD} characters`,
+      confirmLabel: 'Set password',
+      required: true,
+      trim: false,
+      validate: (v) => (v.length < MIN_PASSWORD ? `Password must be at least ${MIN_PASSWORD} characters.` : ''),
+    })
     if (pw == null) return
-    if (pw.length < MIN_PASSWORD) { setError(`Password must be at least ${MIN_PASSWORD} characters.`); return }
     run('password', () => resetPassword(user.id, pw))
   }
 
@@ -242,7 +263,7 @@ export default function UsersTab() {
           <button style={btnGhost} onClick={exportCsv} disabled={!shown.length}>Export CSV</button>
         </div>
 
-        {isLoading && <p style={{ padding: 24, color: faint }}>Loading users…</p>}
+        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={5} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
         {!isLoading && !isError && (

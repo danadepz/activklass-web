@@ -208,7 +208,7 @@ export default function TeacherDashboard() {
                     <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink }}>{label}</span>
                     <span style={{ display: 'block', fontSize: 12, color: muted, marginTop: 1 }}>{hint}</span>
                   </span>
-                  <ChevronRight className="h-4 w-4 shrink-0" style={{ color: '#C3CCDB' }} />
+                  <ChevronRight className="h-4 w-4 shrink-0" style={{ color: '#CBD5E1' }} />
                 </Link>
               ))}
             </div>

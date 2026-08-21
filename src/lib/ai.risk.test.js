@@ -24,24 +24,26 @@ vi.mock('./api', () => ({
 }))
 
 const { api } = await import('./api')
-const { predictRisk, predictRiskBatch } = await import('./ai')
+const { predictRisk, predictRiskBatch, riskReasons } = await import('./ai')
 
 /** What risk_model.TRAINING_BASIS actually ships today. */
 const TRAINING = {
   real_data: false,
   source: 'synthetic',
-  samples: 4000,
+  samples: 8000,
   summary:
-    'Trained on 4,000 generated student records, not on real ActivKlass ' +
-    'history — no labelled term has finished yet. Treat it as a prompt to ' +
-    'look closer, not as evidence about a student.',
+    'Trained on 8,000 generated student trajectories, not on real ActivKlass ' +
+    'history — no labelled term has finished yet. It projects where a student ' +
+    'is heading, so treat it as a prompt to look now, not as evidence about ' +
+    'how they will finish.',
 }
 
 const reply = (over = {}) => ({
   risk_flag: 'on_track',
   risk_probability: 0.13,
   model: 'random_forest',
-  top_factors: [{ feature: 'attendance_rate', importance: 0.42 }],
+  top_factors: [{ feature: 'prior_average_grade', importance: 0.26 }],
+  signals: [],
   training: TRAINING,
   ...over,
 })
@@ -98,8 +100,9 @@ describe('the no-data trap stays visible', () => {
     const result = await predictRisk({})
 
     // This is the trap the coverage warning exists for: the backend fills every
-    // missing indicator with a healthy cohort default, so a student it knows
-    // NOTHING about comes back on_track at 0.13 -- reassuring, and about nobody.
+    // missing level with a healthy cohort default and every missing trend with
+    // zero ("steady"), so a student it knows NOTHING about comes back on_track
+    // at 0.13 -- reassuring, and about nobody.
     expect(result.flag).toBe('on_track')
     expect(result.probability).toBe(0.13)
     expect(result.atRisk).toBe(false)
@@ -113,11 +116,42 @@ describe('the no-data trap stays visible', () => {
 
   it('counts coverage by model weight, not by field count', async () => {
     vi.mocked(api).mockResolvedValue(reply())
-    // attendance_rate alone is 0.42 of the model's basis -- one field, and still
-    // nowhere near the 0.7 the warning triggers below.
+    // attendance_rate alone is 0.08 of the basis -- the whole-term rate is the
+    // model's WEAKEST input now that the trends carry the early signal.
     const result = await predictRisk({ attendanceRate: 92 })
-    expect(result.coverage).toBe(0.42)
+    expect(result.coverage).toBe(0.08)
     expect(result.coverage).toBeLessThan(0.7)
+  })
+
+  it('treats a levels-only caller as under half covered', async () => {
+    vi.mocked(api).mockResolvedValue(reply())
+    // The three levels are 0.26 + 0.13 + 0.08 = 0.47. A caller with a complete
+    // gradebook and no history to difference is still below the 0.7 warning,
+    // which is the honest reading: it cannot yet see where anyone is heading.
+    const result = await predictRisk({
+      priorAverageGrade: 84,
+      quizAverage: 79,
+      attendanceRate: 92,
+    })
+    expect(result.coverage).toBe(0.47)
+    expect(result.coverage).toBeLessThan(0.7)
+    expect(result.missing).toEqual(
+      expect.arrayContaining(['attendance_trend', 'quiz_trend', 'missing_work_rate']),
+    )
+  })
+
+  it('sends trends unscaled, unlike the attendance rate', async () => {
+    vi.mocked(api).mockResolvedValue(reply())
+    // attendanceRate 92 is a percentage and normalises to 0.92; the trend is
+    // already a difference. Halving -0.26 would understate exactly the signal
+    // the trend was added for.
+    await predictRisk({ attendanceRate: 92, attendanceTrend: -0.26, quizTrend: -14 })
+    const sent = vi.mocked(api).mock.calls[0][1].body.indicators
+    expect(sent).toEqual({
+      attendance_rate: 0.92,
+      attendance_trend: -0.26,
+      quiz_trend: -14,
+    })
   })
 
   it('never counts an unmeasured indicator as supplied', async () => {
@@ -129,10 +163,52 @@ describe('the no-data trap stays visible', () => {
       attendanceRate: null,
       priorAverageGrade: undefined,
       quizAverage: '',
-      age: 16,
+      attendanceTrend: undefined,
+      missingWorkRate: 0.4,
     })
-    expect(result.supplied).toEqual(['age'])
+    expect(result.supplied).toEqual(['missing_work_rate'])
     const sent = vi.mocked(api).mock.calls[0][1].body.indicators
-    expect(sent).toEqual({ age: 16 })
+    expect(sent).toEqual({ missing_work_rate: 0.4 })
+  })
+
+  it('keeps a measured zero, which is not the same as unmeasured', async () => {
+    vi.mocked(api).mockResolvedValue(reply())
+    // A student with nothing missing genuinely has missing_work_rate 0, and a
+    // flat trend genuinely is 0. Dropping them as falsy would report the
+    // student as less covered than they are and waste real evidence.
+    await predictRisk({ missingWorkRate: 0, attendanceTrend: 0 })
+    const sent = vi.mocked(api).mock.calls[0][1].body.indicators
+    expect(sent).toEqual({ attendance_trend: 0, missing_work_rate: 0 })
+  })
+})
+
+describe('signals become something a reader can act on', () => {
+  it('carries per-student signals through', async () => {
+    const signals = [{ feature: 'attendance_trend', value: -0.26, code: 'attendance_falling' }]
+    vi.mocked(api).mockResolvedValue(reply({ risk_flag: 'high_risk', signals }))
+    const result = await predictRisk({ attendanceTrend: -0.26 })
+    expect(result.signals).toEqual(signals)
+  })
+
+  it('words the same signal differently for each audience', async () => {
+    const signals = [
+      { feature: 'attendance_trend', value: -0.26, code: 'attendance_falling' },
+      { feature: 'missing_work_rate', value: 0.35, code: 'work_not_submitted' },
+    ]
+    // The teacher scans a list; the student is being told about themselves.
+    // Same source, and neither is a bare probability.
+    expect(riskReasons(signals, 'teacher')).toEqual([
+      'attendance down ~26 pts',
+      '35% of work not submitted',
+    ])
+    expect(riskReasons(signals, 'student')).toEqual([
+      'your attendance has dropped about 26 points recently',
+      'you have not turned in 35% of your work so far',
+    ])
+  })
+
+  it('drops a code it has no wording for rather than rendering undefined', async () => {
+    expect(riskReasons([{ code: 'something_new', value: 1 }], 'student')).toEqual([])
+    expect(riskReasons(undefined, 'student')).toEqual([])
   })
 })

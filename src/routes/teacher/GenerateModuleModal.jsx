@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { generateModule } from '@/lib/ai'
 import { Sparkles } from '@/components/icons'
-import { navy, navyDeep, ink, gold, muted, faint, red, serif, sansFamily as sans } from '@/theme'
+import { navyDeep, ink, gold, muted, faint, red, serif, sansFamily as sans, navy } from '@/theme'
 
 /**
  * Generate Module (AI) — drafts one unit and appends it to the syllabus being

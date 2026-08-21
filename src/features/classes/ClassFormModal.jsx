@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
 import { useAuth } from '@/context/useAuth'
 import { uploadAttachment } from '@/lib/attachments'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const inputCls =
   'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 bg-white text-slate-800 text-sm'
@@ -137,6 +138,7 @@ function buildMeta(form) {
 }
 
 export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, onClose, onSaved }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Class details', closeOnBackdrop: false })
   const { profile } = useAuth()
   const [form, setForm] = useState(initial ?? emptyClassForm())
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
@@ -306,8 +308,8 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4 py-8">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
         <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4 shadow-xl">
           <h3 className="text-lg font-semibold text-slate-800">
             {mode === 'edit' ? 'Edit Class' : 'New Class'}
@@ -370,8 +372,8 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                     className="w-10 h-10 rounded-full font-semibold text-sm transition-all focus:outline-none flex items-center justify-center cursor-pointer border"
                     style={{
                       background: isActive ? '#0E2A5C' : '#fff',
-                      color: isActive ? '#FAFAF6' : '#475569',
-                      borderColor: isActive ? '#0E2A5C' : '#cbd5e1'
+                      color: isActive ? '#FAFAF6' : '#6A7A95',
+                      borderColor: isActive ? '#0E2A5C' : '#CBD5E1'
                     }}
                   >
                     {day.label}

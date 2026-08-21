@@ -1,16 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
 import ParentalAccessPanel from '@/components/ParentalAccessPanel'
+import { useGuardianAccess } from '@/hooks/useGuardianAccess'
 import { navy, ink, muted, faint, red, line, serif } from '@/theme'
 import ChangePassword from '@/components/ChangePassword'
-import AttachmentField from '@/components/AttachmentField'
-
-const fieldStyle = { width: '100%', padding: '10px 12px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }
-const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
+import { ACCEPT, fileToAvatarDataUrl } from '@/lib/avatar'
 
 function InfoCell({ label, value }) {
   return (
@@ -39,7 +37,7 @@ function Avatar({ profile, busy, open, onToggle }) {
         title="Change photo"
         aria-label="Change photo"
         aria-expanded={open}
-        style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: navy, color: '#FFFFFF', display: 'grid', placeItems: 'center', cursor: busy ? 'wait' : 'pointer', border: '2px solid #FFFFFF', fontSize: 12, padding: 0 }}
+        style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: navy, color: '#FAFAF6', display: 'grid', placeItems: 'center', cursor: busy ? 'wait' : 'pointer', border: '2px solid #FFFFFF', fontSize: 12, padding: 0 }}
       >
         {busy ? '…' : '📷'}
       </button>
@@ -55,20 +53,30 @@ export default function StudentProfile() {
   const isAdult = age != null ? age >= 18 : null
 
   // --- Profile photo ---
-  // The camera badge opens the shared attachment field rather than a file
-  // dialog: Cloud Storage is not provisioned, so pasting a Photos or Drive
-  // link is the only route that currently produces a usable photo_url.
-  const [photoOpen, setPhotoOpen] = useState(false)
+  /* The camera badge opens the device file picker. It used to open a
+     paste-a-link field, because Cloud Storage is not provisioned on this
+     project (Spark plan, no bucket) — so a student was asked for a Google
+     Drive or Photos share link rather than their own photo.
+     The photo is cropped and resized to ~256px in the browser and stored
+     inline on the profile; see lib/avatar.js for why that is safe here and
+     not for the other attachment features. */
+  const fileInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [photoError, setPhotoError] = useState(null)
 
-  async function attachPhoto(url) {
+  async function onPhotoPicked(event) {
+    const file = event.target.files?.[0]
+    // Let the same file be chosen again after an error, which the input
+    // otherwise ignores because its value has not changed.
+    event.target.value = ''
+    if (!file) return
+
     setUploading(true)
     setPhotoError(null)
     try {
-      await updateDoc(doc(db, 'users', profile.id), { photo_url: url })
+      const dataUrl = await fileToAvatarDataUrl(file)
+      await updateDoc(doc(db, 'users', profile.id), { photo_url: dataUrl })
       await refreshProfile()
-      setPhotoOpen(false)
     } catch (err) {
       setPhotoError(err.message || 'Could not save the photo.')
     } finally {
@@ -76,55 +84,25 @@ export default function StudentProfile() {
     }
   }
 
-  // --- Edit personal details ---
-  const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState(null)
-  const [form, setForm] = useState(null)
-
-  function startEdit() {
-    setForm({
-      first_name: profile.first_name ?? '',
-      middle_name: profile.middle_name ?? '',
-      last_name: profile.last_name ?? '',
-      course: profile.course ?? '',
-      year_level: profile.year_level ?? '',
-      birthdate: profile.birthdate ?? '',
-    })
-    setFormError(null)
-    setEditing(true)
-  }
-
-  const setField = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
-
-  async function saveProfile() {
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setFormError('First name and last name are required.')
-      return
-    }
-    setSaving(true)
-    setFormError(null)
+  async function removePhoto() {
+    setUploading(true)
+    setPhotoError(null)
     try {
-      const patch = {
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        middle_name: form.middle_name.trim() || null,
-        course: form.course.trim() || null,
-        year_level: form.year_level.trim() || null,
-      }
-      if (form.birthdate) {
-        patch.birthdate = form.birthdate
-        patch.age = ageFromBirthdate(form.birthdate)
-      }
-      await updateDoc(doc(db, 'users', profile.id), patch)
+      await updateDoc(doc(db, 'users', profile.id), { photo_url: null })
       await refreshProfile()
-      setEditing(false)
     } catch (err) {
-      setFormError(err.message || 'Could not save your changes.')
+      setPhotoError(err.message || 'Could not remove the photo.')
     } finally {
-      setSaving(false)
+      setUploading(false)
     }
   }
+
+  /* The photo is the ONLY field a student may change. Name, student number,
+     LRN, course, year level and birthdate are registrar data -- a student
+     editing their own birthdate could flip themselves to "of legal age" and
+     unlock the guardian-access panel below, so the edit form was removed
+     rather than trimmed. Teachers maintain these fields from the class roster.
+     firestore.rules is what actually enforces this; the UI just stops asking. */
 
   // --- Consent (unchanged) ---
   const { data: consent, isLoading } = useQuery({
@@ -156,36 +134,19 @@ export default function StudentProfile() {
   const lockedReason = canManage
     ? null
     : age == null
-      ? 'Add your birthdate above so we can confirm you are of legal age to manage guardian access yourself.'
+      ? 'Your birthdate is not on file, so we cannot confirm you are of legal age to manage guardian access. Ask your teacher to add it to your record.'
       : 'Because you are a minor, your parent or guardian has guardian access to your academic records under RA 10173. This access is managed by your school and cannot be changed here.'
   const parentName = consent
     ? [consent.parent_first_name, consent.parent_last_name].filter(Boolean).join(' ')
     : null
 
   // --- Parental access -----------------------------------------------------
-  // PLACEHOLDERS. The link code and per-topic permissions do not exist in the
-  // data model yet -- the backend work is pending. They are here so the panel
-  // can be reviewed; swap them for the real consent fields when those land.
-  // Nothing in ParentalAccessPanel changes when you do.
-  const linkCode = 'K7M2Q9'
-  const [permissions, setPermissions] = useState({
-    grades: true, quiz_scores: true, attendance: true, analytics: false,
-  })
-
-  // The record holds one parent, so this is 0 or 1 long. The extra row is a
-  // preview of the pending state and goes away with the placeholders above.
-  const guardians = [
-    ...(consent
-      ? [{
-          id: consent.parent_id,
-          name: parentName || 'Parent/Guardian',
-          email: consent.parent_id,
-          relation: 'Guardian',
-          status: consent.status,
-        }]
-      : []),
-    { id: 'preview-pending', name: 'Preview Guardian', relation: 'Placeholder row', status: 'pending' },
-  ]
+  /* Real now. `const linkCode = 'K7M2Q9'` used to sit here with a note saying
+     the backend work was pending -- the same six characters for every student,
+     wired to nothing, alongside a "Preview Guardian" placeholder row. Both are
+     gone: the hook reads the guardian_codes and guardian_links collections the
+     mobile app writes, so a student's code is the same on either device. */
+  const access = useGuardianAccess(profile.id, profile.birthdate)
 
   const fullName = [profile.first_name, profile.middle_name, profile.last_name].filter(Boolean).join(' ')
 
@@ -205,120 +166,75 @@ export default function StudentProfile() {
             <Avatar
               profile={profile}
               busy={uploading}
-              open={photoOpen}
-              onToggle={() => setPhotoOpen((v) => !v)}
+              open={false}
+              onToggle={() => fileInputRef.current?.click()}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT}
+              onChange={onPhotoPicked}
+              style={{ display: 'none' }}
             />
             <div style={{ minWidth: 0 }}>
               <div style={{ ...serif, fontSize: 22, color: ink, lineHeight: 1.1 }}>{fullName || 'Your name'}</div>
               <div style={{ fontSize: 13, color: muted, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
             </div>
           </div>
-          {!editing && (
-            <button
-              onClick={startEdit}
-              className="transition hover:bg-slate-50"
-              style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 10, cursor: 'pointer' }}
-            >
-              Edit
-            </button>
-          )}
         </div>
 
-        {photoOpen && (
-          <div style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 14, marginBottom: 14, background: 'rgba(14,42,92,0.02)' }}>
-            <AttachmentField
-              storagePath={`avatars/${profile.id}`}
-              accept="image/*"
-              onAttached={(url) => attachPhoto(url)}
-              label="Profile photo"
-              compact
-            />
-          </div>
+        {profile.photo_url && (
+          <button
+            type="button"
+            onClick={removePhoto}
+            disabled={uploading}
+            style={{ fontSize: 12.5, color: muted, background: 'none', border: 'none', padding: 0, marginBottom: 12, cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            Remove photo
+          </button>
         )}
 
         {photoError && (
           <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>{photoError}</p>
         )}
 
-        {editing ? (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label style={labelStyle}>First name <span style={{ color: red }}>*</span></label>
-                <input value={form.first_name} onChange={setField('first_name')} style={fieldStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Last name <span style={{ color: red }}>*</span></label>
-                <input value={form.last_name} onChange={setField('last_name')} style={fieldStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Middle name</label>
-                <input value={form.middle_name} onChange={setField('middle_name')} style={fieldStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Birthdate</label>
-                <input type="date" value={form.birthdate} onChange={setField('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Course / Strand</label>
-                <input value={form.course} onChange={setField('course')} placeholder="e.g. STEM, BSIT" style={fieldStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Year / Grade level</label>
-                <input value={form.year_level} onChange={setField('year_level')} placeholder="e.g. Grade 10, 1st Year" style={fieldStyle} />
-              </div>
-            </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <InfoCell label="Student number" value={profile.student_number} />
+          <InfoCell label="DepEd LRN" value={profile.lrn} />
+          <InfoCell label="Course / Strand" value={profile.course} />
+          <InfoCell label="Year / Grade level" value={profile.year_level} />
+          <InfoCell label="Birthdate" value={profile.birthdate} />
+          <InfoCell label="Age" value={age == null ? '—' : `${age} ${isAdult ? '(of legal age)' : '(minor)'}`} />
+        </div>
 
-            <p style={{ fontSize: 12, color: faint, margin: 0 }}>
-              Your student number, LRN, and email are managed by your school and can't be edited here.
-            </p>
-
-            {formError && (
-              <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{formError}</p>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={saveProfile}
-                disabled={saving}
-                className="transition hover:brightness-110 disabled:opacity-50"
-                style={{ padding: '10px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}
-              >
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
-              <button
-                onClick={() => setEditing(false)}
-                disabled={saving}
-                style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <InfoCell label="Student number" value={profile.student_number} />
-            <InfoCell label="DepEd LRN" value={profile.lrn} />
-            <InfoCell label="Course / Strand" value={profile.course} />
-            <InfoCell label="Year / Grade level" value={profile.year_level} />
-            <InfoCell label="Birthdate" value={profile.birthdate} />
-            <InfoCell label="Age" value={age == null ? '—' : `${age} ${isAdult ? '(of legal age)' : '(minor)'}`} />
-          </div>
-        )}
+        <p style={{ fontSize: 12, color: faint, margin: '14px 0 0' }}>
+          Your name and these details are managed by your school. Ask your teacher
+          to correct anything that is wrong. Your profile photo is yours to change.
+        </p>
       </section>
 
       <ParentalAccessPanel
-        code={linkCode}
-        permissions={permissions}
-        onPermissionChange={(key, next) => setPermissions((prev) => ({ ...prev, [key]: next }))}
-        guardians={guardians}
-        onApprove={() => mutation.mutate('approved')}
-        onRevoke={() => mutation.mutate('declined')}
-        canManage={canManage}
+        code={access.code}
+        guardians={access.guardians}
+        onPermissionChange={access.setGuardianPermission}
+        defaultPermissions={access.defaultPermissions}
+        onDefaultPermissionChange={access.setDefaultPermission}
+        onApprove={access.approveGuardian}
+        onRevoke={access.revokeGuardian}
+        /* Deliberately NOT rotateCode: the panel fires this when the student
+           reveals their code, and rotating there would mint a new one every
+           time they looked at it, silently breaking any code already shared. */
+        onGenerateCode={undefined}
+        /* Two gates, and both have to hold. `canManage` above is this page's
+           age check off the roster record; the hook re-derives the same thing
+           from the birthdate, and firestore.rules enforces it a third time on
+           the write. A minor sees the panel disabled, never hidden -- they
+           still need to see who is watching. */
+        canManage={canManage && access.canManage}
         lockedReason={lockedReason}
-        loading={isLoading}
-        busy={mutation.isPending}
-        error={mutation.isError ? "Couldn't update consent. " + (mutation.error?.message ?? '') : null}
+        loading={isLoading || access.loading}
+        busy={access.busy}
+        error={access.error}
       />
 
       <ChangePassword />

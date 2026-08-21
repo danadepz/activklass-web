@@ -17,6 +17,19 @@
       href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <!--
+      DM Serif Display: the product's heading face.
+
+      theme.js has declared `serifFamily = "'DM Serif Display', Georgia, serif"`
+      all along and 88 headings across the app spread it, but the face was never
+      actually loaded — so every one of them silently fell back to Georgia. The
+      app has been shipping a system serif next to Lexend and reading like two
+      designs stitched together, which is exactly what it was.
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap"
+      rel="stylesheet"
+    />
     <title>ActivKlass — AI-Powered Class Record System</title>
   </head>
   <body>

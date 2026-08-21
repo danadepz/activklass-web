@@ -7,6 +7,7 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { computeFinalGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import PredictedRisk from '@/components/PredictedRisk'
+import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(2).replace(/\.00$/, '')
@@ -152,7 +153,14 @@ export default function PerformancePage() {
     queryFn: () => loadPerf(classId),
   })
 
-  if (isLoading) return <p style={{ color: faint }}>Loading performance…</p>
+  if (isLoading) {
+    return (
+      <>
+        <div className="mb-4"><SkeletonStats count={4} label="Loading performance" /></div>
+        <SkeletonTable rows={6} cols={4} label="Loading grade distribution" />
+      </>
+    )
+  }
   if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
 
   const header = (
@@ -183,7 +191,13 @@ export default function PerformancePage() {
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
   const passed = vals.filter((v) => v >= 75).length
   const passingRate = vals.length ? `${Math.round((passed / vals.length) * 100)}%` : '—'
-  const atRiskCount = vals.filter((v) => v < 85).length
+  /* Named for what it counts, not for a judgement. Three different rules were
+     on screen labelled "At risk" at once -- this one (below 85), the one in
+     reports.jsx (assessed but not passing), and PredictedRisk's model output.
+     A teacher reading them as the same claim trusts the wrong number, so the
+     two past-tense ones now say what they measure and only the forecast keeps
+     the word "risk". See BACKLOG #3. */
+  const belowVsCount = vals.filter((v) => v < 85).length
   const hi = vals.length ? Math.max(...vals) : null
 
   // distribution
@@ -198,7 +212,7 @@ export default function PerformancePage() {
   })
 
   const top = [...graded].sort((a, b) => b.grade - a.grade).slice(0, 3)
-  const atRisk = [...graded].filter((r) => r.grade < 85).sort((a, b) => a.grade - b.grade)
+  const belowVs = [...graded].filter((r) => r.grade < 85).sort((a, b) => a.grade - b.grade)
 
   const weakestComponent = (r) => {
     let lowest = null
@@ -257,7 +271,7 @@ export default function PerformancePage() {
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi label="Class average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} />
         <Kpi label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ≥ 75`} color={green} />
-        <Kpi label="At risk · below VS" value={atRiskCount} sub="grade below 85" color={goldDeep} highlight={atRiskCount > 0} />
+        <Kpi label="Below VS" value={belowVsCount} sub="grade below 85 this period" color={goldDeep} highlight={belowVsCount > 0} />
         <Kpi label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} color={green} />
       </div>
 
@@ -324,11 +338,11 @@ export default function PerformancePage() {
               <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
                 Grade under 85 — a record of work already marked, not a forecast.
               </p>
-              {atRisk.length === 0 ? (
+              {belowVs.length === 0 ? (
                 <EmptyBox>No students below the Very Satisfactory threshold — nice work.</EmptyBox>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {atRisk.map((r) => (
+                  {belowVs.map((r) => (
                     <div key={r.student_id} className="flex items-center gap-3" style={{ padding: '12px 14px', background: 'rgba(245,197,24,0.06)', border: '1px solid rgba(245,197,24,0.25)', borderRadius: 11 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex items-center gap-2">

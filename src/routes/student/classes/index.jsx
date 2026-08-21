@@ -7,6 +7,7 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry } from '@/lib/studentData'
 import { BookOpen, ChevronRight } from '@/components/icons'
 import { navy, ink, gold, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { SkeletonCards } from '@/components/ui/Skeleton'
 
 function gradeColor(g) {
   if (g == null) return faint
@@ -60,11 +61,7 @@ export default function StudentClassesIndex() {
       </p>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="animate-pulse" style={{ height: 132, borderRadius: 16, background: '#FFFFFF', border: `1px solid ${line}` }} />
-          ))}
-        </div>
+        <SkeletonCards count={3} label="Loading your classes" />
       ) : list.length === 0 ? (
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
           <div style={{ display: 'inline-grid', placeItems: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(14,42,92,0.08)', color: navy }}>
@@ -95,7 +92,7 @@ export default function StudentClassesIndex() {
                   {c.subject && <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{c.subject}</div>}
                   <div style={{ fontSize: 12.5, color: faint, marginTop: 3 }}>{c.teacher_name}</div>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0" style={{ color: '#C3CCDB' }} />
+                <ChevronRight className="h-4 w-4 shrink-0" style={{ color: '#CBD5E1' }} />
               </div>
               <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(14,42,92,0.07)' }}>
                 <span style={{ ...mono, fontSize: 12.5, color: muted }}>{c.academic_year ?? c.school_year ?? ''}</span>

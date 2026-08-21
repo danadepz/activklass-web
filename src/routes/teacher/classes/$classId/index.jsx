@@ -16,6 +16,10 @@ import {
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { SkeletonTable } from '@/components/ui/Skeleton'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 /* users/{uid}.status carries TWO meanings in this codebase, which is worth
    knowing before changing anything here. The backend treats it as account state
@@ -142,6 +146,7 @@ function StudentFields({ fields, setFields }) {
 
 /* Add a registered student by email, or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const [tab, setTab] = useState('find') // 'find' | 'create'
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -356,8 +361,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4 py-8">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
 
@@ -482,6 +487,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 /* Edit roster fields on one student (rules allow teachers to maintain these). */
 // 2026-06-20: Added first_name and last_name fields so teachers can correct student names
 function EditStudentModal({ student, classId, onClose, onDone }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit student', closeOnBackdrop: false })
   // 2026-06-20: Name state — editable first and last name
   const [firstName, setFirstName] = useState(student.first_name ?? '')
   const [lastName, setLastName] = useState(student.last_name ?? '')
@@ -522,7 +528,12 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   }
 
   async function removeFromClass() {
-    if (!window.confirm(`Remove ${student.first_name} from this class?`)) return
+    if (!(await confirmDialog({
+      title: `Remove ${student.first_name} from this class?`,
+      message: 'Their account is kept, along with their work in every other class. Only this roster changes.',
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    }))) return
     setBusy(true)
     try {
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(student.id) })
@@ -534,8 +545,8 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4 py-8">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Edit Student</h3>
         {error && (
@@ -605,6 +616,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
    optional roster columns student_number,middle_name,course,year_level,remarks,
    enrollment_status. Matches registered students by email; preview first. */
 function CsvUploadModal({ classId, onClose, onDone }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Upload a roster CSV', closeOnBackdrop: false })
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { students: [] }
   const [error, setError] = useState(null)
@@ -666,8 +678,8 @@ function CsvUploadModal({ classId, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4 py-8">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster</h3>
         <div className="space-y-3">
@@ -680,8 +692,8 @@ function CsvUploadModal({ classId, onClose, onDone }) {
             <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
           </ul>
           <p className="text-xs text-slate-400">Rows without a matching account are skipped — ask those students to register first, then re-upload.</p>
-          <div className="rounded-lg border border-slate-200 overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="rounded-lg border border-slate-200 overflow-x-auto">
+            <table className="w-full min-w-[520px] text-xs">
               <thead>
                 <tr className="bg-slate-50 text-left text-slate-500">
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">email</th>
@@ -840,8 +852,15 @@ export default function ClassDetailPage() {
     setModal(null)
   }
 
+  const [removeClass, removingClass] = useAsyncAction(deleteClass)
+
   async function deleteClass() {
-    if (!window.confirm('Delete this class section? The roster list will be lost (student accounts are kept).')) return
+    if (!(await confirmDialog({
+      title: 'Delete this class section?',
+      message: 'The roster list is lost. Student accounts are kept, and so is their work in other classes. This cannot be undone.',
+      confirmLabel: 'Delete section',
+      tone: 'danger',
+    }))) return
     try {
       await deleteDoc(doc(db, 'classes', classId))
       navigate('/teacher/classes')
@@ -852,7 +871,12 @@ export default function ClassDetailPage() {
 
   // 2026-06-20: Quick remove from table row — does not open the edit modal
   async function handleRemoveStudent(s) {
-    if (!window.confirm(`Remove ${s.first_name} ${s.last_name} from this class? Their student account is kept.`)) return
+    if (!(await confirmDialog({
+      title: `Remove ${s.first_name} ${s.last_name} from this class?`,
+      message: 'Their student account is kept - they simply stop appearing on this roster.',
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    }))) return
     try {
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(s.id) })
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
@@ -880,10 +904,19 @@ export default function ClassDetailPage() {
   async function handleToggleAccount(s) {
     const currentlyActive = (s.status ?? 'active') === 'active'
     const who = `${s.first_name} ${s.last_name}`.trim()
-    const message = currentlyActive
-      ? `Disable ${who}'s account? They will be signed out and cannot log in until you re-enable it. They stay on this roster.`
-      : `Re-enable ${who}'s account? They will be able to sign in again.`
-    if (!window.confirm(message)) return
+    const ask = currentlyActive
+      ? {
+          title: `Disable ${who}'s account?`,
+          message: 'They are signed out immediately and cannot log in until you re-enable it. They stay on this roster.',
+          confirmLabel: 'Disable account',
+          tone: 'danger',
+        }
+      : {
+          title: `Re-enable ${who}'s account?`,
+          message: 'They will be able to sign in again straight away.',
+          confirmLabel: 'Re-enable',
+        }
+    if (!(await confirmDialog(ask))) return
 
     setAccountBusy(s.id)
     setError(null)
@@ -931,7 +964,7 @@ export default function ClassDetailPage() {
     }
   }
 
-  if (isLoading) return <p className="text-slate-400">Loading roster…</p>
+  if (isLoading) return <SkeletonTable rows={8} cols={6} label="Loading roster" />
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
   const { clazz, students } = data
@@ -972,7 +1005,7 @@ export default function ClassDetailPage() {
           label="Capacity"
           value={
             <>
-              {students.length} <span style={{ color: '#C3CCDB' }}>/ {maxStudents || '—'}</span>
+              {students.length} <span style={{ color: '#CBD5E1' }}>/ {maxStudents || '—'}</span>
             </>
           }
           sub="students enrolled"
@@ -1019,11 +1052,12 @@ export default function ClassDetailPage() {
                 Add Student
               </button>
               <button
-                onClick={deleteClass}
+                onClick={removeClass}
+                disabled={removingClass}
                 title="Delete class"
-                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50"
+                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50 disabled:opacity-40"
               >
-                Delete
+                {removingClass ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
@@ -1063,7 +1097,10 @@ export default function ClassDetailPage() {
         ) : filteredStudents.length === 0 ? (
           <p className="p-8 text-center text-slate-400">No students match your search or filter.</p>
         ) : (
-          <table className="w-full text-sm">
+          /* min-w so the columns keep their widths and scroll, rather than
+             crushing into each other on a phone. */
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
             <thead>
               <tr className="text-left text-slate-500 border-b border-slate-100">
                 <th className="px-5 py-2.5 font-medium">ID No.</th>
@@ -1144,6 +1181,7 @@ export default function ClassDetailPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

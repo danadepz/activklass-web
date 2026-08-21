@@ -28,8 +28,10 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { splitAgainstBank, toBankPayload } from '@/lib/questionBank'
 import { useAuth } from '@/context/useAuth'
 
 const COLLECTION = 'banked_questions'
@@ -88,4 +90,43 @@ export async function saveBankedQuestion({ teacherId, id, payload }) {
 
 export async function deleteBankedQuestion(id) {
   await deleteDoc(doc(db, COLLECTION, id))
+}
+
+/**
+ * Bank a whole set of questions at once, skipping anything already there.
+ *
+ * This is what makes the bank fill itself: a generated quiz is 5-20 questions
+ * and nobody clicks 💾 twenty times. One `writeBatch` instead of N `addDoc`
+ * calls -- twenty round trips would have the teacher watching a spinner after
+ * the generation they already waited ~30s for, and a failure halfway would
+ * leave the bank half-written with no way to tell which half.
+ *
+ * The bank is re-fetched rather than taking the React Query cache: the cache
+ * may be minutes old, or never populated at all on a page that has not opened
+ * the bank tab, and either one turns "skip duplicates" into "write duplicates".
+ * It is one query against the teacher's own documents, on an action that just
+ * made a network call to an LLM.
+ *
+ * Returns the same counts `describeBankResult` formats.
+ */
+export async function bankQuestions({ teacherId, questions, topicId, syllabusId, origin, sourceQuizId }) {
+  const existing = await fetchBankedQuestions(teacherId)
+  const { fresh, duplicates, unusable } = splitAgainstBank(questions, existing)
+
+  // A batch is capped at 500 writes. A quiz cannot reach that today, but the
+  // chunking costs three lines and the failure it prevents is silent.
+  for (let i = 0; i < fresh.length; i += 400) {
+    const batch = writeBatch(db)
+    for (const { question } of fresh.slice(i, i + 400)) {
+      batch.set(doc(collection(db, COLLECTION)), {
+        ...toBankPayload(question, { topicId, syllabusId, origin, sourceQuizId }),
+        teacher_id: teacherId,
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      })
+    }
+    await batch.commit()
+  }
+
+  return { saved: fresh.length, duplicates: duplicates.length, unusable: unusable.length }
 }

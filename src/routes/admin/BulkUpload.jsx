@@ -112,8 +112,8 @@ export default function BulkUpload({ onDone }) {
 
       {rows.length > 0 && (
         <>
-          <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', margin: '14px 0' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflowX: 'auto', margin: '14px 0' }}>
+            <table style={{ width: '100%', minWidth: 460, borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
                   {['email', 'name', 'role', 'password'].map((h) => (

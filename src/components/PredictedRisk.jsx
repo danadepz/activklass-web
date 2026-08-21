@@ -1,18 +1,26 @@
 import { RISK_CAVEAT, useClassRisk } from '@/hooks/useClassRisk'
+import { riskReasons } from '@/lib/ai'
 import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/theme'
 
 /**
  * Identify At-Risk Students — the model's view, kept deliberately apart from
  * the grade-threshold list on the same page.
  *
- * The two disagree by design: one reports work already marked, the other
- * forecasts from attendance, grades and quiz scores. Presenting them as one
- * number would invite a teacher to read a prediction as a result.
+ * The two disagree by design, and the disagreement is the point: the list above
+ * reports work already marked, this one projects where a student is heading
+ * from the direction their attendance, submissions and quiz scores are moving.
+ * A student who appears in neither list today but appears here first is exactly
+ * who this panel exists for. Presenting them as one number would invite a
+ * teacher to read a projection as a result.
  *
- * Coverage is shown, not hidden. The model has seven inputs and this system
- * collects four, and the backend fills the rest with healthy cohort averages —
- * so a student it knows little about comes back looking fine. A teacher needs
- * to know that before acting on a green flag.
+ * Each flagged student is shown WITH the indicators that put them there. A
+ * percentage on its own tells a teacher to worry; "attendance down ~26 pts,
+ * 35% of work not submitted" tells them what to open the conversation about.
+ *
+ * Coverage is shown, not hidden, and unlike the levels it now varies per
+ * student: a trend needs enough recorded days or attempts to difference, so
+ * early in a term the model is working from less than it looks. A teacher
+ * needs to know that before acting on a green flag.
  */
 export default function PredictedRisk({ classId, rows }) {
   const { data, isLoading, isError, error } = useClassRisk(classId, rows)
@@ -53,9 +61,16 @@ export default function PredictedRisk({ classId, rows }) {
     .filter((x) => x.risk.atRisk)
     .sort((a, b) => (b.risk.probability ?? 0) - (a.risk.probability ?? 0))
 
-  // Coverage is identical for every student here -- the same four indicators are
-  // available for all of them -- so report it once rather than per row.
-  const coverage = scored[0]?.risk.coverage ?? 0
+  // Coverage varies per student now that half the indicators are trends: two
+  // students in the same class differ if one has fewer graded attempts to
+  // difference. The median is what the banner reports, and the weakest student
+  // is named alongside it so a single badly-covered row cannot hide behind a
+  // healthy class average.
+  const coverages = scored.map((x) => x.risk.coverage ?? 0).sort((a, b) => a - b)
+  const coverage = coverages.length
+    ? coverages[Math.floor(coverages.length / 2)]
+    : 0
+  const worstCoverage = coverages[0] ?? 0
   const missing = scored[0]?.risk.missing ?? []
   const training = scored[0]?.risk.training ?? null
 
@@ -64,7 +79,7 @@ export default function PredictedRisk({ classId, rows }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Predicted at risk</h3>
         <span style={{ ...mono, fontSize: 11.5, color: faint }}>
-          {Math.round(coverage * 100)}% of the model’s inputs available
+          {Math.round(coverage * 100)}% of the model’s inputs available (median)
         </span>
       </div>
       <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 10px', maxWidth: '70ch' }}>
@@ -91,9 +106,11 @@ export default function PredictedRisk({ classId, rows }) {
           margin: '0 0 14px',
         }}>
           Only {Math.round(coverage * 100)}% of what the model weighs is known for this class
-          {missing.length ? ` (no ${missing.join(', ')})` : ''}. Missing inputs are filled with
+          {worstCoverage < coverage ? `, and as little as ${Math.round(worstCoverage * 100)}% for one student` : ''}
+          {missing.length ? ` (no ${missing.join(', ')})` : ''}. Missing inputs are filled with steady,
           class-average assumptions, so a student can look safe simply because little is recorded
-          about them.
+          about them. Trends need a few weeks of attendance and several graded attempts before they
+          say anything.
         </p>
       )}
 
@@ -103,7 +120,8 @@ export default function PredictedRisk({ classId, rows }) {
           border: '1px solid rgba(31,138,91,0.25)', borderRadius: 11, padding: '12px 14px', margin: 0,
         }}>
           No student is flagged at this coverage level. Worth re-checking once more attendance and
-          quiz results are recorded.
+          quiz results are recorded — the trends that make this an early warning need a few weeks of
+          history before they carry any weight.
         </p>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -118,6 +136,13 @@ export default function PredictedRisk({ classId, rows }) {
                 <div style={{ fontSize: 12, color: muted, marginTop: 3 }}>
                   Current grade {row.grade == null ? '—' : Math.round(row.grade)}
                 </div>
+                {/* The actionable half. Without this a teacher gets a ranked
+                    list of names and no idea what to raise with any of them. */}
+                {riskReasons(risk.signals, 'teacher').length > 0 && (
+                  <div style={{ ...mono, fontSize: 11, color: red, marginTop: 5, lineHeight: 1.5 }}>
+                    {riskReasons(risk.signals, 'teacher').join(' · ')}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ ...serif, fontSize: 22, lineHeight: 1, color: red }}>

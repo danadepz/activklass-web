@@ -15,6 +15,10 @@ import { emptyClassForm } from '@/lib/classForm'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
+import { SkeletonCards } from '@/components/ui/Skeleton'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -32,7 +36,7 @@ const BADGE_COLORS = [
   { color: '#991B1B', label: 'Crimson' },
   { color: '#166534', label: 'Forest' },
   { color: '#1E40AF', label: 'Royal Blue' },
-  { color: '#334155', label: 'Slate' },
+  { color: '#3A4A6B', label: 'Slate' },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,7 +113,7 @@ function SortDropdown({ sort, setSort }) {
           fontWeight: 600,
           fontFamily: sans,
           color: ink,
-          background: '#fff',
+          background: '#FFFFFF',
           border: `1px solid rgba(14,42,92,0.18)`,
           borderRadius: 9,
           cursor: 'pointer',
@@ -127,7 +131,7 @@ function SortDropdown({ sort, setSort }) {
             top: 'calc(100% + 6px)',
             left: 0,
             zIndex: 20,
-            background: '#fff',
+            background: '#FFFFFF',
             border: `1px solid rgba(14,42,92,0.14)`,
             borderRadius: 10,
             boxShadow: '0 8px 24px -6px rgba(14,42,92,0.16)',
@@ -229,7 +233,7 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
             top: 'calc(100% + 6px)',
             right: 0,
             zIndex: 30,
-            background: '#fff',
+            background: '#FFFFFF',
             border: '1px solid rgba(14,42,92,0.14)',
             borderRadius: 10,
             boxShadow: '0 8px 24px -6px rgba(14,42,92,0.18)',
@@ -283,7 +287,7 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
 
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); setOpen(false) }}
-            style={{ ...menuItemBase, color: '#dc2626' }}
+            style={{ ...menuItemBase, color: '#C0392B' }}
           >
             Delete class
           </button>
@@ -296,6 +300,7 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
 // ─── Delete confirmation modal ────────────────────────────────────────────────
 // 2026-06-20: Teacher must type the subject code exactly before deletion proceeds
 function DeleteConfirmModal({ cls, onClose, onDeleted }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Delete class', closeOnBackdrop: false })
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -316,8 +321,8 @@ function DeleteConfirmModal({ cls, onClose, onDeleted }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
-      <div className="flex min-h-full items-center justify-center p-4 py-8">
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
         <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
           <h3 style={{ fontSize: 18, fontWeight: 700, color: ink, margin: 0 }}>
             Delete Class
@@ -363,7 +368,7 @@ function DeleteConfirmModal({ cls, onClose, onDeleted }) {
               onClick={confirm}
               disabled={!match || busy}
               className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-40"
-              style={{ background: '#dc2626', border: 'none', cursor: match ? 'pointer' : 'not-allowed' }}
+              style={{ background: '#C0392B', border: 'none', cursor: match ? 'pointer' : 'not-allowed' }}
             >
               {busy ? 'Deleting…' : 'Delete class'}
             </button>
@@ -399,10 +404,33 @@ export default function ClassesPage() {
 
   // 2026-06-20: Archive — sets archived_at timestamp; class disappears from list
   async function handleArchive(cls) {
-    if (!window.confirm(`Archive "${cls.section}"? It will be hidden from your class list.`)) return
+    if (!(await confirmDialog({
+      title: `Archive "${cls.section}"?`,
+      message: 'It disappears from your class list. Nothing is deleted — the roster, records and quizzes stay as they are.',
+      confirmLabel: 'Archive',
+    }))) return
     try {
       await updateDoc(doc(db, 'classes', cls.id), { archived_at: serverTimestamp() })
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+      /* Archiving is a single nullable field, so undo is exact -- clearing it
+         puts the class back byte for byte. Only reversible actions get an
+         Undo here; a real delete would need an archive table to restore from,
+         and offering an Undo that silently recreates a *different* document
+         is worse than not offering one. */
+      toast.success(`"${cls.section}" archived.`, {
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              await updateDoc(doc(db, 'classes', cls.id), { archived_at: null })
+              queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+              toast.success(`"${cls.section}" is back in your class list.`)
+            } catch (err) {
+              toast.error(`Could not restore the class: ${err.message}`)
+            }
+          },
+        },
+      })
     } catch (err) {
       setWarning(`Could not archive class: ${err.message}`)
     }
@@ -468,7 +496,7 @@ export default function ClassesPage() {
           style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 11, padding: '12px 16px', fontSize: 13.5, color: goldDeep }}
         >
           <span>{warning}</span>
-          <button onClick={() => setWarning(null)} style={{ color: goldDeep, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => setWarning(null)} title="Dismiss" aria-label="Dismiss this warning" style={{ color: goldDeep, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             ✕
           </button>
         </div>
@@ -490,7 +518,7 @@ export default function ClassesPage() {
             border: '1px solid rgba(14,42,92,0.18)',
             outline: 'none',
             color: ink,
-            background: '#fff',
+            background: '#FFFFFF',
           }}
           onFocus={(e) => (e.target.style.borderColor = navy)}
           onBlur={(e) => (e.target.style.borderColor = 'rgba(14,42,92,0.18)')}
@@ -508,22 +536,20 @@ export default function ClassesPage() {
 
       {/* Classes */}
       {isLoading ? (
-        <div style={{ color: faint, marginTop: 40, textAlign: 'center', fontSize: 14 }}>
-          Loading classes…
-        </div>
+        <div style={{ marginTop: 20 }}><SkeletonCards count={6} label="Loading classes" /></div>
       ) : isEmpty && !search ? (
-        <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
+        <div style={{ background: '#FFFFFF', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
           No classes yet. Create your first class section to start building its roster.
         </div>
       ) : isEmpty ? (
-        <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
+        <div style={{ background: '#FFFFFF', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
           No classes match "{search}".
         </div>
       ) : view === 'list' ? (
 
         /* ── LIST VIEW ── */
         // overflow: visible (no hidden) so the ⋮ dropdown is not clipped; border-radius applied per-row instead
-        <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${line}`, marginTop: 16 }}>
+        <div style={{ background: '#FFFFFF', borderRadius: 14, border: `1px solid ${line}`, marginTop: 16 }}>
           {filtered.map((c, i) => {
             const count = c.student_ids?.length ?? 0
             const isFirst = i === 0
@@ -603,7 +629,7 @@ export default function ClassesPage() {
               <div
                 key={c.id}
                 className="transition hover:-translate-y-0.5 hover:shadow-md"
-                style={{ background: '#fff', border: `1px solid ${line}`, borderRadius: 16, position: 'relative' }}
+                style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, position: 'relative' }}
               >
                 {/* ⋮ menu — absolute top-right, outside the card Link */}
                 <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>

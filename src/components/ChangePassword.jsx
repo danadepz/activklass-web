@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
-import { navy, navyDeep, ink, muted, green, red, line, serif, sansFamily as sans } from '@/theme'
+import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy } from '@/theme'
 
 const MIN_PASSWORD = 8
 

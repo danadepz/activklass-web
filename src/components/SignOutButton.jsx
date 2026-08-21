@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/useAuth'
-import { ink, muted, sansFamily, serifFamily } from '@/theme'
+import { ink, muted, sansFamily, serifFamily, navy } from '@/theme'
 import Button from '@/components/ui/Button'
 
 /**

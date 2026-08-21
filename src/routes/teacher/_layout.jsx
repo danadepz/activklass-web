@@ -11,8 +11,8 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
-  { to: '/teacher/announcements', label: 'Announcement' },
   { to: '/teacher/classes', label: 'My Classes' },
+  { to: '/teacher/announcements', label: 'Announcement' },
   { to: '/teacher/syllabus', label: 'Syllabus' },
   { to: '/teacher/quizzes', label: 'Quizzes' },
   { to: '/teacher/grading', label: 'Grade Config' },
@@ -283,7 +283,7 @@ export default function TeacherLayout() {
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: '#EF4444',
+                      background: '#C0392B',
                     }}
                   />
                 )}
@@ -297,7 +297,7 @@ export default function TeacherLayout() {
                     top: 'calc(100% + 10px)',
                     right: 0,
                     width: 320,
-                    background: '#fff',
+                    background: '#FFFFFF',
                     borderRadius: 12,
                     boxShadow: '0 8px 32px rgba(14,42,92,0.18), 0 2px 8px rgba(14,42,92,0.08)',
                     border: '1px solid rgba(14,42,92,0.1)',

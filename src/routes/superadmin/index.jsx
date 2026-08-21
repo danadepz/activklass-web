@@ -10,6 +10,9 @@ import {
 } from '@/lib/superadmin'
 import { SEGMENTS, STATUSES, analyticsFor, filterRows } from '@/lib/superadminAnalytics'
 import AnalyticsBand from './AnalyticsBand'
+import { toast } from '@/components/ui/toast'
+import { SkeletonTable } from '@/components/ui/Skeleton'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 /**
  * Subscriber console.
@@ -176,7 +179,7 @@ export default function SuperAdminSubscribersPage() {
     onError: (err) => setBanner(err.message),
   })
 
-  if (isLoading) return <p className="text-sm text-zinc-500">Loading subscribers…</p>
+  if (isLoading) return <SkeletonTable rows={7} cols={6} tone="dark" label="Loading subscribers" />
   if (error) {
     /* Branch on the status. The old version showed the "missing claim" hint for
        every failure, which sent you looking at permissions when the real cause
@@ -401,7 +404,7 @@ export default function SuperAdminSubscribersPage() {
             setShowProvision(false)
             setBanner(null)
             refresh()
-            window.alert(message)
+            toast.success(message)
           }}
         />
       )}
@@ -420,9 +423,10 @@ export default function SuperAdminSubscribersPage() {
 }
 
 function Dialog({ title, subtitle, children, onClose }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: title, closeOnBackdrop: false })
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-6">
-      <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+    <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-6">
+      <div {...panelProps} className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-zinc-100">{title}</h2>

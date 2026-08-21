@@ -7,7 +7,6 @@ import {
   deleteDoc,
   deleteField,
   doc,
-  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -19,9 +18,13 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
-import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
+import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
 import { ArrowRight, Plus } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
+import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 // --- shared modal + button styling ----------------------------------------
 const overlayStyle = {
@@ -151,176 +154,10 @@ function gradeColor(v) {
 
 const KIND_OPTIONS = ['activity', 'quiz', 'exam', 'contest', 'other']
 
-// ---------------------------------------------------------------- data loading
-
-async function loadBundle(classId) {
-  const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
-  const gb = gbSnap.exists() ? gbSnap.data() : {}
-  const configured = Boolean(gb.configured && gb.periods?.length && gb.components?.length)
-
-  const classSnap = await getDoc(doc(db, 'classes', classId))
-  if (!classSnap.exists()) throw new Error('Class not found')
-  const ids = classSnap.data().student_ids ?? []
-  const users = ids.length ? await fetchUsersByIds(ids) : []
-  const students = users
-    .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
-    .sort((a, b) =>
-      `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
-    )
-
-  let assessments = []
-  if (configured) {
-    const aSnap = await getDocs(collection(db, 'gradebooks', classId, 'assessments'))
-    assessments = aSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  }
-
-  return {
-    configured,
-    periods: gb.periods ?? [],
-    components: gb.components ?? [],
-    mode: gb.grading_mode ?? 'deped_k12',
-    overrides: gb.overrides ?? {},
-    students,
-    assessments,
-  }
-}
-
-/* One student's grade for one period: component breakdown + (transmuted) grade,
-   honouring a manual override. */
-function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
-  const studentScores = {}
-  for (const a of periodAssessments) {
-    const sc = a.scores?.[studentId]
-    if (sc) studentScores[a.id] = sc
-  }
-  const componentsWithA = bundle.components.map((c) => ({
-    ...c,
-    assessments: periodAssessments.filter((a) => a.component_id === c.id),
-  }))
-  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode)
-  const override = bundle.overrides?.[periodId]?.[studentId]
-  return {
-    components: breakdown,
-    period_grade: final,
-    override: override ?? null,
-    grade: override != null ? override : final,
-  }
-}
-
-/* Shape one period's view the way RecordGrid expects it. */
-function buildPeriodRecord(bundle, periodId) {
-  const period = bundle.periods.find((p) => p.id === periodId) ?? bundle.periods[0]
-  const periodAssessments = bundle.assessments.filter((a) => a.period_id === period.id)
-  const scores = {}
-  for (const a of periodAssessments) scores[a.id] = a.scores ?? {}
-  const grades = {}
-  for (const s of bundle.students) {
-    grades[s.student_id] = gradeForPeriod(bundle, periodAssessments, s.student_id, period.id)
-  }
-  return {
-    periods: bundle.periods,
-    period,
-    components: bundle.components,
-    assessments: periodAssessments,
-    scores,
-    students: bundle.students,
-    grades,
-  }
-}
-
-/* Shape the cross-period summary the way SummaryView expects it. */
-function buildSummary(bundle) {
-  const grades = {}
-  for (const s of bundle.students) {
-    const perPeriod = {}
-    const values = {}
-    for (const p of bundle.periods) {
-      const periodAssessments = bundle.assessments.filter((a) => a.period_id === p.id)
-      const g = gradeForPeriod(bundle, periodAssessments, s.student_id, p.id)
-      perPeriod[p.id] = { grade: g.grade, computed: g.period_grade, override: g.override }
-      values[p.id] = g.grade
-    }
-    grades[s.student_id] = {
-      periods: perPeriod,
-      final_grade: finalAcrossPeriods(values, bundle.periods, bundle.mode),
-    }
-  }
-  return { periods: bundle.periods, students: bundle.students, grades }
-}
-
-/* Persist each student's computed grade to gradebooks/{classId}/entries/{id}.
-   This is the ONLY grade document a student is permitted to read (their own),
-   so it must be kept in sync whenever scores or overrides change. Safe to call
-   after any save — it recomputes from a fresh bundle (teacher-readable). */
-async function syncEntries(classId) {
-  const bundle = await loadBundle(classId)
-  if (!bundle.configured) return
-  const summary = buildSummary(bundle)
-
-  // Class average per assessment (mean of graded scores). This is a safe
-  // aggregate to expose to a student; individual peer scores are never written
-  // into anyone's entry — only the student's own raw_score is.
-  const classAvg = {}
-  for (const a of bundle.assessments) {
-    const vals = Object.values(a.scores ?? {})
-      .filter((sc) => sc?.status === 'graded' && sc.raw_score != null)
-      .map((sc) => sc.raw_score)
-    classAvg[a.id] = vals.length
-      ? Math.round((vals.reduce((x, y) => x + y, 0) / vals.length) * 100) / 100
-      : null
-  }
-  const components = bundle.components.map((c) => ({
-    id: c.id,
-    name: c.name,
-    weight_percent: c.weight_percent,
-  }))
-
-  const batch = writeBatch(db)
-  for (const s of bundle.students) {
-    const g = summary.grades[s.student_id]
-    const computed = {}
-    for (const p of bundle.periods) computed[p.id] = g.periods[p.id]?.grade ?? null
-    // Per-assessment breakdown with ONLY this student's score (+ class average),
-    // so they can see exactly where they're struggling.
-    const assessments = bundle.assessments.map((a) => {
-      const sc = a.scores?.[s.student_id]
-      return {
-        id: a.id,
-        title: a.title ?? 'Untitled',
-        component_id: a.component_id,
-        period_id: a.period_id,
-        total_points: a.total_points ?? 0,
-        date_given: a.date_given ?? null,
-        raw_score: sc?.status === 'graded' ? sc.raw_score : null,
-        status: sc?.status ?? 'pending',
-        class_average: classAvg[a.id],
-      }
-    })
-    batch.set(
-      doc(db, 'gradebooks', classId, 'entries', s.student_id),
-      {
-        student_id: s.student_id,
-        final_grade: g.final_grade,
-        computed_grades: computed,
-        periods: bundle.periods.map((p) => ({
-          id: p.id,
-          name: p.name,
-          grade: g.periods[p.id]?.grade ?? null,
-        })),
-        components,
-        assessments,
-        mode: bundle.mode,
-        updated_at: serverTimestamp(),
-      },
-      { merge: true },
-    )
-  }
-  await batch.commit()
-}
-
 // ---------------------------------------------------------------- components
 
 function AddAssessmentModal({ classId, record, onClose, onSaved }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add an assessment', closeOnBackdrop: false })
   const [form, setForm] = useState({
     title: '',
     component_id: record.components[0]?.id ?? '',
@@ -362,8 +199,8 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   }
 
   return (
-    <div style={overlayStyle}>
-      <form onSubmit={submit} style={{ ...cardStyle, maxWidth: 460 }}>
+    <div {...overlayProps} style={overlayStyle}>
+      <form {...panelProps} onSubmit={submit} style={{ ...cardStyle, maxWidth: 460 }}>
         <div style={headerStyle}>
           <span style={iconSquare}>
             <Plus className="h-[18px] w-[18px]" />
@@ -419,7 +256,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
   )
 }
 
-function cellInputStyle(dirty, locked) {
+function cellInputStyle(dirty, locked, recovered) {
   return {
     ...mono,
     width: 60,
@@ -427,7 +264,13 @@ function cellInputStyle(dirty, locked) {
     textAlign: 'center',
     fontSize: 13,
     borderRadius: 8,
-    border: dirty ? '1.5px solid #F5C518' : '1.5px solid rgba(14,42,92,0.14)',
+    // Unsaved edits win the border: a teacher mid-edit needs to see what they
+    // have not committed more than they need to see where the mark came from.
+    border: dirty
+      ? '1.5px solid #F5C518'
+      : recovered
+        ? '1.5px solid rgba(39,174,96,0.55)'
+        : '1.5px solid rgba(14,42,92,0.14)',
     background: locked ? 'rgba(14,42,92,0.03)' : dirty ? 'rgba(245,197,24,0.12)' : '#FFFFFF',
     color: locked ? muted : ink,
     outline: 'none',
@@ -502,6 +345,12 @@ function RecordGrid({ classId, record, refetch }) {
         for (const [studentId, text] of Object.entries(cells)) {
           const parsed = parseCell(text, assessment.total_points)
           if (parsed.error) throw new Error(`${assessment.title}: ${parsed.error}`)
+          /* The recovery entry describes a score this edit is replacing, so it
+             stops being true the moment the teacher types. Leaving it would
+             show "was 40" beside a mark nobody recovered. */
+          if (assessment.recovery?.[studentId]) {
+            updates[`recovery.${studentId}`] = deleteField()
+          }
           if (parsed.status === 'none') {
             updates[`scores.${studentId}`] = deleteField()
           } else if (parsed.status === 'graded') {
@@ -560,8 +409,20 @@ function RecordGrid({ classId, record, refetch }) {
     }
   }
 
+  const [removeAssessment, removingAssessment] = useAsyncAction(deleteAssessment)
+
   async function deleteAssessment(assessment) {
-    if (!window.confirm(`Delete "${assessment.title}" and all its scores?`)) return
+    if (!(await confirmDialog({
+      title: `Delete "${assessment.title}"?`,
+      // A quiz column is reproducible, unlike a hand-entered one -- saying so
+      // stops a teacher from treating the deletion as unrecoverable, and warns
+      // them it will reappear if they post from the quiz again.
+      message: assessment.source_quiz_id
+        ? 'Every score recorded against it goes too, and the class average is recomputed without it. This column came from a quiz — posting its scores again recreates it.'
+        : 'Every score recorded against it goes too, and the class average is recomputed without it. This cannot be undone.',
+      confirmLabel: 'Delete assessment',
+      tone: 'danger',
+    }))) return
     try {
       await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', assessment.id))
       try { await syncEntries(classId) } catch { /* entries are derived; next save re-syncs */ }
@@ -577,10 +438,18 @@ function RecordGrid({ classId, record, refetch }) {
   }
 
   async function toggleLock() {
-    const warning = locked
-      ? 'Unlock this period? Scores and overrides become editable again.'
-      : 'Lock this period? Scores, assessments, and overrides become read-only until unlocked.'
-    if (!window.confirm(warning)) return
+    const ask = locked
+      ? {
+          title: 'Unlock this period?',
+          message: 'Scores, assessments and overrides become editable again.',
+          confirmLabel: 'Unlock',
+        }
+      : {
+          title: 'Lock this period?',
+          message: 'Scores, assessments and overrides become read-only until you unlock it again.',
+          confirmLabel: 'Lock period',
+        }
+    if (!(await confirmDialog(ask))) return
     try {
       const periods = record.periods.map((p) =>
         p.id === record.period.id ? { ...p, locked: !locked } : p,
@@ -666,9 +535,22 @@ function RecordGrid({ classId, record, refetch }) {
                 ...component.assessments.map((a) => (
                   <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: muted, minWidth: 84 }}>
                     <div className="flex items-center justify-center gap-1">
+                      {/* Marks a column the teacher did not type: its scores
+                          come from quiz attempts and are re-posted from the
+                          quiz's results tab, not edited to stay correct. */}
+                      {a.source_quiz_id && (
+                        <span title={`Posted from the quiz "${a.title}"`} style={{ color: blueText, flexShrink: 0 }} aria-label="From a quiz">◆</span>
+                      )}
                       <span title={a.title} style={{ ...mono, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                       {!locked && (
-                        <button onClick={() => deleteAssessment(a)} title="Delete assessment" style={{ color: faint, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
+                        <button
+                          onClick={() => removeAssessment(a)}
+                          disabled={removingAssessment}
+                          title="Delete assessment"
+                          aria-label={`Delete ${a.title}`}
+                          className="disabled:opacity-40"
+                          style={{ color: faint, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
+                        >
                           ×
                         </button>
                       )}
@@ -705,6 +587,12 @@ function RecordGrid({ classId, record, refetch }) {
                     {byComponent.flatMap((component) => [
                       ...component.assessments.map((a) => {
                         const isDirty = dirty[a.id]?.[student.student_id] !== undefined
+                        /* A mark raised by remediation, with what it used to
+                           be. Showing the original in the grid is the whole
+                           point of the audit trail -- a score that changed
+                           with no visible cause is the one that gets
+                           contested. */
+                        const recovered = a.recovery?.[student.student_id]
                         return (
                           <td key={a.id} style={{ padding: 4, textAlign: 'center' }}>
                             <input
@@ -712,8 +600,16 @@ function RecordGrid({ classId, record, refetch }) {
                               value={getCell(a.id, student.student_id)}
                               onChange={(e) => setCell(a.id, student.student_id, e.target.value)}
                               disabled={locked}
-                              style={cellInputStyle(isDirty, locked)}
+                              style={cellInputStyle(isDirty, locked, !!recovered)}
                             />
+                            {recovered && !isDirty && (
+                              <div
+                                title={`Recovered after remediation: was ${recovered.original_score}/${a.total_points}, practice quiz ${Math.round(recovered.remediation_pct)}%, ceiling ${recovered.cap}%. Typing over this cell clears the recovery.`}
+                                style={{ ...mono, fontSize: 9.5, color: green, marginTop: 2, cursor: 'help', whiteSpace: 'nowrap' }}
+                              >
+                                &#8635; was {recovered.original_score}
+                              </div>
+                            )}
                           </td>
                         )
                       }),
@@ -886,7 +782,22 @@ function GradeContestsPanel({ classId }) {
 
   async function resolve(c, status) {
     let note = null
-    if (status === 'rejected') note = (window.prompt('Reason for rejecting this score dispute (optional):') ?? '').trim() || null
+    if (status === 'rejected') {
+      // Cancel now aborts. window.prompt returning null was coerced straight
+      // into "no reason given" by the `?? ''`, so backing out of the box
+      // rejected the dispute anyway - there was no way not to.
+      const reason = await promptDialog({
+        title: 'Reject this score dispute',
+        message: 'The student is notified of the outcome and sees this note with it.',
+        label: 'Reason (optional)',
+        placeholder: 'e.g. The recorded score matches the answer sheet.',
+        confirmLabel: 'Reject dispute',
+        multiline: true,
+        tone: 'danger',
+      })
+      if (reason == null) return
+      note = reason.trim() || null
+    }
     setBusyId(c.id)
     setError(null)
     try {
@@ -952,7 +863,7 @@ function GradeContestsPanel({ classId }) {
               </div>
               {c.status === 'pending' && (
                 <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={() => resolve(c, 'approved')} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                  <button onClick={() => resolve(c, 'approved')} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
                     Accept
                   </button>
                   <button onClick={() => resolve(c, 'rejected')} disabled={busyId === c.id} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
@@ -985,7 +896,15 @@ export default function ClassRecordPage() {
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
 
-  if (isLoading) return <p style={{ color: faint }}>Loading class record…</p>
+  if (isLoading) {
+    // Five KPI tiles then the score table, which is the shape that lands.
+    return (
+      <>
+        <div className="mb-5"><SkeletonStats count={4} label="Loading class record" /></div>
+        <SkeletonTable rows={8} cols={6} label="Loading scores" />
+      </>
+    )
+  }
   if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
 
   const subline =

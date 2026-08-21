@@ -3,9 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
 } from '@/lib/subscription'
+import {
+  fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
+} from '@/lib/institution'
 import { ink, muted, faint, green, red, gold, navy, line, serif, mono } from '@/theme'
 import { card, field, th } from './ui'
 import Notice from './Notice'
+import Button from '@/components/ui/Button'
+import { confirmDialog } from '@/components/ui/dialogs'
 import ChangePassword from '@/components/ChangePassword'
 
 const GB = 1024 ** 3
@@ -46,16 +51,23 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
     onError: (e) => setError(e.message),
   })
 
-  function pick(e) {
-    const plan = e.target.value
+  async function pick(e) {
+    // Captured before the await: the dialog is asynchronous now, and the
+    // revert below has to reach the same <select> afterwards.
+    const select = e.target
+    const plan = select.value
     if (plan === sub.plan) return
     const now = catalogue[sub.plan]
     const next = catalogue[plan]
     const downgrade = next && now && next.student_seats < now.student_seats
-    if (downgrade && !window.confirm(
-      `Downgrade to ${plan}? Student seats drop from ${now.student_seats} to ${next.student_seats}. ` +
-      'Existing accounts are not removed — you would simply be over the limit.',
-    )) { e.target.value = sub.plan; return }
+    if (downgrade && !(await confirmDialog({
+      title: `Downgrade to ${plan}?`,
+      message:
+        `Student seats drop from ${now.student_seats} to ${next.student_seats}. ` +
+        'Existing accounts are not removed — you would simply be over the limit.',
+      confirmLabel: 'Downgrade',
+      tone: 'danger',
+    }))) { select.value = sub.plan; return }
     mut.mutate(plan)
   }
 
@@ -147,6 +159,153 @@ function StorageMeter({ limitBytes }) {
   )
 }
 
+/**
+ * Offer a seat on this school's plan to a teacher who pays for their own.
+ *
+ * Invite, never assign. The teacher accepts on their own Account page and only
+ * then does their school_id move -- see api/institution.py for why the
+ * handshake matters (RA 10173, and teachers who work at two schools).
+ *
+ * Accepting moves BILLING only. Their classes, students and records stay
+ * theirs, and this panel says so, because "add to school" reads like it would
+ * hand the school their records and it does not.
+ */
+function TeacherSeatsCard({ onChanged }) {
+  const qc = useQueryClient()
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [note, setNote] = useState('')
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['institution-invites'],
+    queryFn: fetchSchoolInvites,
+    retry: false,
+  })
+
+  const done = (message) => {
+    setError('')
+    setNote(message ?? '')
+    qc.invalidateQueries({ queryKey: ['institution-invites'] })
+    onChanged?.()
+  }
+  const fail = (e) => { setNote(''); setError(e.message) }
+
+  const invite = useMutation({
+    mutationFn: () => inviteTeacher(email.trim()),
+    onSuccess: () => { setEmail(''); done('Invitation sent. It appears on their Account page.') },
+    onError: fail,
+  })
+  const revoke = useMutation({ mutationFn: revokeInvite, onSuccess: () => done(), onError: fail })
+  const release = useMutation({ mutationFn: releaseMember, onSuccess: () => done(), onError: fail })
+  const busy = invite.isPending || revoke.isPending || release.isPending
+
+  // Accepted invites are the school's current teachers; the rest are outstanding
+  // offers. Splitting them is what makes "who can I release" answerable.
+  const invites = data?.invites ?? []
+  const accepted = invites.filter((i) => i.status === 'accepted')
+  const pending = invites.filter((i) => i.status === 'pending')
+
+  return (
+    <section style={{ ...card, padding: 22 }}>
+      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Teachers on your plan</h2>
+      <p style={{ fontSize: 13, color: muted, margin: '0 0 16px', lineHeight: 1.6 }}>
+        Invite a teacher who currently pays for their own ActivKlass plan. When they accept, their
+        subscription stops and they take one of your teacher seats. Their classes, students and
+        records are not transferred — this moves billing only.
+      </p>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); invite.mutate() }}
+        style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}
+      >
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="teacher@example.com"
+          aria-label="Teacher email"
+          style={{ ...field, flex: '1 1 240px', minWidth: 0 }}
+        />
+        <Button type="submit" disabled={busy || !email.trim()}>
+          {invite.isPending ? 'Sending…' : 'Send invitation'}
+        </Button>
+      </form>
+
+      {isLoading && <p style={{ fontSize: 12.5, color: faint, marginTop: 14 }}>Loading invitations…</p>}
+      {isError && <p style={{ fontSize: 12.5, color: faint, marginTop: 14 }}>Invitations unavailable.</p>}
+
+      {pending.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 8 }}>
+            Waiting for the teacher to accept
+          </div>
+          {pending.map((i) => (
+            <div key={i.id} style={rowStyle}>
+              <div>
+                <div style={{ fontSize: 13.5, color: ink }}>{i.first_name} {i.last_name}</div>
+                <div style={{ fontSize: 12.5, color: faint }}>{i.email}</div>
+              </div>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={async () => {
+                  if (await confirmDialog({
+                    title: 'Withdraw this invitation?',
+                    message: `${i.email} will no longer be able to accept it. You can invite them again later.`,
+                    confirmLabel: 'Withdraw',
+                  })) revoke.mutate(i.id)
+                }}
+              >
+                Withdraw
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {accepted.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 8 }}>
+            On your plan
+          </div>
+          {accepted.map((i) => (
+            <div key={i.id} style={rowStyle}>
+              <div>
+                <div style={{ fontSize: 13.5, color: ink }}>{i.first_name} {i.last_name}</div>
+                <div style={{ fontSize: 12.5, color: faint }}>{i.email}</div>
+              </div>
+              <Button
+                variant="ghost"
+                disabled={busy}
+                onClick={async () => {
+                  if (await confirmDialog({
+                    title: `Release ${i.first_name || i.email}?`,
+                    message:
+                      'They give up their seat on your plan and their own subscription is reactivated '
+                      + 'exactly as it was. Their classes and records are unaffected.',
+                    confirmLabel: 'Release',
+                    tone: 'danger',
+                  })) release.mutate(i.teacher_id)
+                }}
+              >
+                Release
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {note && <div style={{ marginTop: 14 }}><Notice tone="success">{note}</Notice></div>}
+      {error && <div style={{ marginTop: 14 }}><Notice>{error}</Notice></div>}
+    </section>
+  )
+}
+
+const rowStyle = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+  flexWrap: 'wrap', padding: '10px 0', borderTop: `1px solid ${line}`,
+}
+
 /** Subscription Management: View Status, View Storage Usage, Upgrade/Downgrade. */
 export default function SubscriptionTab() {
   const qc = useQueryClient()
@@ -196,6 +355,8 @@ export default function SubscriptionTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <PlanCard ownerId={ownerId} sub={subscription} usage={usage} plans={plans}
                 onChanged={refresh} />
+
+      <TeacherSeatsCard onChanged={refresh} />
 
       <ChangePassword />
 

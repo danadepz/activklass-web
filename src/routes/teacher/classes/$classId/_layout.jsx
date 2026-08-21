@@ -16,7 +16,7 @@ const TABS = [
   { to: 'performance', label: 'Performance' },
   { to: 'attendance', label: 'Attendance' },
   { to: 'scaffolds', label: 'Scaffold Topics' },
-  { to: 'history', label: 'History' },
+  { to: 'history', label: 'Logs' },
 ]
 
 function tabStyle({ isActive }) {
@@ -98,7 +98,7 @@ export default function ClassLayout() {
           style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 11, padding: '12px 16px', marginBottom: 16, fontSize: 13.5, color: goldDeep }}
         >
           <span>{warning}</span>
-          <button onClick={() => setWarning(null)} style={{ color: goldDeep, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => setWarning(null)} title="Dismiss" aria-label="Dismiss this warning" style={{ color: goldDeep, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             ✕
           </button>
         </div>

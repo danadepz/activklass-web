@@ -3,26 +3,44 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { generateQuiz } from '@/lib/ai'
+import { draftToQuestions, generateQuiz, QUIZ_TYPES } from '@/lib/ai'
 import {
+  bankQuestions,
   deleteBankedQuestion,
   filterBankedQuestions,
   saveBankedQuestion,
   useBankedQuestions,
 } from '@/hooks/useBankedQuestions'
+import { describeBankResult } from '@/lib/questionBank'
+import { LIFECYCLE_TABS, lifecycleOf } from '@/lib/quizAttempts'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useQuizzes } from '@/hooks/useQuizzes'
 import { useSyllabi } from '@/hooks/useSyllabi'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
+import { SkeletonList } from '@/components/ui/Skeleton'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
   published: { label: 'Published', color: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   closed: { label: 'Closed', color: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.5)' },
 }
-const FILTERS = ['all', 'draft', 'published', 'closed']
+/* Lifecycle, not status. `status` alone put a quiz that opens next Monday and
+   one that is open right now in the same bucket, which is the distinction a
+   teacher on a Monday morning actually needs. LIFECYCLE_TABS derives it from
+   opens_at / closes_at / status in lib/quizAttempts.js, so the student player
+   and this list agree on what "open" means. */
+const FILTERS = ['all', ...LIFECYCLE_TABS.map((t) => t.id)]
+const FILTER_LABELS = {
+  all: 'All',
+  ...Object.fromEntries(LIFECYCLE_TABS.map((t) => [t.id, t.label])),
+}
+const FILTER_HINTS = Object.fromEntries(LIFECYCLE_TABS.map((t) => [t.id, t.hint]))
 
 const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
 const fieldStyle = {
@@ -84,22 +102,8 @@ function blankQuiz({ classIds, teacherId, title, generatedBy = 'manual', questio
   }
 }
 
-function aiToQuestions(quiz) {
-  return (quiz.questions ?? []).map((q) => ({
-    id: newId(),
-    qtype: 'mcq',
-    text: q.text ?? '',
-    points: 1,
-    ai_generated: true,
-    options: (q.options ?? []).map((o) => ({
-      id: newId(),
-      text: o.text ?? '',
-      is_correct: !!o.correct,
-    })),
-  }))
-}
-
 function GenerateQuizModal({ classes, onClose }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a quiz with AI', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [selectedClassId, setSelectedClassId] = useState(classes[0]?.id ?? '')
@@ -108,12 +112,33 @@ function GenerateQuizModal({ classes, onClose }) {
     topic: '',
     count: 10,
     blooms_level: 'apply',
+    types: ['mcq'],
+    // On by default: the bank exists to be reused, and a teacher who has to
+    // opt in every time ends up with the empty bank we started with. It is
+    // still a checkbox rather than automatic, because banking writes to a
+    // list the teacher owns and a silent write is the wrong surprise.
+    save_to_bank: true,
   })
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
   const selectStyle = { ...fieldStyle, cursor: 'pointer' }
   const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
   const COUNT_OPTIONS = [5, 10, 15, 20]
+  // Labelled for teachers; the keys are what /api/quizzes/generate accepts.
+  const TYPE_LABELS = {
+    mcq: 'Multiple choice',
+    true_false: 'True / False',
+    short_answer: 'Short answer',
+    matching: 'Matching',
+    essay: 'Essay',
+  }
+  const toggleType = (t) =>
+    setForm((f) => {
+      const next = f.types.includes(t) ? f.types.filter((x) => x !== t) : [...f.types, t]
+      // generateQuiz throws on an empty list, and an empty list would make the
+      // backend silently fall back to ['mcq', 'true_false'] anyway.
+      return next.length ? { ...f, types: next } : f
+    })
 
   const { data: selectedClassMeta } = useQuery({
     queryKey: ['fs-class-meta-gen', selectedClassId],
@@ -161,6 +186,7 @@ function GenerateQuizModal({ classes, onClose }) {
         topic: topicText,
         topicId: form.topic_id || null,
         numQuestions: form.count,
+        types: form.types,
         hints: {
           bloomsLevel: form.blooms_level,
           subject: selectedClassMeta?.subject,
@@ -169,15 +195,20 @@ function GenerateQuizModal({ classes, onClose }) {
       })
 
       const quizId = newId()
+      const questions = draftToQuestions(quiz)
       const payload = blankQuiz({
         classIds: selectedClassId ? [selectedClassId] : [],
         teacherId: profile.id,
         title: quiz.title || `Quiz: ${topicText}`,
         generatedBy: 'ai_generated',
-        questions: aiToQuestions(quiz),
+        questions,
         extra: {
           topic_id: form.topic_id || null,
           module_id: picked?.module_id || null,
+          // Carried so the quiz editor can file its own 💾 saves under the
+          // right syllabus folder; only this dialog knows which syllabus the
+          // class is on.
+          syllabus_id: selectedClassMeta?.syllabus_id || null,
           ai_source: quiz.source || null,
         },
       })
@@ -188,6 +219,24 @@ function GenerateQuizModal({ classes, onClose }) {
         updated_at: serverTimestamp(),
       })
 
+      // After the quiz doc, never before: the quiz is what the teacher asked
+      // for, and a bank write that fails must not cost them the generation.
+      if (form.save_to_bank) {
+        try {
+          const result = await bankQuestions({
+            teacherId: profile.id,
+            questions,
+            topicId: form.topic_id || null,
+            syllabusId: selectedClassMeta?.syllabus_id || null,
+            origin: 'ai_generated',
+            sourceQuizId: quizId,
+          })
+          toast.success(describeBankResult(result))
+        } catch (err) {
+          toast.error(`Quiz created, but the Quiz Bank save failed: ${err.message}`)
+        }
+      }
+
       navigate(`/teacher/quizzes/${quizId}`)
     } catch (err) {
       setError(err.message)
@@ -196,8 +245,8 @@ function GenerateQuizModal({ classes, onClose }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifycenter: 'center', zIndex: 100, padding: 24 }}>
-      <form onSubmit={generate} style={{ margin: 'auto', width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <form {...panelProps} onSubmit={generate} style={{ margin: 'auto', width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <span style={{ width: 36, height: 36, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
             <Sparkles className="h-[18px] w-[18px]" />
@@ -206,8 +255,8 @@ function GenerateQuizModal({ classes, onClose }) {
         </div>
         <div style={{ padding: '24px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
           <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
-            Builds a multiple-choice draft (local Llama 3, with a math fallback). Review every question and
-            answer key before publishing.
+            Builds a draft in the question types you pick (local Llama 3, with a math fallback). Review every
+            question and answer key before publishing.
           </p>
           {error && <AlertBox>{error}</AlertBox>}
 
@@ -257,6 +306,56 @@ function GenerateQuizModal({ classes, onClose }) {
               </select>
             </div>
           </div>
+
+          <div>
+            <label style={labelStyle}>Question types</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {QUIZ_TYPES.map((t) => {
+                const on = form.types.includes(t)
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => toggleType(t)}
+                    aria-pressed={on}
+                    className="transition hover:brightness-105"
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      padding: '6px 12px',
+                      borderRadius: 999,
+                      cursor: 'pointer',
+                      background: on ? navy : '#FFFFFF',
+                      color: on ? gold : muted,
+                      border: `1px solid ${on ? navy : 'rgba(14,42,92,0.16)'}`,
+                    }}
+                  >
+                    {TYPE_LABELS[t] ?? t}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0' }}>
+              Essays are graded by you, not auto-marked.
+            </p>
+          </div>
+
+          <label className="flex items-start gap-2.5 cursor-pointer" style={{ borderTop: '1px solid rgba(14,42,92,0.07)', paddingTop: 16 }}>
+            <input
+              type="checkbox"
+              checked={form.save_to_bank}
+              onChange={(e) => setForm((f) => ({ ...f, save_to_bank: e.target.checked }))}
+              style={{ marginTop: 2, accentColor: navy, width: 15, height: 15, cursor: 'pointer' }}
+            />
+            <span>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>
+                Also save these to my Quiz Bank
+              </span>
+              <span style={{ display: 'block', fontSize: 11.5, color: faint, marginTop: 2 }}>
+                Filed under this topic, ready to reuse. Questions already in your bank are skipped.
+              </span>
+            </span>
+          </label>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
@@ -273,6 +372,7 @@ function GenerateQuizModal({ classes, onClose }) {
 }
 
 function CreateQuizModal({ classes, onClose }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Create a new quiz', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()
   const [title, setTitle] = useState('')
@@ -316,8 +416,8 @@ function CreateQuizModal({ classes, onClose }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <form onSubmit={create} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <form {...panelProps} onSubmit={create} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Create New Quiz</h2>
         </div>
@@ -357,6 +457,7 @@ function CreateQuizModal({ classes, onClose }) {
 }
 
 function QuizCard({ quiz, classes, onDelete }) {
+  const [removeQuiz, removing] = useAsyncAction(() => onDelete(quiz.id))
   const count = quiz.question_count ?? 0
   const s = STATUS_PILL[quiz.status] ?? STATUS_PILL.draft
   const isAi = quiz.generated_by === 'ai_generated'
@@ -377,7 +478,13 @@ function QuizCard({ quiz, classes, onDelete }) {
               <Sparkles className="h-3 w-3" /> AI
             </span>
           )}
-          <button onClick={() => onDelete(quiz.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition">
+          <button
+            onClick={removeQuiz}
+            disabled={removing}
+            title="Delete quiz"
+            aria-label="Delete quiz"
+            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition disabled:opacity-40"
+          >
             <Trash className="h-4 w-4" />
           </button>
         </div>
@@ -422,6 +529,7 @@ const TYPE_LABELS = {
 }
 
 function BankedQuestionCard({ question, onEdit, onDelete }) {
+  const [removeQuestion, removing] = useAsyncAction(() => onDelete(question.id))
   const s = question
   return (
     <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 18, marginBottom: 12 }}>
@@ -434,7 +542,13 @@ function BankedQuestionCard({ question, onEdit, onDelete }) {
           <button onClick={() => onEdit(s)} className="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-slate-50 transition" title="Edit">
             <Edit className="h-4 w-4" />
           </button>
-          <button onClick={() => onDelete(s.id)} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition" title="Delete">
+          <button
+            onClick={removeQuestion}
+            disabled={removing}
+            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition disabled:opacity-40"
+            title="Delete question"
+            aria-label="Delete question"
+          >
             <Trash className="h-4 w-4" />
           </button>
         </div>
@@ -497,6 +611,7 @@ function BankedQuestionCard({ question, onEdit, onDelete }) {
 }
 
 function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a banked question', closeOnBackdrop: false })
   const [qtype, setQtype] = useState(question.qtype || 'mcq')
   const [text, setText] = useState(question.text || '')
   const [points, setPoints] = useState(String(question.points ?? 1))
@@ -514,6 +629,12 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
   const [rubric, setRubric] = useState(question.rubric || '')
   const [syllabusId, setSyllabusId] = useState(question.syllabus_id || '')
   const [topicId, setTopicId] = useState(question.topic_id || '')
+  /* Validation used to fire five alert()s. An OS box takes the reader out of
+     the form to dismiss news about a field they can no longer see; this keeps
+     the message in the footer, beside the Save button they just pressed, and
+     clears the moment they change the question type. */
+  const [formError, setFormError] = useState('')
+  const [runSave, saving] = useAsyncAction(onSave)
 
   const selectedSyllabus = syllabi.find(s => s.id === syllabusId)
   const topicsList = []
@@ -530,7 +651,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!text.trim()) {
-      alert('Question text is required')
+      setFormError('Question text is required.')
       return
     }
 
@@ -546,11 +667,11 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
     if (qtype === 'mcq') {
       const cleanedOptions = options.map(o => ({ ...o, text: o.text.trim() })).filter(o => o.text)
       if (cleanedOptions.length < 2) {
-        alert('Please provide at least 2 options')
+        setFormError('Give the question at least 2 options with text in them.')
         return
       }
       if (!cleanedOptions.some(o => o.is_correct)) {
-        alert('Please mark one option as correct')
+        setFormError('Mark one option as the correct answer.')
         return
       }
       payload.options = cleanedOptions
@@ -559,14 +680,14 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
     } else if (qtype === 'short_answer') {
       const answers = answersText.split('\n').map(s => s.trim()).filter(Boolean)
       if (answers.length === 0) {
-        alert('Provide at least one accepted answer')
+        setFormError('Provide at least one accepted answer, one per line.')
         return
       }
       payload.answer_key = { answers }
     } else if (qtype === 'matching') {
       const cleanedPairs = pairs.map(p => ({ left: p.left.trim(), right: p.right.trim() })).filter(p => p.left && p.right)
       if (cleanedPairs.length < 2) {
-        alert('Provide at least 2 matching pairs')
+        setFormError('Provide at least 2 matching pairs with both sides filled in.')
         return
       }
       payload.answer_key = { pairs: cleanedPairs }
@@ -574,12 +695,13 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
       payload.rubric = rubric.trim() || null
     }
 
-    onSave(payload)
+    setFormError('')
+    runSave(payload)
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 520, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <form {...panelProps} onSubmit={handleSubmit} style={{ width: '100%', maxWidth: 520, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>
             {question.id ? 'Edit Banked Question' : 'Add Question to Bank'}
@@ -616,7 +738,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
                   <div key={i} className="flex items-center gap-2">
                     <input type="radio" checked={o.is_correct} onChange={() => setOptions(options.map((x, j) => ({ ...x, is_correct: j === i })))} style={{ accentColor: navy }} />
                     <input placeholder={`Option ${i + 1}`} value={o.text} onChange={(e) => setOptions(options.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
-                    <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))} disabled={options.length <= 2} className="text-red-500 disabled:opacity-30">×</button>
+                    <button type="button" onClick={() => setOptions(options.filter((_, j) => j !== i))} disabled={options.length <= 2} title={`Remove option ${i + 1}`} aria-label={`Remove option ${i + 1}`} className="text-red-500 disabled:opacity-30">×</button>
                   </div>
                 ))}
                 <button type="button" onClick={() => setOptions([...options, { text: '', is_correct: false }])} className="text-xs font-semibold text-indigo-600 hover:underline">
@@ -656,7 +778,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
                     <input placeholder="Left" value={p.left} onChange={(e) => setPairs(pairs.map((x, j) => j === i ? { ...x, left: e.target.value } : x))} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
                     <span className="text-slate-400">&rarr;</span>
                     <input placeholder="Right" value={p.right} onChange={(e) => setPairs(pairs.map((x, j) => j === i ? { ...x, right: e.target.value } : x))} className="ak-input" style={{ ...fieldStyle, flex: 1 }} />
-                    <button type="button" onClick={() => setPairs(pairs.filter((_, j) => j !== i))} className="text-red-500">×</button>
+                    <button type="button" onClick={() => setPairs(pairs.filter((_, j) => j !== i))} title={`Remove pair ${i + 1}`} aria-label={`Remove pair ${i + 1}`} className="text-red-500">×</button>
                   </div>
                 ))}
                 <button type="button" onClick={() => setPairs([...pairs, { left: '', right: '' }])} className="text-xs font-semibold text-indigo-600 hover:underline">
@@ -700,12 +822,22 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          {formError && (
+            <p role="alert" style={{ flex: 1, margin: 0, fontSize: 12.5, lineHeight: 1.4, color: red, textAlign: 'left' }}>
+              {formError}
+            </p>
+          )}
           <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnModalGhost}>
             Cancel
           </button>
-          <button type="submit" className="transition hover:brightness-110" style={btnModalPrimary}>
-            Save
+          <button
+            type="submit"
+            disabled={saving}
+            className="transition hover:brightness-110 disabled:opacity-50"
+            style={btnModalPrimary}
+          >
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </form>
@@ -745,18 +877,25 @@ function QuizBankBrowser({ syllabi }) {
       setShowQuestionModal(false)
       setEditingQuestion(null)
       refetchBank()
+      toast.success('Question saved to your bank.')
     } catch (err) {
-      alert(`Failed to save: ${err.message}`)
+      toast.error(`Could not save the question: ${err.message}`)
     }
   }
 
   const handleDeleteQuestion = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this question from the bank?')) return
+    if (!(await confirmDialog({
+      title: 'Delete this question from the bank?',
+      message: 'Quizzes that already contain a copy of it are not affected - only the banked original goes.',
+      confirmLabel: 'Delete question',
+      tone: 'danger',
+    }))) return
     try {
       await deleteBankedQuestion(id)
       refetchBank()
+      toast.success('Question removed from your bank.')
     } catch (err) {
-      alert(`Failed to delete: ${err.message}`)
+      toast.error(`Could not delete the question: ${err.message}`)
     }
   }
 
@@ -806,6 +945,9 @@ function QuizBankBrowser({ syllabi }) {
                   {s.modules?.length > 0 && (
                     <button
                       onClick={() => toggleSyllabus(s.id)}
+                      aria-expanded={!!expandedSyllabi[s.id]}
+                      title={expandedSyllabi[s.id] ? `Collapse ${s.title}` : `Expand ${s.title}`}
+                      aria-label={expandedSyllabi[s.id] ? `Collapse ${s.title}` : `Expand ${s.title}`}
                       className="p-1 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                     >
                       <span className={`block text-[10px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
@@ -826,6 +968,9 @@ function QuizBankBrowser({ syllabi }) {
                         {m.topics?.length > 0 && (
                           <button
                             onClick={() => toggleModule(m.id)}
+                            aria-expanded={!!expandedModules[m.id]}
+                            title={expandedModules[m.id] ? `Collapse ${m.title}` : `Expand ${m.title}`}
+                            aria-label={expandedModules[m.id] ? `Collapse ${m.title}` : `Expand ${m.title}`}
                             className="p-0.5 hover:bg-slate-100 rounded text-slate-400 flex-shrink-0"
                           >
                             <span className={`block text-[8px] transition-transform duration-200 ${isModExpanded ? 'rotate-90' : ''}`}>
@@ -948,7 +1093,8 @@ function QuizBankBrowser({ syllabi }) {
 export default function QuizzesIndexPage() {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
-  const [filter, setFilter] = useState('all')
+  // Ongoing first: it is the only tab that can need attention today.
+  const [filter, setFilter] = useState('ongoing')
   const [activeTab, setActiveTab] = useState('quizzes') // 'quizzes' or 'bank'
   const [showCreate, setShowCreate] = useState(false)
   const [showGenerate, setShowGenerate] = useState(false)
@@ -963,23 +1109,35 @@ export default function QuizzesIndexPage() {
   const { data: syllabi } = useSyllabi()
 
   async function handleDelete(quizId) {
-    if (!window.confirm('Are you sure you want to delete this quiz? This cannot be undone.')) return
+    if (!(await confirmDialog({
+      title: 'Delete this quiz?',
+      message: 'Attempts students have already submitted are deleted with it, and the gradebook loses those scores. This cannot be undone.',
+      confirmLabel: 'Delete quiz',
+      tone: 'danger',
+    }))) return
     try {
       await deleteDoc(doc(db, 'quizzes', quizId))
       refetch()
+      toast.success('Quiz deleted.')
     } catch (err) {
-      alert(`Delete failed: ${err.message}`)
+      toast.error(`Could not delete the quiz: ${err.message}`)
     }
   }
 
   if (isLoading) {
-    return <div className="p-8 text-slate-500">Loading Quizzes...</div>
+    return <SkeletonList count={5} height={92} label="Loading quizzes" />
   }
 
-  const filteredQuizzes = sqliteQuizzes.filter((q) => {
-    if (filter === 'all') return true
-    return q.status === filter
-  })
+  const counts = {}
+  for (const q of sqliteQuizzes) {
+    const phase = lifecycleOf(q)
+    counts[phase] = (counts[phase] ?? 0) + 1
+  }
+  counts.all = sqliteQuizzes.length
+
+  const filteredQuizzes = sqliteQuizzes.filter(
+    (q) => filter === 'all' || lifecycleOf(q) === filter,
+  )
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -1040,20 +1198,27 @@ export default function QuizzesIndexPage() {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition ${
+                title={FILTER_HINTS[f]}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                   filter === f
                     ? 'bg-[#0E2A5C] text-white shadow-sm'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
-                {f}
+                {FILTER_LABELS[f]}
+                {/* The count is the reason to click, or the reason not to. */}
+                <span style={{ ...mono, fontSize: 10, opacity: 0.75 }}>{counts[f] ?? 0}</span>
               </button>
             ))}
           </div>
 
           {filteredQuizzes.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-              <p className="text-slate-500">No quizzes match your filter.</p>
+              <p className="text-slate-500">
+                {filter === 'all'
+                  ? 'No quizzes yet.'
+                  : `Nothing ${FILTER_LABELS[filter].toLowerCase()} — ${FILTER_HINTS[filter].toLowerCase()}.`}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

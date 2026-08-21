@@ -5,8 +5,11 @@ import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updat
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
+import { syncAttendanceSummaries } from '@/lib/attendanceMirror'
 import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { promptDialog } from '@/components/ui/dialogs'
+import { SkeletonTable } from '@/components/ui/Skeleton'
 
 const STATUS_META = {
   present: { short: 'P', label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)', fillBg: green, fillFg: '#FFFFFF' },
@@ -176,6 +179,16 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
         recorded_by: profile.id,
         updated_at: serverTimestamp(),
       })
+      /* Rebuild the per-student projection guardians read. Best-effort: the
+         class sheet above is the source of truth and has already committed, so
+         a failure here must not make the teacher think their save was lost. It
+         self-corrects on the next save. */
+      try {
+        await syncAttendanceSummaries(classId, sheet.students.map((s) => s.student_id))
+      } catch (mirrorErr) {
+        console.error('attendance summary sync failed:', mirrorErr)
+      }
+
       setDirty({})
       setTeacherDirty(false)
       refetch()
@@ -316,7 +329,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
                     <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: 12 }}>
                       {STATUS_KEYS.map((key, i) => (
                         <span key={key}>
-                          {i > 0 && <span style={{ color: '#C3CCDB' }}> / </span>}
+                          {i > 0 && <span style={{ color: '#CBD5E1' }}> / </span>}
                           <span style={{ color: STATUS_META[key].fg, fontWeight: 700 }}>{totals[key] ?? 0}</span>
                         </span>
                       ))}
@@ -401,6 +414,12 @@ function ContestsPanel({ classId }) {
           excuse_url: c.excuse_url ?? null,
         },
       })
+      // Approving a contest rewrites that day, so the projection moves too.
+      try {
+        await syncAttendanceSummaries(classId, sheet.students.map((s) => s.student_id))
+      } catch (mirrorErr) {
+        console.error('attendance summary sync failed:', mirrorErr)
+      }
       await notifyStudents({
         studentIds: [c.student_id],
         classId,
@@ -418,7 +437,18 @@ function ContestsPanel({ classId }) {
   }
 
   async function reject(c) {
-    const note = window.prompt('Reason for rejecting this contest (optional):') ?? ''
+    // Cancel now aborts. The `?? ''` turned a cancelled prompt into an empty
+    // reason and rejected the contest regardless.
+    const note = await promptDialog({
+      title: 'Reject this attendance contest',
+      message: 'The student is notified of the outcome and sees this note with it.',
+      label: 'Reason (optional)',
+      placeholder: 'e.g. The register was taken after the bell.',
+      confirmLabel: 'Reject contest',
+      multiline: true,
+      tone: 'danger',
+    })
+    if (note == null) return
     setBusyId(c.id)
     setError(null)
     try {
@@ -483,7 +513,7 @@ function ContestsPanel({ classId }) {
               </div>
               {c.status === 'pending' && (
                 <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={() => approve(c)} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                  <button onClick={() => approve(c)} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
                     Approve
                   </button>
                   <button onClick={() => reject(c)} disabled={busyId === c.id} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
@@ -565,7 +595,7 @@ export default function AttendancePage() {
       <ContestsPanel classId={classId} />
 
       {isLoading ? (
-        <p style={{ color: faint }}>Loading attendance…</p>
+        <SkeletonTable rows={8} cols={5} label="Loading attendance" />
       ) : isError || !sheet ? (
         <p style={{ color: red }}>Class not found.</p>
       ) : (

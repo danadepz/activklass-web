@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { generateQuiz } from '@/lib/ai'
+import { draftToQuestions, generateQuiz } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
 import {
   REMEDIATION_PUBLISHED,
@@ -14,25 +14,26 @@ import {
   unpublishRemediation,
   updateRemediationPlan,
 } from '@/features/classes/remediation'
+import {
+  applyRecoveryToAssessment,
+  loadRecoveryTargets,
+  previewRecovery,
+} from '@/features/classes/gradeRecovery'
+import {
+  PASSING,
+  RECOVERY_POLICIES,
+  CAPPED_REPLACE,
+  describeRecoveryResult,
+} from '@/lib/remediationRecovery'
 import { useAuth } from '@/context/useAuth'
 import { Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
+import { SkeletonList } from '@/components/ui/Skeleton'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const PASS = 75 // an attempt at/above this % counts as mastered for that student
-
-const newId = () =>
-  globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-function aiToQuestions(quiz) {
-  return (quiz.questions ?? []).map((q) => ({
-    id: newId(),
-    qtype: 'mcq',
-    text: q.text ?? '',
-    points: 1,
-    ai_generated: true,
-    options: (q.options ?? []).map((o) => ({ id: newId(), text: o.text ?? '', is_correct: !!o.correct })),
-  }))
-}
 
 async function loadScaffolds(classId) {
   const sylSnap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
@@ -150,7 +151,7 @@ function SectionHead({ dot, title, note }) {
  * the student query nor the security rule can see it. Publishing is what fans
  * it out into per-student assignments — see features/classes/remediation.js.
  */
-function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, onUnpublish, onDelete }) {
+function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, onUnpublish, onDelete, onRecover }) {
   if (!plans.length && !legacy.length) return null
 
   return (
@@ -205,6 +206,16 @@ function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, on
                 >
                   Edit
                 </button>
+                {published && plan.recommended_quiz_id ? (
+                  <button
+                    onClick={() => onRecover(plan)}
+                    title="Use this plan's practice quiz results to repair the marks it was prescribed for"
+                    className="transition hover:brightness-95"
+                    style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: green, background: '#FFFFFF', border: '1.5px solid rgba(39,174,96,0.45)', borderRadius: 9, cursor: 'pointer' }}
+                  >
+                    Recover marks
+                  </button>
+                ) : null}
                 {published ? (
                   <button
                     onClick={() => onUnpublish(plan)}
@@ -253,8 +264,187 @@ function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, on
   )
 }
 
+/**
+ * Recover the marks a remediation was prescribed for.
+ *
+ * The teacher picks which assessment the failing marks sit on, because only
+ * they know it: the plan is filed against a topic, and a topic's failing mark
+ * may be on an AI-posted quiz column, on a hand-entered long test, or on both.
+ * Guessing would be worse than asking -- the wrong guess silently rewrites the
+ * wrong column.
+ *
+ * Nothing is written until Apply. The preview above the button is the same
+ * computation the write uses, so what the teacher approves is exactly what
+ * lands.
+ */
+function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onApplied }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Recover marks from a remediation', closeOnBackdrop: false })
+  const [assessmentId, setAssessmentId] = useState('')
+  const [policy, setPolicy] = useState(CAPPED_REPLACE)
+  const [cap, setCap] = useState(PASSING)
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState(null)
+
+  const { data: targets = [], isLoading: loadingTargets } = useQuery({
+    queryKey: ['fs-recovery-targets', classId],
+    queryFn: () => loadRecoveryTargets(classId),
+  })
+
+  // Re-runs on every policy or ceiling change, so the table below is always
+  // the arithmetic that Apply would perform -- never a stale earlier one.
+  const { data: preview, isFetching: previewing, error: previewError } = useQuery({
+    queryKey: ['fs-recovery-preview', classId, plan.id, assessmentId, policy, cap],
+    queryFn: () => previewRecovery({ plan, classId, assessmentId, policy, cap }),
+    enabled: !!assessmentId,
+    retry: false,
+  })
+
+  const chosen = targets.find((t) => t.id === assessmentId)
+  const recoveries = Object.entries(preview?.recoveries ?? {})
+  const policyMeta = RECOVERY_POLICIES.find((r) => r.id === policy)
+
+  async function apply() {
+    setApplying(true)
+    setError(null)
+    try {
+      const result = await applyRecoveryToAssessment({ plan, classId, assessmentId, policy, cap, teacherId })
+      onApplied(describeRecoveryResult(result))
+    } catch (err) {
+      setError(err.message)
+      setApplying(false)
+    }
+  }
+
+  const selectStyle = { width: '100%', marginTop: 6, padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, cursor: 'pointer' }
+  const fieldLabel = { fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }
+
+  return (
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ margin: 'auto', width: '100%', maxWidth: 620, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '22px 26px 18px', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+          <h2 style={{ ...serif, fontSize: 21, margin: 0, color: ink }}>Recover marks &middot; {plan.topic}</h2>
+          <p style={{ fontSize: 12.5, color: muted, margin: '5px 0 0', lineHeight: 1.5 }}>
+            Uses each targeted student&apos;s best attempt on this plan&apos;s practice quiz to repair
+            the mark they failed. The original score is kept on the record.
+          </p>
+        </div>
+
+        <div style={{ padding: '20px 26px', overflowY: 'auto' }} className="flex flex-col gap-4">
+          {(error || previewError) && (
+            <div role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>
+              {error || previewError.message}
+            </div>
+          )}
+
+          <div>
+            <label style={fieldLabel}>Which mark are you repairing?</label>
+            <select className="ak-input" value={assessmentId} onChange={(e) => setAssessmentId(e.target.value)} style={selectStyle}>
+              <option value="">{loadingTargets ? 'Loading the class record…' : '— Pick an assessment —'}</option>
+              {targets.map((t) => (
+                <option key={t.id} value={t.id} disabled={t.locked}>
+                  {t.period_name} &middot; {t.title} ({t.graded_count} scored, out of {t.total_points})
+                  {t.source_quiz_id ? ' · from a quiz' : ''}
+                  {t.locked ? ' — period locked' : ''}
+                </option>
+              ))}
+            </select>
+            {!loadingTargets && targets.length === 0 && (
+              <p style={{ fontSize: 12, color: muted, margin: '8px 0 0' }}>
+                This class record has no assessments yet, so there is no mark to repair.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div style={{ flex: '1 1 260px' }}>
+              <label style={fieldLabel}>Policy</label>
+              <select className="ak-input" value={policy} onChange={(e) => setPolicy(e.target.value)} style={selectStyle}>
+                {RECOVERY_POLICIES.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ width: 130 }}>
+              <label style={fieldLabel}>Ceiling %</label>
+              <input
+                type="number"
+                min="60"
+                max="100"
+                className="ak-input"
+                value={cap}
+                onChange={(e) => setCap(Number(e.target.value) || PASSING)}
+                style={{ ...selectStyle, ...mono, cursor: 'text' }}
+              />
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.5 }}>
+            {policyMeta?.describe(cap)} A recovery can only raise a mark, never lower one.
+          </p>
+
+          {assessmentId && (
+            <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 14px', background: 'rgba(14,42,92,0.03)', fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                {previewing
+                  ? 'Working it out…'
+                  : `${recoveries.length} of ${(plan.target_student_ids ?? []).length} targeted would be recovered`}
+              </div>
+              {recoveries.length > 0 && (
+                <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {recoveries.map(([studentId, r]) => (
+                      <tr key={studentId} style={{ borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+                        <td style={{ padding: '9px 14px', color: ink, fontWeight: 600 }}>{nameById[studentId] ?? studentId}</td>
+                        <td style={{ ...mono, padding: '9px 14px', color: muted, textAlign: 'right' }}>
+                          {r.original_score}/{chosen?.total_points}
+                        </td>
+                        <td style={{ padding: '9px 4px', color: faint }}>&rarr;</td>
+                        <td style={{ ...mono, padding: '9px 14px', color: green, fontWeight: 700 }}>
+                          {r.applied_score}/{chosen?.total_points}
+                        </td>
+                        <td style={{ ...mono, padding: '9px 14px', color: faint, textAlign: 'right' }}>
+                          practice {Math.round(r.remediation_pct)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {preview && !previewing && (
+                <div style={{ padding: '10px 14px', borderTop: `1px solid ${line}`, fontSize: 12, color: muted, lineHeight: 1.5 }}>
+                  {describeRecoveryResult({
+                    applied: recoveries.length,
+                    notAttempted: preview.notAttempted.length,
+                    noOriginal: preview.noOriginal.length,
+                    noImprovement: preview.noImprovement.length,
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '15px 26px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)' }}>
+          <button onClick={onClose} disabled={applying} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '11px 18px', fontSize: 13.5, fontWeight: 600, fontFamily: sans, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button
+            onClick={apply}
+            disabled={applying || previewing || !recoveries.length}
+            title={!recoveries.length ? 'Nothing to recover with these settings' : undefined}
+            className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
+          >
+            {applying ? 'Applying…' : `Apply to ${recoveries.length} mark${recoveries.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Edit a plan: its text, its linked practice quiz, and who receives it. */
 function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a remediation plan', closeOnBackdrop: false })
   const [title, setTitle] = useState(plan.title ?? '')
   const [guidance, setGuidance] = useState(plan.guidance ?? '')
   const [targets, setTargets] = useState(plan.target_student_ids ?? [])
@@ -271,8 +461,8 @@ function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, o
     setTargets((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
-      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 26, width: '100%', maxWidth: 620 }}>
+    <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
+      <div {...panelProps} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 26, width: '100%', maxWidth: 620 }}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit remediation</h3>
@@ -396,6 +586,7 @@ export default function ScaffoldTopicsPage() {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(null)
+  const [recoveringPlan, setRecoveringPlan] = useState(null)
   const [error, setError] = useState(null)
   const [editingPlan, setEditingPlan] = useState(null)
 
@@ -480,7 +671,7 @@ export default function ScaffoldTopicsPage() {
         opens_at: null,
         closes_at: null,
         generated_by: 'ai_generated',
-        questions: aiToQuestions(quiz),
+        questions: draftToQuestions(quiz),
         topic_id: topic.id,
         ai_source: 'anthropic',
         created_at: serverTimestamp(),
@@ -533,7 +724,7 @@ export default function ScaffoldTopicsPage() {
     </div>
   )
 
-  if (isLoading) return <p style={{ color: faint }}>Loading scaffold topics…</p>
+  if (isLoading) return <SkeletonList count={5} height={72} label="Loading scaffold topics" />
   if (isError || !data) return <p style={{ color: red }}>Class not found.</p>
 
   const { rows, topicCount, linkedQuizzes } = data
@@ -671,9 +862,9 @@ export default function ScaffoldTopicsPage() {
       {developing.length > 0 && (
         <div className="mb-[22px]">
           <SectionHead dot={gold} title="Developing" note={`${developing.length} topic${developing.length === 1 ? '' : 's'} · watch`} />
-          <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
             {developing.map((t) => (
-              <div key={t.id} className="grid items-center gap-4" style={{ gridTemplateColumns: '1fr 160px 120px 80px 120px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+              <div key={t.id} className="grid items-center gap-4 min-w-[720px]" style={{ gridTemplateColumns: '1fr 160px 120px 80px 120px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>{t.title}</div>
                 <div style={{ ...mono, fontSize: 12, color: blueText, fontWeight: 600 }}>{t.moduleTitle}</div>
                 <div style={{ fontSize: 12, color: muted }}>{t.studentsAffected} need help</div>
@@ -694,18 +885,47 @@ export default function ScaffoldTopicsPage() {
         nameById={data.nameById ?? {}}
         busy={busy}
         onEdit={setEditingPlan}
+        onRecover={setRecoveringPlan}
         onPublish={(plan) =>
           runPlanAction(plan, 'publish', () => publishRemediation(plan))
         }
-        onUnpublish={(plan) => {
-          if (!window.confirm(`Withdraw "${plan.title}" from ${plan.assignments?.length ?? 0} student(s)? They lose access to it immediately.`)) return
+        onUnpublish={async (plan) => {
+          if (!(await confirmDialog({
+            title: `Withdraw "${plan.title}"?`,
+            message: `${plan.assignments?.length ?? 0} student(s) lose access to it immediately. The plan itself is kept and can be published again.`,
+            confirmLabel: 'Withdraw',
+            tone: 'danger',
+          }))) return
           runPlanAction(plan, 'unpublish', () => unpublishRemediation(plan))
         }}
-        onDelete={(plan) => {
-          if (!window.confirm(`Delete "${plan.title}" and remove it from every student?`)) return
+        onDelete={async (plan) => {
+          if (!(await confirmDialog({
+            title: `Delete "${plan.title}"?`,
+            message: 'It is removed from every student it was assigned to. This cannot be undone.',
+            confirmLabel: 'Delete plan',
+            tone: 'danger',
+          }))) return
           runPlanAction(plan, 'delete', () => deleteRemediationPlan(plan))
         }}
       />
+
+      {recoveringPlan && (
+        <RecoverMarksModal
+          plan={recoveringPlan}
+          classId={classId}
+          nameById={data.nameById ?? {}}
+          teacherId={profile?.id}
+          onClose={() => setRecoveringPlan(null)}
+          onApplied={async (message) => {
+            setRecoveringPlan(null)
+            // Mastery on this page is computed from quiz attempts, not from
+            // the record, so it will not move -- the refresh is for the plan
+            // list and for anything else reading the class.
+            await refresh()
+            toast.success(message)
+          }}
+        />
+      )}
 
       {editingPlan && (
         <RemediationEditor
@@ -738,9 +958,9 @@ export default function ScaffoldTopicsPage() {
       {mastered.length > 0 && (
         <div>
           <SectionHead dot={green} title="Mastered" note={`${mastered.length} topic${mastered.length === 1 ? '' : 's'} · on track`} />
-          <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
             {mastered.map((t) => (
-              <div key={t.id} className="grid items-center gap-4" style={{ gridTemplateColumns: '1fr 180px 80px 140px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+              <div key={t.id} className="grid items-center gap-4 min-w-[640px]" style={{ gridTemplateColumns: '1fr 180px 80px 140px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>{t.title}</div>
                 <div style={{ ...mono, fontSize: 12, color: blueText, fontWeight: 600 }}>{t.moduleTitle}</div>
                 <div style={{ ...mono, fontSize: 13, fontWeight: 700, color: green, textAlign: 'right' }}>{t.mastery}%</div>

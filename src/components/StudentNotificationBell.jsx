@@ -97,7 +97,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
       >
         <Bell className="h-[18px] w-[18px]" />
         {unread > 0 && (
-          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>
+          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 999, background: '#C0392B', color: '#FAFAF6', fontSize: 10, fontWeight: 800, display: 'grid', placeItems: 'center', border: '2px solid #fff' }}>
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -105,7 +105,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
 
       {open && (
         <div
-          style={{ position: 'absolute', top: 'calc(100% + 10px)', ...(align === 'left' ? { left: 0 } : { right: 0 }), width: 340, maxWidth: '92vw', background: '#fff', borderRadius: 12, boxShadow: '0 8px 32px rgba(14,42,92,0.18), 0 2px 8px rgba(14,42,92,0.08)', border: '1px solid rgba(14,42,92,0.1)', zIndex: 200, overflow: 'hidden' }}
+          style={{ position: 'absolute', top: 'calc(100% + 10px)', ...(align === 'left' ? { left: 0 } : { right: 0 }), width: 340, maxWidth: '92vw', background: '#FFFFFF', borderRadius: 12, boxShadow: '0 8px 32px rgba(14,42,92,0.18), 0 2px 8px rgba(14,42,92,0.08)', border: '1px solid rgba(14,42,92,0.1)', zIndex: 200, overflow: 'hidden' }}
         >
           <div className="flex items-center justify-between" style={{ padding: '13px 16px 11px', borderBottom: '1px solid rgba(14,42,92,0.08)' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: ink, fontFamily: sans }}>

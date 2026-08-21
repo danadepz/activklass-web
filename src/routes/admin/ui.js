@@ -1,5 +1,5 @@
 /** Shared chrome for the admin console tabs. */
-import { navy, navyDeep, ink, line, sansFamily as sans } from '@/theme'
+import { navyDeep, ink, line, sansFamily as sans, navy } from '@/theme'
 
 export const ROLES = ['admin', 'teacher', 'student', 'parent']
 export const MIN_PASSWORD = 8

@@ -41,7 +41,7 @@ function Gauge({ value, size = 132, stroke = 12, color = gold, label, sublabel }
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
         <div>
-          <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: '#FFFFFF' }}>
+          <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: '#FAFAF6' }}>
             {value == null ? '—' : `${Math.round(value)}${label ?? ''}`}
           </div>
           {sublabel && <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)', marginTop: 4, letterSpacing: '0.04em' }}>{sublabel}</div>}
@@ -75,10 +75,10 @@ function ClassCard({ c }) {
         </div>
       </div>
 
-      {/* Syllabus coverage / module count bar */}
+      {/* Module coverage / count bar */}
       <div style={{ marginTop: 16 }}>
         <div className="flex items-center justify-between" style={{ fontSize: 11.5, color: muted, marginBottom: 6 }}>
-          <span>{c.module_count > 0 ? `${c.module_count} module${c.module_count === 1 ? '' : 's'}` : 'No syllabus yet'}</span>
+          <span>{c.module_count > 0 ? `${c.module_count} module${c.module_count === 1 ? '' : 's'}` : 'No modules yet'}</span>
           {c.attendance_rate != null && (
             <span style={{ ...mono, color: blueText }}>{c.attendance_rate}% present</span>
           )}
@@ -186,7 +186,7 @@ export default function StudentDashboard() {
           background: 'linear-gradient(135deg, #0E2A5C, #061840)',
           borderRadius: 22,
           padding: 'clamp(22px, 4vw, 34px)',
-          color: '#FFFFFF',
+          color: '#FAFAF6',
           position: 'relative',
           overflow: 'hidden',
           boxShadow: '0 24px 48px -24px rgba(6,24,64,0.6)',
@@ -247,7 +247,7 @@ export default function StudentDashboard() {
               icon={<ShieldCheck className="h-5 w-5" />}
               title="Parental consent request"
               action={
-                <Link to="/student/profile" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: blueText, borderRadius: 9, textDecoration: 'none', flexShrink: 0 }}>
+                <Link to="/student/profile" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: blueText, borderRadius: 9, textDecoration: 'none', flexShrink: 0 }}>
                   Review request <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               }

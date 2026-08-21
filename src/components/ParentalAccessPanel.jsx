@@ -3,7 +3,7 @@ import { ShieldCheck, Check } from '@/components/icons'
 import CopyButton from '@/components/CopyButton'
 import Toggle from '@/components/Toggle'
 import { PERMISSIONS } from '@/components/parentalAccess'
-import { navy, ink, muted, faint, green, red, line, serif, mono } from '@/theme'
+import { ink, muted, faint, green, red, line, serif, mono, navy } from '@/theme'
 
 /**
  * Parental Access panel — the student's control over who sees their records.
@@ -13,10 +13,12 @@ import { navy, ink, muted, faint, green, red, line, serif, mono } from '@/theme'
  * The Student lane owns fetching and mutating; this owns how it looks, so the
  * two can be worked on in different panes without touching the same file.
  *
- * The order is deliberate — permissions, then the code, then the guardians it
- * let in. A student should settle what a guardian may see *before* handing out
- * anything that grants access, so the code stays behind a button until they
- * have been past the toggles.
+ * The order is deliberate — what access means, then the code, then the
+ * guardians it let in. The code still stays behind a button so a student reads
+ * what they are granting before they can hand it out. What changed is where
+ * the toggles live: scopes belong to each guardian LINK, so they sit on the
+ * guardian's own row rather than once at the top, and they appear only after
+ * that link is approved.
  *
  * Owned by the UI/UX lane (see OWNERSHIP.md).
  */
@@ -62,7 +64,7 @@ function RevokeButton({ guardian, onRevoke, disabled }) {
         padding: '8px 14px',
         fontSize: 13,
         fontWeight: 700,
-        color: armed ? '#FFFFFF' : red,
+        color: armed ? '#FAFAF6' : red,
         background: armed ? red : '#FFFFFF',
         border: `1.5px solid ${armed ? red : 'rgba(192,57,43,0.35)'}`,
         borderRadius: 10,
@@ -75,18 +77,25 @@ function RevokeButton({ guardian, onRevoke, disabled }) {
   )
 }
 
-function GuardianRow({ guardian, onApprove, onRevoke, canManage, busy }) {
+function GuardianRow({ guardian, onApprove, onRevoke, onPermissionChange, canManage, busy }) {
   /* Which buttons are present already says where a link stands — Approve is
      only offered on one that has not been granted — so the status pill was
      repeating it and eating a column. A screen reader still gets it spelled
      out beside the name, since button presence is not something it announces. */
   const grantable = guardian.status !== 'approved'
+  const permissions = guardian.permissions ?? {}
+  /* Scopes live on the LINK, so the toggles belong to this guardian and not to
+     the panel: one guardian may see grades while another sees only attendance.
+     They appear once the link is approved — before that its scopes are written
+     all-false and a pending guardian reads nothing, so a toggle would be a
+     control over nothing. */
+  const showPermissions = canManage && guardian.permissionsEditable
 
   return (
     <div
-      className="flex flex-wrap items-center gap-3"
       style={{ padding: '13px 15px', border: `1px solid ${line}`, borderRadius: 12, background: '#FFFFFF' }}
     >
+    <div className="flex flex-wrap items-center gap-3">
       <span
         aria-hidden="true"
         style={{
@@ -119,7 +128,7 @@ function GuardianRow({ guardian, onApprove, onRevoke, canManage, busy }) {
               disabled={busy}
               aria-label={`Approve access for ${guardian.name}`}
               className="flex items-center gap-1.5 transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FFFFFF', background: green, border: 'none', borderRadius: 10, cursor: 'pointer' }}
+              style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 10, cursor: 'pointer' }}
             >
               <Check className="h-3.5 w-3.5" /> Approve
             </button>
@@ -128,12 +137,33 @@ function GuardianRow({ guardian, onApprove, onRevoke, canManage, busy }) {
         </div>
       )}
     </div>
+
+      {showPermissions && (
+        <div className="flex flex-col gap-2" style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${line}` }}>
+          <p style={{ fontSize: 12, color: faint, margin: '0 0 2px' }}>
+            What {guardian.name} can see
+          </p>
+          {PERMISSIONS.map((perm) => (
+            <Toggle
+              key={perm.key}
+              id={`perm-${guardian.id}-${perm.key}`}
+              label={perm.label}
+              hint={perm.hint}
+              checked={Boolean(permissions[perm.key])}
+              disabled={busy}
+              onChange={(next) => onPermissionChange?.(guardian, perm.key, next)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
 export default function ParentalAccessPanel({
   code,
-  permissions = {},
+  defaultPermissions = {},
+  onDefaultPermissionChange,
   onPermissionChange,
   guardians = [],
   onApprove,
@@ -186,29 +216,11 @@ export default function ParentalAccessPanel({
               </p>
             )}
 
-            {/* --- 1. Permissions, settled first -------------------------- */}
-            <h3 style={heading}>What guardians can see</h3>
-            <p style={note}>
-              {canManage
-                ? 'Set these before you share a code. They apply to every connected guardian, and turning one off hides it immediately.'
-                : 'These are managed for you and cannot be changed here.'}
-            </p>
-
-            <div className="flex flex-col gap-2">
-              {PERMISSIONS.map((p) => (
-                <Toggle
-                  key={p.key}
-                  id={`perm-${p.key}`}
-                  label={p.label}
-                  hint={p.hint}
-                  checked={Boolean(permissions[p.key])}
-                  disabled={!canManage || busy}
-                  onChange={(next) => onPermissionChange?.(p.key, next)}
-                />
-              ))}
-            </div>
-
-            {/* --- 2. Then, and only then, the code ----------------------- */}
+            {/* --- 1. The code first ----------------------------------------
+                Sharing it is not what grants access: a redeemed code creates a
+                PENDING link with every scope false, and the student's approval
+                is the gate. So the code leads, and the settings that approval
+                will apply follow it rather than blocking it. */}
             <h3 style={heading}>Guardian link code</h3>
 
             {!canManage ? (
@@ -218,9 +230,12 @@ export default function ParentalAccessPanel({
               </p>
             ) : !showCode ? (
               <div style={{ ...box, padding: '20px 18px' }}>
+                {/* The button stays, but not as a configuration gate — it is
+                    there so a live credential is not sitting on screen for a
+                    shoulder or a screenshot to pick up. */}
                 <p style={{ fontSize: 13, color: muted, margin: '0 auto 14px', lineHeight: 1.5, maxWidth: 400 }}>
-                  Happy with the settings above? Generate a code to give your parent or
-                  guardian. They enter it to request access — you still approve every one.
+                  Your code is hidden until you ask for it. Show it to give to your parent
+                  or guardian — they enter it to request access, and you approve every one.
                 </p>
                 <button
                   type="button"
@@ -229,7 +244,7 @@ export default function ParentalAccessPanel({
                   className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer' }}
                 >
-                  Generate link code
+                  Show my code
                 </button>
               </div>
             ) : (
@@ -262,6 +277,45 @@ export default function ParentalAccessPanel({
               </div>
             )}
 
+            {/* --- 2. Then what approving will grant -----------------------
+                These are a convenience, not the safety mechanism. A redeemed
+                code creates a PENDING link with every scope false, so a
+                guardian sees nothing until the student approves them — the
+                approval is the gate, and these are simply what that approval
+                grants so it can stay one click. Each guardian keeps its own
+                four afterwards, on its own row, because scopes live on the
+                link and one guardian may see less than another. */}
+            {/* Only while nobody is connected. Once a guardian exists they
+                carry their own four on their row, and showing a second
+                identical set here is the same question asked twice with
+                different answers -- the student cannot tell which one is
+                real. The stored defaults still apply when a later guardian
+                is approved; they just stop being on screen. */}
+            {guardians.length === 0 && (
+              <>
+                <h3 style={heading}>What guardians can see</h3>
+                <p style={note}>
+                  {canManage
+                    ? 'These apply when you approve your first guardian. Nobody sees anything until you approve them, and each guardian can be changed individually afterwards.'
+                    : 'These are managed for you and cannot be changed here.'}
+                </p>
+
+                <div className="flex flex-col gap-2">
+                  {PERMISSIONS.map((perm) => (
+                    <Toggle
+                      key={perm.key}
+                      id={`default-${perm.key}`}
+                      label={perm.label}
+                      hint={perm.hint}
+                      checked={Boolean(defaultPermissions[perm.key])}
+                      disabled={!canManage || busy}
+                      onChange={(next) => onDefaultPermissionChange?.(perm.key, next)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* --- 3. Who it let in --------------------------------------- */}
             <h3 style={{ ...heading, margin: '26px 0 12px' }}>
               Connected guardians{guardians.length > 0 && ` (${guardians.length})`}
@@ -279,6 +333,7 @@ export default function ParentalAccessPanel({
                     guardian={g}
                     onApprove={onApprove}
                     onRevoke={onRevoke}
+                    onPermissionChange={onPermissionChange}
                     canManage={canManage}
                     busy={busy}
                   />

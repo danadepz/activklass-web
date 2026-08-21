@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { navy, cream, sansUiFamily as sans } from '@/theme'
+import { navy, sansUiFamily as sans, cream } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { SkeletonList } from '@/components/ui/Skeleton'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
 
@@ -12,7 +14,7 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 const CATEGORIES = [
   { value: 'general',  label: 'General',  color: '#3B82F6', bg: '#EFF6FF', dot: '#3B82F6' },
   { value: 'reminder', label: 'Reminder', color: '#D97706', bg: '#FFFBEB', dot: '#F59E0B' },
-  { value: 'urgent',   label: 'Urgent',   color: '#DC2626', bg: '#FEF2F2', dot: '#EF4444' },
+  { value: 'urgent',   label: 'Urgent',   color: '#C0392B', bg: '#FEF2F2', dot: '#EF4444' },
 ]
 const catMap = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
 
@@ -37,7 +39,7 @@ function ExpiryBadge({ iso }) {
   const d = new Date(iso)
   const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   return (
-    <span style={{ fontSize: 11, background: '#F1F5F9', color: '#475569', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
+    <span style={{ fontSize: 11, background: '#F1F5F9', color: '#6A7A95', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
       Expires {label}
     </span>
   )
@@ -46,9 +48,9 @@ function ExpiryBadge({ iso }) {
 /* ─── Empty state ─── */
 function EmptyState({ filtered }) {
   return (
-    <div style={{ textAlign: 'center', padding: '64px 32px', color: '#94A3B8' }}>
+    <div style={{ textAlign: 'center', padding: '64px 32px', color: '#9AA6BD' }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>📢</div>
-      <div style={{ fontWeight: 700, fontSize: 16, color: '#64748B', marginBottom: 8 }}>
+      <div style={{ fontWeight: 700, fontSize: 16, color: '#6A7A95', marginBottom: 8 }}>
         {filtered ? 'No announcements for this class' : 'No announcements yet'}
       </div>
       <div style={{ fontSize: 13 }}>
@@ -72,7 +74,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
   return (
     <div
       style={{
-        background: '#fff',
+        background: '#FFFFFF',
         borderRadius: 14,
         border: '1px solid #E2E8F0',
         overflow: 'hidden',
@@ -104,18 +106,18 @@ function AnnouncementCard({ item, onDelete, deleting }) {
           </span>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0F172A', lineHeight: 1.3 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#0A1733', lineHeight: 1.3 }}>
               {item.title}
             </div>
             {item.class_id == null && (
-              <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: '#6A7A95', marginTop: 3 }}>
                 📣 All classes
               </div>
             )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <span style={{ fontSize: 12, color: '#94A3B8', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: '#9AA6BD', whiteSpace: 'nowrap' }}>
               {timeAgo(item.created_at)}
             </span>
             <button
@@ -126,7 +128,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
                 background: 'transparent',
                 border: 'none',
                 cursor: deleting ? 'not-allowed' : 'pointer',
-                color: '#94A3B8',
+                color: '#9AA6BD',
                 padding: 4,
                 borderRadius: 6,
                 lineHeight: 1,
@@ -134,7 +136,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
                 transition: 'color .15s',
               }}
               onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
-              onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
+              onMouseLeave={e => e.currentTarget.style.color = '#9AA6BD'}
             >
               ✕
             </button>
@@ -142,7 +144,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
         </div>
 
         {/* content */}
-        <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.65, marginBottom: 10 }}>
+        <div style={{ fontSize: 14, color: '#3A4A6B', lineHeight: 1.65, marginBottom: 10 }}>
           {isLong && !expanded ? text.slice(0, 160) + '…' : text}
         </div>
         {isLong && (
@@ -235,8 +237,13 @@ export default function AnnouncementsPage() {
     onSettled: () => setDeletingId(null),
   })
 
-  function handleDelete(id) {
-    if (!window.confirm('Delete this announcement?')) return
+  async function handleDelete(id) {
+    if (!(await confirmDialog({
+      title: 'Delete this announcement?',
+      message: 'Students who have not read it yet will never see it. This cannot be undone.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    }))) return
     setDeletingId(id)
     deleteMut.mutate(id)
   }
@@ -268,8 +275,8 @@ export default function AnnouncementsPage() {
   )
 
   /* ── styles ── */
-  const labelStyle = { fontSize: 12, fontWeight: 700, color: '#64748B', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
-  const inputStyle = { width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', padding: '10px 14px', fontSize: 14, fontFamily: sans, color: '#0F172A', outline: 'none', boxSizing: 'border-box', background: '#FAFAFA' }
+  const labelStyle = { fontSize: 12, fontWeight: 700, color: '#6A7A95', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block', marginBottom: 6 }
+  const inputStyle = { width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', padding: '10px 14px', fontSize: 14, fontFamily: sans, color: '#0A1733', outline: 'none', boxSizing: 'border-box', background: '#FAFAFA' }
   const selectStyle = { ...inputStyle, cursor: 'pointer' }
 
   return (
@@ -277,20 +284,20 @@ export default function AnnouncementsPage() {
       {/* ── Page header ── */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 26, fontWeight: 800, color: navy, margin: 0 }}>Announcements</h1>
-        <p style={{ fontSize: 14, color: '#64748B', marginTop: 6 }}>
+        <p style={{ fontSize: 14, color: '#6A7A95', marginTop: 6 }}>
           Post updates, reminders, or urgent notices to all your classes or a specific section.
         </p>
       </div>
 
       {/* ── Compose form ── */}
-      <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #E2E8F0', padding: '24px 28px', marginBottom: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E2E8F0', padding: '24px 28px', marginBottom: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: navy, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>✍️</span> New Announcement
         </div>
 
         <form onSubmit={handleSubmit}>
           {/* Row 1: title + category */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 14, marginBottom: 14 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto]" style={{ gap: 14, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Title</label>
               <input
@@ -330,7 +337,7 @@ export default function AnnouncementsPage() {
           </div>
 
           {/* Row 3: target class + expiry */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14, marginBottom: 14 }}>
             <div>
               <label style={labelStyle}>Target Class</label>
               <select
@@ -361,10 +368,10 @@ export default function AnnouncementsPage() {
 
           {/* Row 4: linked resource (collapsible-ish) */}
           <details style={{ marginBottom: 18 }}>
-            <summary style={{ fontSize: 13, color: '#64748B', cursor: 'pointer', userSelect: 'none', fontWeight: 600 }}>
+            <summary style={{ fontSize: 13, color: '#6A7A95', cursor: 'pointer', userSelect: 'none', fontWeight: 600 }}>
               + Link a resource (optional)
             </summary>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 12 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14, marginTop: 12 }}>
               <div>
                 <label style={labelStyle}>Resource Type</label>
                 <select
@@ -394,7 +401,7 @@ export default function AnnouncementsPage() {
           </details>
 
           {formErr && (
-            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#C0392B', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
               {formErr}
             </div>
           )}
@@ -429,7 +436,7 @@ export default function AnnouncementsPage() {
         <div style={{ fontWeight: 700, fontSize: 16, color: navy }}>
           Posted Announcements
           {announcements.length > 0 && (
-            <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 600, color: '#64748B' }}>
+            <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 600, color: '#6A7A95' }}>
               ({filtered.length})
             </span>
           )}
@@ -447,7 +454,7 @@ export default function AnnouncementsPage() {
                 style={{
                   border: `1.5px solid ${active ? (cat?.color ?? navy) : '#E2E8F0'}`,
                   background: active ? (cat?.bg ?? '#EEF1F6') : '#fff',
-                  color: active ? (cat?.color ?? navy) : '#64748B',
+                  color: active ? (cat?.color ?? navy) : '#6A7A95',
                   borderRadius: 20,
                   padding: '5px 14px',
                   fontSize: 12,
@@ -467,7 +474,7 @@ export default function AnnouncementsPage() {
 
       {/* ── Announcement list ── */}
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: 14 }}>Loading…</div>
+        <SkeletonList count={4} height={116} label="Loading announcements" />
       ) : filtered.length === 0 ? (
         <EmptyState filtered={filterCat !== 'all'} />
       ) : (
