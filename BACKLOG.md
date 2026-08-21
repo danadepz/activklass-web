@@ -918,6 +918,13 @@ authoring pane's own review and was caught only because another pane proposed SA
 a test case. Note what would NOT have caught it: a test asserting that "SAFETY appears in
 the message" passes on the broken version. Assert on the advice, not the label.
 
+The strongest evidence for that practice arrived afterwards: the same class of mistake
+recurred **once while it was being fixed**, and was again caught by the other pane rather
+than the author. A mistake that reappears during its own repair is not carelessness, it
+is a blind spot — and a blind spot is by definition not visible to the person who has it.
+That is the argument for review by a second pane rather than for more self-review, which
+is what the author would otherwise reasonably conclude from having missed it twice.
+
 Not the cause of the walkthrough failures — only reachable above the endpoints' own
 input clamps. But `gemini-3.5-flash` is a thinking model and reasoning tokens are billed
 against `max_output_tokens`, so the margin is invisible: a trivial prompt at a 100-token
