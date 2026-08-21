@@ -196,6 +196,34 @@ edits hot-reload into the same browser tab, so you watch the combined app.
 **Commit per lane, often.** Small commits make a bad interleaving recoverable
 with `git revert` rather than by hand.
 
+**One tree, one `main` — `git pull` between panes is always a no-op.** All
+panes work the same checkout and the same `.git`. Another pane's commit is in
+your working copy the moment they make it, without you fetching. If you find
+yourself telling another pane to pull before their next test run, you have the
+model wrong; they already have it.
+
+**Stage explicit paths. Never `git add -A`, `git add .`, or `git commit -a`.**
+They sweep every other pane's in-flight edits into your commit. This is the
+usual advice and it is not sufficient on its own.
+
+**`git push` publishes every pane's local commits, not yours.** You push a
+*branch*. Any commit another pane made and has not pushed goes out under your
+push, whether or not they were finished deciding to publish it. This has
+happened: a push intended to carry one docs commit carried two commits from
+another pane with it. Nothing was lost — they were complete and the suite
+stayed green — but the choice of when to publish was taken out of their hands.
+
+Before pushing, list what you are about to send and read it:
+
+```
+git log --oneline origin/main..main
+```
+
+Not `git rev-list --left-right --count`, which answers with two numbers that
+are easy to read as your own work. The list names the author and the subject of
+every commit; the count does not, and that is precisely the difference between
+noticing and not.
+
 ## If two panes collide anyway
 
 Claude Code tracks file state — if a file changed since a pane read it, the
