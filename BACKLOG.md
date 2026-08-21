@@ -58,7 +58,7 @@ through.
 
 ## 5. ~~No test suite on the web~~ — done
 
-Done. `npm run test` runs 408 tests across 14 files, and all three targets
+Done. `npm run test` runs 415 tests across 15 files, and all three targets
 named below are covered: `grading.test.js`, `quizGrading.test.js`,
 `aiDrafts.test.js` and `ai.risk.test.js`. `portParity.test.js` additionally
 holds the mobile TypeScript ports to the web originals across the repo
@@ -769,6 +769,68 @@ Still open:
 - **`reopens[]` and `focus_events[]` grow unbounded per attempt document** —
   the second is capped, the first is not. A pathological reconnect loop would
   bloat the document.
+
+---
+
+## 25. Quiz builder: three items from the teacher walkthrough — done
+
+Three pieces of tester feedback on `routes/teacher/quizzes.$quizId.jsx`.
+
+**Read this before assuming the dead backend explains them.** That walkthrough
+ran with Flask down (see `f8ed1fd`), which does account for most of the other
+reported failures. It does not account for these. The quiz builder reaches
+Firestore directly — `updateDoc(doc(db, 'quizzes', id))` — and calls Flask only
+for AI generation. Publishing never touches `/api`, so a dead backend cannot
+break it, and the diagnosis below was reproduced with the emulator rather than
+inferred from the symptom.
+
+- ~~**The time limit was a free-text box that accepted 0.**~~ It was
+  `<input type="number" min="1">`, and `min` on a bare input is only enforced
+  by form validation — this field is not inside a validated form, so `0` and
+  `-30` were both accepted. `0` is the one that reached students: `persist()`
+  reads the raw input string and `'0'` is truthy, so it stored
+  `time_limit_minutes: 0`; the mobile player's `??` (item 23) passes that
+  through to a 0-second countdown, and the quiz auto-submits the instant a
+  student opens it. Now a `<select>`, 5–180 minutes. The bounds are the sitting
+  a quiz has to fit inside — below 5 minutes a student cannot read and answer
+  one question, and 180 is the longest block these schools timetable (PH K-12
+  periods 40–60, college lectures 60–90, a final exam block 3 hours). A stored
+  value that is not on the list is kept and offered back rather than snapped —
+  a teacher who set 37 meant 37. Zero and negatives are the exception and fall
+  through to "No time limit", which is what an unsittable quiz should have been.
+- ~~**Nothing stood between twenty minutes of authored questions and a stray
+  click.**~~ Questions live only in React state until *Save draft* is pressed.
+  `builderSnapshot` compares the live form against what was last written, so
+  the guard arms on real edits only — a boolean flipped by every `onChange`
+  stays armed after typing a character and deleting it, and teachers learn to
+  click through it, which is the same as not having a guard. Covers reload and
+  tab close via `beforeunload`, and in-app navigation by intercepting link
+  clicks in the capture phase. An "Unsaved changes" marker sits beside *Save
+  draft* so the state is never invisible.
+- ~~**A manually-created quiz could not be published.**~~ Reproduced against
+  the Firestore emulator with the real `firestore.rules`, driving the write
+  sequence for a manual and an AI quiz side by side: create, `persist()`, the
+  publish `updateDoc` and the record sync all succeed **identically for both**.
+  Nothing fails the write and nothing fails the rules. It failed *validation*,
+  and the refusal was invisible: `publish()` set an inline banner that renders
+  at the top of the form while the Publish button sits below the last question,
+  so on any real quiz the two are a screenful apart and the teacher saw nothing
+  happen. It is manual-specific because `GenerateQuizModal` preselects a class
+  and `CreateQuizModal` does not — `class_ids: []` is a state only manual
+  creation produces, and an unassigned quiz is exactly what publish refuses.
+  Refusals now toast as well as set the banner, the `questions.length === 0`
+  path no longer `return`s silently, and the create dialog says up front that a
+  class is needed before publishing.
+
+**Left open — the unsaved guard is not a router blocker.** React Router's
+`useBlocker` needs a data router and `main.jsx` mounts `<BrowserRouter>`, so
+the in-app half of the guard is a capture-phase `click` listener on `document`
+matching `a[href]`. It covers every `<Link>`, which is every in-app navigation
+this app actually has, but it is not the first-class version: a programmatic
+`navigate()` from another component, or a browser Back press, goes through
+unguarded. Converting the router is UI/UX-lane work (`main.jsx`); if that
+happens, this listener should be replaced by `useBlocker` rather than kept
+alongside it.
 
 ---
 
