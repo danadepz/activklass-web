@@ -109,9 +109,41 @@ For work inside one screen. Each page belongs to one pane at a time.
 | Pane | Pages |
 |---|---|
 | **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
-| **Classes** | `teacher/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `features/classes/**` |
-| **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx` |
+| **Class detail** | `teacher/classes/$classId/**` |
+| **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx` |
+| **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
+| **Admin** | `routes/admin/**`, `routes/superadmin/**`, `teacher/account.jsx` |
+
+**Why Classes is now two lanes.** It was one — `teacher/classes/**` plus the
+four teacher-level pages plus `features/classes/**` — and in practice two panes
+worked it at once for a whole session: one on the per-class screens, one on
+class creation, grading config and validation. That is the single thing the
+rule above exists to prevent, and it did not break, because the two panes
+announced to each other. Do not read that as the rule being unnecessary. Read
+it as the lane having been drawn too wide for the work: the per-class screens
+and the setup screens are edited on different tasks and barely import each
+other, so they split cleanly and should have been two lanes from the start.
+The document was wrong and the panes were right; this records what they were
+already doing.
+
+**The `$classId` split is the boundary.** `teacher/classes/$classId/**` is one
+class's screens — roster, record, performance, attendance, scaffolds, history.
+Everything else is creating and configuring classes. `teacher/record.jsx` and
+`teacher/classes/$classId/record.jsx` are different files and sit in different
+lanes; check which one you have open.
+
+**Admin was missing entirely.** `routes/admin/**` and `routes/superadmin/**` —
+ten files, including `admin/BulkUpload.jsx`, which a pane was actively editing
+with no lane to cover it — were in no lane and not Shared, so nothing said who
+owned them or whether to announce. `teacher/account.jsx` had the same gap and
+is settings-shaped, so it lands here. A file in no lane is worse than a file in
+the wrong lane: the wrong lane gets argued about, the missing one gets edited
+by two panes in silence.
+
+**If a file is not in this table or under Shared, it has no owner.** Say so in
+the other panes before you touch it, and add it here in the same commit. The
+table is only useful while it is complete.
 
 ## Shared
 
@@ -126,6 +158,20 @@ Announce before editing. Keep the change small.
 | `src/context/**` | auth state for the whole app |
 | `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
 | `src/routes/index.jsx`, `login.jsx`, `register.jsx` | landing + auth |
+| `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
+
+**Shared is not a lane, and nobody owns one of these.** A pane that does most
+of the work in a shared file still does not own it — this has already been
+misread once, with `lib/api.js` described as one pane's file. Doing the work is
+not the same as holding the lane; announce every time, including the second
+time.
+
+**Repo docs, because four panes append to them.** Add your own section, do not
+restructure anyone else's, and re-read before you write — `BACKLOG.md` moved
+six times in one session. If you are recording another pane's finding, name
+them as the source and leave their numbers as measurements: a claim in the
+backlog is only worth what the person who can defend it says, and absorbing it
+into your own voice quietly strips that.
 
 **Navigation is the usual trap.** "Make this page go to that page" is normally
 a `<Route>` in `App.jsx` or a link in a `_layout.jsx` — both shared. Only a
