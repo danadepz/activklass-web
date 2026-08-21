@@ -901,6 +901,26 @@ of the two flows this section is about.
 The generalisation: any handler whose only failure path is `setError()` into a distant
 banner is a candidate. That is the finding — not any individual fix.
 
+**But distance finds the file, not the fix.** Refinement from the Classes pane, who did
+the work on the worst instance: what the failure should do depends on whether it belongs
+to a field. Field-shaped ("title is required") belongs *on the input* — inline, with
+submit scrolling to and focusing the first bad one, which beats a toast because the
+message sits on the thing you have to change. Not field-shaped (a save that failed, a
+file rejected for type or size, a partial sync) has no field to attach to and nowhere to
+go but the far banner; that is what toasting is for.
+
+The consequence for anyone using the audit list: **a file can score badly and already be
+half-fixed.** `features/classes/ClassFormModal.jsx` scored worst in the codebase at 307
+lines banner-to-submit, but its validation half had already been rebuilt into inline
+per-field messages — while the Firestore save error and two file rejections, which are
+not field-shaped, were still going to the distant banner. Both were true in one file at
+once. Read the metric as "look here", never as "this is broken".
+
+One more control to check besides the submit button: the same file's **file picker** sits
+at :694, 280 lines below the banner. A rejected upload ("must be a PDF", "under 10 MB")
+is caused right where the teacher is looking and was reported 280 lines above it. Any
+control that can fail counts, not just the one that submits.
+
 ### Related backend change (uncommitted at time of writing)
 
 `app/services/ai/client.py` gained a truncation guard. `json.loads` on an empty or
