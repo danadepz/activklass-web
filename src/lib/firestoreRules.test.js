@@ -342,3 +342,115 @@ describe('the guard that stops a submitted attempt being rewritten', () => {
     // And the real ruleset, tested above, refuses exactly this.
   })
 })
+
+/**
+ * Guardian revocation.
+ *
+ * Revoking is a delete, so access stops the moment the link document goes.
+ * But the CODE outlives the link: guardian_codes has no consumed flag and
+ * neither revoke path rotates one. Without the revoked list these tests pin,
+ * a removed guardian could retype the same six characters, and for a MINOR
+ * the create rule then forces status 'approved' with every scope on -- full
+ * access restored with nobody approving it.
+ *
+ * That matters most exactly where the protection is weakest: a minor cannot
+ * revoke their own guardian (the update and delete rules require
+ * is_minor == false), so revocation is a teacher's or admin's decision, and
+ * re-redeeming would let the revoked guardian overturn it unilaterally.
+ */
+describe('guardian_links · a revoked guardian cannot let themselves back in', () => {
+  const PARENT = 'parent-1'
+  const OTHER_PARENT = 'parent-2'
+  const CODE = 'ABC234'
+  const linkId = (guardian) => STUDENT + '_' + guardian
+
+  const ALL_ON = {
+    can_view_grades: true,
+    can_view_quiz_scores: true,
+    can_view_attendance: true,
+    can_view_analytics: true,
+  }
+
+  /** What a guardian redeeming a MINOR's code must submit. */
+  const minorLink = (guardian) => ({
+    student_uid: STUDENT,
+    guardian_uid: guardian,
+    code: CODE,
+    is_minor: true,
+    status: 'approved',
+    scopes: ALL_ON,
+  })
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', PARENT), { role: 'parent', first_name: 'P', last_name: 'One' })
+      await setDoc(doc(db, 'users', OTHER_PARENT), { role: 'parent', first_name: 'P', last_name: 'Two' })
+      await setDoc(doc(db, 'guardian_codes', CODE), {
+        code: CODE,
+        student_uid: STUDENT,
+        student_name: 'A B',
+        is_minor: true,
+        default_scopes: ALL_ON,
+      })
+    })
+  })
+
+  /** Revoke the way the app does it: drop the link, then mark the guardian. */
+  async function revoke(guardian) {
+    await deleteDoc(doc(ctx(TEACHER), 'guardian_links', linkId(guardian)))
+    await updateDoc(doc(ctx(TEACHER), 'guardian_codes', CODE), {
+      revoked_guardian_uids: [guardian],
+    })
+  }
+
+  it('lets a guardian redeem a minor code and unlock at once', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT)),
+    )
+  })
+
+  it('lets a teacher revoke, recording it on the code', async () => {
+    await setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT))
+    await assertSucceeds(revoke(PARENT))
+  })
+
+  it('refuses the revoked guardian re-redeeming the same code', async () => {
+    await setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT))
+    await revoke(PARENT)
+    await assertFails(
+      setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT)),
+    )
+  })
+
+  it('still lets a DIFFERENT guardian redeem that code', async () => {
+    await setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT))
+    await revoke(PARENT)
+    // The block is targeted at the revoked guardian, not the code. A second
+    // parent holding the same six characters is unaffected -- rotating the
+    // code instead would have cut them off for someone else's revocation.
+    await assertSucceeds(
+      setDoc(
+        doc(ctx(OTHER_PARENT), 'guardian_links', linkId(OTHER_PARENT)),
+        minorLink(OTHER_PARENT),
+      ),
+    )
+  })
+
+  it('does not let a guardian clear their own revocation', async () => {
+    await setDoc(doc(ctx(PARENT), 'guardian_links', linkId(PARENT)), minorLink(PARENT))
+    await revoke(PARENT)
+    await assertFails(
+      updateDoc(doc(ctx(PARENT), 'guardian_codes', CODE), { revoked_guardian_uids: [] }),
+    )
+  })
+
+  it('does not let a guardian reach is_minor while writing the revoked list', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'guardian_codes', CODE), {
+        revoked_guardian_uids: [PARENT],
+        is_minor: false,
+      }),
+    )
+  })
+})

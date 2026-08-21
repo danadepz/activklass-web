@@ -27,6 +27,7 @@
  */
 import {
   Timestamp,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -167,7 +168,7 @@ function displayName(profile) {
  * other permission-denied would fail identically on every attempt and falls
  * out of the loop.
  */
-async function mintCode(uid, profile) {
+async function mintCode(uid, profile, carriedRevocations = []) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidate = randomCode()
     try {
@@ -184,6 +185,9 @@ async function mintCode(uid, profile) {
         // write-locked to photo_url. Open by default: redeeming a code the
         // student handed over is itself the grant, and they narrow from there.
         default_scopes: { ...ALL_SCOPES_ON },
+        // Guardians removed under the PREVIOUS code stay removed -- see
+        // rotateMyGuardianCode for why this is carried rather than reset.
+        revoked_guardian_uids: [...carriedRevocations],
         created_at: serverTimestamp(),
       })
       return candidate
@@ -241,7 +245,19 @@ export async function ensureMyGuardianCode(uid) {
 export async function rotateMyGuardianCode(uid) {
   const snap = await getDoc(doc(db, 'users', uid))
   const previous = await findMyCode(uid)
-  const code = await mintCode(uid, snap.data() ?? {})
+
+  /* Revocations survive rotation. A fresh code document starts with an empty
+     list, so rotating for an unrelated reason -- a code the student thinks has
+     leaked -- would otherwise quietly readmit every guardian anyone had
+     removed, including ones a teacher removed for a minor.
+
+     Best effort by necessity: the rules cannot enforce the carry-forward,
+     because the create rule cannot see the document being replaced. It fixes
+     the honest path, not a determined student with a console. */
+  const carried = previous
+    ? ((await getDoc(doc(db, 'guardian_codes', previous))).data()?.revoked_guardian_uids ?? [])
+    : []
+  const code = await mintCode(uid, snap.data() ?? {}, carried)
 
   // Retire last: the new code is already live, so a failure here leaves the
   // student with two working codes rather than none -- the safer half to fail.
@@ -309,7 +325,30 @@ export async function setGuardianLinkScopes(linkId, scopes) {
 }
 
 /** Revoking is a delete: the guardian loses the document the rules read, so
- *  access stops at once rather than depending on a status field. */
+ *  access stops at once rather than depending on a status field.
+ *
+ *  The guardian is also recorded on the CODE, because the code outlives the
+ *  link -- there is no consumed flag and revoking does not rotate one. Without
+ *  that record a removed guardian could retype the same six characters, and
+ *  for a minor the create rule auto-approves, handing back every scope with
+ *  nobody approving it.
+ *
+ *  Marked BEFORE the delete. If the mark fails, the revoke aborts with the
+ *  guardian still attached -- visible, and the caller can retry. Deleting
+ *  first and then failing to mark would look like a successful revoke while
+ *  quietly leaving the way back in, which is the worse half to get wrong. */
 export async function revokeGuardianLink(linkId) {
-  await deleteDoc(doc(db, 'guardian_links', linkId))
+  const linkRef = doc(db, 'guardian_links', linkId)
+  const link = (await getDoc(linkRef)).data()
+
+  if (link?.code && link?.guardian_uid) {
+    const codeRef = doc(db, 'guardian_codes', link.code)
+    // A code that has already been rotated away is dead to everyone, so there
+    // is nothing to block and nothing to write to.
+    if ((await getDoc(codeRef)).exists()) {
+      await updateDoc(codeRef, { revoked_guardian_uids: arrayUnion(link.guardian_uid) })
+    }
+  }
+
+  await deleteDoc(linkRef)
 }
