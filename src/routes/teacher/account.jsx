@@ -380,7 +380,7 @@ function CodeChip({ code }) {
 }
 
 /** Create a group, or redeem someone else's code. Shown when in neither. */
-function GroupOnboarding({ pendingRequest, onChanged }) {
+function GroupOnboarding({ pendingRequest, flash, onChanged }) {
   const [mode, setMode] = useState('join')
   const [name, setName] = useState('')
   const [joinMode, setJoinMode] = useState('approval')
@@ -390,7 +390,15 @@ function GroupOnboarding({ pendingRequest, onChanged }) {
 
   const create = useMutation({
     mutationFn: () => createGroup({ name, joinMode }),
-    onSuccess: () => { setErr(''); onChanged() },
+    /* The confirmation is handed upward rather than shown here. A successful
+       create refetches the group, which swaps this whole card out for
+       GroupDetail -- anything set in local state would unmount with it, which
+       is why creating a group looked like it did nothing at all. */
+    onSuccess: (res) => {
+      setErr('')
+      const created = res?.group?.name ?? name.trim()
+      onChanged(`"${created}" is ready. Share the group code below to invite teachers.`)
+    },
     onError: (e) => setErr(e.message),
   })
   const join = useMutation({
@@ -508,14 +516,14 @@ function GroupOnboarding({ pendingRequest, onChanged }) {
         </form>
       )}
 
-      <Notice tone="success">{note}</Notice>
+      <Notice tone="success">{note || flash}</Notice>
       <Notice>{err}</Notice>
     </div>
   )
 }
 
 /** The group the teacher is already in: members, requests, code, leaving. */
-function GroupDetail({ group, onChanged }) {
+function GroupDetail({ group, flash, onChanged }) {
   const [err, setErr] = useState('')
   const done = () => { setErr(''); onChanged() }
   const fail = (e) => setErr(e.message)
@@ -553,6 +561,8 @@ function GroupDetail({ group, onChanged }) {
           Leave
         </Button>
       </div>
+
+      <Notice tone="success">{flash}</Notice>
 
       {group.school_id && (
         <p style={{ fontSize: 12.5, color: faint, margin: '12px 0 0', lineHeight: 1.6 }}>
@@ -656,13 +666,21 @@ function TeacherGroupCard() {
     queryFn: fetchMyGroup,
     retry: false,
   })
-  const onChanged = () => qc.invalidateQueries({ queryKey: ['teacher-group'] })
+  /* Held here, above both cards, because the action that earns a confirmation
+     is usually the one whose refetch unmounts the card that fired it. Callers
+     pass the message they want kept; the ones that pass nothing clear it, so a
+     stale confirmation cannot outlive the next action. */
+  const [flash, setFlash] = useState('')
+  const onChanged = (message = '') => {
+    setFlash(message)
+    qc.invalidateQueries({ queryKey: ['teacher-group'] })
+  }
 
   if (isLoading) {
     return <div style={card}><p style={{ color: faint, margin: 0 }}>Loading your group…</p></div>
   }
-  if (data?.group) return <GroupDetail group={data.group} onChanged={onChanged} />
-  return <GroupOnboarding pendingRequest={data?.pending_request} onChanged={onChanged} />
+  if (data?.group) return <GroupDetail group={data.group} flash={flash} onChanged={onChanged} />
+  return <GroupOnboarding pendingRequest={data?.pending_request} flash={flash} onChanged={onChanged} />
 }
 
 /** Teacher account page: Update Profile, Update Password, any school invitation,
