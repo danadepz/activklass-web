@@ -907,7 +907,16 @@ banner is a candidate. That is the finding — not any individual fix.
 truncated stream previously raised a bare `JSONDecodeError` that neither `except` arm
 caught — no retry, no model fallback, and an opaque 502 reading "AI generation failed.
 Please try again." It now raises `AITruncatedError`, handled like a 503 (retry, then step
-models), with a message naming `finish_reason`, `reasoning_tokens` and the budget.
+models), with a message naming `finish_reason`, `reasoning_tokens` and the budget — and
+advice that branches on the reason, since a safety refusal and an oversized request both
+arrive with no usable JSON but need opposite fixes from the teacher.
+
+How that branch was found is worth more than the branch. The reason name was already
+correct while the sentence after it was not: a SAFETY refusal was being told "ask for
+less, or raise max_tokens" — tune a number that was never the problem. It survived the
+authoring pane's own review and was caught only because another pane proposed SAFETY as
+a test case. Note what would NOT have caught it: a test asserting that "SAFETY appears in
+the message" passes on the broken version. Assert on the advice, not the label.
 
 Not the cause of the walkthrough failures — only reachable above the endpoints' own
 input clamps. But `gemini-3.5-flash` is a thinking model and reasoning tokens are billed
