@@ -901,7 +901,7 @@ of the two flows this section is about.
 The generalisation: any handler whose only failure path is `setError()` into a distant
 banner is a candidate. That is the finding — not any individual fix.
 
-**But distance finds the file, not the fix.** Refinement from the Classes pane, who did
+**But distance finds the file, not the fix.** Refinement from the Class setup pane, who did
 the work on the worst instance: what the failure should do depends on whether it belongs
 to a field. Field-shaped ("title is required") belongs *on the input* — inline, with
 submit scrolling to and focusing the first bad one, which beats a toast because the
@@ -915,6 +915,15 @@ lines banner-to-submit, but its validation half had already been rebuilt into in
 per-field messages — while the Firestore save error and two file rejections, which are
 not field-shaped, were still going to the distant banner. Both were true in one file at
 once. Read the metric as "look here", never as "this is broken".
+
+**Distance in the file is not distance on screen**, which is the same caveat
+from the other side. `teacher/grading.jsx` scored 39 lines with the banner
+*below* its action — but the Save button is in the page header and the banner
+sits near the top too, so on screen they are adjacent and the gap is an
+artifact of source order. A long gap can be harmless and a short one can bite;
+what decides it is what the user can see at the moment they press the control,
+and only opening the page answers that. The metric ranks where to look. It does
+not rank severity, and nothing measurable from source order does.
 
 One more control to check besides the submit button: the same file's **file picker** sits
 at :694, 280 lines below the banner. A rejected upload ("must be a PDF", "under 10 MB")
