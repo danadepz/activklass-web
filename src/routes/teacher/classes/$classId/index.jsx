@@ -16,6 +16,7 @@ import {
 } from '@/lib/roster'
 import { X, Users, FileText } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { toast } from '@/components/ui/toast'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -93,6 +94,33 @@ const TODAY_ISO = new Date().toISOString().slice(0, 10)
 
 /* Shared roster field inputs (ID Number, Middle Name, Course, Year, Remarks,
    enrollment status, LRN, birthdate). Last/first name come from the account. */
+/**
+ * Show a failure in the banner AND as a toast.
+ *
+ * This file has the most fail() sites in the codebase and three scroll
+ * containers, and none of it toasted. Each banner renders at the top of its
+ * modal while the button that triggers it sits below the fields, so a teacher
+ * could press Add, watch the button return to its idle label, and never see
+ * the reason -- it rendered somewhere they had already scrolled past.
+ *
+ * That is the shape behind two walkthrough reports: "cannot add a student
+ * manually" and "can find a registered student but cannot add them". The
+ * refusals were firing. They were not where anyone was looking.
+ *
+ * Toasting rather than moving the banner is deliberate. Relocating it only
+ * moves the assumption about what fits on screen, and that assumption breaks
+ * again the next time someone adds a field. A toast is viewport-independent
+ * and stays correct without anyone reasoning about layout.
+ *
+ * null clears the banner without toasting: that is a reset, not a failure.
+ */
+function failWith(setError) {
+  return (message) => {
+    setError(message)
+    if (message) toast.error(message)
+  }
+}
+
 function StudentFields({ fields, setFields }) {
   const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
   return (
@@ -155,6 +183,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const [tab, setTab] = useState('find') // 'find' | 'create'
   const [error, setError] = useState(null)
+  const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
 
@@ -166,14 +195,14 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   async function lookup(e) {
     e.preventDefault()
     setBusy(true)
-    setError(null)
+    fail(null)
     setStudent(null)
     try {
       const found = await findStudentByEmail(email)
       if (!found) {
-        setError('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
+        fail('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
       } else if (enrolledIds.includes(found.id)) {
-        setError('That student is already in this class.')
+        fail('That student is already in this class.')
       } else {
         setStudent(found)
         setFindFields({
@@ -188,17 +217,17 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         })
       }
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
     } finally {
       setBusy(false)
     }
   }
 
   async function enroll() {
-    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
-    if (!findFields.student_number?.trim()) { setError('ID Number is required.'); return }
+    if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
+    if (!findFields.student_number?.trim()) { fail('ID Number is required.'); return }
     setBusy(true)
-    setError(null)
+    fail(null)
     try {
       const payload = {
         students: [
@@ -226,7 +255,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       }
       onDone()
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setBusy(false)
     }
   }
@@ -239,17 +268,17 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 
   async function createStudent(e) {
     e.preventDefault()
-    if (!firstName.trim() || !lastName.trim()) { setError('First name and last name are required.'); return }
-    if (!newEmail.trim()) { setError('Email is required.'); return }
-    if (!createFields.student_number?.trim()) { setError('ID Number is required.'); return }
-    if (isFull) { setError(`This class is full (max ${maxStudents} students).`); return }
+    if (!firstName.trim() || !lastName.trim()) { fail('First name and last name are required.'); return }
+    if (!newEmail.trim()) { fail('Email is required.'); return }
+    if (!createFields.student_number?.trim()) { fail('ID Number is required.'); return }
+    if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
-    setError(null)
+    fail(null)
     try {
       // Client-side duplicate check before manual creation
       const existing = await findStudentByEmail(newEmail)
       if (existing) {
-        setError('A student with this email is already registered. Please use the "Find Registered Student" tab to add them.')
+        fail('A student with this email is already registered. Please use the "Find Registered Student" tab to add them.')
         setBusy(false)
         return
       }
@@ -280,7 +309,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       }
       onDone()
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setBusy(false)
     }
   }
@@ -288,7 +317,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   const tabBtn = (id, label) => (
     <button
       type="button"
-      onClick={() => { setTab(id); setError(null); setStudent(null) }}
+      onClick={() => { setTab(id); fail(null); setStudent(null) }}
       style={{
         flex: 1,
         padding: '8px 0',
@@ -509,16 +538,17 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   })
   const [status, setStatus] = useState(student.status ?? 'active')
   const [error, setError] = useState(null)
+  const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
 
   async function save() {
     // 2026-06-20: Validate and save edited name alongside all other roster fields
     if (!firstName.trim() || !lastName.trim()) {
-      setError('First name and last name are required.')
+      fail('First name and last name are required.')
       return
     }
     setBusy(true)
-    setError(null)
+    fail(null)
     try {
       await updateDoc(doc(db, 'users', student.id), {
         first_name: firstName.trim(),
@@ -528,7 +558,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
       })
       onDone()
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setBusy(false)
     }
   }
@@ -545,7 +575,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
       await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(student.id) })
       onDone()
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setBusy(false)
     }
   }
@@ -626,11 +656,12 @@ function CsvUploadModal({ classId, onClose, onDone }) {
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { students: [] }
   const [error, setError] = useState(null)
+  const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
 
   async function handleFile(file) {
     setBusy(true)
-    setError(null)
+    fail(null)
     setPreview(null)
     try {
       const rows = parseCsv(await file.text())
@@ -662,7 +693,7 @@ function CsvUploadModal({ classId, onClose, onDone }) {
       }
       setPreview({ students })
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
     } finally {
       setBusy(false)
     }
@@ -670,7 +701,7 @@ function CsvUploadModal({ classId, onClose, onDone }) {
 
   async function commit() {
     setBusy(true)
-    setError(null)
+    fail(null)
     try {
       await api(`/api/classes/${classId}/students/provision`, {
         method: 'POST',
@@ -678,7 +709,7 @@ function CsvUploadModal({ classId, onClose, onDone }) {
       })
       onDone()
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setBusy(false)
     }
   }
@@ -823,6 +854,7 @@ export default function ClassDetailPage() {
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
   const [error, setError] = useState(null)
+  const fail = failWith(setError)
   const [rosterSearch, setRosterSearch] = useState('')
   const [rosterFilter, setRosterFilter] = useState('all')
   const [rosterSort, setRosterSort] = useState('az')
@@ -871,7 +903,7 @@ export default function ClassDetailPage() {
       await deleteDoc(doc(db, 'classes', classId))
       navigate('/teacher/classes')
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
     }
   }
 
@@ -888,7 +920,7 @@ export default function ClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
     }
   }
 
@@ -925,7 +957,7 @@ export default function ClassDetailPage() {
     if (!(await confirmDialog(ask))) return
 
     setAccountBusy(s.id)
-    setError(null)
+    fail(null)
     setNotice(null)
     try {
       let result
@@ -951,18 +983,18 @@ export default function ClassDetailPage() {
       /* The Firestore write and the Auth call are separate, so say which half
          failed -- one of them may already have gone through. */
       if (err.code === 'not_on_your_roster') {
-        setError(`${who} is not in any of your classes, so you cannot change their login.`)
+        fail(`${who} is not in any of your classes, so you cannot change their login.`)
       } else if (err.status === 403) {
-        setError(
+        fail(
           `Could not change ${who}'s login: ${err.message}. Their roster status was not changed.`,
         )
       } else if (err.code === 'no_auth_account') {
-        setError(
+        fail(
           `${who} has no sign-in account yet — they were added to the roster but have never ` +
             'signed up, so there is no login to disable.',
         )
       } else {
-        setError(err.message)
+        fail(err.message)
       }
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
     } finally {
