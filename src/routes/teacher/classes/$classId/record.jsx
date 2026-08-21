@@ -922,9 +922,9 @@ export default function ClassRecordPage() {
 
       {!bundle.configured ? (
         <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40, marginTop: 8 }}>
-          <p style={{ color: muted, margin: 0 }}>Set up grading periods and components before recording scores.</p>
+          <p style={{ color: muted, margin: 0 }}>Set up grading periods and components before recording scores. Grade Config covers every class you teach, so tick this one there.</p>
           <Link
-            to={`/teacher/classes/${classId}/grading`}
+            to="/teacher/grading"
             className="mt-4 inline-flex transition hover:brightness-110"
             style={{ ...btnPrimary, textDecoration: 'none' }}
           >
