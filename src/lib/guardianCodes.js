@@ -146,10 +146,25 @@ export function canManageOwnLinks(birthdate) {
 // The student's code
 // ---------------------------------------------------------------------------
 
+/**
+ * A code is the credential that attaches a guardian to a child's records, so
+ * it is drawn from crypto rather than Math.random -- V8's Math.random is
+ * xorshift128+, seeded per context and predictable from enough outputs.
+ *
+ * The practical attack here was always thin: each student mints one code in
+ * their own browser, so there is no sequence for anyone to observe. This costs
+ * one line and removes the question rather than arguing it.
+ *
+ * CODE_ALPHABET is exactly 32 characters and 256 divides evenly by 32, so
+ * `byte % 32` is unbiased. An alphabet of any other size would need rejection
+ * sampling -- do not shorten it without changing this.
+ */
 function randomCode() {
+  const bytes = new Uint8Array(CODE_LENGTH)
+  crypto.getRandomValues(bytes)
   let out = ''
   for (let i = 0; i < CODE_LENGTH; i += 1) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length]
   }
   return out
 }
