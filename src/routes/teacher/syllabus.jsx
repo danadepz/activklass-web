@@ -331,9 +331,31 @@ function GenerateModal({ onClose, onDraft }) {
   const inputCls =
     'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white w-full'
 
+  /**
+   * Report a failure where the teacher is looking, not only where the markup
+   * puts it.
+   *
+   * This panel is `max-h-[90vh] overflow-y-auto` and the banner renders above
+   * five fields and a notes textarea, with "✨ Generate" below all of them. The
+   * banner alone is therefore only reliable while the panel fits the viewport
+   * -- and the fields are `grid-cols-1 sm:grid-cols-2`, so below 640px they
+   * stack into four rows and the panel is at its tallest exactly when the
+   * viewport is at its shortest. On a narrow or short screen the teacher
+   * scrolls down to press Generate, the button drops back to its idle label,
+   * and the reason is off-screen above: the failure reads as nothing having
+   * happened. Same shape as the quiz-builder publish bug (BACKLOG 25).
+   *
+   * The toast is what makes it viewport-independent; the banner stays for the
+   * detail and for anyone who never scrolled.
+   */
+  function fail(message) {
+    setError(message)
+    toast.error(message)
+  }
+
   async function generate() {
     if (!subjectCode.trim() && !subjectDesc.trim()) {
-      setError('Please provide a subject code or description')
+      fail('Please provide a subject code or description')
       return
     }
     setGenerating(true)
@@ -348,7 +370,7 @@ function GenerateModal({ onClose, onDraft }) {
       })
       onDraft(draft)
     } catch (err) {
-      setError(err.message)
+      fail(err.message)
       setGenerating(false)
     }
   }
