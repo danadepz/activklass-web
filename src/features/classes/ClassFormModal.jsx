@@ -5,9 +5,16 @@ import { emptyClassForm } from '@/lib/classForm'
 import { useAuth } from '@/context/useAuth'
 import { uploadAttachment } from '@/lib/attachments'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { toast } from '@/components/ui/toast'
 
-const inputCls =
-  'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 bg-white text-slate-800 text-sm'
+/* Split so the error border replaces the normal one rather than sitting beside
+   it. Both colours in one class string is a coin-flip on stylesheet order, and
+   the losing half is the red one nobody sees. */
+const inputBase = 'mt-1 w-full rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 bg-white text-slate-800 text-sm'
+const inputOk = 'border-slate-300 focus:ring-[#0E2A5C]/40'
+const inputBad = 'border-red-400 focus:ring-red-300'
+const inputCls = `${inputBase} ${inputOk}`
+const fieldCls = (bad) => `${inputBase} ${bad ? inputBad : inputOk}`
 
 const MAX_SYLLABUS_BYTES = 10 * 1024 * 1024
 const ALLOWED_SYLLABUS_TYPES = [
@@ -16,7 +23,22 @@ const ALLOWED_SYLLABUS_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
-const YEARS = Array.from({ length: 10 }, (_, i) => String(2026 + i))
+const FIRST_YEAR = 2026
+const YEARS = Array.from({ length: 10 }, (_, i) => String(FIRST_YEAR + i))
+
+/* The selects only offer FIRST_YEAR and later, so anything below it is clamped
+   for display. Normalising up front keeps the value we save equal to the one on
+   screen: a blank form rendered "2026 - 2027" while still holding
+   emptyClassForm()'s "2025-2026", and saved the latter unless the teacher
+   happened to touch a year dropdown. */
+function normalizeAcademicYear(value) {
+  const [rawFrom, rawTo] = String(value ?? '')
+    .split(/[-–]/)
+    .map((v) => Number(String(v ?? '').trim()))
+  const from = Number.isFinite(rawFrom) && rawFrom >= FIRST_YEAR ? rawFrom : FIRST_YEAR
+  const to = Number.isFinite(rawTo) && rawTo > from ? rawTo : from + 1
+  return { from: String(from), to: String(to), value: `${from}-${to}` }
+}
 
 function parseSchedule(str = '') {
   const defaults = {
@@ -100,27 +122,80 @@ function validateSchedule(str) {
   return null
 }
 
-function validate(form) {
-  if (
-    !form.subject_code.trim() ||
-    !form.subject.trim() ||
-    !form.section.trim() ||
-    !form.schedule.trim() ||
-    !form.grade_level.trim()
-  ) {
-    return 'Subject code, section, description, schedule, and grade/year level are required'
+/* Class-size and unit-load bounds. A teacher mistyping 400 for 40, or 30 units
+   for 3, should be told at the field rather than finding out from the roster
+   cap or a transcript later. */
+const MIN_STUDENTS = 1
+const MAX_STUDENTS = 300
+const MIN_UNITS = 0.5
+const MAX_UNITS = 12
+
+/* Rendered top-to-bottom, so the first entry carrying an error is the field
+   worth scrolling to. */
+const FIELD_ORDER = [
+  'subject_code', 'section', 'subject', 'schedule',
+  'grade_level', 'max_students', 'academic_year', 'units',
+]
+
+/* Returns { field: message } -- one message per input, keyed by the field it
+   belongs to. The old single string named five fields at once and left the
+   teacher to work out which of them was actually empty. */
+function validate(form, selectedDays) {
+  const errors = {}
+  const isCollege = form.education_level === 'College'
+  const required = (key, message) => {
+    if (!String(form[key] ?? '').trim()) errors[key] = message
   }
-  const scheduleError = validateSchedule(form.schedule)
-  if (scheduleError) return scheduleError
-  const maxStudents = Number.parseInt(form.max_students, 10)
-  if (!Number.isInteger(maxStudents) || maxStudents <= 0) {
-    return 'Max no. of students must be a positive number'
+
+  required('subject_code', 'Subject code is required.')
+  required('section', isCollege ? 'Room is required.' : 'Section is required.')
+  required('subject', 'Subject description is required.')
+  required('grade_level', isCollege ? 'Year level is required.' : 'Grade level is required.')
+
+  // No day selected leaves schedule an empty string, which reads as "missing"
+  // rather than "malformed" -- say which of the two it is.
+  if (!selectedDays.length) {
+    errors.schedule = 'Pick at least one day this class meets.'
+  } else {
+    const scheduleError = validateSchedule(form.schedule)
+    if (scheduleError) errors.schedule = scheduleError
   }
-  if (form.education_level === 'College' && form.units.trim()) {
-    const units = Number.parseFloat(form.units)
-    if (Number.isNaN(units) || units < 0) return 'Units must be a positive number'
+
+  const students = String(form.max_students ?? '').trim()
+  if (!students) {
+    errors.max_students = 'Max students is required.'
+  } else if (!Number.isInteger(Number(students))) {
+    errors.max_students = 'Max students must be a whole number.'
+  } else if (Number(students) < MIN_STUDENTS || Number(students) > MAX_STUDENTS) {
+    errors.max_students = `Max students must be between ${MIN_STUDENTS} and ${MAX_STUDENTS}.`
   }
-  return null
+
+  // The pickers only offer to-years above the from-year, but a class stored
+  // before that filter existed can still load a reversed span into the form.
+  const [fromYear, toYear] = String(form.academic_year ?? '')
+    .split(/[-–]/)
+    .map((v) => Number(v.trim()))
+  if (!fromYear || !toYear || toYear <= fromYear) {
+    errors.academic_year = 'School year must run from one year to the next.'
+  }
+
+  if (isCollege) {
+    const units = String(form.units ?? '').trim()
+    if (!units) {
+      errors.units = 'Course units are required for a college class.'
+    } else if (Number.isNaN(Number(units))) {
+      errors.units = 'Course units must be a number.'
+    } else if (Number(units) < MIN_UNITS || Number(units) > MAX_UNITS) {
+      errors.units = `Course units must be between ${MIN_UNITS} and ${MAX_UNITS}.`
+    }
+  }
+
+  return errors
+}
+
+function FieldError({ id, message }) {
+  if (!message) return null
+  return <p id={id} role="alert" className="mt-1 text-xs text-red-600">{message}</p>
 }
 
 function buildMeta(form) {
@@ -140,7 +215,10 @@ function buildMeta(form) {
 export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, onClose, onSaved }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Class details', closeOnBackdrop: false })
   const { profile } = useAuth()
-  const [form, setForm] = useState(initial ?? emptyClassForm())
+  const [form, setForm] = useState(() => {
+    const base = initial ?? emptyClassForm()
+    return { ...base, academic_year: normalizeAcademicYear(base.academic_year).value }
+  })
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
   
   // Parse schedule helper
@@ -153,28 +231,49 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const [endMinute, setEndMinute] = useState(parsed.endMinute)
   const [endPeriod, setEndPeriod] = useState(parsed.endPeriod)
 
-  // Academic year parsed states (must fallback to >= 2026)
-  const [fromYear, setFromYear] = useState(() => {
-    const parts = (form.academic_year || '2026-2027').split(/[-–]/)
-    const val = parts[0]?.trim() || '2026'
-    return Number(val) >= 2026 ? val : '2026'
-  })
-  const [toYear, setToYear] = useState(() => {
-    const parts = (form.academic_year || '2026-2027').split(/[-–]/)
-    const val = parts[1]?.trim() || '2027'
-    return Number(val) >= 2027 ? val : '2027'
-  })
+  // Seeded from the same normaliser the form state was, so the dropdowns and
+  // form.academic_year cannot start out disagreeing.
+  const [fromYear, setFromYear] = useState(() => normalizeAcademicYear(form.academic_year).from)
+  const [toYear, setToYear] = useState(() => normalizeAcademicYear(form.academic_year).to)
 
   const [syllabusFile, setSyllabusFile] = useState(null)
   const [error, setError] = useState(null)
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const fileRef = useRef(null)
+  const formRef = useRef(null)
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const invalidCount = FIELD_ORDER.filter((key) => errors[key]).length
+
+  /* Failures that are not tied to one field still render in the banner at the
+     top of the form -- roughly 300 lines above the file picker and the Save
+     button, inside a scroll container. A teacher at the bottom of the modal
+     sees the button return to its idle label and nothing else, which reads as
+     the button being dead. The toast is viewport-independent and, for errors,
+     stays until dismissed. Field-level problems do not come through here: those
+     scroll to the offending input instead. */
+  const reportError = (message) => {
+    setError(message)
+    toast.error(message)
+  }
+
+  // Clear a field's message as soon as the teacher edits it, so a corrected
+  // field stops shouting before they reach the bottom of the form.
+  const clearError = (key) =>
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+
+  const set = (key) => (e) => {
+    const { value } = e.target
+    setForm((f) => ({ ...f, [key]: value }))
+    clearError(key)
+  }
 
   const handleEducationLevelChange = (level) => {
     setEducationLevel(level)
     setForm((f) => ({ ...f, education_level: level }))
+    // Units are only required for College, so the message stops applying the
+    // moment the level changes.
+    clearError('units')
   }
 
   // Update schedule string helper
@@ -183,6 +282,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     const sortedDays = dayOrder.filter(d => days.includes(d)).join('')
     const str = sortedDays ? `${sortedDays} ${sh}:${sm} ${sp} – ${eh}:${em} ${ep}` : ''
     setForm(f => ({ ...f, schedule: str }))
+    clearError('schedule')
   }
 
   const toggleDay = (day) => {
@@ -222,11 +322,13 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     setFromYear(val)
     setToYear(nextTo)
     setForm(f => ({ ...f, academic_year: `${val}-${nextTo}` }))
+    clearError('academic_year')
   }
 
   const handleToYearChange = (val) => {
     setToYear(val)
     setForm(f => ({ ...f, academic_year: `${fromYear}-${val}` }))
+    clearError('academic_year')
   }
 
   const clearFile = () => {
@@ -244,12 +346,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     const looksLikeDoc =
       ALLOWED_SYLLABUS_TYPES.includes(file.type) || /\.(pdf|docx?)$/i.test(file.name)
     if (!looksLikeDoc) {
-      setError('Syllabus must be a PDF or Word document.')
+      reportError('Syllabus must be a PDF or Word document.')
       clearFile()
       return
     }
     if (file.size > MAX_SYLLABUS_BYTES) {
-      setError('Syllabus file must be under 10 MB.')
+      reportError('Syllabus file must be under 10 MB.')
       clearFile()
       return
     }
@@ -258,9 +360,15 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   async function submit(e) {
     e.preventDefault()
-    const validationError = validate(form)
-    if (validationError) {
-      setError(validationError)
+    const nextErrors = validate(form, selectedDays)
+    setErrors(nextErrors)
+    const firstBad = FIELD_ORDER.find((key) => nextErrors[key])
+    if (firstBad) {
+      // The banner at the top can sit off-screen on a scrolled modal, so move
+      // to the offending field rather than only naming it.
+      const el = formRef.current?.querySelector(`[data-field="${firstBad}"]`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (typeof el?.focus === 'function') el.focus({ preventScroll: true })
       return
     }
     setSaving(true)
@@ -302,7 +410,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
       }
       onSaved({ warning })
     } catch (err) {
-      setError(err.message)
+      reportError(err.message)
       setSaving(false)
     }
   }
@@ -310,12 +418,19 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   return (
     <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
       <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
-        <form onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4 shadow-xl">
+        {/* noValidate: the browser's own bubble fires first and would stop
+            submit() before a single inline message could render. */}
+        <form ref={formRef} noValidate onSubmit={submit} className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4 shadow-xl">
           <h3 className="text-lg font-semibold text-slate-800">
             {mode === 'edit' ? 'Edit Class' : 'New Class'}
           </h3>
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+          )}
+          {invalidCount > 0 && (
+            <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              Fix the {invalidCount === 1 ? 'highlighted field' : `${invalidCount} highlighted fields`} below.
+            </p>
           )}
 
           {/* Education Level Dropdown */}
@@ -336,22 +451,46 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Subject Code / Identifier</span>
-              <input required placeholder="e.g. MATH10, SCI-1" value={form.subject_code} onChange={set('subject_code')} className={inputCls} />
+              <input
+                required placeholder="e.g. MATH10, SCI-1" value={form.subject_code} onChange={set('subject_code')}
+                data-field="subject_code"
+                aria-invalid={!!errors.subject_code}
+                aria-describedby={errors.subject_code ? 'err-subject_code' : undefined}
+                className={fieldCls(errors.subject_code)}
+              />
+              <FieldError id="err-subject_code" message={errors.subject_code} />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Section / Room</span>
-              <input required placeholder="e.g. Grade 10 - Rizal, Block A" value={form.section} onChange={set('section')} className={inputCls} />
+              <input
+                required placeholder="e.g. Grade 10 - Rizal, Block A" value={form.section} onChange={set('section')}
+                data-field="section"
+                aria-invalid={!!errors.section}
+                aria-describedby={errors.section ? 'err-section' : undefined}
+                className={fieldCls(errors.section)}
+              />
+              <FieldError id="err-section" message={errors.section} />
             </label>
           </div>
 
           {/* Row 2: Subject Description */}
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Subject Description</span>
-            <input required placeholder="e.g. Mathematics 10, Introduction to Computing" value={form.subject} onChange={set('subject')} className={inputCls} />
+            <input
+              required placeholder="e.g. Mathematics 10, Introduction to Computing" value={form.subject} onChange={set('subject')}
+              data-field="subject"
+              aria-invalid={!!errors.subject}
+              aria-describedby={errors.subject ? 'err-subject' : undefined}
+              className={fieldCls(errors.subject)}
+            />
+            <FieldError id="err-subject" message={errors.subject} />
           </label>
 
           {/* Row 3: Schedule Day & Time Custom Selector */}
-          <div className="space-y-2 border border-slate-100 rounded-xl p-3 bg-slate-50/50">
+          <div
+            data-field="schedule"
+            className={`space-y-2 border rounded-xl p-3 bg-slate-50/50 ${errors.schedule ? 'border-red-400' : 'border-slate-100'}`}
+          >
             <span className="text-sm font-medium text-slate-700 block">Schedule Days</span>
             <div className="flex gap-2 flex-wrap">
               {[
@@ -465,17 +604,39 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                 </div>
               </div>
             </div>
+
+            <FieldError id="err-schedule" message={errors.schedule} />
           </div>
 
           {/* Row 4: Grade/Year Level, Max Students, School Year */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label className="block col-span-1">
               <span className="text-sm font-medium text-slate-700">Grade / Year Level</span>
-              <input required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')} className={inputCls} />
+              <input
+                required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')}
+                data-field="grade_level"
+                aria-invalid={!!errors.grade_level}
+                aria-describedby={errors.grade_level ? 'err-grade_level' : undefined}
+                className={fieldCls(errors.grade_level)}
+              />
+              <FieldError id="err-grade_level" message={errors.grade_level} />
             </label>
             <label className="block col-span-1">
               <span className="text-sm font-medium text-slate-700">Max Students</span>
-              <input required type="number" min="1" placeholder="40" value={form.max_students} onChange={set('max_students')} className={inputCls} />
+              <input
+                required
+                type="number"
+                min={MIN_STUDENTS}
+                max={MAX_STUDENTS}
+                placeholder="40"
+                value={form.max_students}
+                onChange={set('max_students')}
+                data-field="max_students"
+                aria-invalid={!!errors.max_students}
+                aria-describedby={errors.max_students ? 'err-max_students' : undefined}
+                className={fieldCls(errors.max_students)}
+              />
+              <FieldError id="err-max_students" message={errors.max_students} />
             </label>
 
             {/* School Year Selectors */}
@@ -502,6 +663,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                   ))}
                 </select>
               </div>
+              <FieldError id="err-academic_year" message={errors.academic_year} />
             </div>
           </div>
 
@@ -509,7 +671,21 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {educationLevel === 'College' && (
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Course Units</span>
-              <input required={educationLevel === 'College'} type="number" min="0" step="0.5" placeholder="3" value={form.units} onChange={set('units')} className={inputCls} />
+              <input
+                required
+                type="number"
+                min={MIN_UNITS}
+                max={MAX_UNITS}
+                step="0.5"
+                placeholder="3"
+                value={form.units}
+                onChange={set('units')}
+                data-field="units"
+                aria-invalid={!!errors.units}
+                aria-describedby={errors.units ? 'err-units' : undefined}
+                className={fieldCls(errors.units)}
+              />
+              <FieldError id="err-units" message={errors.units} />
             </label>
           )}
 
