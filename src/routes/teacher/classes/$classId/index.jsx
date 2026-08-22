@@ -156,6 +156,20 @@ function provisionOutcome(res) {
   }
 }
 
+/**
+ * Shown under a button while an account is being made.
+ *
+ * Creating a sign-in account is several round trips to the identity service and
+ * takes closer to ten seconds than one. A disabled button reading "Creating…"
+ * for that long is indistinguishable from a dead one, which is part of how a
+ * working flow got reported as "can't add student" -- measured at 10s in the
+ * browser, twice. Saying it takes a moment costs nothing, and stops the second
+ * click that starts the whole thing again.
+ */
+function SlowHint({ show, children = 'Setting up their account — this takes a few seconds.' }) {
+  return show ? <p className="text-xs text-slate-400 text-center pt-1">{children}</p> : null
+}
+
 /** The first reason, plus how many more there were. */
 function firstReason(rows) {
   if (!rows.length) return ''
@@ -538,6 +552,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
                   >
                     {busy ? 'Adding…' : 'Add to class'}
                   </button>
+                  <SlowHint show={busy} />
                   <button
                     type="button"
                     onClick={onClose}
@@ -589,6 +604,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
               >
                 {busy ? 'Creating…' : 'Create'}
               </button>
+              <SlowHint show={busy} />
               <button
                 type="button"
                 onClick={onClose}
@@ -907,6 +923,9 @@ function CsvUploadModal({ classId, onClose, onDone }) {
             >
               {busy ? 'Importing…' : `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}`}
             </button>
+            <SlowHint show={busy}>
+              Setting up their accounts — a few seconds each. Leave this open until it finishes.
+            </SlowHint>
           </>
         )}
 

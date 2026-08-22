@@ -103,6 +103,12 @@ function CreateUserForm({ onCreated }) {
         <button type="submit" style={btnPrimary} disabled={mut.isPending}>
           {mut.isPending ? 'Creating…' : 'Create user'}
         </button>
+        {/* Ten seconds is normal here: making a sign-in account is several
+            round trips to the identity service. Without a word about it, the
+            disabled button reads as a dead one. */}
+        {mut.isPending && (
+          <span style={{ fontSize: 12.5, color: faint }}>Setting up the account — this takes a few seconds.</span>
+        )}
         <div style={{ flex: 1, minWidth: 200 }}>
           <Notice>{error}</Notice>
           <Notice tone="ok">{done}</Notice>
