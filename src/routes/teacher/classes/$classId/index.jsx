@@ -5,6 +5,7 @@ import { arrayRemove, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firesto
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
+import { downloadCsv, stampedName } from '@/lib/csv'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -119,6 +120,69 @@ function failWith(setError) {
     setError(message)
     if (message) toast.error(message)
   }
+}
+
+/**
+ * What provisioning actually did, said out loud.
+ *
+ * The endpoint answers with created / skipped / failed and a 200 even when
+ * every row failed, because a partial import is the normal outcome of a real
+ * roster. Callers used to read `failed` only in the single-student flows and
+ * not at all in the CSV one, so an upload where nothing was imported closed
+ * the modal looking like success -- which is what "bulk upload not
+ * functioning" was: rows quietly not arriving, with no error anywhere.
+ */
+function provisionOutcome(res) {
+  return {
+    created: res?.created ?? [],
+    skipped: res?.skipped ?? [],
+    failed: res?.failed ?? [],
+  }
+}
+
+/** The first reason, plus how many more there were. */
+function firstReason(rows) {
+  if (!rows.length) return ''
+  const more = rows.length - 1
+  return `${rows[0].reason ?? 'no reason given'}${more > 0 ? ` (and ${more} more row${more === 1 ? '' : 's'})` : ''}`
+}
+
+/**
+ * Announce the accounts that were just minted.
+ *
+ * The initial password is the student's ID number and it is emailed to nobody,
+ * so this response is the only place it exists -- the toast stays until it is
+ * dismissed, and a roster-sized import gets the list as a CSV rather than a
+ * wall of text in a toast.
+ */
+function announceLogins(created) {
+  const logins = created.filter((c) => c.login_created && c.initial_password)
+  if (!logins.length) return
+  if (logins.length === 1) {
+    const one = logins[0]
+    const who = `${one.first_name ?? ''} ${one.last_name ?? ''}`.trim() || one.email
+    toast.success(
+      `Account created for ${who}. They sign in with ${one.email} and the password ` +
+        `${one.initial_password} — their ID number. Nothing is emailed, so pass it on.`,
+      { duration: 0 },
+    )
+    return
+  }
+  toast.success(
+    `${logins.length} sign-in accounts created. The password is each student's ID number, ` +
+      'and it is emailed to nobody — download the list before you close this.',
+    {
+      duration: 0,
+      action: {
+        label: 'Download logins',
+        onClick: () =>
+          downloadCsv(stampedName('new-student-logins'), [
+            ['email', 'first_name', 'last_name', 'student_number', 'initial_password'],
+            ...logins.map((l) => [l.email, l.first_name, l.last_name, l.student_number, l.initial_password]),
+          ]),
+      },
+    },
+  )
 }
 
 function StudentFields({ fields, setFields }) {
@@ -250,9 +314,13 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         method: 'POST',
         body: payload
       })
-      if (res.failed && res.failed.length > 0) {
-        throw new Error(res.failed[0].reason)
-      }
+      const { created, skipped, failed } = provisionOutcome(res)
+      if (failed.length) throw new Error(firstReason(failed))
+      // A skip is not a failure and not a success: the row was understood and
+      // deliberately not acted on. Saying nothing here is what made "add" look
+      // like it had done something when it had not.
+      if (!created.length && skipped.length) throw new Error(firstReason(skipped))
+      announceLogins(created)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -304,9 +372,10 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         method: 'POST',
         body: payload
       })
-      if (res.failed && res.failed.length > 0) {
-        throw new Error(res.failed[0].reason)
-      }
+      const { created, skipped, failed } = provisionOutcome(res)
+      if (failed.length) throw new Error(firstReason(failed))
+      if (!created.length && skipped.length) throw new Error(firstReason(skipped))
+      announceLogins(created)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -703,10 +772,38 @@ function CsvUploadModal({ classId, onClose, onDone }) {
     setBusy(true)
     fail(null)
     try {
-      await api(`/api/classes/${classId}/students/provision`, {
+      const res = await api(`/api/classes/${classId}/students/provision`, {
         method: 'POST',
         body: { students: preview.students }
       })
+      const { created, skipped, failed } = provisionOutcome(res)
+
+      /* Nothing imported is a failure however the server labelled it. Closing
+         the modal here -- which is what this did -- is why an upload that
+         imported no one looked like it had worked. */
+      if (!created.length) {
+        fail(
+          failed.length
+            ? `No students were imported. ${firstReason(failed)}`
+            : skipped.length
+              ? `Nothing to import. ${firstReason(skipped)}`
+              : 'No students were imported. Check that the file has a row under the header.',
+        )
+        setBusy(false)
+        return
+      }
+
+      // Partial success: the rows that did not land have to be named, or the
+      // teacher reads the count as the whole file.
+      if (failed.length) {
+        toast.error(
+          `${created.length} imported, ${failed.length} could not be. ${firstReason(failed)}`,
+        )
+      }
+      if (skipped.length) {
+        toast.info(`${skipped.length} row${skipped.length === 1 ? '' : 's'} skipped. ${firstReason(skipped)}`)
+      }
+      announceLogins(created)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -728,7 +825,11 @@ function CsvUploadModal({ classId, onClose, onDone }) {
             <li><code className="bg-slate-100 px-1 rounded text-xs">course</code>, <code className="bg-slate-100 px-1 rounded text-xs">year_level</code>, <code className="bg-slate-100 px-1 rounded text-xs">middle_name</code></li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
           </ul>
-          <p className="text-xs text-slate-400">Rows without a matching account are skipped — ask those students to register first, then re-upload.</p>
+          <p className="text-xs text-slate-400">
+            Students without an ActivKlass account get one, and their first password is the{' '}
+            <code className="bg-slate-100 px-1 rounded text-xs">student_number</code> in this file — so it needs at
+            least 6 characters. Students who already have an account keep their own password and are just enrolled.
+          </p>
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
             <table className="w-full min-w-[520px] text-xs">
               <thead>
@@ -777,7 +878,7 @@ function CsvUploadModal({ classId, onClose, onDone }) {
                   <span style={{ color: ink }}>
                     {s.last_name || s.first_name ? `${s.last_name}, ${s.first_name}` : s.email}
                   </span>
-                  <span style={{ color: blueText, fontWeight: 600 }}>will import/invite</span>
+                  <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
                 </div>
               ))}
             </div>

@@ -961,6 +961,95 @@ budget spent 97 on reasoning and returned no answer text at all.
 
 ---
 
+## 27. The second walkthrough list: one environment, two real defects
+
+Source: seven items from the teachers, triaged 2026-08-22 against live Firestore,
+live Firebase Auth, the SQLite mirror, and the listening ports. Everything below is
+an observation unless it says otherwise.
+
+### The list, and what each item turned out to be
+
+| Reported | Verdict |
+|---|---|
+| Bulk upload roster: not functioning | Backend unreachable **and** the modal reported a failed import as success — fixed |
+| Cannot add a student manually | Backend unreachable; the refusal was already toasted by 2790480 |
+| Can find a registered student but cannot add them | Same. The find is Firestore, the add is Flask — which is the whole diagnosis in one line |
+| Edit class: no validations | Already fixed in 775ccc5, per-field and inline |
+| Cannot publish a quiz built manually | Working as designed: the four hand-built quizzes carry 0–1 questions and no class. 2550603 made the refusal say so |
+| Teacher group: no confirmation | Already fixed in 0fdaf9c; `teacher_groups` is empty, consistent with the backend never having answered |
+| Admin: cannot add a user | Backend unreachable. `smoke_admin` passes on every path |
+| Cannot log in with the default password | A real defect, independent of the backend being down — see below |
+
+### Every Flask feature failed and every Firestore feature worked
+
+That split is the finding. Measured 2026-08-22:
+
+- Nothing is listening on **:5000**. Vite is up on :5173.
+- The SQLite mirror has had **no write since 2026-08-19 15:32** — no users, no
+  invites, no enrollments. Three days of testing left nothing.
+- `teacher_groups` is empty; the newest `ai_jobs` row is 2026-08-18.
+- Meanwhile the same testers **did** register a student account (14:11) and build a
+  quiz (14:17) **on 2026-08-22** — both pure Firestore paths, both fine.
+
+So six of the seven reports are one environment fact: the API was not running.
+`lib/api.js` already names that condition since f8ed1fd, and its own comment
+predicted this exact list. The remaining question from §26 — "which account did they
+sign in with" — is now moot for these items; a dead port explains them without a
+role mismatch.
+
+**This is the second walkthrough in a row where the backend was down.** Being able to
+start the web app without the API is what makes it possible, and the failure only
+appears when someone presses a button that needs it. Worth considering: a dev-mode
+banner that pings `/api/health` on load, so the state is visible before the first
+click rather than discovered through six bug reports.
+
+### Defect 1: provisioning never created the account it promised
+
+`POST /api/classes/{id}/students/provision` documented "each student's initial
+password is their student_number" and **never called `create_user`**. The
+no-account branch wrote a `ClassInvite` and a placeholder Firestore profile
+instead. So a manually added student got a roster row with no login, which is
+exactly the report — and it would have failed the same way with Flask running.
+
+The evidence was in the data: two profiles (`tenzbatum@gmail.com`,
+`davidtwo@gmail.com`) with roster fields, no `created_at`, and no Auth account,
+both sitting in a class `student_ids` array.
+
+Fixed: the endpoint creates the account with the student number as the initial
+password (a shorter ID fails its own row, since Firebase's floor is 6 characters
+and padding would mint something the teacher cannot predict), enrolls under the
+uid the student signs in with, and returns `login_created` / `initial_password`
+so the UI can show the teacher a credential that is emailed to nobody. The web
+side announces it in a toast that stays until dismissed, and offers the list as a
+CSV for a roster-sized import.
+
+### Defect 2: the placeholder swap could never run
+
+The placeholder was meant to be replaced by the real uid when the student first
+authenticated — in `middleware/auth.py`, on a Flask request. The student app
+moved to Firestore and stopped making Flask requests, so the swap never ran.
+
+Live proof: `davidtwo@gmail.com` registered on 2026-08-22 and their class still
+pointed at the placeholder, so the student was not in the class they had been
+added to, and the teacher's roster row belonged to nobody.
+
+Gone with defect 1 — there is no placeholder to swap. Both existing rows were
+repaired against live Firestore and SQLite on 2026-08-22.
+
+### Worth keeping from this round
+
+- **"Which half of the stack does this feature use" sorted seven reports in
+  minutes.** Firestore-backed features worked; Flask-backed features did not.
+  Ask that before reading any code.
+- **A 200 is not a success.** `provision` answers 200 with `created`, `skipped`
+  and `failed`, because a partial import is normal. The CSV modal read none of
+  them and closed as if everything had landed — the report was "not functioning",
+  and it was right.
+- **A docstring is a claim, not a fact.** Two of these items trace to one
+  sentence that had been wrong for weeks, in the file the endpoint is in.
+
+---
+
 ## Smaller notes
 
 - Top-level Firestore `syllabi` is empty; the seed writes
