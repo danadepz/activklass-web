@@ -72,12 +72,24 @@ export async function api(path, { method = 'GET', body, requireAuth = true } = {
   }
 
   if (!res.ok) {
-    if (data === null && raw.trimStart().startsWith('<')) {
+    /* Nothing answered as the API. Two shapes, one cause:
+
+       - HTML, when the dev server hands back its index page because the /api
+         proxy had nothing to forward to.
+       - An empty 502/503/504, which is what Vite's proxy actually returns
+         today when Flask is not running. Measured, not assumed: the response
+         is `502 Bad Gateway`, content-type text/plain, body empty. fetch()
+         resolves happily, so the unreachable branch above never fires, and
+         the line below reported it as its statusText -- the word "Bad
+         Gateway", to a teacher, in a toast, as the entire explanation of why
+         adding a student did nothing. */
+    const proxyGaveUp = data === null && !raw.trim() && [502, 503, 504].includes(res.status)
+    if (proxyGaveUp || (data === null && raw.trimStart().startsWith('<'))) {
       throw new ApiError(
         res.status,
         'unreachable',
-        'The ActivKlass server did not answer this request. It may not be running — ' +
-          'start the API and try again.',
+        'The ActivKlass server did not answer. It may not be running — ' +
+          'tell whoever set up the demo, then try again.',
         null,
       )
     }

@@ -8,6 +8,7 @@ import SetupRequired from './components/SetupRequired'
 import { AuthProvider } from './context/AuthContext'
 import DialogHost from './components/ui/DialogHost'
 import Toaster from './components/ui/Toaster'
+import ServerStatus from './components/ServerStatus'
 import App from './App.jsx'
 
 const queryClient = new QueryClient()
@@ -18,6 +19,10 @@ createRoot(document.getElementById('root')).render(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <BrowserRouter>
+            {/* Above the app, not inside a layout: the API being down affects
+                every role and every page, and a tester on a forwarded port has
+                no other way to find out. */}
+            <ServerStatus />
             <App />
             {/* Both are singletons driven by module-level stores, so any file
                 can call confirmDialog()/toast() without threading a provider
