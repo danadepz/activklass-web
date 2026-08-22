@@ -1036,6 +1036,53 @@ added to, and the teacher's roster row belonged to nobody.
 Gone with defect 1 — there is no placeholder to swap. Both existing rows were
 repaired against live Firestore and SQLite on 2026-08-22.
 
+### Addendum, 2026-08-23: what driving it in a browser changed
+
+Everything above was reached by reading code and querying live data. Then the
+whole list was walked in Chrome with the backend up, and three of its
+conclusions moved.
+
+**"Cannot publish a manual quiz" was diagnosed wrongly here.** The section says
+the tester's quizzes had no questions and no class. One of them -- Seatwork 2,
+built the same afternoon -- had both. What actually blocked publish was the
+CLASS having no Grade Config, so there was nowhere to record the scores. The
+modal said so and then stranded the teacher: disabled button, no link, and the
+fix a page away that they had to find and scope themselves. Now linked, opening
+on that class with its presets one click away.
+
+**`is_temp_password` had never once fired.** The mobile app has gated on it
+since it was written -- login.tsx sends anyone carrying it to a
+change-password screen -- and nothing anywhere set it. Only seed_demo.py wrote
+it, as false. Provisioning, admin create, bulk upload and admin reset all set it
+now; both change-password screens clear it and stamp `password_changed_at`.
+Reading the flag's name was not enough to notice this; grepping for who WRITES
+it was.
+
+**Two bugs nobody had reported, found by clicking:**
+
+- Adding an already-registered student wrote `enrollment_status: 'ENROLLED'`
+  onto their profile. The select offers AC and IN, the seed writes 'enrolled',
+  and an unmatched value leaves the select showing "Active (AC)" while state
+  holds the old string -- which then saves. The roster renders it unstyled and
+  the teacher's own AC filter does not match it.
+- A class saved before the 1-to-300 capacity cap could not be edited AT ALL.
+  Fixing a typo in the subject code was refused for a capacity the teacher had
+  not touched. The cap now applies to a new value only.
+
+**Making an account takes about ten seconds**, measured twice, and showed
+nothing but a disabled button for the whole wait. I watched it for eight
+seconds during this very session and wrote the flow off as hung; the row had
+been written. That is the same shape as the reports this section is about, on
+the inside of the investigation into them. The wait is now narrated, not fixed.
+
+**The rules had to be deployed before a fix worked.** Clearing the flag is a
+write to users/{uid}, and a student may write only photo_url to their own
+document, so the write was denied, the password changed anyway, and the badge
+stayed stale. Caught by changing a password in the browser and re-reading the
+document -- not by any test, since the emulator ran the NEW rules while
+production ran the old ones. Deployed 2026-08-23 after the predeploy gate
+re-ran the suite.
+
 ### Worth keeping from this round
 
 - **"Which half of the stack does this feature use" sorted seven reports in
