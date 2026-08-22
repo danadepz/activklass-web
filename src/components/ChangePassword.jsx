@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { auth, db } from '@/lib/firebase'
 import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy } from '@/theme'
 
 const MIN_PASSWORD = 8
@@ -19,6 +20,14 @@ const MIN_PASSWORD = 8
  * Note this changes the password but does not revoke other sessions; Firebase
  * keeps existing tokens valid. An admin disabling an account is what forces
  * everyone out.
+ *
+ * `is_temp_password` on the profile means "still on the password staff issued"
+ * -- pass1234 for a roster-provisioned account, whatever an admin typed for one
+ * made in the console. The mobile app already gates on it (app/login.tsx sends
+ * anyone carrying it to the change-password screen); this is where it stops
+ * being true, so this is where it is cleared. The password itself is never
+ * written to Firestore: Firebase Auth holds it hashed, and a profile document
+ * is readable by staff.
  */
 export default function ChangePassword({ compact = false }) {
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
@@ -57,6 +66,18 @@ export default function ChangePassword({ compact = false }) {
         user, EmailAuthProvider.credential(user.email, form.current),
       )
       await updatePassword(user, form.next)
+      /* Best effort, and deliberately after the fact: the password HAS changed
+         by now, so a failed flag write must not be reported as a failed change.
+         A stale flag is a wrong badge in a console; telling someone their
+         password did not change when it did is a lockout. */
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          is_temp_password: false,
+          password_changed_at: serverTimestamp(),
+        })
+      } catch (flagErr) {
+        console.warn('[ChangePassword] password state not recorded:', flagErr)
+      }
       setForm({ current: '', next: '', confirm: '' })
       setMsg('Password changed. You stay signed in on this device.')
     } catch (e2) {
@@ -64,7 +85,7 @@ export default function ChangePassword({ compact = false }) {
         e2.code === 'auth/wrong-password' || e2.code === 'auth/invalid-credential'
           ? 'That current password is not right.'
           : e2.code === 'auth/weak-password'
-            ? 'Firebase rejected that password as too weak. Try a longer one.'
+            ? 'That password is too easy to guess. Try a longer one, or mix in numbers.'
             : e2.code === 'auth/too-many-requests'
               ? 'Too many attempts. Wait a few minutes and try again.'
               : e2.message,

@@ -48,16 +48,21 @@ export function AuthProvider({ children }) {
       setProfile(null)
       setIsSuperAdmin(false)
       setStatus('error')
+      /* Two audiences, two messages. Whoever is signed in gets a sentence
+         about their account; whoever is running the app gets the code and the
+         fix in the console. Putting "deploy the security rules" in front of a
+         teacher named a tool they do not have and a problem they cannot fix. */
+      console.error('[AuthContext] profile load failed:', err.code ?? '', err)
       const hint =
         {
           'permission-denied':
-            'Firestore denied the read — deploy the security rules: firebase deploy --only firestore:rules',
+            'Your account does not have access yet. Ask your school administrator to check it.',
           unavailable:
-            'Firestore is unreachable — check your connection, and disable Brave Shields / ad-blockers for localhost (they block firestore.googleapis.com).',
+            'We could not reach the server. Check your connection — an ad-blocker or shield can also block it.',
           'failed-precondition':
-            'The Firestore database may not be initialized for this project — create it in the Firebase console.',
-        }[err.code] ?? 'Check your connection and Firebase configuration.'
-      setErrorDetail(`Could not load your profile from Firestore (${err.code ?? err.message}). ${hint}`)
+            'This school is not set up yet. Ask your school administrator to finish setup.',
+        }[err.code] ?? 'Check your connection and try again.'
+      setErrorDetail(`Could not load your account. ${hint}`)
     }
   }, [])
 

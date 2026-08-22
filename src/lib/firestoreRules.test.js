@@ -265,6 +265,42 @@ describe('users · the billing fields no client may move', () => {
   })
 })
 
+describe('users · what a student may write about their own password', () => {
+  beforeEach(seedRoles)
+
+  /* The change-password screen clears is_temp_password right after Firebase
+     accepts the new password. Without this allowance the write is denied, the
+     password changes anyway, and the console keeps reporting the student as
+     still on the one the school issued -- which is the stale badge the flag
+     exists to prevent. Found by changing a password in the browser and watching
+     the flag stay true. */
+  it('lets a student record that they chose their own password', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(STUDENT), 'users', STUDENT), {
+        is_temp_password: false,
+        password_changed_at: new Date(),
+      }),
+    )
+  })
+
+  it('still refuses everything else a student might write about themselves', async () => {
+    // The narrow allowlist is the point: birthdate is load-bearing, since the
+    // guardian-access panel unlocks on age >= 18.
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'users', STUDENT), { birthdate: '2000-01-01' }),
+    )
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'users', STUDENT), { role: 'teacher' }),
+    )
+  })
+
+  it('does not let a student touch a classmate’s password state', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'users', OTHER_STUDENT), { is_temp_password: false }),
+    )
+  })
+})
+
 describe('teacher groups and invites are closed to every client', () => {
   it('denies reads and writes even to a teacher', async () => {
     for (const path of [

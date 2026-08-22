@@ -4,7 +4,7 @@ import { useAuth } from '@/context/useAuth'
 import { adminUsersKey, useAdminUsers, setUserRole, setUserStatus } from '@/hooks/useAdminUsers'
 import { createUser, resetPassword, setAccountDisabled } from '@/lib/admin'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { navy, ink, muted, faint, green, red, line, serif, mono } from '@/theme'
+import { navy, ink, muted, faint, green, red, line, serif, mono, goldDeep } from '@/theme'
 import { ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
 import Notice from './Notice'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
@@ -196,6 +196,15 @@ function UserRow({ user, isSelf, onChanged }) {
         <Pill tint={active ? { fg: green, bg: 'rgba(31,138,91,0.10)' } : { fg: red, bg: 'rgba(192,57,43,0.08)' }}>
           {active ? 'active' : 'inactive'}
         </Pill>
+        {/* Every account staff create starts on a password staff chose -- and
+            an admin resetting one puts it back there. This says who has not
+            replaced it yet, which is the question behind "can they log in?".
+            The password is not stored anywhere readable; only this fact is. */}
+        {user.is_temp_password && (
+          <div style={{ marginTop: 6 }}>
+            <Pill tint={{ fg: goldDeep, bg: 'rgba(245,197,24,0.16)' }}>issued password</Pill>
+          </div>
+        )}
       </td>
 
       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>

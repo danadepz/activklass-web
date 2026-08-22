@@ -57,6 +57,22 @@ const ACCOUNT_STATUS_LABELS = {
 const inputCls =
   'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40'
 
+/**
+ * Coerce a stored enrollment status to one the form can actually show.
+ *
+ * The seed writes `enrollment_status: 'enrolled'` on demo students, and other
+ * values have reached the field over time. The select only offers AC and IN,
+ * so an unknown value leaves it displaying "Active (AC)" while state still
+ * holds the old string -- and saving writes that string straight back through
+ * provisioning, which uppercases it. That is how a roster row ended up reading
+ * a bare "ENROLLED": no style, no label, and invisible to the AC filter the
+ * teacher uses to count their class.
+ */
+function normalizeEnrollmentStatus(value) {
+  const upper = String(value ?? '').trim().toUpperCase()
+  return upper in ENROLLMENT_STATUS_LABELS ? upper : 'AC'
+}
+
 const EMPTY_STUDENT_FIELDS = {
   student_number: '',
   middle_name: '',
@@ -158,19 +174,20 @@ function firstReason(rows) {
 function announceLogins(created) {
   const logins = created.filter((c) => c.login_created && c.initial_password)
   if (!logins.length) return
+  const password = logins[0].initial_password
   if (logins.length === 1) {
     const one = logins[0]
     const who = `${one.first_name ?? ''} ${one.last_name ?? ''}`.trim() || one.email
     toast.success(
       `Account created for ${who}. They sign in with ${one.email} and the password ` +
-        `${one.initial_password} — their ID number. Nothing is emailed, so pass it on.`,
+        `${password}. Nothing is emailed, so pass it on — and tell them to change it.`,
       { duration: 0 },
     )
     return
   }
   toast.success(
-    `${logins.length} sign-in accounts created. The password is each student's ID number, ` +
-      'and it is emailed to nobody — download the list before you close this.',
+    `${logins.length} sign-in accounts created, all on the starting password ${password}. ` +
+      'Nothing is emailed — download the list so you know who still has to change theirs.',
     {
       duration: 0,
       action: {
@@ -275,7 +292,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
           course: found.course ?? '',
           year_level: found.year_level ?? '',
           remarks: found.remarks ?? '',
-          enrollment_status: found.enrollment_status ?? 'AC',
+          enrollment_status: normalizeEnrollmentStatus(found.enrollment_status),
           lrn: found.lrn ?? '',
           birthdate: found.birthdate ?? '',
         })
@@ -544,7 +561,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         ) : (
           <form onSubmit={createStudent} className="space-y-4">
             <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              Creates the student's sign-in account and adds them to this class. Their first password is the ID Number below, so it needs at least 6 characters — nothing is emailed, so pass it on yourself.
+              Creates the student's sign-in account and adds them to this class. They start on the password <code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code> — nothing is emailed, so pass it on yourself and have them change it.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -826,9 +843,9 @@ function CsvUploadModal({ classId, onClose, onDone }) {
             <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
           </ul>
           <p className="text-xs text-slate-400">
-            Students without an ActivKlass account get one, and their first password is the{' '}
-            <code className="bg-slate-100 px-1 rounded text-xs">student_number</code> in this file — so it needs at
-            least 6 characters. Students who already have an account keep their own password and are just enrolled.
+            Students without an ActivKlass account get one, and they all start on the same password:{' '}
+            <code className="bg-slate-100 px-1 rounded text-xs">pass1234</code>. Students who already have an account
+            keep their own password and are just enrolled.
           </p>
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
             <table className="w-full min-w-[520px] text-xs">
