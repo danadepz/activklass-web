@@ -140,7 +140,7 @@ const FIELD_ORDER = [
 /* Returns { field: message } -- one message per input, keyed by the field it
    belongs to. The old single string named five fields at once and left the
    teacher to work out which of them was actually empty. */
-function validate(form, selectedDays) {
+function validate(form, selectedDays, originalMaxStudents = null) {
   const errors = {}
   const isCollege = form.education_level === 'College'
   const required = (key, message) => {
@@ -166,7 +166,14 @@ function validate(form, selectedDays) {
     errors.max_students = 'Max students is required.'
   } else if (!Number.isInteger(Number(students))) {
     errors.max_students = 'Max students must be a whole number.'
-  } else if (Number(students) < MIN_STUDENTS || Number(students) > MAX_STUDENTS) {
+  } else if (Number(students) < MIN_STUDENTS) {
+    errors.max_students = `Max students must be at least ${MIN_STUDENTS}.`
+  } else if (Number(students) > MAX_STUDENTS && Number(students) !== originalMaxStudents) {
+    /* A class saved before this cap existed can hold a bigger number, and
+       refusing it here blocked every OTHER edit to that class: a teacher
+       fixing a typo in the subject code was told to change a capacity they
+       had not touched, with no way to save until they did. Found by opening
+       Edit Class on a 1000-seat class. Only a NEW value has to fit the cap. */
     errors.max_students = `Max students must be between ${MIN_STUDENTS} and ${MAX_STUDENTS}.`
   }
 
@@ -220,6 +227,15 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     return { ...base, academic_year: normalizeAcademicYear(base.academic_year).value }
   })
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
+
+  /* The capacity this class was already saved with. Held so validate() can let
+     an over-cap number through untouched while still refusing a new one -- see
+     the note there. useState with an initialiser, not a useRef read of `form`,
+     so it captures the value as it arrived rather than as the teacher edits. */
+  const [originalMaxStudents] = useState(() => {
+    const n = Number(initial?.max_students)
+    return Number.isFinite(n) ? n : null
+  })
   
   // Parse schedule helper
   const parsed = parseSchedule(form.schedule)
@@ -360,7 +376,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   async function submit(e) {
     e.preventDefault()
-    const nextErrors = validate(form, selectedDays)
+    const nextErrors = validate(form, selectedDays, originalMaxStudents)
     setErrors(nextErrors)
     const firstBad = FIELD_ORDER.find((key) => nextErrors[key])
     if (firstBad) {
