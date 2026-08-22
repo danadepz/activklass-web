@@ -650,15 +650,24 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Publish quiz', closeOnBackdrop: false })
   const [mappings, setMappings] = useState({})
   const [error, setError] = useState(null)
+  /* The class whose Grade Config is missing, not just its name in a sentence.
+     "Please go to Grade Config" was the whole instruction, and the teacher had
+     to find the page, then find this class inside it, then come back -- which
+     is how a publish that refuses for a real reason still reads as "I press
+     Publish and nothing happens". Holding the id lets the notice carry a link
+     to the one page that fixes it. */
+  const [unconfigured, setUnconfigured] = useState(null)
 
   useEffect(() => {
     if (!isOpen) return
     const initial = {}
     let err = null
+    let blocked = null
     for (const c of assignedClasses) {
       const gb = gradebooksMap?.[c.id]
       if (!gb || !gb.configured || !gb.components?.length || !gb.periods?.length) {
-        err = `Class "${c.section} · ${c.subject}" has not configured its Grade Config yet. Please go to Grade Config and configure it before publishing.`
+        err = `Class "${c.section} · ${c.subject}" has no Grade Config yet, so there is nowhere to record the scores. Set its components and grading periods, then publish.`
+        blocked = blocked ?? c
         continue
       }
       initial[c.id] = {
@@ -668,6 +677,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
     }
     setMappings(initial)
     setError(err)
+    setUnconfigured(blocked)
   }, [isOpen, assignedClasses, gradebooksMap])
 
   if (!isOpen) return null
@@ -692,7 +702,21 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
           <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
             Map this quiz to a grading component and grading period for each assigned class to create score records in their gradebooks.
           </p>
-          {error && <AlertBox>{error}</AlertBox>}
+          {error && (
+            <AlertBox>
+              {error}
+              {unconfigured && (
+                <div style={{ marginTop: 8 }}>
+                  <Link
+                    to={`/teacher/classes/${unconfigured.id}/grading`}
+                    style={{ color: blueText, fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    Open Grade Config for {unconfigured.section} →
+                  </Link>
+                </div>
+              )}
+            </AlertBox>
+          )}
 
           {!error && assignedClasses.map((c) => {
             const gb = gradebooksMap?.[c.id]

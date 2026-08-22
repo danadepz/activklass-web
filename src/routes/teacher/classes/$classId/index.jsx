@@ -544,7 +544,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         ) : (
           <form onSubmit={createStudent} className="space-y-4">
             <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              Creates a student record directly — no login account needed. The student can link their account later by signing up with the same email.
+              Creates the student's sign-in account and adds them to this class. Their first password is the ID Number below, so it needs at least 6 characters — nothing is emailed, so pass it on yourself.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
