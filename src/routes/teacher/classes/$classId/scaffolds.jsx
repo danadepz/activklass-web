@@ -904,6 +904,7 @@ export default function ScaffoldTopicsPage() {
             message: 'It is removed from every student it was assigned to. This cannot be undone.',
             confirmLabel: 'Delete plan',
             tone: 'danger',
+            typeToConfirm: 'DELETE',
           }))) return
           runPlanAction(plan, 'delete', () => deleteRemediationPlan(plan))
         }}

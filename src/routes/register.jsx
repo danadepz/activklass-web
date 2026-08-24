@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
+import { emailError, nameError, passwordError } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
   SubmitButton,
@@ -103,6 +104,13 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+    // Same rules as every other form that collects these fields.
+    const problem =
+      nameError(form.firstName, { label: 'First name' }) ||
+      nameError(form.lastName, { label: 'Last name' }) ||
+      emailError(form.email) ||
+      (auth.currentUser ? '' : passwordError(form.password))
+    if (problem) { setError(problem); return }
     setSubmitting(true)
     try {
       // 1. Firebase identity — skipped when completing an existing session.
@@ -113,8 +121,8 @@ export default function Register() {
       // Role drives routing; security rules block later role changes by
       // students/parents (escalation guard). Passwords stay in Firebase Auth.
       await setDoc(doc(db, 'users', auth.currentUser.uid), {
-        first_name: form.firstName,
-        last_name: form.lastName,
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
         email: auth.currentUser.email,
         role: form.role,
         created_at: serverTimestamp(),

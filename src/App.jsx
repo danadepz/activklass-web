@@ -15,6 +15,7 @@ import ParentOnMobile from '@/components/ParentOnMobile'
 const Landing  = lazyRoute(() => import('@/routes/index'), { full: true })
 const Login    = lazyRoute(() => import('@/routes/login'), { full: true })
 const Register = lazyRoute(() => import('@/routes/register'), { full: true })
+const ForgotPassword = lazyRoute(() => import('@/routes/forgot-password'), { full: true })
 
 // ─── Student portal ──────────────────────────────────────────────────────────
 const StudentLayout       = lazyRoute(() => import('@/routes/student/_layout'), { full: true })
@@ -61,6 +62,7 @@ export default function App() {
       <Route path="/"         element={Landing} />
       <Route path="/login"    element={Login} />
       <Route path="/register" element={Register} />
+      <Route path="/forgot-password" element={ForgotPassword} />
       <Route path="/portal"   element={<RoleHomeRedirect />} />
 
       {/* Teacher */}

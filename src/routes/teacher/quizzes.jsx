@@ -1123,6 +1123,7 @@ export default function QuizzesIndexPage() {
       message: 'Attempts students have already submitted are deleted with it, and the gradebook loses those scores. This cannot be undone.',
       confirmLabel: 'Delete quiz',
       tone: 'danger',
+      typeToConfirm: 'DELETE',
     }))) return
     try {
       await deleteDoc(doc(db, 'quizzes', quizId))

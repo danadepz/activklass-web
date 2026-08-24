@@ -188,14 +188,22 @@ export function computeFinalGrade(components, studentScores, mode = 'deped_k12')
 }
 
 /**
- * Weights must sum to 100 before settings can be saved (§1.7).
+ * Weights must each be positive and together sum to 100 before settings can
+ * be saved (§1.7).
  *
- * Tolerance, not equality: 20.5 + 20.5 + 59 is 99.99999999999999 in floating
- * point, so `=== 100` rejected weight sets that are correct. The 0.01 window
- * matches the `balanced()` check routes/teacher/grading.jsx already uses.
+ * Positive, not just summing: 120 and -20 also reach 100, and the pilot
+ * teacher walkthrough proved someone will type it. A weight of 0 is a period
+ * that never counts — delete the row instead.
+ *
+ * Tolerance on the sum, not equality: 20.5 + 20.5 + 59 is 99.99999999999999
+ * in floating point, so `=== 100` rejected weight sets that are correct. The
+ * 0.01 window matches the `balanced()` check routes/teacher/grading.jsx
+ * already uses.
  */
 export function weightsValid(components) {
-  const sum = (components ?? []).reduce((total, c) => total + (Number(c.weight_percent) || 0), 0)
+  const rows = components ?? []
+  if (rows.some((c) => !(Number(c.weight_percent) > 0))) return false
+  const sum = rows.reduce((total, c) => total + (Number(c.weight_percent) || 0), 0)
   return Math.abs(sum - 100) < 0.01
 }
 

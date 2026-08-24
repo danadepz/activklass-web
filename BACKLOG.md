@@ -1112,3 +1112,51 @@ re-ran the suite.
   that token is gone -- so it needs removing by hand from the Firebase
   Console. Harmless; it just makes the `users` collection lie about how many
   accounts exist.
+
+---
+
+## Pilot walkthrough feedback (2026-08-24) — addressed 2026-08-25
+
+Tester-reported items and what was done. The recurring theme was missing
+field validation; one definition per rule now lives in `src/lib/validation.js`
+(names, passwords, year levels, emails) and every form imports from there.
+
+- ~~**Change password accepted anything** (all roles).~~ The 8-char minimum
+  existed but nothing else did. Now (owner's policy, 2026-08-25): 8+ with an
+  uppercase letter, a lowercase letter, a number and a special character —
+  in `ChangePassword.jsx`, the admin set-password dialog, register, and
+  mobile `app/parent/change-pass.tsx` **(cross-repo)**.
+- ~~**Names accepted digits** (teacher roster add/edit, admin create user,
+  register).~~ Letters/spaces/hyphens/apostrophes/periods only, accents
+  included.
+- ~~**Grading accepted negative weights** (120 + −20 = 100).~~ `weightsValid`
+  now requires every weight > 0 before checking the sum.
+- ~~**"Classes cannot end after 9:00 PM."**~~ Cap removed per feedback; the
+  7 AM open and one-hour minimum stay.
+- ~~**Grade/year level accepted free text.**~~ "Grade 1–12" or "1st–5th
+  [Year]", restricted by education level where the form knows it.
+- ~~**Syllabus link accepted "1".**~~ `isSafeLink` (http/https only) now runs
+  in the add-link form, same rule as `AttachmentField`.
+- ~~**Dashboard said "1 review guide waiting", page showed none.**~~ The
+  class-labels query in `student/remediation.jsx` threw when a remediation
+  referenced an unreadable/deleted class, and the whole loader died into the
+  "all caught up" empty state. Query is now tolerant like its siblings, and a
+  load failure renders an error card with retry, never the empty state.
+- ~~**"Forgot?" → standard flow.**~~ Now "Forgot your password?" linking to a
+  dedicated `/forgot-password` page (`routes/forgot-password.jsx`).
+- ~~**GitHub-style delete confirmation.**~~ `confirmDialog` accepts
+  `typeToConfirm: 'DELETE'`; applied to the irreversible deletes (class
+  section, published quiz, syllabus, assessment column, remediation plan).
+  Reversible actions (archive, close quiz, draft delete) stay one click on
+  purpose — see the note in `ui/dialogs.js`.
+
+Not code: the admin "server did not answer" banner means Flask wasn't started
+for the demo, and syllabus file upload is the known Spark-plan limitation
+(links are the supported path; `lib/attachments.js`).
+
+Still open from this round:
+- The Flask provision endpoint and Firestore rules accept what the client now
+  rejects — server-side validation is still the backend's job **(cross-repo)**.
+- BulkUpload CSV path only checks password length, not the new letter+number
+  rule or name characters.
+- Student-facing forms (contest evidence, profile) not re-audited this round.

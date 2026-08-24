@@ -372,3 +372,18 @@ describe('DepEd preset', () => {
     expect(DEPED_COMPONENT_PRESET.map((c) => c.weight_percent)).toEqual([30, 50, 20])
   })
 })
+
+describe('weightsValid', () => {
+  it('rejects negative weights even when the sum still reaches 100', () => {
+    // Pilot feedback: 120 + (-20) = 100 was accepted.
+    expect(weightsValid([{ weight_percent: 120 }, { weight_percent: -20 }])).toBe(false)
+  })
+  it('rejects zero weights', () => {
+    expect(weightsValid([{ weight_percent: 0 }, { weight_percent: 100 }])).toBe(false)
+  })
+  it('keeps the floating-point tolerance on the sum', () => {
+    expect(weightsValid([
+      { weight_percent: 20.5 }, { weight_percent: 20.5 }, { weight_percent: 59 },
+    ])).toBe(true)
+  })
+})

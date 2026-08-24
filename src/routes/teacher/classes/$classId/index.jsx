@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
 import { downloadCsv, stampedName } from '@/lib/csv'
+import { emailError, nameError, yearLevelError } from '@/lib/validation'
 import {
   ENROLLMENT_STATUS_LABELS,
   REMARKS_OPTIONS,
@@ -82,6 +83,16 @@ const EMPTY_STUDENT_FIELDS = {
   enrollment_status: 'AC',
   lrn: '',
   birthdate: '',
+}
+
+/* Optional roster fields still have to hold sensible values when filled in.
+   Returns the first problem, or '' -- pilot feedback: a middle name of "123"
+   and a year level of anything at all were both accepted. */
+function rosterFieldsError(fields) {
+  return (
+    nameError(fields.middle_name, { label: 'Middle name', required: false }) ||
+    yearLevelError(fields.year_level, { required: false })
+  )
 }
 
 /* Build a Firestore patch of roster fields from the modal form state.
@@ -321,6 +332,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   async function enroll() {
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     if (!findFields.student_number?.trim()) { fail('ID Number is required.'); return }
+    const fieldProblem = rosterFieldsError(findFields)
+    if (fieldProblem) { fail(fieldProblem); return }
     setBusy(true)
     fail(null)
     try {
@@ -367,8 +380,12 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
 
   async function createStudent(e) {
     e.preventDefault()
-    if (!firstName.trim() || !lastName.trim()) { fail('First name and last name are required.'); return }
-    if (!newEmail.trim()) { fail('Email is required.'); return }
+    const problem =
+      nameError(firstName, { label: 'First name' }) ||
+      nameError(lastName, { label: 'Last name' }) ||
+      emailError(newEmail) ||
+      rosterFieldsError(createFields)
+    if (problem) { fail(problem); return }
     if (!createFields.student_number?.trim()) { fail('ID Number is required.'); return }
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
@@ -645,8 +662,12 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
 
   async function save() {
     // 2026-06-20: Validate and save edited name alongside all other roster fields
-    if (!firstName.trim() || !lastName.trim()) {
-      fail('First name and last name are required.')
+    const problem =
+      nameError(firstName, { label: 'First name' }) ||
+      nameError(lastName, { label: 'Last name' }) ||
+      rosterFieldsError(fields)
+    if (problem) {
+      fail(problem)
       return
     }
     setBusy(true)
@@ -1035,6 +1056,7 @@ export default function ClassDetailPage() {
       message: 'The roster list is lost. Student accounts are kept, and so is their work in other classes. This cannot be undone.',
       confirmLabel: 'Delete section',
       tone: 'danger',
+      typeToConfirm: 'DELETE',
     }))) return
     try {
       await deleteDoc(doc(db, 'classes', classId))

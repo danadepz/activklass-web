@@ -36,12 +36,16 @@ async function loadScaffolding(studentId) {
 
   const classIds = [...new Set(remediations.map((r) => r.class_id).filter(Boolean))]
 
-  // Class labels in batched reads (enrolled classes are readable).
+  // Class labels in batched reads (enrolled classes are readable). Tolerant
+  // like every other read below: a remediation can outlive its class (deleted,
+  // or unreadable under current rules), and one bad chunk must cost only its
+  // labels -- not the whole page. This exact query throwing is what made the
+  // dashboard say "1 review guide waiting" while this page showed none.
   const labels = {}
   for (let i = 0; i < classIds.length; i += 30) {
     const chunk = classIds.slice(i, i + 30)
-    const cSnap = await getDocs(query(collection(db, 'classes'), where(documentId(), 'in', chunk)))
-    cSnap.forEach((d) => {
+    const cSnap = await getDocs(query(collection(db, 'classes'), where(documentId(), 'in', chunk))).catch(() => null)
+    cSnap?.forEach((d) => {
       const c = d.data()
       labels[d.id] = c.subject_code || c.subject || c.section || 'Class'
     })
@@ -445,7 +449,7 @@ export default function StudentRemediation() {
   const { panelProps: notePanel } =
     useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Practice note' })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['student-scaffolding', profile.id],
     queryFn: () => loadScaffolding(profile.id),
   })
@@ -464,6 +468,21 @@ export default function StudentRemediation() {
 
       {isLoading ? (
         <SkeletonList count={2} height={220} label="Loading your practice plans" />
+      ) : isError ? (
+        /* A failed load must never wear the "all caught up" face -- that is
+           how a student with a pending review guide was told they had none. */
+        <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 48, textAlign: 'center' }}>
+          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>Could not load your review guides</h3>
+          <p style={{ fontSize: 14, color: muted, margin: '0 0 18px', maxWidth: 420, marginInline: 'auto' }}>
+            Something went wrong while fetching your practice plans. Check your connection and try again.
+          </p>
+          <button
+            onClick={() => refetch()}
+            style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: ink, border: 'none', borderRadius: 9, cursor: 'pointer' }}
+          >
+            Try again
+          </button>
+        </div>
       ) : list.length === 0 ? (
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 48, textAlign: 'center' }}>
           <div style={{ display: 'inline-grid', placeItems: 'center', width: 52, height: 52, borderRadius: 13, background: 'rgba(31,138,91,0.12)', color: green }}>

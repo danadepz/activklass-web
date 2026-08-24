@@ -9,7 +9,7 @@ import { ink } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
-import { uploadAttachment } from '@/lib/attachments'
+import { uploadAttachment, isSafeLink } from '@/lib/attachments'
 import AttachmentField from '@/components/AttachmentField'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -74,8 +74,10 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
       setError('Title is required')
       return
     }
-    if (addingType === 'link' && !url.trim()) {
-      setError('URL is required')
+    if (addingType === 'link' && !isSafeLink(url)) {
+      // Pilot feedback: "1" was accepted as a link. http(s) URLs only -- same
+      // rule AttachmentField applies to pasted links.
+      setError(url.trim() ? 'That is not a valid link. It should start with https://' : 'URL is required')
       return
     }
     if (addingType === 'rich_text' && !contentMarkdown.trim()) {
@@ -790,6 +792,7 @@ export default function SyllabusIndexPage() {
       message: 'Every class currently linked to it loses that link, and students stop seeing it. This cannot be undone.',
       confirmLabel: 'Delete syllabus',
       tone: 'danger',
+      typeToConfirm: 'DELETE',
     }))) return
     try {
       await deleteDoc(doc(db, 'syllabi', syllabusId))

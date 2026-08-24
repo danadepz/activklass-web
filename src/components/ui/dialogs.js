@@ -72,7 +72,13 @@ function normalize(input) {
  * is the same contract window.confirm had.
  *
  * @param {string|object} input message, or { title, message, confirmLabel,
- *   cancelLabel, tone: 'danger'|'primary' }
+ *   cancelLabel, tone: 'danger'|'primary', typeToConfirm }
+ *
+ * `typeToConfirm: 'DELETE'` adds the GitHub-style guard: an input the reader
+ * must type the phrase into before the confirm button arms. Reserve it for
+ * deletions that destroy data with no undo -- a class, a published quiz with
+ * attempts, a syllabus. Reversible actions (archive, close, unpublish) stay
+ * one click, or the guard stops meaning anything.
  */
 export function confirmDialog(input) {
   return push({ kind: 'confirm', ...normalize(input) })

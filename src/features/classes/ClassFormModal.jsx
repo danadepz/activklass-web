@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { yearLevelError } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
@@ -82,9 +83,10 @@ function parseSchedule(str = '') {
 }
 
 /* School-day bounds. The pickers are 12-hour, so nothing stops a teacher
-   saving a 6:00 AM class or one ending at 11:30 PM -- these catch it. */
+   saving a 6:00 AM class -- this catches it. There is deliberately no
+   closing-time cap any more: the pilot had real classes ending after 9 PM,
+   and the old DAY_CLOSES check blocked saving them. */
 const DAY_OPENS = 7 * 60      // 7:00 AM
-const DAY_CLOSES = 21 * 60    // 9:00 PM
 const MIN_LENGTH = 60         // one hour
 
 function minutesFromLabel(hour, minute, period) {
@@ -118,7 +120,6 @@ function validateSchedule(str) {
   if (end <= start) return 'A class has to end after it starts.'
   if (end - start < MIN_LENGTH) return 'A class has to run for at least one hour.'
   if (start < DAY_OPENS) return `Classes cannot start before ${clockLabel(DAY_OPENS)}.`
-  if (end > DAY_CLOSES) return `Classes cannot end after ${clockLabel(DAY_CLOSES)}.`
   return null
 }
 
@@ -150,7 +151,10 @@ function validate(form, selectedDays, originalMaxStudents = null) {
   required('subject_code', 'Subject code is required.')
   required('section', isCollege ? 'Room is required.' : 'Section is required.')
   required('subject', 'Subject description is required.')
-  required('grade_level', isCollege ? 'Year level is required.' : 'Grade level is required.')
+  {
+    const levelProblem = yearLevelError(form.grade_level, { level: isCollege ? 'college' : 'school' })
+    if (levelProblem) errors.grade_level = levelProblem
+  }
 
   // No day selected leaves schedule an empty string, which reads as "missing"
   // rather than "malformed" -- say which of the two it is.

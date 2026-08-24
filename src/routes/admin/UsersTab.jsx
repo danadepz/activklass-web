@@ -6,6 +6,7 @@ import { createUser, resetPassword, setAccountDisabled } from '@/lib/admin'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, line, serif, mono, goldDeep } from '@/theme'
 import { ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
+import { PASSWORD_RULE, emailError, nameError, passwordError } from '@/lib/validation'
 import Notice from './Notice'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import BulkUpload from './BulkUpload'
@@ -54,9 +55,12 @@ function CreateUserForm({ onCreated }) {
   function submit(e) {
     e.preventDefault()
     setDone('')
-    if (!form.firstName.trim() || !form.lastName.trim()) return setError('First and last name are required.')
-    if (!form.email.trim()) return setError('Email is required.')
-    if (form.password.length < MIN_PASSWORD) return setError(`Password must be at least ${MIN_PASSWORD} characters.`)
+    const problem =
+      nameError(form.firstName, { label: 'First name' }) ||
+      nameError(form.lastName, { label: 'Last name' }) ||
+      emailError(form.email) ||
+      passwordError(form.password)
+    if (problem) return setError(problem)
     if (!form.role) return setError('Pick a role for this user.')
     setError('')
     mut.mutate(form)
@@ -164,13 +168,13 @@ function UserRow({ user, isSelf, onChanged }) {
     // an empty field, having thrown the typed password away.
     const pw = await promptDialog({
       title: 'Set a new password',
-      message: `This replaces the password for ${user.email} immediately.`,
+      message: `This replaces the password for ${user.email} immediately. ${PASSWORD_RULE}`,
       label: 'New password',
       placeholder: `At least ${MIN_PASSWORD} characters`,
       confirmLabel: 'Set password',
       required: true,
       trim: false,
-      validate: (v) => (v.length < MIN_PASSWORD ? `Password must be at least ${MIN_PASSWORD} characters.` : ''),
+      validate: passwordError,
     })
     if (pw == null) return
     run('password', () => resetPassword(user.id, pw))

@@ -237,7 +237,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
 
   async function persist(nextPeriods, nextComponents, nextMode) {
     if (!balanced(nextPeriods) || !balanced(nextComponents)) {
-      throw new Error('Grading periods and components must each total 100%.')
+      throw new Error('Every weight must be above 0%, and each group must total 100%.')
     }
 
     const processedPeriods = withIds(nextPeriods)

@@ -5,7 +5,6 @@ import DevQuickLogin from '@/components/DevQuickLogin'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   signInWithEmailAndPassword,
-  sendPasswordResetEmail,
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence,
@@ -56,22 +55,6 @@ export default function Login() {
     }
   }
 
-  // Lightweight reset: emails a link to the address already typed above.
-  async function handleForgot() {
-    setError(null)
-    setNotice(null)
-    if (!email) {
-      setNotice('Enter your email above first, then tap Forgot.')
-      return
-    }
-    try {
-      await sendPasswordResetEmail(auth, email)
-      setNotice(`Password reset link sent to ${email}.`)
-    } catch (err) {
-      setError(FRIENDLY_ERRORS[err.code] ?? 'Could not send a reset link. Try again.')
-    }
-  }
-
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your ActivKlass account.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -103,14 +86,13 @@ export default function Login() {
             <label htmlFor="login-password" style={{ fontSize: 13, fontWeight: 600, color: ink }}>
               Password
             </label>
-            <button
-              type="button"
-              onClick={handleForgot}
+            <Link
+              to="/forgot-password"
               className="transition hover:opacity-70"
-              style={{ fontSize: 12, fontWeight: 600, color: navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ fontSize: 12, fontWeight: 600, color: navy, textDecoration: 'none' }}
             >
-              Forgot?
-            </button>
+              Forgot your password?
+            </Link>
           </div>
           <div style={{ position: 'relative' }}>
             <input

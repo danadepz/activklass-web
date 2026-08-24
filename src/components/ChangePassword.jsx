@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
+import { MIN_PASSWORD, PASSWORD_RULE, passwordError } from '@/lib/validation'
 import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy } from '@/theme'
-
-const MIN_PASSWORD = 8
 
 /**
  * "Change password" for whoever is signed in. Used by the teacher, student and
@@ -53,9 +52,8 @@ export default function ChangePassword({ compact = false }) {
   async function submit(e) {
     e.preventDefault()
     setMsg(''); setErr('')
-    if (form.next.length < MIN_PASSWORD) {
-      setErr(`New password must be at least ${MIN_PASSWORD} characters.`); return
-    }
+    const weak = passwordError(form.next)
+    if (weak) { setErr(`New ${weak.charAt(0).toLowerCase()}${weak.slice(1)}`); return }
     if (form.next !== form.confirm) { setErr('The two new passwords do not match.'); return }
     if (!form.current) { setErr('Enter your current password.'); return }
 
@@ -103,7 +101,7 @@ export default function ChangePassword({ compact = false }) {
         Change password
       </h2>
       <p style={{ fontSize: 13, color: muted, margin: '0 0 16px' }}>
-        Your current password is required to confirm it is you.
+        Your current password is required to confirm it is you. {PASSWORD_RULE}
       </p>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>

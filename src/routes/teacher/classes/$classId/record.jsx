@@ -422,6 +422,7 @@ function RecordGrid({ classId, record, refetch }) {
         : 'Every score recorded against it goes too, and the class average is recomputed without it. This cannot be undone.',
       confirmLabel: 'Delete assessment',
       tone: 'danger',
+      typeToConfirm: 'DELETE',
     }))) return
     try {
       await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', assessment.id))

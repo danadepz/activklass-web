@@ -15,6 +15,12 @@ import { getDialogs, settleDialog, subscribeDialogs } from '@/components/ui/dial
 function ConfirmBody({ spec }) {
   const danger = spec.tone === 'danger'
   const isAlert = spec.kind === 'alert'
+  /* typeToConfirm: the GitHub-style guard for deletions that cannot be
+     undone. The confirm button stays disabled until the reader has typed the
+     phrase back, so a reflexive Enter or double-click cannot destroy data.
+     Requested in pilot feedback -- "deleting important data is very easy". */
+  const [typed, setTyped] = useState('')
+  const armed = !spec.typeToConfirm || typed.trim() === spec.typeToConfirm
   return (
     <Modal
       open
@@ -32,9 +38,10 @@ function ConfirmBody({ spec }) {
           <Button
             variant={!isAlert && danger ? 'dangerSolid' : 'primary'}
             radius={12}
-            autoFocus
-            onClick={() => settleDialog(spec.id, isAlert ? undefined : true)}
-            style={{ flex: 1 }}
+            autoFocus={!spec.typeToConfirm}
+            disabled={!armed}
+            onClick={() => armed && settleDialog(spec.id, isAlert ? undefined : true)}
+            style={{ flex: 1, ...(armed ? null : { opacity: 0.5, cursor: 'not-allowed' }) }}
           >
             {spec.confirmLabel ?? (isAlert ? 'Got it' : 'Confirm')}
           </Button>
@@ -42,6 +49,27 @@ function ConfirmBody({ spec }) {
       }
     >
       <p style={{ margin: 0, color: ink, whiteSpace: 'pre-line' }}>{spec.message}</p>
+      {spec.typeToConfirm && (
+        <div style={{ marginTop: 14 }}>
+          <label
+            htmlFor={`confirm-${spec.id}`}
+            style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: muted, marginBottom: 6 }}
+          >
+            Type <strong style={{ color: ink, fontFamily: sansFamily }}>{spec.typeToConfirm}</strong> to confirm
+          </label>
+          <input
+            id={`confirm-${spec.id}`}
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && armed) settleDialog(spec.id, true) }}
+            placeholder={spec.typeToConfirm}
+            autoComplete="off"
+            className="ak-input"
+            style={fieldStyle(false)}
+          />
+        </div>
+      )}
     </Modal>
   )
 }
