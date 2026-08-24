@@ -19,6 +19,7 @@ import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { formatSchedule } from '@/lib/schedule'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -596,7 +597,7 @@ export default function ClassesPage() {
 
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {c.academic_year && <div style={{ fontSize: 13, color: muted }}>{c.academic_year}</div>}
-                    {c.schedule && <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>{c.schedule}</div>}
+                    {formatSchedule(c.schedule) && <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>{formatSchedule(c.schedule)}</div>}
                   </div>
 
                   <div style={{ borderRadius: 999, background: 'rgba(14,42,92,0.07)', color: navy, padding: '4px 13px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
@@ -675,9 +676,9 @@ export default function ClassesPage() {
                     </div>
                   </div>
 
-                  {c.schedule && (
+                  {formatSchedule(c.schedule) && (
                     <div style={{ fontSize: 12, color: faint, marginTop: 14, ...mono }}>
-                      {c.schedule}
+                      {formatSchedule(c.schedule)}
                     </div>
                   )}
 

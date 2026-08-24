@@ -3,6 +3,7 @@ import { useAuth } from '@/context/useAuth'
 import { Layers, Users, TrendingUp, AlertCircle, Check, Plus, CalendarCheck, FileText, BarChart, ChevronRight, ArrowRight } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serifAlt as serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { formatSchedule } from '@/lib/schedule'
 
 const QUICK_ACTIONS = [
   { to: '/teacher/classes', label: 'New class', hint: 'Add a section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
@@ -66,7 +67,7 @@ function ClassCard({ c }) {
             {c.section}
           </div>
           {c.subject && <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{c.subject}</div>}
-          {c.schedule && <div style={{ ...mono, fontSize: 12, color: faint, marginTop: 2 }}>{c.schedule}</div>}
+          {formatSchedule(c.schedule) && <div style={{ ...mono, fontSize: 12, color: faint, marginTop: 2 }}>{formatSchedule(c.schedule)}</div>}
         </div>
       </div>
       <div className="flex items-center justify-between" style={{ paddingTop: 16, borderTop: '1px solid rgba(14,42,92,0.07)' }}>

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { classToForm } from '@/lib/classForm'
+import { formatSchedule } from '@/lib/schedule'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, ink, gold, goldDeep, muted, serif, mono, sansFamily as sans } from '@/theme'
 
@@ -50,7 +51,7 @@ export default function ClassLayout() {
   })
 
   const subtitle = clazz
-    ? [clazz.subject, clazz.academic_year, clazz.schedule].filter(Boolean).join(' · ')
+    ? [clazz.subject, clazz.academic_year, formatSchedule(clazz.schedule)].filter(Boolean).join(' · ')
     : ''
 
   return (

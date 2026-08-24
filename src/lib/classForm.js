@@ -1,3 +1,5 @@
+import { formatSchedule } from '@/lib/schedule'
+
 /** Blank class form state (strings, for controlled inputs). */
 export function emptyClassForm() {
   return {
@@ -20,7 +22,7 @@ export function classToForm(c) {
     subject_code: c.subject_code ?? '',
     subject: c.subject ?? '',
     section: c.section ?? '',
-    schedule: c.schedule ?? '',
+    schedule: formatSchedule(c.schedule),
     grade_level: c.grade_level ?? '',
     max_students: c.max_students != null ? String(c.max_students) : '',
     academic_year: c.academic_year ?? '2025-2026',

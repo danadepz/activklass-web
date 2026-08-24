@@ -13,6 +13,7 @@ import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesFo
 import ClassStandingForecast from '@/components/ClassStandingForecast'
 import AttachmentField from '@/components/AttachmentField'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { formatSchedule } from '@/lib/schedule'
 
 const ATT_META = {
   present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
@@ -1313,7 +1314,7 @@ export default function StudentClassDetail() {
 
   const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz } = data
   const finalGrade = entry?.final_grade ?? null
-  const schedule = typeof clazz.schedule === 'string' ? clazz.schedule : null
+  const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['student-class-detail', classId, profile.id] })
 
