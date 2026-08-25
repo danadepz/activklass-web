@@ -12,6 +12,7 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
   { to: '/teacher/classes', label: 'My Classes' },
+  { to: '/teacher/students', label: 'Students' },
   { to: '/teacher/announcements', label: 'Announcement' },
   { to: '/teacher/syllabus', label: 'Syllabus' },
   { to: '/teacher/quizzes', label: 'Quizzes' },

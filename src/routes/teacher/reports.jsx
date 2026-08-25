@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
+import { computeStudentFinal } from '@/lib/gradebook'
 import { BarChart, FileText, Users, Notebook, AlertCircle, ArrowRight } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -33,31 +33,6 @@ function gradeColor(avg, mode) {
 
 // --- data: compute a cross-class report from real gradebooks ---------------
 
-/* Final grade across all periods for one student, mirroring the Class Record /
-   Performance computation (per-period grade with overrides, then weighted over
-   periods). Returns null when the student has no recorded grade anywhere. */
-function studentFinal(sid, periods, components, assessments, overrides, mode) {
-  const periodGrades = {}
-  for (const p of periods) {
-    const periodAssessments = assessments.filter((a) => a.period_id === p.id)
-    const studentScores = {}
-    for (const a of periodAssessments) {
-      const sc = a.scores?.[sid]
-      if (sc) studentScores[a.id] = sc
-    }
-    const componentsWithA = components.map((c) => ({
-      ...c,
-      assessments: periodAssessments.filter((a) => a.component_id === c.id),
-    }))
-    const { final } = computeFinalGrade(componentsWithA, studentScores, mode)
-    const override = overrides?.[p.id]?.[sid]
-    const hasScore = periodAssessments.some((a) => a.scores?.[sid])
-    const g = override != null ? override : hasScore ? final : null
-    if (g != null) periodGrades[p.id] = g
-  }
-  return finalAcrossPeriods(periodGrades, periods, mode)
-}
-
 async function loadClassReport(c) {
   const gbSnap = await getDoc(doc(db, 'gradebooks', c.id))
   const gb = gbSnap.exists() ? gbSnap.data() : {}
@@ -81,7 +56,7 @@ async function loadClassReport(c) {
   const assessments = aSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   const finals = ids
-    .map((sid) => studentFinal(sid, gb.periods, gb.components, assessments, gb.overrides ?? {}, base.mode))
+    .map((sid) => computeStudentFinal(sid, gb.periods, gb.components, assessments, gb.overrides ?? {}, base.mode))
     .filter((g) => g != null)
 
   base.assessedCount = finals.length

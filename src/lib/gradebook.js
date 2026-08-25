@@ -89,6 +89,33 @@ function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
   }
 }
 
+/* Final grade across all periods for one student, given a class's already-
+   loaded periods/components/assessments/overrides and grading mode. Shared by
+   the Class Record grid (via gradeForPeriod above) and any cross-class view
+   (reports.jsx, the student directory) that needs one number per student
+   without loading the whole RecordGrid bundle shape. */
+export function computeStudentFinal(studentId, periods, components, assessments, overrides, mode) {
+  const periodGrades = {}
+  for (const p of periods) {
+    const periodAssessments = assessments.filter((a) => a.period_id === p.id)
+    const studentScores = {}
+    for (const a of periodAssessments) {
+      const sc = a.scores?.[studentId]
+      if (sc) studentScores[a.id] = sc
+    }
+    const componentsWithA = components.map((c) => ({
+      ...c,
+      assessments: periodAssessments.filter((a) => a.component_id === c.id),
+    }))
+    const { final } = computeFinalGrade(componentsWithA, studentScores, mode)
+    const override = overrides?.[p.id]?.[studentId]
+    const hasScore = periodAssessments.some((a) => a.scores?.[studentId])
+    const g = override != null ? override : hasScore ? final : null
+    if (g != null) periodGrades[p.id] = g
+  }
+  return finalAcrossPeriods(periodGrades, periods, mode)
+}
+
 /* Shape one period's view the way RecordGrid expects it. */
 export function buildPeriodRecord(bundle, periodId) {
   const period = bundle.periods.find((p) => p.id === periodId) ?? bundle.periods[0]
