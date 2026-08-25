@@ -110,7 +110,7 @@ For work inside one screen. Each page belongs to one pane at a time.
 |---|---|
 | **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
 | **Class detail** | `teacher/classes/$classId/**` |
-| **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx` |
+| **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
 | **Admin** | `routes/admin/**`, `routes/superadmin/**`, `teacher/account.jsx` |
