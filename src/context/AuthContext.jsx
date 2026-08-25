@@ -82,9 +82,23 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => signOut(auth), [])
 
+  /* The forced change-password gate reads profile.is_temp_password, so the
+     in-memory profile is corrected here rather than by re-reading Firestore.
+     Firebase has already accepted the new password by the time this is called
+     and the flag write is best effort (see components/ChangePassword) -- a
+     write that failed must not bounce someone straight back to the gate they
+     just satisfied. Worst case the stored flag is stale and they are asked once
+     more at their next sign-in: a nuisance, not a lockout. */
+  const markPasswordChanged = useCallback(() => {
+    setProfile((p) => (p ? { ...p, is_temp_password: false } : p))
+  }, [])
+
   return (
     <AuthContext.Provider
-      value={{ firebaseUser, profile, status, errorDetail, isSuperAdmin, logout, refreshProfile: loadProfile }}
+      value={{
+        firebaseUser, profile, status, errorDetail, isSuperAdmin, logout,
+        refreshProfile: loadProfile, markPasswordChanged,
+      }}
     >
       {children}
     </AuthContext.Provider>

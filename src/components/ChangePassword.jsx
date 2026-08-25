@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
+import { useAuth } from '@/context/useAuth'
 import { MIN_PASSWORD, PASSWORD_RULE, passwordError } from '@/lib/validation'
 import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy } from '@/theme'
 
@@ -22,13 +23,15 @@ import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy
  *
  * `is_temp_password` on the profile means "still on the password staff issued"
  * -- pass1234 for a roster-provisioned account, whatever an admin typed for one
- * made in the console. The mobile app already gates on it (app/login.tsx sends
- * anyone carrying it to the change-password screen); this is where it stops
- * being true, so this is where it is cleared. The password itself is never
- * written to Firestore: Firebase Auth holds it hashed, and a profile document
- * is readable by staff.
+ * made in the console. Both apps gate on it: mobile in app/login.tsx, web in
+ * components/ProtectedRoute, which sends anyone carrying it to
+ * /change-password. This is where it stops being true, so this is where it is
+ * cleared -- in Firestore for the next sign-in, and in the auth context for
+ * this one. The password itself is never written to Firestore: Firebase Auth
+ * holds it hashed, and a profile document is readable by staff.
  */
 export default function ChangePassword({ compact = false }) {
+  const { markPasswordChanged } = useAuth()
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
@@ -76,6 +79,9 @@ export default function ChangePassword({ compact = false }) {
       } catch (flagErr) {
         console.warn('[ChangePassword] password state not recorded:', flagErr)
       }
+      /* Outside that try on purpose: the password changed, so the gate must
+         lift whether or not the flag write landed. */
+      markPasswordChanged()
       setForm({ current: '', next: '', confirm: '' })
       setMsg('Password changed. You stay signed in on this device.')
     } catch (e2) {

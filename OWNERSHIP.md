@@ -164,6 +164,7 @@ Announce before editing. Keep the change small.
 | `src/context/**` | auth state for the whole app |
 | `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
 | `src/routes/index.jsx`, `login.jsx`, `register.jsx` | landing + auth |
+| `src/components/ProtectedRoute.jsx`, `src/routes/change-password.jsx` | the temp-password gate and the one screen it lets through — auth routing, not presentation, so `src/components/**` in the UI/UX lane does not cover it |
 | `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
 
 **Shared is not a lane, and nobody owns one of these.** A pane that does most

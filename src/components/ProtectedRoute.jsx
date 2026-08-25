@@ -18,8 +18,12 @@ function FullScreenMessage({ children }) {
  * self-grantable. This guard is convenience only: every /api/superadmin route
  * re-verifies the claim server-side, so hiding the UI is not the security
  * boundary.
+ *
+ * `allowTempPassword` opts a route out of the temporary-password gate below.
+ * Only /change-password sets it — that is the screen the gate sends people to,
+ * so gating it too would be a redirect loop.
  */
-export default function ProtectedRoute({ roles, superAdmin = false }) {
+export default function ProtectedRoute({ roles, superAdmin = false, allowTempPassword = false }) {
   const { status, profile, errorDetail, isSuperAdmin } = useAuth()
 
   if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
@@ -31,6 +35,18 @@ export default function ProtectedRoute({ roles, superAdmin = false }) {
         {errorDetail ?? 'Could not reach the ActivKlass server. Is the API running?'}
       </FullScreenMessage>
     )
+  }
+  /* An account an admin provisioned starts on a password an admin chose, and
+     `is_temp_password` stays true until the holder replaces it themselves. Gate
+     here rather than in the login redirect (which is where the mobile app does
+     it) because a login redirect is only the first hop: a bookmark, a refresh
+     or a pasted deep link all land straight on a screen without passing through
+     it. Every protected route in App.jsx goes through this component, so this is
+     the one place that covers all of them. It is a workflow gate, not a security
+     boundary — firestore.rules is what actually decides what the account can
+     read, and it does not care what password is on it. */
+  if (!allowTempPassword && profile.is_temp_password) {
+    return <Navigate to="/change-password" replace />
   }
   if (superAdmin && !isSuperAdmin) return <Navigate to="/portal" replace />
   if (roles && !roles.includes(profile.role)) return <Navigate to="/portal" replace />
@@ -50,6 +66,10 @@ export function RoleHomeRedirect() {
       </FullScreenMessage>
     )
   }
+  // Still on the password staff issued: finish that before anything else.
+  // Checked ahead of the super-admin branch so a developer account on a
+  // temporary password is not waved past its own gate.
+  if (profile.is_temp_password) return <Navigate to="/change-password" replace />
   // Developers land in the ops console. Checked before role, since we hold a
   // normal role too — the claim is what distinguishes us.
   if (isSuperAdmin) return <Navigate to="/superadmin" replace />

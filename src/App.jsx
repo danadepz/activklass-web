@@ -16,6 +16,7 @@ const Landing  = lazyRoute(() => import('@/routes/index'), { full: true })
 const Login    = lazyRoute(() => import('@/routes/login'), { full: true })
 const Register = lazyRoute(() => import('@/routes/register'), { full: true })
 const ForgotPassword = lazyRoute(() => import('@/routes/forgot-password'), { full: true })
+const ForcedChangePassword = lazyRoute(() => import('@/routes/change-password'), { full: true })
 
 // ─── Student portal ──────────────────────────────────────────────────────────
 const StudentLayout       = lazyRoute(() => import('@/routes/student/_layout'), { full: true })
@@ -45,6 +46,7 @@ const GradingSetupPage    = lazyRoute(() => import('@/routes/teacher/grading'))
 const TeacherAccountPage  = lazyRoute(() => import('@/routes/teacher/account'))
 const AnnouncementsPage   = lazyRoute(() => import('@/routes/teacher/announcements'))
 const ReportsPage         = lazyRoute(() => import('@/routes/teacher/reports'))
+const StudentsPage        = lazyRoute(() => import('@/routes/teacher/students'))
 
 // ─── Teacher: class-level layout + tabs ──────────────────────────────────────
 const ClassLayout        = lazyRoute(() => import('@/routes/teacher/classes/$classId/_layout'))
@@ -65,6 +67,15 @@ export default function App() {
       <Route path="/forgot-password" element={ForgotPassword} />
       <Route path="/portal"   element={<RoleHomeRedirect />} />
 
+      {/* Signed in, but still on the password an admin issued. ProtectedRoute
+          sends every other route here until it is replaced, so this one route
+          opts out of that gate -- gating it as well is a redirect loop. It is
+          still behind ProtectedRoute: there is nothing here for a signed-out
+          visitor, and the form reauthenticates before it changes anything. */}
+      <Route element={<ProtectedRoute allowTempPassword />}>
+        <Route path="/change-password" element={ForcedChangePassword} />
+      </Route>
+
       {/* Teacher */}
       <Route element={<ProtectedRoute roles={['teacher']} />}>
         <Route path="/teacher" element={TeacherLayout}>
@@ -73,6 +84,7 @@ export default function App() {
 
           {/* Navbar: Classes */}
           <Route path="classes" element={ClassesPage} />
+          <Route path="students" element={StudentsPage} />
 
           {/* Class tabs — ClassLayout renders the sub-navbar */}
           <Route path="classes/:classId" element={ClassLayout}>
