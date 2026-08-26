@@ -373,8 +373,8 @@ The free tier is **20 requests per day per model**, which is also the default
 `AI_DAILY_LIMIT`, so one teacher can drain the whole project's quota in an
 afternoon. Reached during testing on 2026-08-19.
 
-This is precisely the failure docs/05 warns about under "Ollama availability
-during defense: the procedural fallback is mandatory". The overload path is
+This is precisely the failure the docs/05 risk register warned about for
+defense-day LLM availability (its "fallback is mandatory" line). The overload path is
 covered; the far likelier one is not. Catching 429 and stepping to the next
 model is a small change, but it should not ship untested, and testing it
 requires quota that is currently spent.
