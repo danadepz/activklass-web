@@ -15,6 +15,7 @@ import {
   idNumberError, lrnError, schoolNameError, schoolAbbrError,
 } from '@/lib/validation'
 import Notice from './Notice'
+import RolePicker from './RolePicker'
 import CardHead from './CardHead'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import BulkUpload from './BulkUpload'
@@ -134,9 +135,9 @@ function splitPair(text) {
 }
 
 function CreateUserForm({ onCreated, settings }) {
-  // No default role: 'teacher' meant an admin who never opened the dropdown
+  // No default role: 'teacher' meant an admin who never touched the picker
   // silently created a teacher, which is the most privileged non-admin role
-  // here. Picking one is now deliberate.
+  // here. Picking one is now deliberate, and nothing else renders until it is.
   const blank = {
     role: '', firstName: '', middleName: '', lastName: '', email: '', password: '',
     level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
@@ -240,18 +241,34 @@ function CreateUserForm({ onCreated, settings }) {
         icon="👤"
         tint="rgba(14,42,92,0.07)"
         title="Add a user"
-        sub="Creates the sign-in account and the profile together. Parents are not added here — they register themselves and claim their student's invitation code."
+        sub="Pick the role first — the form follows. Creates the sign-in account and the profile together. Parents are not added here — they register themselves and claim their student's invitation code."
         style={{ marginBottom: 18 }}
       />
 
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
-        <label style={labelStyle}>
-          Role
-          <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.role} onChange={set('role')}>
-            <option value="">— none —</option>
-            {CREATABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </label>
+      {/* One question first, then the form. Every field below is role-shaped —
+          a student is asked for an LRN, a teacher for an employee ID, an admin
+          for an inbox — so showing them all up front showed most admins fields
+          that did not apply to the account they were making. No visible label
+          over it: the three words are the label, and `aria-label` on the
+          radiogroup keeps it named for screen readers. */}
+      <div style={{ maxWidth: 360, margin: '0 auto' }}>
+        <RolePicker
+          value={role}
+          onChange={(r) => { setError(''); setDone(''); setForm((f) => ({ ...f, role: r })) }}
+        />
+      </div>
+
+      {!role && (
+        <p style={{
+          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
+          maxWidth: 420, textAlign: 'center',
+        }}>
+          Pick one and the rest of the form appears, asking for what that kind of account needs and nothing else.
+        </p>
+      )}
+
+      {role && (<>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', marginTop: 14 }}>
         <label style={labelStyle}>
           First name
           <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
@@ -350,7 +367,7 @@ function CreateUserForm({ onCreated, settings }) {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
         <button type="submit" style={btnPrimary} disabled={mut.isPending}>
-          {mut.isPending ? 'Creating…' : 'Create user'}
+          {mut.isPending ? 'Creating…' : `Create ${role}`}
         </button>
         {/* Ten seconds is normal here: making a sign-in account is several
             round trips to the identity service. Without a word about it, the
@@ -358,11 +375,18 @@ function CreateUserForm({ onCreated, settings }) {
         {mut.isPending && (
           <span style={{ fontSize: 12.5, color: faint }}>Setting up the account — this takes a few seconds.</span>
         )}
-        <div style={{ flex: 1, minWidth: 200 }}>
+      </div>
+      </>)}
+
+      {/* Outside the role gate on purpose: a successful create empties the form
+          back to the role step, and the line naming the login and the password
+          they were given has to survive that. */}
+      {(error || done) && (
+        <div style={{ marginTop: 14 }}>
           <Notice>{error}</Notice>
           <Notice tone="ok">{done}</Notice>
         </div>
-      </div>
+      )}
     </form>
   )
 }
