@@ -28,3 +28,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# A personal, cross-project playbook that happens to live in this checkout --
+# it is scaffolding for starting repos, not part of this one.
+PROJECT-SETUP.md
