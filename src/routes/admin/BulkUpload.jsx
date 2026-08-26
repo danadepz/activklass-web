@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
 import { bulkCreateUsers } from '@/lib/admin'
 import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono } from '@/theme'
-import { CREATABLE_ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
+import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
 import Notice from './Notice'
 import CardHead from './CardHead'
+import RolePicker from './RolePicker'
 
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
@@ -38,6 +39,33 @@ const TEMPLATES = {
       ['Maria', '', 'Santos', 'T-2024-018', 'Mathematics', ''],
     ],
   },
+}
+
+// Admins are not bulk-uploaded: an admin row needs a real inbox, and there are
+// never enough of them to be worth a spreadsheet. A `role` column can still
+// carry one.
+const BULK_ROLES = ['teacher', 'student']
+
+/* What a row needs, per role. This lived in the card's subtitle as one 130-word
+   paragraph covering both roles at once — most of a screen of prose before the
+   first click, half of it about the role you were not uploading. Same rules, as
+   a column/rule table, and only for the role that was picked. Keep it in step
+   with rowProblem below. */
+const ROW_SPEC = {
+  student: [
+    ['first_name · last_name', 'Required. middle_name is optional.'],
+    ['student_number', 'Required on every student row.'],
+    ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
+    ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
+    ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
+    ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
+  ],
+  teacher: [
+    ['first_name · last_name', 'Required. middle_name is optional.'],
+    ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
+    ['department', 'Optional.'],
+    ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
+  ],
 }
 
 /** What stops a row from being accepted; mirrors _prepare_user in api/admin.py.
@@ -179,78 +207,101 @@ export default function BulkUpload({ onDone, settings }) {
         icon="📄"
         tint="rgba(245,197,24,0.15)"
         title="Bulk upload"
-        sub={
-          <>
-            Creates accounts from a spreadsheet (.xlsx or CSV). Choose a role first — the
-            downloadable template and the uploaded rows follow it. A <code style={{ ...mono, fontSize: 12 }}>role</code> column
-            in the file overrides it per row, which lets one file mix teachers and students.
-            Logins are issued from your school&apos;s prefix plus the last six digits of the LRN
-            (students) or employee ID (teachers){prefix
-              ? <> — e.g. <code style={{ ...mono, fontSize: 12 }}>{prefix}-789012</code>.</>
-              : <>, but no prefix is set yet — set it in the Login prefix card first.</>}
-            {' '}Every student needs a <code style={{ ...mono, fontSize: 12 }}>student_number</code>;
-            Grade 12 &amp; below also carry their 12-digit <code style={{ ...mono, fontSize: 12 }}>lrn</code>{' '}
-            (college learners leave it blank), and every student needs a{' '}
-            <code style={{ ...mono, fontSize: 12 }}>birthdate</code> — parental access checks
-            depend on it. Teachers need an{' '}
-            <code style={{ ...mono, fontSize: 12 }}>employee_number</code>. Rows with a blank{' '}
-            <code style={{ ...mono, fontSize: 12 }}>password</code> start on the default,{' '}
-            <code style={{ ...mono, fontSize: 12 }}>{DEFAULT_PASSWORD}</code> — accounts are usable
-            immediately, so have people change it.
-          </>
-        }
-        style={{ marginBottom: 16 }}
+        sub="Creates accounts from a spreadsheet — .xlsx or CSV. Pick a role, fill in the template it hands you, and upload it back."
+        style={{ marginBottom: 18 }}
       />
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-          Choose role
-          <select value={uploadRole}
-                  onChange={(e) => {
-                    // Switching roles switches templates, so a file parsed
-                    // under the old role no longer means what it says.
-                    setUploadRole(e.target.value)
-                    setRows([])
-                    setFileName('')
-                    setResult(null)
-                    setParseError('')
-                  }}
-                  style={{ ...field, width: 'auto', cursor: 'pointer' }}>
-            <option value="">— none —</option>
-            {['teacher', 'student'].map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </label>
-        {/* The two used to be identical ghost buttons and read as one control.
-            Same size on purpose — color alone tells them apart: navy for the
-            action this card exists for, outlined for the helper beside it.
-            Both wait for a role: the template's columns and the rows' meaning
-            depend on it. */}
-        <label style={{ ...btnPrimary, display: 'inline-block',
-                        ...(uploadRole ? {} : { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' }) }}
-               title={uploadRole ? undefined : 'Choose a role first'}>
-          📂 Choose file…
-          <input type="file"
-                 accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                 onChange={onFile} disabled={!uploadRole}
-                 style={{ display: 'none' }} />
-        </label>
-        <button type="button" disabled={!uploadRole}
-                title={uploadRole ? undefined : 'Choose a role first'}
-                style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10,
-                         display: 'inline-flex', alignItems: 'center', gap: 8,
-                         ...(uploadRole ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}
-                onClick={downloadTemplate}>
-          <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
-          Download template
-        </button>
-        {fileName && (
-          <span style={{ ...mono, fontSize: 12, color: faint }}>
-            {fileName} · {rows.length} row{rows.length === 1 ? '' : 's'}
-          </span>
-        )}
+      {/* Role first, as in Add a user. The template's columns and the meaning
+          of every row follow it, and the rules below are half the reading when
+          only the picked role's are shown. */}
+      <div style={{ maxWidth: 360, margin: '0 auto' }}>
+        <RolePicker
+          value={uploadRole}
+          options={BULK_ROLES}
+          onChange={(r) => {
+            // Switching roles switches templates, so a file parsed under the
+            // old role no longer means what it says.
+            setUploadRole(r)
+            setRows([])
+            setFileName('')
+            setResult(null)
+            setParseError('')
+          }}
+        />
       </div>
 
-      <Notice>{parseError}</Notice>
+      {!uploadRole && (
+        <p style={{
+          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
+          maxWidth: 440, textAlign: 'center',
+        }}>
+          Pick one and this card lists what that role&apos;s rows need, and hands you a template
+          with exactly those columns.
+        </p>
+      )}
+
+      {uploadRole && (
+        <>
+          <dl style={{
+            display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr)',
+            columnGap: 16, rowGap: 9, margin: '18px 0 0', padding: '15px 17px',
+            fontSize: 13, background: 'rgba(14,42,92,0.025)',
+            border: `1px solid ${line}`, borderRadius: 12,
+          }}>
+            <div style={{
+              gridColumn: '1 / -1', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: muted, marginBottom: 2,
+            }}>
+              What a {uploadRole} row needs
+            </div>
+            {ROW_SPEC[uploadRole].map(([columns, rule]) => (
+              <Fragment key={columns}>
+                <dt style={{ ...mono, fontSize: 12, color: ink, lineHeight: 1.5 }}>{columns}</dt>
+                <dd style={{ margin: 0, color: muted, lineHeight: 1.5 }}>{rule}</dd>
+              </Fragment>
+            ))}
+          </dl>
+
+          <p style={{ fontSize: 12.5, color: prefix ? faint : red, margin: '10px 2px 0', lineHeight: 1.55 }}>
+            {prefix
+              ? <>
+                  Logins are issued as <code style={{ ...mono, fontSize: 12 }}>{prefix}-789012</code> — your
+                  school&apos;s prefix and the last six digits of the{' '}
+                  {uploadRole === 'student' ? 'LRN, or of the student number for college rows' : 'employee ID'}.
+                  A <code style={{ ...mono, fontSize: 12 }}>role</code> column in the file overrides the
+                  role above, row by row, so one file can mix teachers and students.
+                </>
+              : <>No login prefix is set for your school yet — set it in the Login prefix card above,
+                  or these rows have nothing to issue a login from.</>}
+          </p>
+
+          {/* Same size on purpose — colour alone tells them apart: navy for the
+              action this card exists for, outlined for the helper beside it. */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+            <label style={{ ...btnPrimary, display: 'inline-block' }}>
+              📂 Choose file…
+              <input type="file"
+                     accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                     onChange={onFile}
+                     style={{ display: 'none' }} />
+            </label>
+            <button type="button"
+                    style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10,
+                             display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                    onClick={downloadTemplate}>
+              <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
+              Download template
+            </button>
+            {fileName && (
+              <span style={{ ...mono, fontSize: 12, color: faint }}>
+                {fileName} · {rows.length} row{rows.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {parseError && <div style={{ marginTop: 14 }}><Notice>{parseError}</Notice></div>}
 
       {rows.length > 0 && (
         <>
