@@ -20,19 +20,36 @@ const TABS = [
   { to: 'history', label: 'Logs' },
 ]
 
-function tabStyle({ isActive }) {
-  return {
-    padding: '12px 14px',
-    fontSize: 14,
-    fontWeight: 600,
-    fontFamily: sans,
-    whiteSpace: 'nowrap',
-    textDecoration: 'none',
-    borderBottom: '2.5px solid transparent',
-    marginBottom: -1.5,
-    color: isActive ? navy : muted,
-    borderBottomColor: isActive ? gold : 'transparent',
-  }
+// Compact class badge, e.g. "MATH10" -> "M10" (same rule as the dashboard).
+function classBadge(c) {
+  const base = (c.subject_code || c.subject || c.section || '').toUpperCase()
+  const letters = base.match(/[A-Z]+/)?.[0] ?? ''
+  const digits = base.match(/\d+/)?.[0] ?? ''
+  if (letters && digits) return (letters[0] + digits).slice(0, 4)
+  return base.replace(/[^A-Z0-9]/g, '').slice(0, 3) || '—'
+}
+
+/** Small meta chip under the class title — one fact per chip. */
+function MetaChip({ icon, children, monoFace }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      style={{
+        ...(monoFace ? mono : null),
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: '#3A4A6B',
+        background: 'rgba(14,42,92,0.06)',
+        border: '1px solid rgba(14,42,92,0.08)',
+        borderRadius: 8,
+        padding: '5px 10px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {icon && <span aria-hidden="true">{icon}</span>}
+      {children}
+    </span>
+  )
 }
 
 export default function ClassLayout() {
@@ -50,9 +67,7 @@ export default function ClassLayout() {
     },
   })
 
-  const subtitle = clazz
-    ? [clazz.subject, clazz.academic_year, formatSchedule(clazz.schedule)].filter(Boolean).join(' · ')
-    : ''
+  const scheduleChips = clazz ? formatSchedule(clazz.schedule).split(' · ').filter(Boolean) : []
 
   return (
     <div>
@@ -73,24 +88,73 @@ export default function ClassLayout() {
         ← My Classes
       </Link>
 
-      <div className="flex items-start justify-between gap-4" style={{ marginTop: 8, marginBottom: 22 }}>
-        <div>
-          <h1 className="text-[clamp(28px,4vw,38px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 7px', color: ink }}>
-            {clazz
-              ? `${clazz.subject_code ? `${clazz.subject_code} · ` : ''}${clazz.section}`
-              : 'Class'}
-          </h1>
-          {subtitle && <p style={{ ...mono, fontSize: 14, color: muted, margin: 0 }}>{subtitle}</p>}
+      {/* Header card — badge + title + one chip per fact, tabs attached below */}
+      <div style={{ background: '#FFFFFF', border: '1px solid rgba(14,42,92,0.08)', borderRadius: 16, marginTop: 10, marginBottom: 16, overflow: 'hidden' }}>
+        <div className="flex flex-wrap items-start justify-between gap-4" style={{ padding: '26px 22px 22px' }}>
+          <div className="flex items-start gap-3.5" style={{ minWidth: 0 }}>
+            {clazz && (
+              <span
+                aria-hidden="true"
+                style={{ ...mono, width: 52, height: 52, borderRadius: 13, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0, fontWeight: 600, fontSize: 15 }}
+              >
+                {classBadge(clazz)}
+              </span>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <h1 className="text-[clamp(24px,3vw,32px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: 0, color: ink }}>
+                {clazz
+                  ? `${clazz.subject_code ? `${clazz.subject_code} · ` : ''}${clazz.section}`
+                  : 'Class'}
+              </h1>
+              {clazz && (
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 9 }}>
+                  {clazz.subject && <MetaChip icon="📘">{clazz.subject}</MetaChip>}
+                  {clazz.academic_year && <MetaChip icon="🗓" monoFace>{clazz.academic_year}</MetaChip>}
+                  {scheduleChips.map((s) => (
+                    <MetaChip key={s} icon="🕑" monoFace>{s}</MetaChip>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {clazz && (
+            <button
+              onClick={() => setShowEdit(true)}
+              className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}
+            >
+              ✏️ Edit Class
+            </button>
+          )}
         </div>
-        {clazz && (
-          <button
-            onClick={() => setShowEdit(true)}
-            className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
-          >
-            Edit Class
-          </button>
-        )}
+
+        {/* pill tab strip, divided from the header by a hairline */}
+        <nav
+          className="flex gap-1.5 flex-wrap justify-center"
+          style={{ borderTop: '1px solid rgba(14,42,92,0.08)', background: 'rgba(14,42,92,0.03)', padding: '13px 14px' }}
+        >
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.to || 'overview'}
+              to={tab.to ? `${base}/${tab.to}` : base}
+              end={tab.end}
+              className="whitespace-nowrap transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+              style={({ isActive }) => ({
+                padding: '8px 15px',
+                fontSize: 13.5,
+                fontWeight: 600,
+                fontFamily: sans,
+                borderRadius: 9,
+                textDecoration: 'none',
+                color: isActive ? '#FAFAF6' : muted,
+                background: isActive ? navy : 'transparent',
+                boxShadow: isActive ? '0 2px 6px -2px rgba(14,42,92,0.5)' : 'none',
+              })}
+            >
+              {tab.label}
+            </NavLink>
+          ))}
+        </nav>
       </div>
 
       {warning && (
@@ -104,25 +168,6 @@ export default function ClassLayout() {
           </button>
         </div>
       )}
-
-      <nav className="mt-4 border-b border-slate-200 flex gap-1 flex-wrap">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to || 'overview'}
-            to={tab.to ? `${base}/${tab.to}` : base}
-            end={tab.end}
-            className={({ isActive }) =>
-              `whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
-                isActive
-                  ? 'border-[#F5C518] text-[#0E2A5C]'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-              }`
-            }
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
 
       <Outlet />
 

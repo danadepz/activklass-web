@@ -2,6 +2,10 @@
 import { navyDeep, ink, line, sansFamily as sans, navy } from '@/theme'
 
 export const ROLES = ['admin', 'teacher', 'student', 'parent']
+// What the console may CREATE (and re-role someone into). Parents are absent
+// deliberately: a parent registers themselves and claims a student's
+// invitation code -- the school does not issue or manage their account.
+export const CREATABLE_ROLES = ['admin', 'teacher', 'student']
 export const MIN_PASSWORD = 8
 
 export const card = { background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }

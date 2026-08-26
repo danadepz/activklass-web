@@ -31,6 +31,7 @@ import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonList } from '@/components/ui/Skeleton'
+import { MetricCard } from '@/components/ui/Card'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 const PASS = 75 // an attempt at/above this % counts as mastered for that student
@@ -122,16 +123,6 @@ function bucketOf(m) {
   if (m < 60) return 'needs'
   if (m < 80) return 'developing'
   return 'mastered'
-}
-
-function CountCard({ label, value, sub, color, borderColor }) {
-  return (
-    <div style={{ background: '#FFFFFF', border: `1px solid ${borderColor ?? line}`, borderRadius: 14, padding: '16px 18px' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: color ?? muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ ...serif, fontSize: 28, lineHeight: 1, color: color ?? ink, marginTop: 5 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: muted, marginTop: 5 }}>{sub}</div>}
-    </div>
-  )
 }
 
 function SectionHead({ dot, title, note }) {
@@ -776,10 +767,10 @@ export default function ScaffoldTopicsPage() {
 
       {/* count strip */}
       <div className="mb-[22px] grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <CountCard label="Topics tracked" value={rows.length} />
-        <CountCard label="Needs scaffolding" value={needs.length} sub="below 60% mastery" color={red} borderColor="rgba(192,57,43,0.35)" />
-        <CountCard label="Developing" value={developing.length} sub="60–80% mastery" color={goldDeep} borderColor="rgba(245,197,24,0.45)" />
-        <CountCard label="Mastered" value={mastered.length} sub="≥ 80% mastery" color={green} borderColor="rgba(31,138,91,0.4)" />
+        <MetricCard label="Topics tracked" value={rows.length} tint="rgba(14,42,92,0.07)" />
+        <MetricCard label="Needs scaffolding" value={needs.length} sub="below 60% mastery" valueColor={red} tint="rgba(192,57,43,0.07)" />
+        <MetricCard label="Developing" value={developing.length} sub="60–80% mastery" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" />
+        <MetricCard label="Mastered" value={mastered.length} sub="≥ 80% mastery" valueColor={green} tint="rgba(31,138,91,0.1)" />
       </div>
 
       {/* needs scaffolding */}

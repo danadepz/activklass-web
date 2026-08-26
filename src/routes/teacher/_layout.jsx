@@ -18,7 +18,6 @@ const NAV_ITEMS = [
   { to: '/teacher/quizzes', label: 'Quizzes' },
   { to: '/teacher/grading', label: 'Grade Config' },
   { to: '/teacher/reports', label: 'Reports' },
-  { to: '/teacher/account', label: 'Account' },
 ]
 
 function HamburgerIcon({ open }) {
@@ -41,11 +40,12 @@ function HamburgerIcon({ open }) {
 }
 
 function navLinkStyle(isActive) {
+  // Padding and font size live in the className so they can step down at
+  // laptop widths (lg) and back up at xl.
   return {
     display: 'inline-flex',
     alignItems: 'center',
-    padding: '7px 14px',
-    fontSize: 14,
+    whiteSpace: 'nowrap',
     fontWeight: 600,
     fontFamily: sans,
     borderRadius: 8,
@@ -73,10 +73,9 @@ function mobileNavLinkStyle(isActive) {
 }
 
 export default function TeacherLayout() {
-  const { profile, logout } = useAuth()
+  const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const notifRef = useRef(null)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
 
@@ -194,6 +193,10 @@ export default function TeacherLayout() {
           background: navy,
           color: cream,
           borderBottom: '1px solid rgba(255,255,255,0.08)',
+          /* clip, not hidden: the decorative rings hang past the right edge
+             and would otherwise give the page a horizontal scrollbar, while
+             the notification dropdown still needs to overflow downward. */
+          overflowX: 'clip',
         }}
       >
         {/* decorative rings — desktop only so they don't clip on mobile */}
@@ -212,7 +215,7 @@ export default function TeacherLayout() {
           }}
         >
           {/* LEFT — brand + desktop nav */}
-          <div className="flex items-center" style={{ gap: 24, flex: 1 }}>
+          <div className="flex items-center gap-3 xl:gap-6" style={{ flex: 1, minWidth: 0 }}>
             {/* Brand */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
               <BrandMark size={32} onNavy />
@@ -222,10 +225,17 @@ export default function TeacherLayout() {
               </div>
             </div>
 
-            {/* Desktop nav links — hidden on mobile */}
-            <nav className="hidden md:flex items-center" style={{ gap: 2 }}>
+            {/* Desktop nav links — hamburger below lg. Links compress at
+                laptop widths (lg) and relax at xl so the row never wraps. */}
+            <nav className="hidden lg:flex items-center" style={{ gap: 2 }}>
               {NAV_ITEMS.map(({ to, label, end }) => (
-                <NavLink key={to} to={to} end={end} style={({ isActive }) => navLinkStyle(isActive)}>
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className="px-2 py-[7px] text-[13px] xl:px-3.5 xl:text-sm"
+                  style={({ isActive }) => navLinkStyle(isActive)}
+                >
                   {({ isActive }) => (
                     <>
                       {label}
@@ -250,10 +260,12 @@ export default function TeacherLayout() {
             </nav>
           </div>
 
-          {/* RIGHT — actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* RIGHT — actions. Shrinkable (minWidth 0) so a tight row squeezes
+              the profile name into an ellipsis instead of overflowing the
+              viewport; the bell and avatar themselves never shrink. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             {/* Notification bell + dropdown */}
-            <div ref={notifRef} style={{ position: 'relative' }}>
+            <div ref={notifRef} style={{ position: 'relative', flexShrink: 0 }}>
               <button
                 aria-label="Notifications"
                 aria-expanded={notifOpen}
@@ -388,9 +400,25 @@ export default function TeacherLayout() {
               )}
             </div>
 
-            {/* Avatar + name — name hidden on mobile */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Avatar + name — name hidden on mobile. The card itself is the
+                Account button (there is no separate nav item for it). */}
+            <NavLink
+              to="/teacher/account"
+              aria-label="Account settings"
+              className="group transition duration-200 hover:bg-white/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                minWidth: 0,
+                padding: '4px 10px 4px 4px',
+                borderRadius: 999,
+                textDecoration: 'none',
+                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              })}
+            >
               <div
+                className="transition-transform duration-200 group-hover:scale-110"
                 style={{
                   width: 34,
                   height: 34,
@@ -406,41 +434,22 @@ export default function TeacherLayout() {
               >
                 {initials}
               </div>
-              <div className="hidden md:block" style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: cream }}>
+              <div className="hidden xl:block" style={{ lineHeight: 1.2, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: cream, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.first_name} {profile.last_name}
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.email}
                 </div>
               </div>
-            </div>
-
-            {/* Sign out — desktop only */}
-            <button
-              onClick={() => setShowLogoutConfirm(true)}
-              className="hidden md:block transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={{
-                padding: '7px 14px',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: sans,
-                color: 'rgba(250,250,246,0.85)',
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.18)',
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
-            >
-              Sign out
-            </button>
+            </NavLink>
 
             {/* Hamburger — mobile only */}
             <button
               onClick={() => setMenuOpen((o) => !o)}
               aria-label={menuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={menuOpen}
-              className="grid md:hidden transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="grid lg:hidden transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               style={{
                 width: 36,
                 height: 36,
@@ -450,6 +459,7 @@ export default function TeacherLayout() {
                 cursor: 'pointer',
                 color: cream,
                 placeItems: 'center',
+                flexShrink: 0,
               }}
             >
               <HamburgerIcon open={menuOpen} />
@@ -460,7 +470,7 @@ export default function TeacherLayout() {
         {/* Mobile dropdown menu */}
         {menuOpen && (
           <div
-            className="md:hidden"
+            className="lg:hidden"
             style={{
               borderTop: '1px solid rgba(255,255,255,0.1)',
               padding: '10px 16px 16px',
@@ -481,118 +491,22 @@ export default function TeacherLayout() {
               </NavLink>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px' }}>
-              <div style={{ fontSize: 13, color: 'rgba(250,250,246,0.6)' }}>
-                {profile.first_name} {profile.last_name} · {profile.email}
-              </div>
-            </div>
-            <button
-              onClick={() => { closeMenu(); setShowLogoutConfirm(true) }}
-              style={{
-                margin: '0 0',
-                padding: '11px 16px',
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: sans,
-                color: 'rgba(250,250,246,0.85)',
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.14)',
-                borderRadius: 10,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
+            {/* Profile row doubles as the Account link, same as the desktop card. */}
+            <NavLink
+              to="/teacher/account"
+              onClick={closeMenu}
+              style={({ isActive }) => mobileNavLinkStyle(isActive)}
             >
-              Sign out
-            </button>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span>Account</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {profile.first_name} {profile.last_name} · {profile.email}
+                </span>
+              </span>
+            </NavLink>
           </div>
         )}
       </header>
-
-      {/* Sign Out Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(14,23,51,0.55)',
-          backdropFilter: 'blur(3px)',
-          WebkitBackdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 24
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: 400,
-            background: '#FFFFFF',
-            borderRadius: 20,
-            boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)',
-            padding: '30px 28px',
-            textAlign: 'center'
-          }}>
-            <h3 style={{
-              fontFamily: "'DM Serif Display', Georgia, serif",
-              fontSize: 22,
-              color: '#0A1733',
-              margin: '0 0 12px 0'
-            }}>
-              Sign Out Confirmation
-            </h3>
-            <p style={{
-              fontFamily: sans,
-              fontSize: 14,
-              color: '#6A7A95',
-              lineHeight: 1.5,
-              margin: '0 0 24px 0'
-            }}>
-              Are you sure you want to sign out of your ActivKlass account?
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setShowLogoutConfirm(false)}
-                style={{
-                  flex: 1,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: sans,
-                  color: '#3A4A6B',
-                  background: '#FFFFFF',
-                  border: '1.5px solid rgba(14,42,92,0.14)',
-                  borderRadius: 12,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLogoutConfirm(false)
-                  logout()
-                }}
-                style={{
-                  flex: 1,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  fontFamily: sans,
-                  color: '#FAFAF6',
-                  background: '#C0392B',
-                  border: 'none',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  boxShadow: '0 3px 0 #922B21'
-                }}
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MAIN CONTENT — responsive padding */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-9" style={{ flex: 1 }}>

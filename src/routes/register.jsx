@@ -1,9 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
-import { emailError, nameError, passwordError } from '@/lib/validation'
+import { emailError, nameError, passwordError, schoolAbbrError, schoolNameError } from '@/lib/validation'
+import {
+  abbrConflictError,
+  addSchoolToDirectory,
+  fetchSchoolDirectory,
+} from '@/lib/schoolDirectory'
 import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
   SubmitButton,
@@ -25,6 +31,10 @@ const ROLES = [
   { value: 'teacher', label: 'Teacher', hint: 'Manage classes & grades' },
   { value: 'student', label: 'Student', hint: 'Take quizzes & track progress' },
 ]
+
+// Sentinel for "my school isn't listed" in the school dropdown. Firestore doc
+// ids never look like this, so it cannot collide with a real directory entry.
+const NEW_SCHOOL = '__add_new_school__'
 
 // 0–3 heuristic strength score, mirrored by the three-segment meter.
 function scorePassword(v = '') {
@@ -90,12 +100,28 @@ export default function Register() {
     email: '',
     password: '',
     role: 'teacher',
+    schoolId: '',
+    newSchoolName: '',
+    newSchoolAbbr: '',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  // The public directory behind "Select School" (see lib/schoolDirectory.js).
+  // Readable signed-out, so it loads while the form is being filled in. On a
+  // fetch error the dropdown degrades to just the "add my school" path.
+  const queryClient = useQueryClient()
+  const schoolsQuery = useQuery({
+    queryKey: ['school-directory'],
+    queryFn: fetchSchoolDirectory,
+    enabled: form.role === 'teacher',
+    staleTime: 60_000,
+  })
+  const schools = schoolsQuery.data ?? []
+  const addingSchool = form.schoolId === NEW_SCHOOL
 
   const pwScore = scorePassword(form.password)
   const pwStrength = pwColor(pwScore)
@@ -104,27 +130,57 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
-    // Same rules as every other form that collects these fields.
+    // Same rules as every other form that collects these fields. A teacher
+    // must name a school (existing entry, or a new full name + abbreviation);
+    // email and password only exist when this is not a completing session.
     const problem =
       nameError(form.firstName, { label: 'First name' }) ||
       nameError(form.lastName, { label: 'Last name' }) ||
-      emailError(form.email) ||
-      (auth.currentUser ? '' : passwordError(form.password))
+      (form.role === 'teacher'
+        ? !form.schoolId
+          ? 'Select the school you teach at.'
+          : addingSchool
+            ? schoolNameError(form.newSchoolName) || schoolAbbrError(form.newSchoolAbbr)
+            : ''
+        : '') ||
+      (auth.currentUser ? '' : emailError(form.email) || passwordError(form.password))
     if (problem) { setError(problem); return }
     setSubmitting(true)
     try {
+      // "UCB is taken by another school" is a predictable rejection — check it
+      // BEFORE creating the Firebase account so it cannot strand anyone in the
+      // half-registered completing state. The directory is readable signed out.
+      if (form.role === 'teacher' && addingSchool) {
+        const clash = await abbrConflictError(form.newSchoolAbbr, form.newSchoolName)
+        if (clash) { setError(clash); return }
+      }
       // 1. Firebase identity — skipped when completing an existing session.
       if (!auth.currentUser) {
         await createUserWithEmailAndPassword(auth, form.email, form.password)
       }
-      // 2. ActivKlass profile doc in the Firestore 'users' collection.
+      // 2. A newly declared school goes into the public directory first, so
+      // the next teacher from that school finds it in the dropdown. Requires
+      // the session that step 1 just created.
+      let school = null
+      if (form.role === 'teacher') {
+        school = addingSchool
+          ? await addSchoolToDirectory({ name: form.newSchoolName, abbreviation: form.newSchoolAbbr })
+          : (schools.find((s) => s.id === form.schoolId) ?? null)
+      }
+      if (addingSchool && school) {
+        queryClient.invalidateQueries({ queryKey: ['school-directory'] })
+      }
+      // 3. ActivKlass profile doc in the Firestore 'users' collection.
       // Role drives routing; security rules block later role changes by
       // students/parents (escalation guard). Passwords stay in Firebase Auth.
+      // teaching_school_* is affiliation only — school_id stays the billing
+      // link and is never written here (see lib/schoolDirectory.js).
       await setDoc(doc(db, 'users', auth.currentUser.uid), {
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         email: auth.currentUser.email,
         role: form.role,
+        ...(school && { teaching_school_id: school.id, teaching_school_name: school.name }),
         created_at: serverTimestamp(),
       })
       await refreshProfile()
@@ -195,6 +251,66 @@ export default function Register() {
             ))}
           </div>
         </fieldset>
+
+        {form.role === 'teacher' && (
+          <div>
+            <label htmlFor="reg-school" style={authLabelStyle}>School</label>
+            <select
+              id="reg-school"
+              className="ak-input"
+              required
+              value={form.schoolId}
+              onChange={set('schoolId')}
+              style={{ ...authInputStyle, cursor: 'pointer', color: form.schoolId ? undefined : '#9AA6BD' }}
+            >
+              <option value="" disabled>
+                {schoolsQuery.isLoading ? 'Loading schools…' : 'Select the school you teach at'}
+              </option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.abbreviation})
+                </option>
+              ))}
+              <option value={NEW_SCHOOL}>My school isn’t listed — add it</option>
+            </select>
+
+            {addingSchool && (
+              <div className="flex flex-col gap-3.5" style={{ marginTop: 12 }}>
+                <div>
+                  <label htmlFor="reg-school-name" style={authLabelStyle}>Full name of school</label>
+                  <input
+                    id="reg-school-name"
+                    className="ak-input"
+                    required
+                    maxLength={120}
+                    placeholder="University of Cebu-Banilad"
+                    value={form.newSchoolName}
+                    onChange={set('newSchoolName')}
+                    style={authInputStyle}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="reg-school-abbr" style={authLabelStyle}>Abbreviation</label>
+                  <input
+                    id="reg-school-abbr"
+                    className="ak-input"
+                    required
+                    maxLength={12}
+                    placeholder="UCB"
+                    value={form.newSchoolAbbr}
+                    onChange={set('newSchoolAbbr')}
+                    style={{ ...authInputStyle, textTransform: 'uppercase' }}
+                  />
+                </div>
+                <p style={{ fontSize: 12, color: '#9AA6BD', margin: 0, lineHeight: 1.5 }}>
+                  Write the full official name without abbreviations, plus the short form
+                  colleagues know it by. Both will appear in this list for the next teacher
+                  from your school.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {!completing && (
           <>

@@ -14,6 +14,8 @@ import {
   DEPED_COMPONENT_PRESET,
   computeFinalGrade,
   finalAcrossPeriods,
+  rebalanceWeights,
+  redistributeWeights,
   weightsValid,
 } from './grading.js'
 
@@ -385,5 +387,61 @@ describe('weightsValid', () => {
     expect(weightsValid([
       { weight_percent: 20.5 }, { weight_percent: 20.5 }, { weight_percent: 59 },
     ])).toBe(true)
+  })
+})
+
+const rows = (...weights) => weights.map((w, i) => ({ id: `r${i}`, name: `Row ${i}`, weight_percent: String(w) }))
+const total = (rs) => rs.reduce((s, r) => s + (Number(r.weight_percent) || 0), 0)
+
+describe('rebalanceWeights', () => {
+  it('rescales the other rows in proportion and keeps the total at exactly 100', () => {
+    const next = rebalanceWeights(rows(30, 50, 20), 0, '40')
+    expect(next[0].weight_percent).toBe('40')
+    // 50:20 ratio over the remaining 60 → 43 : 17 (0.5-grid).
+    expect(Number(next[1].weight_percent)).toBeCloseTo(43, 1)
+    expect(Number(next[2].weight_percent)).toBeCloseTo(17, 1)
+    expect(total(next)).toBe(100)
+  })
+  it('two rows behave as complements', () => {
+    const next = rebalanceWeights(rows(60, 40), 1, '25')
+    expect(next[0].weight_percent).toBe('75')
+    expect(total(next)).toBe(100)
+  })
+  it('splits equally when every other row sits at zero', () => {
+    const next = rebalanceWeights(rows(0, 0, 0), 0, '40')
+    expect(next[1].weight_percent).toBe('30')
+    expect(next[2].weight_percent).toBe('30')
+  })
+  it('pinning a row at 100 zeroes the rest', () => {
+    const next = rebalanceWeights(rows(30, 50, 20), 1, '100')
+    expect(next[0].weight_percent).toBe('0')
+    expect(next[2].weight_percent).toBe('0')
+    expect(total(next)).toBe(100)
+  })
+  it('keeps the raw string in the edited cell so decimals stay typeable', () => {
+    const next = rebalanceWeights(rows(30, 50, 20), 0, '30.')
+    expect(next[0].weight_percent).toBe('30.')
+    expect(total(next)).toBe(100)
+  })
+  it('never sends a row negative when rounding overshoots', () => {
+    const next = rebalanceWeights(rows(25, 25, 25, 25, 25), 0, '99')
+    expect(next.every((r) => Number(r.weight_percent) >= 0)).toBe(true)
+    expect(total(next)).toBe(100)
+  })
+  it('a single row keeps whatever was typed', () => {
+    expect(rebalanceWeights(rows(100), 0, '70')[0].weight_percent).toBe('70')
+  })
+})
+
+describe('redistributeWeights', () => {
+  it('hands a removed row weight back to the survivors, keeping 100', () => {
+    const next = redistributeWeights(rows(50, 20).map((r) => ({ ...r })))
+    // 50:20 ratio scaled to 100 → 71.5 : 28.5 on the 0.5 grid.
+    expect(total(next)).toBe(100)
+    expect(Number(next[0].weight_percent)).toBeGreaterThan(Number(next[1].weight_percent))
+  })
+  it('splits 100 equally across all-zero rows', () => {
+    const next = redistributeWeights(rows(0, 0))
+    expect(next.map((r) => r.weight_percent)).toEqual(['50', '50'])
   })
 })

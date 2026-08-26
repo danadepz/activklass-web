@@ -10,6 +10,7 @@ import {
   browserSessionPersistence,
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import { toAuthEmail } from '@/lib/logins'
 import AuthLayout, {
   SubmitButton,
   EyeToggle,
@@ -20,11 +21,11 @@ import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { navy, ink } from '@/theme'
 
 const FRIENDLY_ERRORS = {
-  'auth/invalid-credential': 'Incorrect email or password.',
-  'auth/user-not-found': 'No account found with that email.',
-  'auth/wrong-password': 'Incorrect email or password.',
+  'auth/invalid-credential': 'Incorrect login or password.',
+  'auth/user-not-found': 'No account found with that email or login ID.',
+  'auth/wrong-password': 'Incorrect login or password.',
   'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
-  'auth/invalid-email': 'That email address is not valid.',
+  'auth/invalid-email': 'That email or login ID is not valid.',
 }
 
 export default function Login() {
@@ -46,7 +47,9 @@ export default function Login() {
       // "Keep me signed in" → persist across browser restarts; otherwise the
       // session is cleared when the tab/browser closes.
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence)
-      await signInWithEmailAndPassword(auth, email, password)
+      // Issued logins (snhs-789012) get the internal suffix appended here —
+      // people type only the prefix-and-digits form the school gave them.
+      await signInWithEmailAndPassword(auth, toAuthEmail(email), password)
       navigate('/portal')
     } catch (err) {
       setError(FRIENDLY_ERRORS[err.code] ?? 'Sign in failed. Please try again.')
@@ -67,14 +70,14 @@ export default function Login() {
         {notice && <AuthNotice>{notice}</AuthNotice>}
 
         <div>
-          <label htmlFor="login-email" style={authLabelStyle}>Email</label>
+          <label htmlFor="login-email" style={authLabelStyle}>Email or login ID</label>
           <input
             id="login-email"
             className="ak-input"
-            type="email"
+            type="text"
             required
-            autoComplete="email"
-            placeholder="you@school.edu.ph"
+            autoComplete="username"
+            placeholder="you@school.edu.ph or snhs-789012"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={authInputStyle}

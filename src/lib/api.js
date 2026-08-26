@@ -19,8 +19,10 @@ export class ApiError extends Error {
   }
 }
 
-/** Authenticated fetch against the Flask API. Attaches the Firebase ID token. */
-export async function api(path, { method = 'GET', body, requireAuth = true } = {}) {
+/** Authenticated fetch against the Flask API. Attaches the Firebase ID token.
+ * `keepalive` lets the browser finish sending the request even if the tab is
+ * closed right after it fires — for saves that must land once started. */
+export async function api(path, { method = 'GET', body, requireAuth = true, keepalive = false } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (requireAuth) {
     const user = auth.currentUser
@@ -33,6 +35,7 @@ export async function api(path, { method = 'GET', body, requireAuth = true } = {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      keepalive,
     })
   } catch (cause) {
     /* fetch rejects only when the request never got an answer at all: the API

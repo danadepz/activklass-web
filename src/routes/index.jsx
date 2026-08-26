@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
@@ -143,12 +144,38 @@ function Eyebrow({ children, color = muted }) {
   )
 }
 
+// Adds .ak-in once the element scrolls into view, then disconnects so the
+// reveal only ever plays once. The slide-in itself lives in index.css
+// (.ak-reveal-grid).
+function useRevealOnScroll() {
+  const ref = useRef(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.classList.add('ak-in')
+          io.disconnect()
+        }
+      },
+      { threshold: 0.15 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return ref
+}
+
 const primaryBtn =
   'inline-flex items-center gap-2.5 rounded-xl px-6 py-4 text-[15px] font-bold transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2'
 
 // --- page ----------------------------------------------------------------
 
 export default function Landing() {
+  const featureGridRef = useRevealOnScroll()
+  const stepsGridRef = useRevealOnScroll()
+  const auditCardRef = useRevealOnScroll()
   return (
     <div style={{ background: '#FAFAF6', color: ink, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
       <a
@@ -460,7 +487,7 @@ export default function Landing() {
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div ref={featureGridRef} className="ak-reveal-grid grid gap-5 md:grid-cols-3">
             {/* Feature 1 — Grading */}
             <article className="flex flex-col" style={{ background: '#FAFAF6', border: `1px solid ${line}`, borderRadius: 20, padding: 28, minHeight: 360 }}>
               <div style={{ ...mono, fontSize: 11, color: muted, fontWeight: 500, marginBottom: 20 }}>01 / Grading</div>
@@ -586,7 +613,7 @@ export default function Landing() {
               </h2>
             </div>
 
-            <div className="grid gap-px overflow-hidden md:grid-cols-3" style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div ref={stepsGridRef} className="ak-reveal-steps grid gap-px overflow-hidden md:grid-cols-3" style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)' }}>
               {STEPS.map((step) => (
                 <div key={step.n} style={{ background: navy, padding: '36px 32px' }}>
                   <div className="flex items-center gap-3" style={{ marginBottom: 28 }}>
@@ -640,7 +667,7 @@ export default function Landing() {
             </div>
 
             {/* Audit log card */}
-            <div style={{ background: '#FAFAF6', border: '1px solid rgba(14,42,92,0.1)', borderRadius: 20, padding: 32, boxShadow: '0 20px 60px -20px rgba(14,42,92,0.15)' }}>
+            <div ref={auditCardRef} className="ak-reveal-audit" style={{ background: '#FAFAF6', border: '1px solid rgba(14,42,92,0.1)', borderRadius: 20, padding: 32, boxShadow: '0 20px 60px -20px rgba(14,42,92,0.15)' }}>
               <div className="flex items-center justify-between" style={{ marginBottom: 24, paddingBottom: 20, borderBottom: `1px solid ${line}` }}>
                 <div>
                   <div style={{ ...serif, fontSize: 22, color: ink }}>Audit log · live</div>
@@ -717,7 +744,7 @@ export default function Landing() {
                 <div className="flex flex-wrap items-center gap-3.5">
                   <Link
                     to="/register"
-                    className={primaryBtn}
+                    className={`${primaryBtn} ak-cta-pulse`}
                     style={{ background: gold, color: navy, boxShadow: `0 3px 0 ${goldDeep}` }}
                   >
                     Create an account

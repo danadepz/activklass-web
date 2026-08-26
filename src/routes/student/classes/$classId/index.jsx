@@ -13,6 +13,7 @@ import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesFo
 import ClassStandingForecast from '@/components/ClassStandingForecast'
 import AttachmentField from '@/components/AttachmentField'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { MetricCard } from '@/components/ui/Card'
 import { formatSchedule } from '@/lib/schedule'
 
 const ATT_META = {
@@ -701,11 +702,12 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
   return (
     <div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5" style={{ marginBottom: 18 }}>
-        <Stat label="Rate" value={rate == null ? '—' : `${rate}%`} color={blueText} />
-        <Stat label="Present" value={tally.present} color={green} />
-        <Stat label="Late" value={tally.late} color={goldDeep} />
-        <Stat label="Absent" value={tally.absent} color={red} />
-        <Stat label="Excused" value={tally.excused} color={blueText} />
+        {/* icon-less MetricCards: five across, so the chips would crowd */}
+        <MetricCard label="Rate" value={rate == null ? '—' : `${rate}%`} valueColor={blueText} tint="rgba(14,42,92,0.07)" />
+        <MetricCard label="Present" value={tally.present} valueColor={green} tint="rgba(31,138,91,0.1)" />
+        <MetricCard label="Late" value={tally.late} valueColor={goldDeep} tint="rgba(245,197,24,0.15)" />
+        <MetricCard label="Absent" value={tally.absent} valueColor={red} tint="rgba(192,57,43,0.07)" />
+        <MetricCard label="Excused" value={tally.excused} valueColor={blueText} tint="rgba(63,169,245,0.13)" />
       </div>
 
       {log.length === 0 ? (
@@ -1068,16 +1070,6 @@ function PerfChart({ points, active, onActive }) {
   )
 }
 
-function AnalyticsStat({ label, value, sub, color }) {
-  return (
-    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
-      <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: faint, marginTop: 4 }}>{sub}</div>}
-    </div>
-  )
-}
-
 /* rgba(14,42,92,0.03) flattened over white: a translucent sticky header would
    let table rows scroll visibly through it. */
 const stickyTh = { position: 'sticky', top: 0, background: '#F8F9FA', zIndex: 1 }
@@ -1139,15 +1131,16 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
     <div className="flex flex-col gap-4">
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <AnalyticsStat label="Current grade" value={Math.round(entry.final_grade)} color={gradeColor(entry.final_grade)} />
-        <AnalyticsStat label="Your average" value={`${youAvg}%`} sub="across graded items" color={gradeColor(youAvg)} />
-        <AnalyticsStat
+        <MetricCard label="Current grade" value={Math.round(entry.final_grade)} valueColor={gradeColor(entry.final_grade)} tint="rgba(14,42,92,0.07)" />
+        <MetricCard label="Your average" value={`${youAvg}%`} sub="across graded items" valueColor={gradeColor(youAvg)} tint="rgba(63,169,245,0.13)" />
+        <MetricCard
           label="vs class"
           value={diff == null ? '—' : `${diff >= 0 ? '+' : ''}${diff}`}
           sub={classAvg == null ? '' : `class avg ${classAvg}%`}
-          color={diff == null ? faint : diff >= 0 ? green : red}
+          valueColor={diff == null ? faint : diff >= 0 ? green : red}
+          tint="rgba(245,197,24,0.15)"
         />
-        <AnalyticsStat label="Attendance" value={attendance.rate == null ? '—' : `${attendance.rate}%`} color={blueText} />
+        <MetricCard label="Attendance" value={attendance.rate == null ? '—' : `${attendance.rate}%`} valueColor={blueText} tint="rgba(31,138,91,0.1)" />
       </div>
 
       {/* Trend and the same numbers as a table, side by side.
@@ -1258,15 +1251,6 @@ function AnnouncementsTab({ announcements }) {
           </div>
         )
       })}
-    </div>
-  )
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '14px 16px' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
-      <div style={{ ...serif, fontSize: 28, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
     </div>
   )
 }

@@ -45,6 +45,25 @@ export const redDeep = '#922B21'
 export const blue = '#3FA9F5'
 export const blueText = '#1E6FB0'
 
+/**
+ * Chart-fill gold. Brand `gold` sits too light to carry a data mark on a white
+ * card, so charts use this deepened step; UI chrome keeps the brighter gold.
+ * Validated (with blueText/blue/goldDeep) for colorblind-safe adjacency.
+ */
+export const goldChart = '#D9A400'
+
+/**
+ * Accent pair for stat-card variety — decorative tints only, so a row of six
+ * MetricCards isn't limited to the four brand hues. Not status colors: keep
+ * green/red/gold for their meanings and use these where a tile just needs to
+ * look different from its neighbours. The *Deep steps are the icon/text
+ * colors that hold contrast on a white chip.
+ */
+export const violet = '#7C5CE0'
+export const violetDeep = '#5B3DB8'
+export const orange = '#E67E22'
+export const orangeDeep = '#A85410'
+
 // ---------------------------------------------------------------------------
 // Typography
 //

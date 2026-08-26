@@ -12,6 +12,22 @@
  */
 import { api } from './api'
 
+/** React Query key for the admin's school settings. */
+export const adminSchoolKey = ['admin-school-settings']
+
+/** The admin's school record: { school: {id, name, login_prefix} | null }. */
+export function fetchSchoolSettings() {
+  return api('/api/admin/school')
+}
+
+/**
+ * Sets the school's full name and its abbreviation — the abbreviation,
+ * lowercased, is the login prefix. Never rewrites existing accounts.
+ */
+export function saveSchoolSettings({ name, prefix }) {
+  return api('/api/admin/school', { method: 'PUT', body: { name, prefix } })
+}
+
 /** Creates the Auth account and the users/{uid} profile together. */
 export function createUser({ email, password, role, firstName, lastName, extra = {} }) {
   return api('/api/admin/users', {

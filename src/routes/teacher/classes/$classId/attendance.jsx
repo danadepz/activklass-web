@@ -10,6 +10,7 @@ import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { promptDialog } from '@/components/ui/dialogs'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { MetricCard } from '@/components/ui/Card'
 
 const STATUS_META = {
   present: { short: 'P', label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)', fillBg: green, fillFg: '#FFFFFF' },
@@ -53,23 +54,6 @@ function todayIso() {
 
 function emptyEntry() {
   return { status: 'none', remarks: '' }
-}
-
-function AttStat({ label, value, color, highlight }) {
-  return (
-    <div
-      style={{
-        background: '#FFFFFF',
-        borderRadius: 14,
-        padding: '16px 18px',
-        border: highlight ? '1px solid rgba(63,169,245,0.4)' : `1px solid ${line}`,
-        boxShadow: highlight ? '0 0 0 3px rgba(63,169,245,0.08)' : 'none',
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: muted }}>{label}</div>
-      <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: color ?? ink, marginTop: 4 }}>{value}</div>
-    </div>
-  )
 }
 
 /* Reusable Present/Late/Absent/Excused button group. */
@@ -203,11 +187,12 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
     <>
       {/* Live session tallies */}
       <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-        <AttStat label="Total" value={total} />
-        <AttStat label="Present" value={presentCount} color={green} />
-        <AttStat label="Absent" value={absentCount} color={red} />
-        <AttStat label="Late" value={lateCount} color={goldDeep} />
-        <AttStat label="Rate" value={rate} color={blueText} highlight />
+        {/* icon-less MetricCards: five across, so the chips would crowd */}
+        <MetricCard label="Total" value={total} tint="rgba(14,42,92,0.07)" />
+        <MetricCard label="Present" value={presentCount} valueColor={green} tint="rgba(31,138,91,0.1)" />
+        <MetricCard label="Absent" value={absentCount} valueColor={red} tint="rgba(192,57,43,0.07)" />
+        <MetricCard label="Late" value={lateCount} valueColor={goldDeep} tint="rgba(245,197,24,0.15)" />
+        <MetricCard label="Rate" value={rate} valueColor={blueText} tint="rgba(63,169,245,0.13)" />
       </div>
 
       {/* Action bar */}
@@ -351,18 +336,17 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   )
 }
 
-const CONTEST_STATUS = {
-  pending: { label: 'Pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
-  approved: { label: 'Approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
-  rejected: { label: 'Rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
-}
-
 /* Attendance disputes filed by students. The teacher approves (which marks that
-   date as excused on the attendance sheet) or rejects with a note. */
+   date as excused on the attendance sheet) or rejects with a note. The decision
+   is written to Firestore the moment the button is clicked; the row then slides
+   out of the queue, so the panel only ever holds work still to be done. */
 function ContestsPanel({ classId }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState(null)
+  // Resolved contests animating out. They stay 'pending' in the query cache
+  // until the slide finishes, so the row survives long enough to animate.
+  const [leavingIds, setLeavingIds] = useState([])
   const [error, setError] = useState(null)
 
   const { data: contests } = useQuery({
@@ -387,14 +371,24 @@ function ContestsPanel({ classId }) {
     },
   })
 
-  const list = contests ?? []
-  if (list.length === 0) return null
-  const pendingCount = list.filter((c) => c.status === 'pending').length
+  // Only undecided disputes appear; resolved ones slide out and stay gone.
+  const pending = (contests ?? []).filter((c) => c.status === 'pending')
+  if (pending.length === 0) return null
+  const pendingCount = pending.filter((c) => !leavingIds.includes(c.id)).length
 
-  const refetch = () => {
-    queryClient.invalidateQueries({ queryKey: ['fs-contests', classId] })
+  /* The decision itself is already committed by the time these run — this only
+     refreshes dependent views. The contests query is deliberately NOT
+     invalidated here: doing so would drop the row mid-animation. */
+  const refetchOthers = () => {
     queryClient.invalidateQueries({ queryKey: ['fs-attendance', classId] })
     queryClient.invalidateQueries({ queryKey: ['fs-pending-contests'] }) // refresh the bell
+  }
+
+  const beginLeave = (id) => setLeavingIds((ids) => [...ids, id])
+
+  const finishLeave = (id) => {
+    setLeavingIds((ids) => ids.filter((x) => x !== id))
+    queryClient.invalidateQueries({ queryKey: ['fs-contests', classId] })
   }
 
   async function approve(c) {
@@ -416,7 +410,7 @@ function ContestsPanel({ classId }) {
       })
       // Approving a contest rewrites that day, so the projection moves too.
       try {
-        await syncAttendanceSummaries(classId, sheet.students.map((s) => s.student_id))
+        await syncAttendanceSummaries(classId, [c.student_id])
       } catch (mirrorErr) {
         console.error('attendance summary sync failed:', mirrorErr)
       }
@@ -428,7 +422,8 @@ function ContestsPanel({ classId }) {
         message: `Your attendance contest for ${c.date} was approved — it's now marked Excused.`,
         link: `/student/classes/${classId}`,
       }).catch(() => {})
-      refetch()
+      refetchOthers()
+      beginLeave(c.id)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -466,7 +461,8 @@ function ContestsPanel({ classId }) {
         message: `Your attendance contest for ${c.date} was declined.`,
         link: `/student/classes/${classId}`,
       }).catch(() => {})
-      refetch()
+      refetchOthers()
+      beginLeave(c.id)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -492,35 +488,34 @@ function ContestsPanel({ classId }) {
       )}
 
       <div>
-        {list.map((c) => {
-          const tone = CONTEST_STATUS[c.status] ?? CONTEST_STATUS.pending
+        {pending.map((c) => {
+          const isLeaving = leavingIds.includes(c.id)
           return (
-            <div key={c.id} className="flex flex-wrap items-start justify-between gap-3" style={{ padding: '14px 18px', borderTop: '1px solid rgba(14,42,92,0.05)' }}>
+            <div
+              key={c.id}
+              className={`flex flex-wrap items-start justify-between gap-3${isLeaving ? ' ak-resolve-out' : ''}`}
+              onAnimationEnd={isLeaving ? (e) => e.target === e.currentTarget && finishLeave(c.id) : undefined}
+              style={{ padding: '14px 18px', borderTop: '1px solid rgba(14,42,92,0.05)' }}
+            >
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>{c.student_name}</span>
                   <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.date}</span>
                   <span style={{ fontSize: 11, color: faint }}>(marked {c.current_status})</span>
-                  <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>{tone.label}</span>
                 </div>
                 <div style={{ fontSize: 13, color: muted, lineHeight: 1.5 }}>{c.reason}</div>
                 {c.excuse_url && (
                   <a href={c.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: blueText }}>📎 View excuse document</a>
                 )}
-                {c.status === 'rejected' && c.resolution_note && (
-                  <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>Note: {c.resolution_note}</div>
-                )}
               </div>
-              {c.status === 'pending' && (
-                <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={() => approve(c)} disabled={busyId === c.id} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-                    Approve
-                  </button>
-                  <button onClick={() => reject(c)} disabled={busyId === c.id} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
-                    Reject
-                  </button>
-                </div>
-              )}
+              <div className="flex gap-2 flex-shrink-0">
+                <button onClick={() => approve(c)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                  Approve
+                </button>
+                <button onClick={() => reject(c)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
+                  Reject
+                </button>
+              </div>
             </div>
           )
         })}

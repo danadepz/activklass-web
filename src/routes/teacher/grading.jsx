@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
-import { GRADING_MODES, GRADING_PRESETS, weightsValid } from '@/lib/grading'
+import { GRADING_MODES, GRADING_PRESETS, rebalanceWeights, redistributeWeights, weightsValid } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
@@ -113,7 +113,7 @@ function withIds(rows, extraKeys = []) {
     })
 }
 
-function EditorCard({ title, hint, rows, setRows, addLabel }) {
+function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
   // Badge reflects what would actually be saved, so it agrees with the check
   // in persist() rather than counting weights on unnamed rows.
   const counted = namedRows(rows)
@@ -121,8 +121,14 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
   const ok = balanced(rows)
   const ignored = rows.length - counted.length
 
+  /* Weights are reactive: setting one rescales the others so the card always
+     totals 100 (rebalanceWeights in lib/grading.js). Names edit normally. */
   const update = (index, key, value) =>
-    setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
+    setRows(
+      key === 'weight_percent'
+        ? rebalanceWeights(rows, index, value)
+        : rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
+    )
 
   return (
     <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
@@ -145,13 +151,19 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
 
       <div className="flex flex-col gap-2.5">
         {rows.map((row, i) => (
-          <div key={row.id ?? `new-${i}`} className="flex items-center gap-2.5">
+          /* Rows must never poke out of the card: the name input is the only
+             piece allowed to shrink (minWidth: 0 beats the browser's built-in
+             input minimum), the slider gives ground next, and the number box
+             and × stay fixed. Before this, the × sat outside the card edge
+             whenever the two-column grid left the card narrower than the
+             fixed widths added up to. */
+          <div key={row.id ?? `new-${i}`} className="flex items-center gap-2">
             <input
               className="ak-input"
               placeholder="Name"
               value={row.name}
               onChange={(e) => update(i, 'name', e.target.value)}
-              style={{ ...fieldStyle, flex: 1 }}
+              style={{ ...fieldStyle, flex: '1 1 90px', minWidth: 0 }}
             />
             <input
               type="range"
@@ -160,9 +172,9 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
               step="5"
               value={parseFloat(row.weight_percent) || 0}
               onChange={(e) => update(i, 'weight_percent', e.target.value)}
-              style={{ width: 112, accentColor: navy }}
+              style={{ flex: '0 1 112px', minWidth: 64, accentColor: navy }}
             />
-            <div className="relative">
+            <div className="relative" style={{ flexShrink: 0 }}>
               <input
                 className="ak-input"
                 type="number"
@@ -172,16 +184,16 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
                 placeholder="0"
                 value={row.weight_percent}
                 onChange={(e) => update(i, 'weight_percent', e.target.value)}
-                style={{ ...fieldStyle, width: 88, paddingRight: 26, textAlign: 'right' }}
+                style={{ ...fieldStyle, width: 76, paddingRight: 26, textAlign: 'right' }}
               />
               <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
             </div>
             <IconButton
-              onClick={() => setRows(rows.filter((_, j) => j !== i))}
-              disabled={rows.length === 1}
+              onClick={() => setRows(redistributeWeights(rows.filter((_, j) => j !== i)))}
+              disabled={rows.length === 1 || busy}
               label="Remove"
               className="transition hover:text-[#C0392B] disabled:cursor-not-allowed"
-              style={{ color: faint, fontSize: 18, opacity: rows.length === 1 ? 0.3 : 1 }}
+              style={{ color: faint, fontSize: 18, flexShrink: 0, opacity: rows.length === 1 || busy ? 0.3 : 1 }}
             >
               ×
             </IconButton>
@@ -192,8 +204,9 @@ function EditorCard({ title, hint, rows, setRows, addLabel }) {
       <button
         type="button"
         onClick={() => setRows([...rows, newRow()])}
-        className="mt-3 transition hover:opacity-70"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        disabled={busy}
+        className="mt-3 transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
       >
         <span style={{ color: gold }}>+</span> {addLabel}
       </button>
@@ -243,42 +256,22 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     const processedPeriods = withIds(nextPeriods)
     const processedComponents = withIds(nextComponents)
 
-    // Save global preset
-    await setDoc(doc(db, 'grading_presets', profile.id), {
-      grading_mode: nextMode,
-      periods: processedPeriods,
-      components: processedComponents,
-      updated_at: serverTimestamp(),
+    /* One request; the backend does the whole save — the preset doc, the
+       per-class SQLite rows, and the per-class gradebook docs. Those last two
+       used to be written from here after the API answered, so a tab closed
+       mid-save left the stores disagreeing. Now, once this request reaches
+       the server, the save completes whether or not this page is still open;
+       keepalive lets the browser finish sending it even on unload. */
+    const res = await api('/api/grading-setup', {
+      method: 'POST',
+      keepalive: true,
+      body: {
+        class_ids: selectedClassIds,
+        grading_mode: nextMode,
+        periods: processedPeriods,
+        components: processedComponents,
+      },
     })
-
-    let skipped = []
-    if (selectedClassIds.length > 0) {
-      // 1. Sync classes SQLite
-      const res = await api('/api/grading-setup', {
-        method: 'POST',
-        body: {
-          class_ids: selectedClassIds,
-          periods: processedPeriods,
-          components: processedComponents,
-        },
-      })
-      skipped = res?.skipped ?? []
-
-      // 2. Sync classes Firestore
-      const batch = writeBatch(db)
-      for (const cid of selectedClassIds) {
-        const docRef = doc(db, 'gradebooks', cid)
-        batch.set(docRef, {
-          teacher_id: profile.id,
-          grading_mode: nextMode,
-          periods: processedPeriods.map(p => ({ ...p, locked: false })),
-          components: processedComponents,
-          configured: true,
-          updated_at: serverTimestamp(),
-        }, { merge: true })
-      }
-      await batch.commit()
-    }
 
     queryClient.invalidateQueries({ queryKey: ['fs-grading-preset', profile.id] })
     for (const cid of selectedClassIds) {
@@ -286,11 +279,22 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       queryClient.invalidateQueries({ queryKey: ['fs-record', cid] })
     }
 
-    return { skipped, requested: selectedClassIds.length }
+    return {
+      skipped: res?.skipped ?? [],
+      requested: selectedClassIds.length,
+      firestoreSynced: res?.firestore_synced !== false,
+    }
   }
 
-  const flash = ({ skipped = [], requested = 0 } = {}) => {
+  const flash = ({ skipped = [], requested = 0, firestoreSynced = true } = {}) => {
     setError(null)
+    if (!firestoreSynced) {
+      // SQLite took the save but the cloud mirror did not — the one state the
+      // teacher can fix themselves by saving again.
+      reportError('Saved to the class records, but the cloud copy did not update. Save again to retry.')
+      setSaved('')
+      return
+    }
     if (skipped.length) {
       // Left on screen. A partial sync is something the teacher has to act on,
       // and a banner that clears itself after 2.5s is one they can miss.
@@ -331,6 +335,10 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     onError: (err) => reportError(err.message),
   })
 
+  // Every button on the form keys off this: a second click mid-save would
+  // race the request in flight (two saves, last-write-wins on the backend).
+  const busy = save.isPending || applyPreset.isPending
+
   return (
     <div className="max-w-4xl pb-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -353,8 +361,8 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
             </p>
           )}
         </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending} radius={11}>
-          {save.isPending ? 'Saving…' : 'Save & Sync'}
+        <Button onClick={() => save.mutate()} disabled={busy} radius={11}>
+          {busy ? 'Saving…' : 'Save & Sync'}
           <GoldArrowDot>
             <ArrowRight className="h-3 w-3" />
           </GoldArrowDot>
@@ -379,9 +387,9 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
                   applyPreset.mutate(p)
                 }
               }}
-              disabled={applyPreset.isPending}
+              disabled={busy}
               className="transition hover:brightness-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ textAlign: 'left', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', fontFamily: sans }}
+              style={{ textAlign: 'left', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '14px 16px', cursor: busy ? 'not-allowed' : 'pointer', fontFamily: sans }}
             >
               <div style={{ fontSize: 14, fontWeight: 800, color: ink, marginBottom: 4 }}>{p.label}</div>
               <div style={{ fontSize: 12, color: muted, lineHeight: 1.4 }}>
@@ -419,6 +427,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
                   <input
                     type="checkbox"
                     checked={checked}
+                    disabled={busy}
                     onChange={() => toggleClass(clazz.id)}
                     className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                   />
@@ -447,9 +456,10 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
                 key={m.value}
                 type="button"
                 onClick={() => setGradingMode(m.value)}
-                className="transition hover:brightness-105"
+                disabled={busy}
+                className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
-                  padding: '11px 18px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11, cursor: 'pointer', textAlign: 'left',
+                  padding: '11px 18px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
                   ...(active
                     ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
                     : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
@@ -469,6 +479,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           rows={periods}
           setRows={setPeriods}
           addLabel="Add period"
+          busy={busy}
         />
         <EditorCard
           title="Grade Components"
@@ -476,6 +487,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           rows={components}
           setRows={setComponents}
           addLabel="Add component"
+          busy={busy}
         />
       </div>
     </div>

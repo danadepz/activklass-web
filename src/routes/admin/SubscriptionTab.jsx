@@ -9,6 +9,7 @@ import {
 import { ink, muted, faint, green, red, gold, navy, line, serif, mono } from '@/theme'
 import { card, field, th } from './ui'
 import Notice from './Notice'
+import CardHead from './CardHead'
 import Button from '@/components/ui/Button'
 import { confirmDialog } from '@/components/ui/dialogs'
 import ChangePassword from '@/components/ChangePassword'
@@ -76,16 +77,24 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
   return (
     <section style={{ ...card, padding: 22 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                        textTransform: 'uppercase', color: muted }}>
-            {sub.type === 'institution' ? 'Institution subscription' : 'Solo teacher subscription'}
-          </div>
-          <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '4px 0 2px' }}>
-            {sub.school_name ?? ownerId}
-          </h2>
-          <div style={{ fontSize: 13, color: muted }}>
-            {sub.period_label} · {sub.period_start} → {sub.period_end}
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(14,42,92,0.07)', border: `1px solid ${line}`, display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 20 }}
+          >
+            🏛️
+          </span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                          textTransform: 'uppercase', color: muted }}>
+              {sub.type === 'institution' ? 'Institution subscription' : 'Solo teacher subscription'}
+            </div>
+            <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '4px 0 2px' }}>
+              {sub.school_name ?? ownerId}
+            </h2>
+            <div style={{ fontSize: 13, color: muted }}>
+              {sub.period_label} · {sub.period_start} → {sub.period_end}
+            </div>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -207,12 +216,13 @@ function TeacherSeatsCard({ onChanged }) {
 
   return (
     <section style={{ ...card, padding: 22 }}>
-      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Teachers on your plan</h2>
-      <p style={{ fontSize: 13, color: muted, margin: '0 0 16px', lineHeight: 1.6 }}>
-        Invite a teacher who currently pays for their own ActivKlass plan. When they accept, their
-        subscription stops and they take one of your teacher seats. Their classes, students and
-        records are not transferred — this moves billing only.
-      </p>
+      <CardHead
+        icon="🧑‍🏫"
+        tint="rgba(63,169,245,0.13)"
+        title="Teachers on your plan"
+        sub="Invite a teacher who currently pays for their own ActivKlass plan. When they accept, their subscription stops and they take one of your teacher seats. Their classes, students and records are not transferred — this moves billing only."
+        style={{ marginBottom: 16 }}
+      />
 
       <form
         onSubmit={(e) => { e.preventDefault(); invite.mutate() }}
@@ -363,11 +373,12 @@ export default function SubscriptionTab() {
       {plans && (
         <section style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
-            <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>Available plans</h2>
-            <p style={{ fontSize: 13, color: muted, margin: '4px 0 0' }}>
-              Seat counts are limits, not reservations — usage is measured live from the user list.
-              Nothing is blocked when a limit is passed.
-            </p>
+            <CardHead
+              icon="🗂️"
+              tint="rgba(245,197,24,0.15)"
+              title="Available plans"
+              sub="Seat counts are limits, not reservations — usage is measured live from the user list. Nothing is blocked when a limit is passed."
+            />
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>

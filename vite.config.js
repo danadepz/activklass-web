@@ -25,6 +25,6 @@ export default defineConfig({
     },
     // VS Code port forwarding serves from *.devtunnels.ms; without this Vite
     // rejects the Host header and the page renders "Blocked request".
-    allowedHosts: ['.devtunnels.ms'],
+    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com'],
   },
 })

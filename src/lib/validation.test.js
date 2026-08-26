@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { emailError, nameError, passwordError, yearLevelError } from './validation'
+import {
+  emailError, nameError, passwordError, tempPasswordError, yearLevelError,
+  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError,
+} from './validation'
 
 describe('nameError', () => {
   it('accepts ordinary and Filipino names', () => {
@@ -41,6 +44,18 @@ describe('passwordError', () => {
   })
 })
 
+describe('tempPasswordError', () => {
+  it('accepts the standing default and anything 8+ characters', () => {
+    expect(tempPasswordError('pass1234')).toBe('')
+    expect(tempPasswordError('aaaaaaaa')).toBe('')
+  })
+  it('rejects short values, and blanks only when required', () => {
+    expect(tempPasswordError('short')).not.toBe('')
+    expect(tempPasswordError('')).not.toBe('')
+    expect(tempPasswordError('', { required: false })).toBe('')
+  })
+})
+
 describe('yearLevelError', () => {
   it('accepts both formats when the level is unknown', () => {
     expect(yearLevelError('Grade 10')).toBe('')
@@ -59,6 +74,73 @@ describe('yearLevelError', () => {
     expect(yearLevelError('6th Year')).not.toBe('')
     expect(yearLevelError('sophomore')).not.toBe('')
     expect(yearLevelError('10')).not.toBe('')
+  })
+})
+
+describe('idNumberError', () => {
+  it('accepts school-issued number shapes', () => {
+    expect(idNumberError('2024-00123')).toBe('')
+    expect(idNumberError('T-2024-018')).toBe('')
+    expect(idNumberError('AB.123')).toBe('')
+  })
+  it('rejects blanks, leading punctuation and stray characters', () => {
+    expect(idNumberError('')).not.toBe('')
+    expect(idNumberError('-2024')).not.toBe('')
+    expect(idNumberError('2024/00123')).not.toBe('')
+    expect(idNumberError('20 24')).not.toBe('')
+  })
+  it('names the field in the message', () => {
+    expect(idNumberError('', { label: 'Employee number' })).toMatch(/Employee number/)
+  })
+})
+
+describe('lrnError', () => {
+  it('accepts exactly 12 digits', () => {
+    expect(lrnError('123456789012')).toBe('')
+  })
+  it('rejects blanks, short, long and non-digit values', () => {
+    expect(lrnError('')).not.toBe('')
+    expect(lrnError('12345')).not.toBe('')
+    expect(lrnError('1234567890123')).not.toBe('')
+    expect(lrnError('12345678901a')).not.toBe('')
+  })
+})
+
+describe('loginPrefixError', () => {
+  it('accepts short alphanumeric prefixes regardless of case', () => {
+    expect(loginPrefixError('snhs')).toBe('')
+    expect(loginPrefixError('SNHS2')).toBe('')
+  })
+  it('rejects blanks, symbols and out-of-range lengths', () => {
+    expect(loginPrefixError('')).not.toBe('')
+    expect(loginPrefixError('s')).not.toBe('')
+    expect(loginPrefixError('no spaces')).not.toBe('')
+    expect(loginPrefixError('waytoolongprefix')).not.toBe('')
+  })
+})
+
+describe('schoolNameError', () => {
+  it('accepts real full names, hyphens and campuses included', () => {
+    expect(schoolNameError('University of Cebu-Banilad')).toBe('')
+    expect(schoolNameError('Sta. Niña National High School')).toBe('')
+  })
+  it('rejects blanks, letterless input and over-long names', () => {
+    expect(schoolNameError('')).not.toBe('')
+    expect(schoolNameError('12')).not.toBe('')
+    expect(schoolNameError('x'.repeat(121))).not.toBe('')
+  })
+})
+
+describe('schoolAbbrError', () => {
+  it('accepts short alphanumeric forms regardless of case', () => {
+    expect(schoolAbbrError('UCB')).toBe('')
+    expect(schoolAbbrError('snhs2')).toBe('')
+  })
+  it('rejects blanks, symbols and out-of-range lengths', () => {
+    expect(schoolAbbrError('')).not.toBe('')
+    expect(schoolAbbrError('U')).not.toBe('')
+    expect(schoolAbbrError('U C B')).not.toBe('')
+    expect(schoolAbbrError('waytoolongabbrev')).not.toBe('')
   })
 })
 

@@ -142,6 +142,99 @@
   scale: 1.03;
 }
 
+/* Feature-card scroll reveal (Landing).
+ *
+ * Children of .ak-reveal-grid start shifted down and transparent; when the
+ * grid scrolls into view, Landing adds .ak-in and each card slides up in
+ * turn (nth-child staggers the delay). The reveal runs once — the observer
+ * disconnects after firing, so scrolling back up never re-hides the cards.
+ *
+ * Under reduced motion the cards are simply visible from the start: the
+ * global reduce block collapses transition-duration but not -delay, which
+ * would otherwise leave a staggered pop-in. */
+.ak-reveal-grid > * {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ak-reveal-grid.ak-in > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+.ak-reveal-grid.ak-in > *:nth-child(2) { transition-delay: 0.12s; }
+.ak-reveal-grid.ak-in > *:nth-child(3) { transition-delay: 0.24s; }
+
+/* Step-card scroll reveal (Landing, "How it works").
+ *
+ * Same observer/.ak-in contract as .ak-reveal-grid, but the cards enter
+ * from the left and the stagger is long enough that each card finishes
+ * arriving before the next starts — reading as counting 1, 2, 3 rather
+ * than a single cascading wave. The parent grid's overflow-hidden clips
+ * the shifted cards inside its rounded border while they slide in. */
+.ak-reveal-steps > * {
+  opacity: 0;
+  transform: translateX(-32px);
+  transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ak-reveal-steps.ak-in > * {
+  opacity: 1;
+  transform: translateX(0);
+}
+.ak-reveal-steps.ak-in > *:nth-child(2) { transition-delay: 0.4s; }
+.ak-reveal-steps.ak-in > *:nth-child(3) { transition-delay: 0.8s; }
+
+/* CTA "Create an account" pulse (Landing).
+ *
+ * A gold ring swells out of the button and fades, drawing the eye to the
+ * primary action. Animating box-shadow replaces the inline base shadow
+ * (the 0 3px goldDeep press edge) for the animation's duration, so every
+ * keyframe restates it alongside the spreading ring. Paused on hover:
+ * once the cursor has found the button the nudge has done its job. */
+@keyframes ak-cta-pulse {
+  0% {
+    box-shadow: 0 3px 0 #8B6A00, 0 0 0 0 rgba(245, 197, 24, 0.55);
+  }
+  70%, 100% {
+    box-shadow: 0 3px 0 #8B6A00, 0 0 0 18px rgba(245, 197, 24, 0);
+  }
+}
+.ak-cta-pulse {
+  animation: ak-cta-pulse 2.2s ease-out infinite;
+}
+.ak-cta-pulse:hover {
+  animation-play-state: paused;
+}
+
+/* Audit-log card scroll reveal (Landing, compliance section).
+ *
+ * Same observer/.ak-in contract as the reveals above, but this one zooms:
+ * the card starts slightly shrunk and grows to full size, then keeps a
+ * slow idle float. ak-float owns `transform` (translateY), so the zoom
+ * uses the standalone `scale` property — same trick as .ak-hero-card —
+ * letting the grow-in and the bob run at the same time without fighting. */
+.ak-reveal-audit {
+  animation: ak-float 7s ease-in-out infinite;
+  opacity: 0;
+  scale: 0.93;
+  transition: opacity 0.7s ease, scale 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ak-reveal-audit.ak-in {
+  opacity: 1;
+  scale: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ak-reveal-grid > *,
+  .ak-reveal-steps > * {
+    opacity: 1;
+    transform: none;
+  }
+  .ak-reveal-audit {
+    opacity: 1;
+    scale: none;
+  }
+}
+
 /* Marketing/auth text inputs — navy focus ring (the !important overrides the
    inline base border these fields carry). Used by the Login/Register shell. */
 .ak-input::placeholder { color: #9AA6BD; }
@@ -228,6 +321,32 @@
 @keyframes ak-toast-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ------------------------------------------------------------------ *
+ * Resolved-item exit (teacher attendance disputes, and any other queue
+ * where a decided row leaves the screen).
+ *
+ * Two movements in one animation: the row first slides right and fades
+ * (the decision leaving), then its height collapses so the list below
+ * closes the gap rather than jumping. max-height because height is
+ * unknown per row; 320px comfortably covers the tallest dispute card.
+ *
+ * The animation overrides the row's inline padding while it runs, and
+ * `forwards` holds the collapsed state until React unmounts the row on
+ * the animationend refetch. The reduced-motion block above collapses
+ * the duration, so those users see the row simply disappear —
+ * animationend still fires, so removal logic keyed to it stays sound.
+ * ------------------------------------------------------------------ */
+@keyframes ak-resolve-out {
+  0%   { opacity: 1; transform: translateX(0);    max-height: 320px; }
+  55%  { opacity: 0; transform: translateX(48px); max-height: 320px; }
+  100% { opacity: 0; transform: translateX(48px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+.ak-resolve-out {
+  animation: ak-resolve-out 0.45s ease-in forwards;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------------ *

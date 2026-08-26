@@ -23,6 +23,7 @@ import { ArrowRight, Plus } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import { MetricCard } from '@/components/ui/Card'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
@@ -97,24 +98,6 @@ function AlertBox({ tone = 'error', children }) {
   return (
     <div role="alert" style={{ fontSize: 13, color: t.color, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 12px' }}>
       {children}
-    </div>
-  )
-}
-
-function StatMini({ label, value, sub, color, highlight }) {
-  return (
-    <div
-      style={{
-        background: '#FFFFFF',
-        borderRadius: 14,
-        padding: '16px 18px',
-        border: highlight ? '1px solid rgba(245,197,24,0.45)' : `1px solid ${line}`,
-        boxShadow: highlight ? '0 0 0 3px rgba(245,197,24,0.08)' : 'none',
-      }}
-    >
-      <div style={{ fontSize: 11, fontWeight: 700, color: highlight ? goldDeep : muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ ...serif, fontSize: 32, lineHeight: 1, color: color ?? ink, marginTop: 6 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 6 }}>{sub}</div>}
     </div>
   )
 }
@@ -466,11 +449,12 @@ function RecordGrid({ classId, record, refetch }) {
     <>
       {record.students.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-          <StatMini label="Class average" value={fmt(avg)} sub={`across ${record.students.length} students`} />
-          <StatMini label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ≥ 75`} color={green} />
-          <StatMini label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" color={goldDeep} highlight={atRisk > 0} />
-          <StatMini label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} color={green} />
-          <StatMini label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} color={red} />
+          {/* icon-less MetricCards: five across, so the chips would crowd */}
+          <MetricCard label="Class average" value={fmt(avg)} sub={`across ${record.students.length} students`} tint="rgba(14,42,92,0.07)" />
+          <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ≥ 75`} valueColor={green} tint="rgba(31,138,91,0.1)" />
+          <MetricCard label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" highlight={atRisk > 0} />
+          <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} valueColor={green} tint="rgba(63,169,245,0.13)" />
+          <MetricCard label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} valueColor={red} tint="rgba(192,57,43,0.07)" />
         </div>
       )}
 

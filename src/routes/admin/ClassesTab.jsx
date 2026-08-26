@@ -1,9 +1,12 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useAdminOverview } from '@/hooks/useAdminOverview'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { ink, muted, faint, green, red, gold, line, serif, mono } from '@/theme'
+import { navy, ink, muted, faint, green, red, blueText, orangeDeep, line, serif, mono } from '@/theme'
+import { Layers, BookOpen, Users, BarChart } from '@/components/icons'
 import { card, field, btnGhost, th } from './ui'
+import { MetricCard } from '@/components/ui/Card'
 import Notice from './Notice'
+import CardHead from './CardHead'
 
 function pct(value) {
   return value == null ? '—' : `${value}%`
@@ -43,25 +46,15 @@ export default function ClassesTab() {
   return (
     <div style={{ display: 'grid', gap: 22 }}>
       {/* School-wide statistics */}
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))' }}>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
+        {/* One hue per tile — decorative variety, not status coding. */}
         {[
-          { label: 'Classes', value: s.activeClasses, sub: s.classes !== s.activeClasses ? `${s.classes} incl. archived` : null },
-          { label: 'Teachers', value: s.teachers },
-          { label: 'Students', value: s.students },
-          { label: 'Quizzes', value: s.quizzes },
-          { label: 'Attempts', value: s.attempts },
-          { label: 'School average', value: pct(s.schoolAverage), color: gold },
+          { label: 'Classes', value: s.activeClasses, sub: s.classes !== s.activeClasses ? `${s.classes} incl. archived` : null, tint: 'rgba(14,42,92,0.08)', Icon: Layers, iconColor: navy },
+          { label: 'Teachers', value: s.teachers, tint: 'rgba(63,169,245,0.15)', Icon: BookOpen, iconColor: blueText },
+          { label: 'Students', value: s.students, tint: 'rgba(31,138,91,0.12)', Icon: Users, iconColor: green },
+          { label: 'School average', value: pct(s.schoolAverage), color: orangeDeep, tint: 'rgba(230,126,34,0.13)', Icon: BarChart, iconColor: orangeDeep },
         ].map((k) => (
-          <div key={k.label} style={{ ...card, padding: '14px 18px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                          textTransform: 'uppercase', color: muted }}>
-              {k.label}
-            </div>
-            <div style={{ ...serif, fontSize: 26, lineHeight: 1, color: k.color ?? ink, marginTop: 5 }}>
-              {k.value}
-            </div>
-            {k.sub && <div style={{ fontSize: 11.5, color: faint, marginTop: 4 }}>{k.sub}</div>}
-          </div>
+          <MetricCard key={k.label} label={k.label} value={k.value} sub={k.sub} valueColor={k.color} tint={k.tint} Icon={k.Icon} iconColor={k.iconColor} />
         ))}
       </div>
 
@@ -73,19 +66,25 @@ export default function ClassesTab() {
       )}
 
       <section style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}`,
-                      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0, flex: 1 }}>
-            All classes <span style={{ ...mono, fontSize: 13, color: faint }}>{rows.length}</span>
-          </h2>
-          <input placeholder="Search class, subject or teacher" value={search}
-                 onChange={(e) => setSearch(e.target.value)}
-                 style={{ ...field, width: 250, padding: '8px 12px', fontSize: 13 }} />
-          <label style={{ fontSize: 13, color: muted, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Show archived
-          </label>
-          <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}>Export CSV</button>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
+          <CardHead
+            icon="🏫"
+            tint="rgba(14,42,92,0.07)"
+            title="All classes"
+            count={rows.length}
+            action={
+              <div className="flex flex-wrap items-center gap-3">
+                <input placeholder="Search class, subject or teacher" value={search}
+                       onChange={(e) => setSearch(e.target.value)}
+                       style={{ ...field, width: 250, padding: '8px 12px', fontSize: 13 }} />
+                <label style={{ fontSize: 13, color: muted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                  Show archived
+                </label>
+                <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}>Export CSV</button>
+              </div>
+            }
+          />
         </div>
 
         {rows.length === 0 ? (

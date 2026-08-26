@@ -6,6 +6,8 @@ import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { computeFinalGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
+import { MetricCard, Panel } from '@/components/ui/Card'
 import PredictedRisk from '@/components/PredictedRisk'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 
@@ -93,36 +95,13 @@ function buildRows(bundle, period) {
 
 // --- presentational bits --------------------------------------------------
 
-function Kpi({ label, value, sub, color, highlight }) {
-  return (
-    <div
-      style={{
-        background: '#FFFFFF',
-        borderRadius: 14,
-        padding: '18px 20px',
-        border: highlight ? '1px solid rgba(245,197,24,0.4)' : `1px solid ${line}`,
-        boxShadow: highlight ? '0 0 0 3px rgba(245,197,24,0.08)' : 'none',
-      }}
-    >
-      <div style={{ fontSize: 11, fontWeight: 700, color: highlight ? goldDeep : muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ ...serif, fontSize: 36, lineHeight: 1, color: color ?? ink, marginTop: 6 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 8 }}>{sub}</div>}
-    </div>
-  )
-}
-
+/* Local alias over the shared Panel so existing call sites keep their
+   `right` slot name. */
 function Card({ title, sub, children, right }) {
   return (
-    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
-      <div className="flex items-start justify-between gap-3" style={{ marginBottom: 16 }}>
-        <div>
-          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>{title}</h3>
-          {sub && <p style={{ fontSize: 12, color: faint, margin: 0 }}>{sub}</p>}
-        </div>
-        {right}
-      </div>
+    <Panel title={title} sub={sub} action={right}>
       {children}
-    </div>
+    </Panel>
   )
 }
 
@@ -269,10 +248,10 @@ export default function PerformancePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <Kpi label="Class average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} />
-        <Kpi label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ≥ 75`} color={green} />
-        <Kpi label="Below VS" value={belowVsCount} sub="grade below 85 this period" color={goldDeep} highlight={belowVsCount > 0} />
-        <Kpi label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} color={green} />
+        <MetricCard label="Class average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} Icon={BarChart} tint="rgba(14,42,92,0.07)" iconColor={navy} />
+        <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ≥ 75`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Below VS" value={belowVsCount} sub="grade below 85 this period" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={belowVsCount > 0} />
+        <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} valueColor={green} Icon={TrendingUp} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
       </div>
 
       {graded.length === 0 ? (

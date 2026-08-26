@@ -7,6 +7,7 @@ import { computeStudentFinal } from '@/lib/gradebook'
 import { BarChart, FileText, Users, Notebook, AlertCircle, ArrowRight } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import { MetricCard } from '@/components/ui/Card'
 
 const MODE_LABEL = { deped_k12: 'DepEd K-12', ched_percentage: 'CHED %', ched_point: 'CHED point' }
 
@@ -73,31 +74,6 @@ async function loadReports(teacherId) {
 }
 
 // --- presentational --------------------------------------------------------
-
-function Kpi({ label, value, sub, color, Icon, highlight }) {
-  return (
-    <div
-      style={{
-        background: '#FFFFFF',
-        borderRadius: 14,
-        padding: '18px 20px',
-        border: highlight ? '1px solid rgba(245,197,24,0.4)' : `1px solid ${line}`,
-        boxShadow: highlight ? '0 0 0 3px rgba(245,197,24,0.08)' : 'none',
-      }}
-    >
-      <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-        {Icon && (
-          <span style={{ display: 'inline-grid', placeItems: 'center', width: 26, height: 26, borderRadius: 7, background: 'rgba(14,42,92,0.07)', color: navy }}>
-            <Icon className="h-[14px] w-[14px]" />
-          </span>
-        )}
-        <span style={{ fontSize: 11, fontWeight: 700, color: highlight ? goldDeep : muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</span>
-      </div>
-      <div style={{ ...serif, fontSize: 34, lineHeight: 1, color: color ?? ink }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 8 }}>{sub}</div>}
-    </div>
-  )
-}
 
 const th = { padding: '11px 16px', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
 const td = { padding: '14px 16px', fontSize: 14, color: ink, verticalAlign: 'middle' }
@@ -206,10 +182,10 @@ export default function ReportsPage() {
 
       {/* Global KPIs */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <Kpi label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} with grading set up`} Icon={Notebook} />
-        <Kpi label="Students" value={totalStudents} sub={`${totalAssessed} assessed across classes`} Icon={Users} />
-        <Kpi label="Passing rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} color={green} Icon={BarChart} />
-        <Kpi label="Not yet passing" value={notPassing} sub="of the students already assessed" color={goldDeep} Icon={AlertCircle} highlight={notPassing > 0} />
+        <MetricCard label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} with grading set up`} Icon={Notebook} tint="rgba(14,42,92,0.07)" iconColor={navy} />
+        <MetricCard label="Students" value={totalStudents} sub={`${totalAssessed} assessed across classes`} Icon={Users} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
+        <MetricCard label="Passing rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} valueColor={green} Icon={BarChart} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Not yet passing" value={notPassing} sub="of the students already assessed" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={notPassing > 0} />
       </div>
 
       {/* Per-class breakdown */}

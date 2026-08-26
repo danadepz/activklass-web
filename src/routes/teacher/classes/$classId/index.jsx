@@ -16,7 +16,8 @@ import {
   findStudentByEmail,
   parseCsv,
 } from '@/lib/roster'
-import { X, Users, FileText } from '@/components/icons'
+import { Users, Check, Clock, Layers } from '@/components/icons'
+import { MetricCard } from '@/components/ui/Card'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { toast } from '@/components/ui/toast'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -996,16 +997,6 @@ function pillStyle(tone) {
 }
 const statusTone = (status) => (status === 'mastered' ? 'blue' : status === 'needs_remediation' ? 'gold' : 'green')
 
-function StatCard({ label, value, sub, color }) {
-  return (
-    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: muted, marginBottom: 12 }}>{label}</div>
-      <div style={{ ...serif, fontSize: 40, lineHeight: 1, color: color ?? ink }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: faint, marginTop: 8 }}>{sub}</div>}
-    </div>
-  )
-}
-
 export default function ClassDetailPage() {
   const { classId } = useParams()
   const navigate = useNavigate()
@@ -1195,17 +1186,20 @@ export default function ClassDetailPage() {
     <div>
       {/* Stat cards (matches the DC mock's Overview) */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <StatCard label="Students" value={students.length} />
-        <StatCard label="Active (AC)" value={activeCount} color={green} />
-        <StatCard label="Inactive (IN)" value={inactiveCount} />
-        <StatCard
+        <MetricCard label="Students" value={students.length} Icon={Users} tint="rgba(14,42,92,0.07)" iconColor={navy} />
+        <MetricCard label="Active (AC)" value={activeCount} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Inactive (IN)" value={inactiveCount} Icon={Clock} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} />
+        <MetricCard
           label="Capacity"
           value={
             <>
-              {students.length} <span style={{ color: '#CBD5E1' }}>/ {maxStudents || '—'}</span>
+              {students.length} <span style={{ color: '#9AA6BD' }}>/ {maxStudents || '—'}</span>
             </>
           }
           sub="students enrolled"
+          Icon={Layers}
+          tint="rgba(63,169,245,0.13)"
+          iconColor={blueText}
         />
       </div>
 
@@ -1299,15 +1293,15 @@ export default function ClassDetailPage() {
           <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b border-slate-100">
-                <th className="px-5 py-2.5 font-medium">ID No.</th>
-                <th className="px-5 py-2.5 font-medium">Name</th>
-                <th className="px-5 py-2.5 font-medium">Program / Year</th>
-                <th className="px-5 py-2.5 font-medium">Remarks</th>
-                <th className="px-5 py-2.5 font-medium text-center">Enrollment</th>
-                <th className="px-5 py-2.5 font-medium">Progress</th>
+              <tr className="text-left text-slate-700 border-b border-slate-100">
+                <th className="px-5 py-2.5 font-semibold">ID No.</th>
+                <th className="px-5 py-2.5 font-semibold">Name</th>
+                <th className="px-5 py-2.5 font-semibold">Program / Year</th>
+                <th className="px-5 py-2.5 font-semibold">Remarks</th>
+                <th className="px-5 py-2.5 font-semibold text-center">Enrollment</th>
+                <th className="px-5 py-2.5 font-semibold">Progress</th>
                 {/* 2026-06-20: Actions column header — Edit and Remove per row */}
-                <th className="px-5 py-2.5 font-medium text-right">Actions</th>
+                <th className="px-5 py-2.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>

@@ -1,13 +1,21 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { adminUsersKey, useAdminUsers, setUserRole, setUserStatus } from '@/hooks/useAdminUsers'
-import { createUser, resetPassword, setAccountDisabled } from '@/lib/admin'
+import {
+  createUser, resetPassword, setAccountDisabled,
+  adminSchoolKey, fetchSchoolSettings, saveSchoolSettings,
+} from '@/lib/admin'
+import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { navy, ink, muted, faint, green, red, line, serif, mono, goldDeep } from '@/theme'
-import { ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
-import { PASSWORD_RULE, emailError, nameError, passwordError } from '@/lib/validation'
+import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
+import { ROLES, CREATABLE_ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
+import {
+  emailError, nameError, tempPasswordError,
+  idNumberError, lrnError, schoolNameError, schoolAbbrError,
+} from '@/lib/validation'
 import Notice from './Notice'
+import CardHead from './CardHead'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import BulkUpload from './BulkUpload'
 import { SkeletonTable } from '@/components/ui/Skeleton'
@@ -30,21 +38,131 @@ function Pill({ tint, children }) {
   )
 }
 
-/* ─────────────────────────── create user ─────────────────────────── */
+/* ─────────────────────────── login prefix ─────────────────────────── */
 
-function CreateUserForm({ onCreated }) {
-  // No default role: 'teacher' meant an admin who never opened the dropdown
-  // silently created a teacher, which is the most privileged non-admin role
-  // here. Picking one is now deliberate.
-  const blank = { email: '', password: '', role: '', firstName: '', lastName: '' }
-  const [form, setForm] = useState(blank)
+/**
+ * The school's identity: its full official name and the abbreviation used as
+ * the login prefix. Teachers and students the admin creates need no email of
+ * their own: their login is issued as <abbreviation>-<last 6 digits of LRN /
+ * student number / employee ID>, e.g. ucb-789012 — no domain, since
+ * ActivKlass has none. Changing the abbreviation only shapes logins issued
+ * from that point on — existing accounts keep theirs.
+ */
+function LoginPrefixCard({ settings, onSaved }) {
+  const school = settings?.school
+  // null = untouched, show the saved value
+  const [name, setName] = useState(null)
+  const [abbr, setAbbr] = useState(null)
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
 
   const mut = useMutation({
+    mutationFn: saveSchoolSettings,
+    onSuccess: (res) => {
+      setName(null)
+      setAbbr(null)
+      setError('')
+      setDone(`Saved. New teacher and student logins will start with “${res.login_prefix}-”.`)
+      onSaved()
+    },
+    onError: (e) => { setError(e.message); setDone('') },
+  })
+
+  const shownName = name ?? school?.name ?? ''
+  const shownAbbr = abbr ?? school?.login_prefix ?? ''
+
+  function submit(e) {
+    e.preventDefault()
+    setDone('')
+    const problem = schoolNameError(shownName) || schoolAbbrError(shownAbbr)
+    if (problem) return setError(problem)
+    setError('')
+    mut.mutate({ name: shownName.trim(), prefix: shownAbbr.trim().toLowerCase() })
+  }
+
+  return (
+    <form onSubmit={submit} style={{ ...card, padding: 22 }}>
+      <CardHead
+        icon="🏫"
+        tint="rgba(245,197,24,0.14)"
+        title="School & login prefix"
+        sub={school
+          ? 'Enter your school’s full name and the abbreviation used beside it — the abbreviation is the prefix of every issued login: prefix, a dash, then the last six digits of the LRN (students) or employee ID (teachers). Existing logins are never changed.'
+          : 'This admin account is not linked to a school yet, so a login prefix cannot be set.'}
+        style={{ marginBottom: school ? 16 : 0 }}
+      />
+      {school && (
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
+            School name
+            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200 }} value={shownName}
+                   onChange={(e) => { setName(e.target.value); setDone('') }}
+                   placeholder="e.g. University of Cebu-Banilad" />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            Abbreviation
+            <input style={{ ...field, width: 130, padding: '10px 14px' }} value={shownAbbr}
+                   onChange={(e) => { setAbbr(e.target.value); setDone('') }}
+                   placeholder="e.g. UCB" />
+          </label>
+          <span style={{ ...mono, fontSize: 12.5, color: faint }}>
+            → {(shownAbbr.trim().toLowerCase() || 'prefix')}-789012
+          </span>
+          <button type="submit" style={btnPrimary} disabled={mut.isPending}>
+            {mut.isPending ? 'Saving…' : 'Save'}
+          </button>
+          <div style={{ flex: '1 1 100%', minWidth: 200 }}>
+            <Notice>{error}</Notice>
+            <Notice tone="ok">{done}</Notice>
+          </div>
+        </div>
+      )}
+    </form>
+  )
+}
+
+/* ─────────────────────────── create user ─────────────────────────── */
+
+const labelStyle = { fontSize: 13, fontWeight: 600, color: ink }
+
+/* "Grade 9 - Rizal" -> ['Grade 9', 'Rizal']; "BSIT - 3rd Year" -> ['BSIT',
+   '3rd Year']; no dash -> [text, '']. One field per the manuscript's Add
+   user mockup (Figure 49), split for storage. */
+function splitPair(text) {
+  const [head, ...rest] = String(text ?? '').split('-')
+  return [head.trim(), rest.join('-').trim()]
+}
+
+function CreateUserForm({ onCreated, settings }) {
+  // No default role: 'teacher' meant an admin who never opened the dropdown
+  // silently created a teacher, which is the most privileged non-admin role
+  // here. Picking one is now deliberate.
+  const blank = {
+    role: '', firstName: '', middleName: '', lastName: '', email: '', password: '',
+    level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
+    birthdate: '', employeeNumber: '', department: '',
+  }
+  const [form, setForm] = useState(blank)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+
+  const prefix = settings?.school?.login_prefix ?? ''
+  const role = form.role
+  // Grade 12 & below sign in by the last six digits of their LRN; college
+  // learners carry no LRN (manuscript Fig. 49-50) so theirs come from the
+  // student number. Teachers use their employee ID.
+  const isG12 = form.level === 'g12'
+  const idSource = role === 'student'
+    ? (isG12 ? form.lrn : form.studentNumber)
+    : role === 'teacher' ? form.employeeNumber : ''
+  const loginPreview = issuedLoginId(prefix, idSource)
+
+  const mut = useMutation({
     mutationFn: createUser,
     onSuccess: (res) => {
-      setDone(`Created ${res.user.email}. They can sign in with the password you set.`)
+      const login = res.user.login_id ?? res.user.email
+      const pw = form.password || DEFAULT_PASSWORD
+      setDone(`Created. They sign in as ${login} with the password “${pw}” — give them both directly, nothing is emailed.`)
       setForm(blank)
       setError('')
       onCreated()
@@ -55,53 +173,180 @@ function CreateUserForm({ onCreated }) {
   function submit(e) {
     e.preventDefault()
     setDone('')
+    if (!role) return setError('Pick a role for this user.')
     const problem =
       nameError(form.firstName, { label: 'First name' }) ||
+      nameError(form.middleName, { label: 'Middle name', required: false }) ||
       nameError(form.lastName, { label: 'Last name' }) ||
-      emailError(form.email) ||
-      passwordError(form.password)
+      (role === 'admin' ? emailError(form.email) : '') ||
+      (role === 'student'
+        ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
+          (isG12
+            ? lrnError(form.lrn)
+            : (String(form.studentNumber).replace(/\D/g, '').length < 6
+                ? 'The student number needs at least 6 digits — the last six become their login.'
+                : '')) ||
+          // Parental-access linking age-gates on the birthdate, so a student
+          // without one breaks guardian invites later.
+          (!form.birthdate ? 'Birthdate is required — parental access checks depend on it.' : '')
+        : '') ||
+      (role === 'teacher'
+        ? idNumberError(form.employeeNumber, { label: 'Employee number' }) ||
+          (String(form.employeeNumber).replace(/\D/g, '').length < 6
+            ? 'The employee number needs at least 6 digits — the last six become their login.'
+            : '')
+        : '') ||
+      // Blank falls back to the default; is_temp_password gates either way.
+      tempPasswordError(form.password, { required: false })
     if (problem) return setError(problem)
-    if (!form.role) return setError('Pick a role for this user.')
+    if (role !== 'admin' && !prefix) {
+      return setError('Set your school’s login prefix above first — it is what their sign-in login is issued from.')
+    }
     setError('')
-    mut.mutate(form)
+    mut.mutate({
+      // Admins need a real inbox (password recovery goes there); teacher and
+      // student logins are issued server-side from the school's prefix.
+      email: role === 'admin' ? form.email : '',
+      password: form.password,
+      role,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      extra: {
+        ...(form.middleName.trim() ? { middle_name: form.middleName.trim() } : {}),
+        ...(role === 'student' ? (() => {
+          const [a, b] = splitPair(isG12 ? form.gradeSection : form.courseYear)
+          return {
+            student_number: form.studentNumber.trim(),
+            ...(isG12 ? { lrn: form.lrn.trim() } : {}),
+            birthdate: form.birthdate,
+            ...(isG12
+              ? { ...(a ? { year_level: a } : {}), ...(b ? { section: b } : {}) }
+              : { ...(a ? { course: a } : {}), ...(b ? { year_level: b } : {}) }),
+          }
+        })() : {}),
+        ...(role === 'teacher' ? {
+          employee_number: form.employeeNumber.trim(),
+          ...(form.department.trim() ? { department: form.department.trim() } : {}),
+        } : {}),
+      },
+    })
   }
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   return (
     <form onSubmit={submit} style={{ ...card, padding: 22 }}>
-      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Add a user</h2>
-      <p style={{ fontSize: 13, color: muted, margin: '0 0 18px' }}>
-        Creates the sign-in account and the profile together. Give them the password directly —
-        it is not emailed.
-      </p>
+      <CardHead
+        icon="👤"
+        tint="rgba(14,42,92,0.07)"
+        title="Add a user"
+        sub="Creates the sign-in account and the profile together. Parents are not added here — they register themselves and claim their student's invitation code."
+        style={{ marginBottom: 18 }}
+      />
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          First name
-          <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
-        </label>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Last name
-          <input style={{ ...field, marginTop: 6 }} value={form.lastName} onChange={set('lastName')} />
-        </label>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Email
-          <input style={{ ...field, marginTop: 6 }} type="email" value={form.email} onChange={set('email')} />
-        </label>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+        <label style={labelStyle}>
           Role
           <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.role} onChange={set('role')}>
             <option value="">— none —</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {CREATABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
-        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Temporary password
+        <label style={labelStyle}>
+          First name
+          <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
+        </label>
+        <label style={labelStyle}>
+          Middle name <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+          <input style={{ ...field, marginTop: 6 }} value={form.middleName} onChange={set('middleName')} />
+        </label>
+        <label style={labelStyle}>
+          Last name
+          <input style={{ ...field, marginTop: 6 }} value={form.lastName} onChange={set('lastName')} />
+        </label>
+
+        {role === 'admin' && (
+          <label style={labelStyle}>
+            Email
+            <input style={{ ...field, marginTop: 6 }} type="email" value={form.email} onChange={set('email')} />
+          </label>
+        )}
+
+        {role === 'student' && (
+          <>
+            {/* Figure 49: Grade 12 & below carry an LRN alongside their
+                student number; college learners have the student number only. */}
+            <label style={labelStyle}>
+              Level
+              <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.level} onChange={set('level')}>
+                <option value="g12">Grade 12 &amp; below</option>
+                <option value="college">College</option>
+              </select>
+            </label>
+            <label style={labelStyle}>
+              Student number
+              <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
+                     onChange={set('studentNumber')} placeholder="e.g. 2024-00123" />
+            </label>
+            {isG12 && (
+              <label style={labelStyle}>
+                LRN
+                <input style={{ ...field, marginTop: 6 }} inputMode="numeric" maxLength={12}
+                       value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" />
+              </label>
+            )}
+            {isG12 ? (
+              <label style={labelStyle}>
+                Grade &amp; section <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+                <input style={{ ...field, marginTop: 6 }} value={form.gradeSection}
+                       onChange={set('gradeSection')} placeholder="e.g. Grade 9 - Rizal" />
+              </label>
+            ) : (
+              <label style={labelStyle}>
+                Course &amp; year <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+                <input style={{ ...field, marginTop: 6 }} value={form.courseYear}
+                       onChange={set('courseYear')} placeholder="e.g. BSIT - 3rd Year" />
+              </label>
+            )}
+            <label style={labelStyle}>
+              Birthdate
+              <input style={{ ...field, marginTop: 6 }} type="date" value={form.birthdate} onChange={set('birthdate')} />
+            </label>
+          </>
+        )}
+
+        {role === 'teacher' && (
+          <>
+            <label style={labelStyle}>
+              Employee number
+              <input style={{ ...field, marginTop: 6 }} value={form.employeeNumber}
+                     onChange={set('employeeNumber')} placeholder="e.g. T-2024-018" />
+            </label>
+            <label style={labelStyle}>
+              Department <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+              <input style={{ ...field, marginTop: 6 }} value={form.department}
+                     onChange={set('department')} placeholder="e.g. Mathematics" />
+            </label>
+          </>
+        )}
+
+        <label style={labelStyle}>
+          Temporary password <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
-                 onChange={set('password')} placeholder={`at least ${MIN_PASSWORD} characters`} />
+                 onChange={set('password')} placeholder={`defaults to ${DEFAULT_PASSWORD}`} />
         </label>
       </div>
+
+      {(role === 'teacher' || role === 'student') && (
+        <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
+          {loginPreview
+            ? <>They will sign in as <strong style={{ color: ink }}>{loginPreview}</strong></>
+            : prefix
+              ? `Their login will be ${prefix}-<last 6 digits of their ${
+                  role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee ID'}>`
+              : 'No login prefix is set for your school yet — set it in the card above.'}
+        </p>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
         <button type="submit" style={btnPrimary} disabled={mut.isPending}>
@@ -128,6 +373,7 @@ function UserRow({ user, isSelf, onChanged }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
+  const isParent = user.role === 'parent'
   const tint = ROLE_TINT[user.role] ?? ROLE_TINT.student
 
   async function run(label, fn) {
@@ -168,13 +414,13 @@ function UserRow({ user, isSelf, onChanged }) {
     // an empty field, having thrown the typed password away.
     const pw = await promptDialog({
       title: 'Set a new password',
-      message: `This replaces the password for ${user.email} immediately. ${PASSWORD_RULE}`,
+      message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they should change it after signing in.`,
       label: 'New password',
-      placeholder: `At least ${MIN_PASSWORD} characters`,
+      placeholder: `e.g. ${DEFAULT_PASSWORD}`,
       confirmLabel: 'Set password',
       required: true,
       trim: false,
-      validate: passwordError,
+      validate: tempPasswordError,
     })
     if (pw == null) return
     run('password', () => resetPassword(user.id, pw))
@@ -187,17 +433,21 @@ function UserRow({ user, isSelf, onChanged }) {
           {user.last_name}, {user.first_name}
           {isSelf && <span style={{ ...mono, fontSize: 11, color: faint, marginLeft: 8 }}>you</span>}
         </div>
-        <div style={{ fontSize: 12.5, color: muted }}>{user.email}</div>
+        {/* Issued accounts show the login people actually type (snhs-789012);
+            the email field holds the internal identifier and stays hidden. */}
+        <div style={{ fontSize: 12.5, color: muted }}>{user.login_id ?? user.email}</div>
         {error && <div style={{ fontSize: 12, color: red, marginTop: 4 }}>{error}</div>}
       </td>
 
       <td style={{ padding: '12px 14px' }}>
-        {isSelf ? (
+        {/* Parents keep a fixed role: their account exists through their
+            student's invitation link, and re-roling would orphan it. */}
+        {isSelf || isParent ? (
           <Pill tint={tint}>{user.role}</Pill>
         ) : (
           <select value={user.role ?? 'student'} onChange={changeRole} disabled={!!busy}
                   style={{ ...field, padding: '6px 10px', fontSize: 13, cursor: 'pointer', width: 'auto' }}>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {CREATABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         )}
       </td>
@@ -221,15 +471,25 @@ function UserRow({ user, isSelf, onChanged }) {
         <button style={btnGhost} onClick={doReset} disabled={!!busy}>
           {busy === 'password' ? '…' : 'Reset password'}
         </button>
-        <button
-          style={{ ...btnGhost, marginLeft: 8, color: active ? red : green,
-                   borderColor: active ? 'rgba(192,57,43,0.3)' : 'rgba(31,138,91,0.3)' }}
-          onClick={toggleActive}
-          disabled={!!busy || isSelf}
-          title={isSelf ? 'You cannot deactivate your own account' : undefined}
-        >
-          {busy === 'status' ? '…' : active ? 'Deactivate' : 'Reactivate'}
-        </button>
+        {/* Parent accounts cannot be deactivated from here: a parent's access
+            is granted and revoked by their student's invitation link, not by
+            the school. The API refuses it too (parent_protected). */}
+        {isParent ? (
+          <span style={{ fontSize: 12, color: faint, marginLeft: 8 }}
+                title="A parent's access is controlled by their student's invitation link.">
+            family-managed
+          </span>
+        ) : (
+          <button
+            style={{ ...btnGhost, marginLeft: 8, color: active ? red : green,
+                     borderColor: active ? 'rgba(192,57,43,0.3)' : 'rgba(31,138,91,0.3)' }}
+            onClick={toggleActive}
+            disabled={!!busy || isSelf}
+            title={isSelf ? 'You cannot deactivate your own account' : undefined}
+          >
+            {busy === 'status' ? '…' : active ? 'Deactivate' : 'Reactivate'}
+          </button>
+        )}
       </td>
     </tr>
   )
@@ -239,47 +499,56 @@ export default function UsersTab() {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: users = [], isLoading, isError, error } = useAdminUsers()
+  const { data: settings } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
 
   const refresh = () => qc.invalidateQueries({ queryKey: adminUsersKey })
+  const refreshSchool = () => qc.invalidateQueries({ queryKey: adminSchoolKey })
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
     return users.filter((u) => {
       if (roleFilter !== 'all' && u.role !== roleFilter) return false
       if (!q) return true
-      return `${u.first_name ?? ''} ${u.last_name ?? ''} ${u.email ?? ''}`.toLowerCase().includes(q)
+      return `${u.first_name ?? ''} ${u.last_name ?? ''} ${u.email ?? ''} ${u.login_id ?? ''}`.toLowerCase().includes(q)
     })
   }, [users, roleFilter, search])
 
   function exportCsv() {
     downloadCsv(stampedName('users'), [
-      ['Last name', 'First name', 'Email', 'Role', 'Status'],
-      ...shown.map((u) => [u.last_name, u.first_name, u.email, u.role, u.status ?? 'active']),
+      ['Last name', 'First name', 'Login', 'Role', 'Status'],
+      ...shown.map((u) => [u.last_name, u.first_name, u.login_id ?? u.email, u.role, u.status ?? 'active']),
     ])
   }
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <CreateUserForm onCreated={refresh} />
-      <BulkUpload onDone={refresh} />
+      <LoginPrefixCard settings={settings} onSaved={refreshSchool} />
+      <BulkUpload onDone={refresh} settings={settings} />
+      <CreateUserForm onCreated={refresh} settings={settings} />
 
       <section style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}`,
-                      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0, flex: 1 }}>
-            Users <span style={{ ...mono, fontSize: 13, color: faint }}>{shown.length}</span>
-          </h2>
-          <input placeholder="Search name or email" value={search}
-                 onChange={(e) => setSearch(e.target.value)}
-                 style={{ ...field, width: 220, padding: '8px 12px', fontSize: 13 }} />
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-                  style={{ ...field, width: 'auto', padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
-            <option value="all">All roles</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <button style={btnGhost} onClick={exportCsv} disabled={!shown.length}>Export CSV</button>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
+          <CardHead
+            icon="👥"
+            tint="rgba(63,169,245,0.13)"
+            title="Users"
+            count={shown.length}
+            action={
+              <div className="flex flex-wrap items-center gap-3">
+                <input placeholder="Search name, email or login" value={search}
+                       onChange={(e) => setSearch(e.target.value)}
+                       style={{ ...field, width: 220, padding: '8px 12px', fontSize: 13 }} />
+                <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+                        style={{ ...field, width: 'auto', padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
+                  <option value="all">All roles</option>
+                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <button style={btnGhost} onClick={exportCsv} disabled={!shown.length}>Export CSV</button>
+              </div>
+            }
+          />
         </div>
 
         {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={5} label="Loading users" /></div>}

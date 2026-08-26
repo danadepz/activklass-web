@@ -25,7 +25,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 
 const RULES_PATH = fileURLToPath(
   new URL('../../../activklass-backend/firestore.rules', import.meta.url),
@@ -488,5 +488,59 @@ describe('guardian_links · a revoked guardian cannot let themselves back in', (
         is_minor: false,
       }),
     )
+  })
+})
+
+describe('school_directory · the registration page dropdown', () => {
+  // A well-formed entry as lib/schoolDirectory.js writes it. The rule pins
+  // created_at to request.time, which serverTimestamp() satisfies.
+  const entry = (by = TEACHER) => ({
+    name: 'University of Cebu-Banilad',
+    abbreviation: 'UCB',
+    created_by: by,
+    created_at: serverTimestamp(),
+  })
+
+  it('is readable with no account at all — the register form is pre-auth', async () => {
+    await assertSucceeds(
+      getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'school_directory', 'ucb')),
+    )
+  })
+
+  it('lets a signed-in user create an entry under its lowercased abbreviation', async () => {
+    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'school_directory', 'ucb'), entry()))
+  })
+
+  it('refuses a doc id that is not the lowercased abbreviation', async () => {
+    // The id is the uniqueness guarantee; an entry filed elsewhere would let
+    // "UCB" exist twice.
+    await assertFails(setDoc(doc(ctx(TEACHER), 'school_directory', 'elsewhere'), entry()))
+  })
+
+  it('refuses creation signed out or signed as someone else', async () => {
+    await assertFails(
+      setDoc(doc(testEnv.unauthenticatedContext().firestore(), 'school_directory', 'ucb'), entry()),
+    )
+    await assertFails(setDoc(doc(ctx(STUDENT), 'school_directory', 'ucb'), entry(TEACHER)))
+  })
+
+  it('refuses extra fields and malformed abbreviations', async () => {
+    await assertFails(
+      setDoc(doc(ctx(TEACHER), 'school_directory', 'ucb'), { ...entry(), login_prefix: 'ucb' }),
+    )
+    await assertFails(
+      setDoc(doc(ctx(TEACHER), 'school_directory', 'u c b'), { ...entry(), abbreviation: 'U C B' }),
+    )
+  })
+
+  it('refuses client rewrites or deletes of an existing entry', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'school_directory', 'ucb'), {
+        name: 'University of Cebu-Banilad',
+        abbreviation: 'UCB',
+      })
+    })
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'ucb'), { name: 'Hijacked U' }))
+    await assertFails(deleteDoc(doc(ctx(TEACHER), 'school_directory', 'ucb')))
   })
 })

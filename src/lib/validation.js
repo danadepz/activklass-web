@@ -56,6 +56,19 @@ export function passwordError(value) {
   return ''
 }
 
+/**
+ * Admin-ISSUED temporary passwords: length only. The person must replace it
+ * anyway (is_temp_password gates them), and the full character-class rule
+ * above would forbid the standing default `pass1234`. User-chosen passwords
+ * keep going through passwordError.
+ */
+export function tempPasswordError(value, { required = true } = {}) {
+  const text = String(value ?? '')
+  if (!text) return required ? 'Password is required.' : ''
+  if (text.length < MIN_PASSWORD) return `Password must be at least ${MIN_PASSWORD} characters.`
+  return ''
+}
+
 /* "Grade 7" (K-12, grades 1-12) or "1st Year" / "3rd" (college, years 1-5).
    Case-insensitive; "Year" optional on the college form since the class form
    placeholder has always suggested bare "3rd". */
@@ -85,6 +98,76 @@ export function yearLevelError(value, { level, required = true } = {}) {
     return isGrade ? '' : 'Enter a grade level like "Grade 7" (Grade 1 to 12).'
   }
   return isGrade || isYear ? '' : 'Enter a level like "Grade 10" or "1st Year".'
+}
+
+/* School-issued identifiers: student numbers like "2024-00123", employee
+   numbers like "T-2024-018". Letters, digits, dots and hyphens, starting
+   alphanumeric so "-" alone cannot pass. Mirrors the backend's sanitizer for
+   issued logins (api/admin.py), which keeps exactly these characters. */
+const ID_NUMBER_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
+
+/**
+ * A school-issued id number (student number, employee number).
+ * @param {string} value
+ * @param {object} [opts]
+ * @param {string} [opts.label='ID number']
+ * @param {boolean} [opts.required=true]
+ */
+export function idNumberError(value, { label = 'ID number', required = true } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return required ? `${label} is required.` : ''
+  if (!ID_NUMBER_RE.test(text)) {
+    return `${label} can only contain letters, digits, dots and hyphens.`
+  }
+  return ''
+}
+
+/** DepEd Learner Reference Number: exactly 12 digits. */
+export function lrnError(value, { required = true } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return required ? 'LRN is required.' : ''
+  if (!/^\d{12}$/.test(text)) return 'LRN must be exactly 12 digits.'
+  return ''
+}
+
+/** The institution's login prefix: 2–12 letters or digits, stored lowercase. */
+export function loginPrefixError(value) {
+  const text = String(value ?? '').trim().toLowerCase()
+  if (!text) return 'A login prefix is required.'
+  if (!/^[a-z0-9]{2,12}$/.test(text)) {
+    return 'The prefix must be 2–12 letters or digits, like "snhs".'
+  }
+  return ''
+}
+
+/**
+ * A school's full official name for the public directory ("University of
+ * Cebu-Banilad", never "UC Banilad"). Loose on purpose — hyphens, digits and
+ * campus suffixes are all real — but it must carry a letter and enough length
+ * that a stray abbreviation cannot pass as the full name.
+ */
+export function schoolNameError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'The school’s full name is required.'
+  if (text.length < 3 || !/\p{L}/u.test(text)) {
+    return 'Enter the school’s full name, like "University of Cebu-Banilad".'
+  }
+  if (text.length > 120) return 'The school name is too long (120 characters at most).'
+  return ''
+}
+
+/* Mirrors the school_directory create rule in firestore.rules — the
+   abbreviation becomes the directory doc id, so the two must agree. */
+const SCHOOL_ABBR_RE = /^[A-Za-z0-9]{2,12}$/
+
+/** The short form of a school's name for the directory, like "UCB". */
+export function schoolAbbrError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'An abbreviation is required.'
+  if (!SCHOOL_ABBR_RE.test(text)) {
+    return 'The abbreviation must be 2–12 letters or digits, like "UCB".'
+  }
+  return ''
 }
 
 /* Same shape as the browser's own type="email" check: one @, no spaces,

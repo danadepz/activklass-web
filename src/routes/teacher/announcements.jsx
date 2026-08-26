@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { navy, sansUiFamily as sans, cream } from '@/theme'
+import { navy, line, sansUiFamily as sans, cream } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { SkeletonList } from '@/components/ui/Skeleton'
@@ -76,7 +76,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
       style={{
         background: '#FFFFFF',
         borderRadius: 14,
-        border: '1px solid #E2E8F0',
+        border: `1px solid ${line}`,
         overflow: 'hidden',
         transition: 'box-shadow .15s',
       }}
@@ -290,7 +290,7 @@ export default function AnnouncementsPage() {
       </div>
 
       {/* ── Compose form ── */}
-      <div style={{ background: '#FFFFFF', borderRadius: 16, border: '1px solid #E2E8F0', padding: '24px 28px', marginBottom: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 16, border: `1px solid ${line}`, padding: '24px 28px', marginBottom: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: navy, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 18 }}>✍️</span> New Announcement
         </div>
@@ -329,7 +329,7 @@ export default function AnnouncementsPage() {
             <textarea
               id="ann-content"
               rows={4}
-              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
+              style={{ ...inputStyle, resize: 'none', height: 110, overflowY: 'auto', lineHeight: 1.6 }}
               placeholder="Write your announcement here…"
               value={form.content}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}

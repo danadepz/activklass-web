@@ -33,7 +33,7 @@ export default function ClassPicker({ title, hint, buildPath, linkLabel }) {
           <p className="text-slate-400">No classes yet.</p>
           <Link
             to="/teacher/classes"
-            className="inline-block mt-3 rounded-lg bg-indigo-600 text-white px-4 py-2 font-medium hover:bg-indigo-700"
+            className="inline-block mt-3 rounded-lg bg-[#0E2A5C] text-white px-4 py-2 font-medium hover:brightness-110"
           >
             Create a class
           </Link>
@@ -46,13 +46,13 @@ export default function ClassPicker({ title, hint, buildPath, linkLabel }) {
               <Link
                 key={c.id}
                 to={buildPath(c)}
-                className="bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-400 hover:shadow-sm transition"
+                className="bg-white rounded-xl border border-slate-200 p-5 hover:border-[#0E2A5C]/40 hover:shadow-sm transition"
               >
                 <h3 className="font-semibold text-slate-800">{classLabel(c)}</h3>
                 <p className="text-sm text-slate-500">
                   {c.subject} · {count} student{count === 1 ? '' : 's'}
                 </p>
-                <p className="text-sm text-indigo-600 font-medium mt-3">{linkLabel} →</p>
+                <p className="text-sm font-medium mt-3 text-[#1E6FB0]">{linkLabel} →</p>
               </Link>
             )
           })}

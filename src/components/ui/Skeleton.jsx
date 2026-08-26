@@ -155,7 +155,7 @@ export function SkeletonList({ count = 4, height = 84, label = 'Loading' }) {
   )
 }
 
-/** A row of KPI tiles, matching the `Kpi`/`StatMini` blocks above most tables. */
+/** A row of KPI tiles, matching the shared MetricCard (ui/Card.jsx) above most tables. */
 export function SkeletonStats({ count = 4, label = 'Loading' }) {
   return (
     <div role="status" aria-live="polite" aria-busy="true" className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
@@ -163,10 +163,10 @@ export function SkeletonStats({ count = 4, label = 'Loading' }) {
       {Array.from({ length: count }, (_, i) => (
         <div
           key={i}
-          style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px' }}
+          style={{ background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 14, padding: '18px 20px' }}
         >
-          <SkeletonLine w="60%" h={9} />
-          <SkeletonLine w="42%" h={20} style={{ marginTop: 12 }} />
+          <SkeletonLine w="60%" h={12} />
+          <SkeletonLine w="42%" h={30} style={{ marginTop: 14 }} />
         </div>
       ))}
     </div>

@@ -29,6 +29,8 @@ const SORT_OPTIONS = [
 ]
 
 // 2026-06-20: Preset palette for the class badge background colour
+// 2026-08-26: Expanded with lighter/brighter options; text colour is now
+// contrast-picked per background (see badgeTextColor)
 const BADGE_COLORS = [
   { color: '#0E2A5C', label: 'Navy (default)' },
   { color: '#0D7A6A', label: 'Teal' },
@@ -38,6 +40,14 @@ const BADGE_COLORS = [
   { color: '#166534', label: 'Forest' },
   { color: '#1E40AF', label: 'Royal Blue' },
   { color: '#3A4A6B', label: 'Slate' },
+  { color: '#F5C518', label: 'Gold' },
+  { color: '#F97316', label: 'Tangerine' },
+  { color: '#38BDF8', label: 'Sky' },
+  { color: '#34D399', label: 'Mint' },
+  { color: '#A3E635', label: 'Lime' },
+  { color: '#A78BFA', label: 'Lavender' },
+  { color: '#F472B6', label: 'Rose' },
+  { color: '#475569', label: 'Steel' },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,6 +61,26 @@ function classBadge(c) {
 
 function badgeColor(c) {
   return c.badge_color || navy
+}
+
+// 2026-08-26: Pick the badge text colour (brand gold or navy) by WCAG contrast
+// against the chosen background, so light badges get dark text and vice versa.
+function relativeLuminance(hex) {
+  const h = hex.replace('#', '')
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+const contrastRatio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+
+function badgeTextColor(bg) {
+  const bgLum = relativeLuminance(bg)
+  const goldLum = relativeLuminance(gold)
+  const navyLum = relativeLuminance(navy)
+  return contrastRatio(bgLum, goldLum) >= contrastRatio(bgLum, navyLum) ? gold : navy
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -266,7 +296,7 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
                         height: 26,
                         borderRadius: 7,
                         background: color,
-                        border: active ? `2.5px solid ${gold}` : '2.5px solid rgba(255,255,255,0.3)',
+                        border: active ? `2.5px solid ${gold}` : '2.5px solid rgba(14,42,92,0.12)',
                         outline: active ? '1.5px solid rgba(0,0,0,0.2)' : 'none',
                         cursor: 'pointer',
                       }}
@@ -575,7 +605,7 @@ export default function ClassesPage() {
                       height: 42,
                       borderRadius: 10,
                       background: badgeColor(c),
-                      color: gold,
+                      color: badgeTextColor(badgeColor(c)),
                       display: 'grid',
                       placeItems: 'center',
                       fontWeight: 700,
@@ -656,7 +686,7 @@ export default function ClassesPage() {
                         height: 42,
                         borderRadius: 10,
                         background: badgeColor(c),
-                        color: gold,
+                        color: badgeTextColor(badgeColor(c)),
                         display: 'grid',
                         placeItems: 'center',
                         fontWeight: 700,

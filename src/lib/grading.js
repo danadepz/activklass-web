@@ -207,6 +207,48 @@ export function weightsValid(components) {
   return Math.abs(sum - 100) < 0.01
 }
 
+const toHalfStep = (n) => Math.round(n * 2) / 2
+
+/**
+ * Scale every row's weight so they total `target`, each in proportion to what
+ * it held — equally when they all sit at zero, so a fresh set of rows still
+ * splits sensibly. Shares snap to the 0.5 grid the weight inputs use; the
+ * last row absorbs the rounding residue so the total is exact, never 99.5.
+ * Rows keep everything but weight_percent, which comes back as the string the
+ * editor stores.
+ */
+function scaleWeightsTo(rows, target) {
+  const weights = rows.map((r) => Number(r.weight_percent) || 0)
+  const sum = weights.reduce((a, b) => a + b, 0)
+  let remaining = round2(Math.max(0, target))
+  return rows.map((r, i) => {
+    const isLast = i === rows.length - 1
+    const ideal = sum > 0 ? (weights[i] / sum) * target : target / rows.length
+    // Never hand out more than is left, so the last row can't go negative.
+    const share = isLast ? remaining : Math.min(remaining, Math.max(0, toHalfStep(ideal)))
+    remaining = round2(remaining - share)
+    return { ...r, weight_percent: String(share) }
+  })
+}
+
+/**
+ * Reactive weights (§1.7 editors): pin one row to what the teacher just set
+ * and rescale every other row so the group still totals 100. The pinned cell
+ * keeps the raw input string — rewriting "3." to "3" mid-keystroke makes
+ * decimals untypeable — while the distribution reads it clamped to 0–100.
+ */
+export function rebalanceWeights(rows, index, rawValue) {
+  const pinned = Math.min(100, Math.max(0, Number(rawValue) || 0))
+  const others = scaleWeightsTo(rows.filter((_, i) => i !== index), 100 - pinned)
+  let k = 0
+  return rows.map((r, i) => (i === index ? { ...r, weight_percent: String(rawValue) } : others[k++]))
+}
+
+/** Removing a row hands its weight back to the survivors, keeping 100. */
+export function redistributeWeights(rows) {
+  return scaleWeightsTo(rows, 100)
+}
+
 /**
  * Final grade across grading periods: each period's grade weighted by its
  * weight_percent, over periods that have a grade. DepEd finals are whole
