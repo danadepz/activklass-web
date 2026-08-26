@@ -48,8 +48,15 @@ function Pill({ tint, children }) {
  * student number / employee ID>, e.g. ucb-789012 — no domain, since
  * ActivKlass has none. Changing the abbreviation only shapes logins issued
  * from that point on — existing accounts keep theirs.
+ *
+ * Four states, kept apart on purpose. `settings` is undefined both while the
+ * request is in flight and after it fails, and this card used to read that as
+ * "not linked to a school" and say so — a confident claim about the account,
+ * made when the only true statement is that we have not heard back. An admin
+ * whose school was linked all along was told to go fix a link that was not
+ * broken, with the actual failure invisible.
  */
-function LoginPrefixCard({ settings, onSaved }) {
+function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   // null = untouched, show the saved value
   const [name, setName] = useState(null)
@@ -87,11 +94,21 @@ function LoginPrefixCard({ settings, onSaved }) {
         icon="🏫"
         tint="rgba(245,197,24,0.14)"
         title="School & login prefix"
-        sub={school
-          ? 'Enter your school’s full name and the abbreviation used beside it — the abbreviation is the prefix of every issued login: prefix, a dash, then the last six digits of the LRN (students) or employee ID (teachers). Existing logins are never changed.'
-          : 'This admin account is not linked to a school yet, so a login prefix cannot be set.'}
-        style={{ marginBottom: school ? 16 : 0 }}
+        sub={
+          loadError ? 'Your school’s details could not be loaded, so this card cannot show them yet. Nothing has been changed.'
+            : pending ? 'Checking which school this account manages…'
+            : school ? 'Enter your school’s full name and the abbreviation used beside it — the abbreviation is the prefix of every issued login: prefix, a dash, then the last six digits of the LRN (students) or employee ID (teachers). Existing logins are never changed.'
+            : 'This admin account is not linked to a school yet, so a login prefix cannot be set.'
+        }
+        style={{ marginBottom: school || loadError ? 16 : 0 }}
       />
+
+      {loadError && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
+        </div>
+      )}
       {school && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
@@ -523,7 +540,9 @@ export default function UsersTab() {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: users = [], isLoading, isError, error } = useAdminUsers()
-  const { data: settings } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
+  const {
+    data: settings, isPending: schoolPending, error: schoolError, refetch: refetchSchool,
+  } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
 
@@ -548,7 +567,8 @@ export default function UsersTab() {
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <LoginPrefixCard settings={settings} onSaved={refreshSchool} />
+      <LoginPrefixCard settings={settings} pending={schoolPending} error={schoolError}
+                       onRetry={refetchSchool} onSaved={refreshSchool} />
       <BulkUpload onDone={refresh} settings={settings} />
       <CreateUserForm onCreated={refresh} settings={settings} />
 
