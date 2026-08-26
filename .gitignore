@@ -22,4 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env.local
+# Local config. .env is real config for the activklass1 project and its own
+# header says "Not committed" -- but only .env.local was ignored, so it sat one
+# blanket `git add` away from being published.
+.env
+.env.*
+!.env.example
