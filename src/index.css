@@ -79,6 +79,33 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* Auth-panel circle wander -- slow straight-line drift that changes heading
+ * at each waypoint, reading as a shape rebounding off unseen walls. Linear
+ * timing keeps each leg straight instead of easing into curves. Three paths
+ * (plus per-element durations/delays in AuthLayout) keep the shapes from
+ * ever moving in lockstep. */
+@keyframes ak-wander-a {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-60px, 45px); }
+  50%  { transform: translate(-15px, 95px); }
+  75%  { transform: translate(50px, 30px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes ak-wander-b {
+  0%   { transform: translate(0, 0); }
+  30%  { transform: translate(45px, 60px); }
+  55%  { transform: translate(-40px, 80px); }
+  80%  { transform: translate(-60px, -15px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes ak-wander-c {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(55px, -45px); }
+  55%  { transform: translate(85px, 30px); }
+  80%  { transform: translate(15px, 65px); }
+  100% { transform: translate(0, 0); }
+}
+
 /* Hero card drift.
  *
  * The stacked hero cards carry a static `transform: rotate(Ndeg)` inline, and
@@ -276,18 +303,28 @@
    Button/IconButton (.ak-btn, which varies its slab per variant), the auth key,
    the teacher sidebar and card affordances, and the announcement delete. They
    would otherwise get this darkening stacked on top of their own. */
+/* The transition makes the hover an animation rather than a snap. `translate`
+   rather than a transform, for the same reason as .ak-hero-card: it is its own
+   property, so it composes with any inline `transform` or Tailwind transform
+   utility a button carries instead of being overwritten by it. Button.jsx and
+   .ak-primary set their own inline/class transition, which wins over this
+   zero-specificity one, so their timing is untouched. The reduced-motion block
+   above collapses the duration for readers who asked for that. */
 :where(button:not(:disabled)) {
   cursor: pointer;
+  transition: filter 0.15s ease, translate 0.15s ease;
 }
 
 :where(
   button:not(:disabled):not(.ak-btn):not(.ak-primary):not(.ak-nav):not(.ak-action):not(.ak-card-hov):not(.ak-ann-del):hover
 ) {
   filter: brightness(0.96);
+  translate: 0 -1px;
 }
 
 :where(
   button:not(:disabled):not(.ak-btn):not(.ak-primary):not(.ak-nav):not(.ak-action):not(.ak-card-hov):not(.ak-ann-del):active
 ) {
   filter: brightness(0.92);
+  translate: 0 1px;
 }

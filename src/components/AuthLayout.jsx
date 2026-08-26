@@ -177,10 +177,10 @@ export default function AuthLayout({ title, subtitle, children }) {
         className="relative hidden overflow-hidden lg:flex lg:flex-col lg:sticky lg:top-0 lg:self-start lg:h-screen"
         style={{ background: navy, color: cream, padding: 56 }}
       >
-        <div aria-hidden="true" style={{ position: 'absolute', top: -140, right: -100, width: 460, height: 460, border: '1px solid rgba(245,197,24,0.16)', borderRadius: '50%' }} />
-        <div aria-hidden="true" style={{ position: 'absolute', top: -80, right: -40, width: 340, height: 340, border: '1px solid rgba(245,197,24,0.1)', borderRadius: '50%' }} />
-        <div aria-hidden="true" style={{ position: 'absolute', bottom: -120, left: -120, width: 380, height: 380, border: '1px solid rgba(63,169,245,0.14)', borderRadius: '50%' }} />
-        <div aria-hidden="true" style={{ position: 'absolute', top: '30%', right: '8%', width: 220, height: 220, background: 'radial-gradient(circle, rgba(245,197,24,0.18), transparent 65%)', filter: 'blur(10px)' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: -140, right: -100, width: 460, height: 460, border: '1px solid rgba(245,197,24,0.16)', borderRadius: '50%', animation: 'ak-wander-a 46s linear infinite' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: -80, right: -40, width: 340, height: 340, border: '1px solid rgba(245,197,24,0.1)', borderRadius: '50%', animation: 'ak-wander-b 38s linear infinite', animationDelay: '-12s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', bottom: -120, left: -120, width: 380, height: 380, border: '1px solid rgba(63,169,245,0.14)', borderRadius: '50%', animation: 'ak-wander-c 52s linear infinite', animationDelay: '-20s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: '30%', right: '8%', width: 220, height: 220, background: 'radial-gradient(circle, rgba(245,197,24,0.18), transparent 65%)', filter: 'blur(10px)', animation: 'ak-wander-b 60s linear infinite', animationDelay: '-35s' }} />
 
         {/* brand */}
         <Link to="/" className="relative flex w-fit items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E2A5C]" style={{ textDecoration: 'none', color: cream }}>
