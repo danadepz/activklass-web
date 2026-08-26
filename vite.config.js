@@ -15,6 +15,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Bind to all interfaces so devices on the network can reach the dev
+    // server, not just this machine's own browser.
+    host: true,
     // Same-origin /api so a forwarded port works for remote viewers: their
     // browser cannot reach our localhost:5000, but it can reach this server.
     proxy: {
