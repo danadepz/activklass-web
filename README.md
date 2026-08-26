@@ -46,7 +46,9 @@ Copy `.env.example` to `.env.local`:
 | `npm run dev` | Vite dev server with HMR |
 | `npm run build` | Production build to `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint — 41 pre-existing errors, mostly `no-unused-vars` |
+| `npm run test` | Vitest — 446 tests over the pure modules |
+| `npm run test:rules` | Runs the real `firestore.rules` against the emulator (needs Java) |
 
 ## Layout
 
@@ -54,7 +56,27 @@ Copy `.env.example` to `.env.local`:
 src/
 ├── routes/         # Route components (teacher portal pages)
 ├── features/       # Feature modules
-├── components/     # Shared UI components & icons
+├── components/     # Shared UI components & icons; ui/ is toasts + dialogs
 ├── context/        # Auth context (useAuth)
-└── lib/            # firebase.js (client init), api.js (fetch wrapper)
+├── hooks/          # Shared Firestore reads (TanStack Query)
+├── theme.js        # Every colour + typography token
+└── lib/            # firebase.js (client init), api.js (fetch wrapper),
+                    # domain logic, and 18 *.test.js files
 ```
+
+## Docs
+
+`CLAUDE.md` is the working brief for this repo. `OWNERSHIP.md` is required reading
+before editing anything, because several people work this checkout at once.
+
+| Doc | Answers |
+|---|---|
+| [docs/VISION.md](docs/VISION.md) | Why this exists and who it is for |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The layers, and the two data paths |
+| [docs/TECH-STACK.md](docs/TECH-STACK.md) | Every tool, why, and what was rejected |
+| [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Every Firestore path this client touches |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What phase we are in |
+| [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md) | What has not been decided |
+
+The schema and API docs shared by all three repos live in
+[activklass-backend/docs](https://github.com/rdgdepaz13-afk/activklass-backend/tree/main/docs).
