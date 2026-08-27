@@ -169,7 +169,7 @@ export default function Login() {
             required
             disabled={settingPassword}
             autoComplete="username"
-            placeholder="you@school.edu.ph or snhs-789012"
+            placeholder="Enter your username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={{ ...authInputStyle, opacity: settingPassword ? 0.6 : 1 }}
