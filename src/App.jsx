@@ -16,6 +16,7 @@ const Landing  = lazyRoute(() => import('@/routes/index'), { full: true })
 const Login    = lazyRoute(() => import('@/routes/login'), { full: true })
 const Register = lazyRoute(() => import('@/routes/register'), { full: true })
 const ForgotPassword = lazyRoute(() => import('@/routes/forgot-password'), { full: true })
+const ResetPassword = lazyRoute(() => import('@/routes/reset-password'), { full: true })
 const ForcedChangePassword = lazyRoute(() => import('@/routes/change-password'), { full: true })
 
 // ─── Student portal ──────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/login"    element={Login} />
       <Route path="/register" element={Register} />
       <Route path="/forgot-password" element={ForgotPassword} />
+      <Route path="/reset-password" element={ResetPassword} />
       <Route path="/portal"   element={<RoleHomeRedirect />} />
 
       {/* Signed in, but still on the password an admin issued. ProtectedRoute
