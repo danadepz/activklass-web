@@ -272,11 +272,14 @@ export default function Login() {
             : settingPassword ? 'Set password and continue' : 'Sign in'}
         </SubmitButton>
 
+        {/* Registration is teacher-only: students, admins and parents get
+            their accounts from the school, so the invite here says who it
+            is actually for instead of a generic "create one". */}
         {!settingPassword && (
           <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
-            No account yet?{' '}
+            A teacher signing up on your own?{' '}
             <Link to="/register" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Create one
+              Create an account
             </Link>
           </div>
         )}
