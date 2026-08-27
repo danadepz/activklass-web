@@ -171,7 +171,9 @@ function randomCode() {
 
 function displayName(profile) {
   const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
-  return name || profile.email || 'Student'
+  // login_id before email: the email may be the internal issued-login address,
+  // which is never shown to people.
+  return name || profile.login_id || profile.email || 'Student'
 }
 
 /**

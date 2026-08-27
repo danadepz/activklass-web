@@ -439,7 +439,7 @@ export default function TeacherLayout() {
                   {profile.first_name} {profile.last_name}
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.email}
+                  {profile.login_id ?? profile.email}
                 </div>
               </div>
             </NavLink>
@@ -500,7 +500,7 @@ export default function TeacherLayout() {
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                 <span>Account</span>
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.first_name} {profile.last_name} · {profile.email}
+                  {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
                 </span>
               </span>
             </NavLink>

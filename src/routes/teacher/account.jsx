@@ -111,9 +111,9 @@ function ProfileCard() {
                  onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: muted }}>
-          Email
+          {profile.login_id ? 'Login ID' : 'Email'}
           <input style={{ ...field, marginTop: 6, background: 'rgba(14,42,92,0.03)' }}
-                 value={profile.email ?? ''} disabled />
+                 value={profile.login_id ?? profile.email ?? ''} disabled />
         </label>
       </div>
       <div style={{ marginTop: 16 }}>

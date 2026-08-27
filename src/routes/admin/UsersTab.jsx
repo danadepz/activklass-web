@@ -158,7 +158,7 @@ function CreateUserForm({ onCreated, settings }) {
   const blank = {
     role: '', firstName: '', middleName: '', lastName: '', email: '', password: '',
     level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
-    birthdate: '', employeeNumber: '', department: '',
+    birthdate: '', employeeNumber: '', department: '', personalEmail: '',
   }
   const [form, setForm] = useState(blank)
   const [error, setError] = useState('')
@@ -197,6 +197,9 @@ function CreateUserForm({ onCreated, settings }) {
       nameError(form.middleName, { label: 'Middle name', required: false }) ||
       nameError(form.lastName, { label: 'Last name' }) ||
       (role === 'admin' ? emailError(form.email) : '') ||
+      // Their own inbox, kept for password recovery — optional, but has to be
+      // an email when given.
+      (role !== 'admin' && form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
       (role === 'student'
         ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
           (isG12
@@ -231,6 +234,8 @@ function CreateUserForm({ onCreated, settings }) {
       lastName: form.lastName,
       extra: {
         ...(form.middleName.trim() ? { middle_name: form.middleName.trim() } : {}),
+        ...(role !== 'admin' && form.personalEmail.trim()
+          ? { personal_email: form.personalEmail.trim() } : {}),
         ...(role === 'student' ? (() => {
           const [a, b] = splitPair(isG12 ? form.gradeSection : form.courseYear)
           return {
@@ -362,6 +367,16 @@ function CreateUserForm({ onCreated, settings }) {
                      onChange={set('department')} placeholder="e.g. Mathematics" />
             </label>
           </>
+        )}
+
+        {(role === 'teacher' || role === 'student') && (
+          <label style={labelStyle}>
+            Personal email <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+            {/* Their own inbox — not all students have a school email. Saved
+                for password recovery; the sign-in stays the issued login. */}
+            <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
+                   onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
+          </label>
         )}
 
         <label style={labelStyle}>
@@ -509,12 +524,15 @@ function UserRow({ user, isSelf, onChanged }) {
       </td>
 
       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-        <button style={btnGhost} onClick={doReset} disabled={!!busy}>
-          {busy === 'password' ? '…' : 'Reset password'}
-        </button>
-        {/* Parent accounts cannot be deactivated from here: a parent's access
+        {/* Parents get neither action: they self-register with their own real
+            email, so recovery is theirs (self-service reset), and their access
             is granted and revoked by their student's invitation link, not by
-            the school. The API refuses it too (parent_protected). */}
+            the school. The API refuses both too (parent_protected). */}
+        {!isParent && (
+          <button style={btnGhost} onClick={doReset} disabled={!!busy}>
+            {busy === 'password' ? '…' : 'Reset password'}
+          </button>
+        )}
         {isParent ? (
           <span style={{ fontSize: 12, color: faint, marginLeft: 8 }}
                 title="A parent's access is controlled by their student's invitation link.">

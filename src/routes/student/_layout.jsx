@@ -195,7 +195,7 @@ export default function StudentLayout() {
                   {profile.first_name} {profile.last_name}
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.email}
+                  {profile.login_id ?? profile.email}
                 </div>
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function StudentLayout() {
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px' }}>
               <div style={{ fontSize: 13, color: 'rgba(250,250,246,0.6)' }}>
-                {profile.first_name} {profile.last_name} · {profile.email}
+                {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
               </div>
             </div>
             <button

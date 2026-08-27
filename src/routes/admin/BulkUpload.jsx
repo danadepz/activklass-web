@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
+import { emailError } from '@/lib/validation'
 import { bulkCreateUsers } from '@/lib/admin'
 import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
@@ -13,6 +14,7 @@ import RolePicker from './RolePicker'
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
   'role', 'email', 'middle_name', 'password', // blank password -> the default
+  'personal_email',                           // their own inbox, for password recovery
   'student_number', 'lrn',                    // students: number always; LRN for Grade 12 & below
   'grade', 'section', 'birthdate',            // grade is stored as year_level
   'employee_number', 'department',            // teachers: number required per row
@@ -27,16 +29,17 @@ const OPTIONAL = [
 const TEMPLATES = {
   student: {
     columns: ['first_name', 'middle_name', 'last_name', 'student_number', 'lrn',
-              'grade', 'section', 'course', 'birthdate', 'password'],
+              'grade', 'section', 'course', 'birthdate', 'personal_email', 'password'],
     rows: [
-      ['Ana', '', 'Bautista', '2024-00123', '136728190501', 'Grade 9', 'Rizal', '', '2010-03-14', ''],
-      ['Juan', 'Reyes', 'Dela Cruz', '2022-04567', '', '3rd Year', '', 'BSIT', '2004-07-01', ''],
+      ['Ana', '', 'Bautista', '2024-00123', '136728190501', 'Grade 9', 'Rizal', '', '2010-03-14', '', ''],
+      ['Juan', 'Reyes', 'Dela Cruz', '2022-04567', '', '3rd Year', '', 'BSIT', '2004-07-01', 'sample.juan@gmail.com', ''],
     ],
   },
   teacher: {
-    columns: ['first_name', 'middle_name', 'last_name', 'employee_number', 'department', 'password'],
+    columns: ['first_name', 'middle_name', 'last_name', 'employee_number', 'department',
+              'personal_email', 'password'],
     rows: [
-      ['Maria', '', 'Santos', 'T-2024-018', 'Mathematics', ''],
+      ['Maria', '', 'Santos', 'T-2024-018', 'Mathematics', 'sample.maria@gmail.com', ''],
     ],
   },
 }
@@ -58,12 +61,14 @@ const ROW_SPEC = {
     ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
+    ['personal_email', 'Optional — their own inbox, like sample.juan@gmail.com, kept for password recovery. Not what they sign in with.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
   teacher: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
     ['department', 'Optional.'],
+    ['personal_email', 'Optional — their own inbox, like sample.maria@gmail.com, kept for password recovery. Not what they sign in with.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
 }
@@ -89,9 +94,14 @@ function rowProblem(row, prefix) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(row.birthdate)) return 'birthdate must be YYYY-MM-DD'
   }
   if (row.role === 'teacher' && !row.employee_number) return 'missing employee_number'
-  if (!row.email) {
-    if (row.role === 'admin') return 'admin rows need an email'
-    if (!prefix) return 'no email, and no login prefix set'
+  if (row.role === 'admin') {
+    if (!row.email) return 'admin rows need an email'
+  } else {
+    // Teachers and students always sign in with the issued login; an email
+    // on their row is their personal inbox (password recovery), not a login.
+    const personal = row.personal_email || row.email
+    if (personal && emailError(personal)) return 'personal_email is not an email'
+    if (!prefix) return 'no login prefix set'
     if (row.role === 'teacher' && !issuedLoginId(prefix, row.employee_number)) {
       return 'employee number needs 6 digits'
     }
@@ -99,9 +109,10 @@ function rowProblem(row, prefix) {
   return ''
 }
 
-/** The login this row will get: its own email, or one issued from the prefix. */
+/** The login this row will get: issued from the prefix, except admins, who
+ *  sign in with their real email. */
 function rowLogin(row, prefix) {
-  if (row.email) return row.email
+  if (row.role === 'admin') return row.email
   return issuedLoginId(prefix, row.role === 'student'
     ? (row.lrn || row.student_number)
     : row.employee_number)
@@ -114,9 +125,10 @@ function rowLogin(row, prefix) {
  * default role is chosen here and a per-row `role` column overrides it. Two
  * near-identical screens would drift.
  *
- * The `email` column is optional: teacher and student rows without one get a
- * login issued from the school's prefix (see the Login prefix card), which is
- * the normal case — most students have no email of their own.
+ * Teacher and student rows always get their login issued from the school's
+ * prefix (see the Login prefix card). A `personal_email` column — their own
+ * inbox, like sample.maria@gmail.com — is stored on the profile for password
+ * recovery, because not everyone has a school email; it is never the login.
  */
 export default function BulkUpload({ onDone, settings }) {
   const prefix = settings?.school?.login_prefix ?? ''
