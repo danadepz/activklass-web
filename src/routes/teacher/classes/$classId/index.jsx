@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { arrayRemove, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
@@ -14,8 +14,10 @@ import {
   ageFromBirthdate,
   fetchUsersByIds,
   findStudentByEmail,
+  findStudentsByNumber,
   parseCsv,
 } from '@/lib/roster'
+import { useAuth } from '@/context/useAuth'
 import { Users, Check, Clock, Layers } from '@/components/icons'
 import { MetricCard } from '@/components/ui/Card'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -285,9 +287,26 @@ function StudentFields({ fields, setFields }) {
   )
 }
 
-/* Add a registered student by email, or create a new manual student record. */
+/**
+ * Pick the account a roster ID refers to.
+ *
+ * findStudentsByNumber returns every match because a student number is only
+ * unique within a school. The teacher's own school wins; a tie that survives
+ * that filter is a real ambiguity for the admin to resolve, not something to
+ * guess at — enrolling the wrong school's student puts this class on a
+ * stranger's dashboard.
+ */
+function pickMatch(matches, schoolId) {
+  if (matches.length <= 1) return { match: matches[0] ?? null, ambiguous: false }
+  const scoped = schoolId ? matches.filter((m) => m.school_id === schoolId) : []
+  if (scoped.length === 1) return { match: scoped[0], ambiguous: false }
+  return { match: null, ambiguous: true }
+}
+
+/* Add a registered student by ID (or email), or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
+  const { profile } = useAuth()
   const [tab, setTab] = useState('find') // 'find' | 'create'
   const [error, setError] = useState(null)
   const fail = failWith(setError)
@@ -295,7 +314,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
 
   // --- Find existing ---
-  const [email, setEmail] = useState('')
+  const [idInput, setIdInput] = useState('')
   const [student, setStudent] = useState(null)
   const [findFields, setFindFields] = useState(EMPTY_STUDENT_FIELDS)
 
@@ -305,9 +324,23 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     fail(null)
     setStudent(null)
     try {
-      const found = await findStudentByEmail(email)
+      // The ID is the key the class list actually carries; email still works
+      // for self-registered students, recognized by the '@' no ID can contain.
+      const needle = idInput.trim()
+      let found = null
+      if (needle.includes('@')) {
+        found = await findStudentByEmail(needle)
+      } else {
+        const picked = pickMatch(await findStudentsByNumber(needle), profile?.school_id)
+        if (picked.ambiguous) {
+          fail('More than one student account carries that ID. Ask your school admin which account is your student, then add them by email.')
+          setBusy(false)
+          return
+        }
+        found = picked.match
+      }
       if (!found) {
-        fail('No registered student account with that email. Ask the student to sign up first, or use "Create New" to add them manually.')
+        fail('No student account matches that ID. Ask your school admin to create the account first, or use "Create New" to add them yourself.')
       } else if (enrolledIds.includes(found.id)) {
         fail('That student is already in this class.')
       } else {
@@ -338,34 +371,14 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     setBusy(true)
     fail(null)
     try {
-      const payload = {
-        students: [
-          {
-            first_name: student.first_name,
-            last_name: student.last_name,
-            email: student.email,
-            student_number: findFields.student_number.trim(),
-            middle_name: findFields.middle_name?.trim() || '',
-            course: findFields.course?.trim() || '',
-            year_level: findFields.year_level?.trim() || '',
-            remarks: findFields.remarks || '',
-            enrollment_status: findFields.enrollment_status || 'AC',
-            lrn: findFields.lrn?.trim() || '',
-            birthdate: findFields.birthdate || '',
-          }
-        ]
-      }
-      const res = await api(`/api/classes/${classId}/students/provision`, {
-        method: 'POST',
-        body: payload
-      })
-      const { created, skipped, failed } = provisionOutcome(res)
-      if (failed.length) throw new Error(firstReason(failed))
-      // A skip is not a failure and not a success: the row was understood and
-      // deliberately not acted on. Saying nothing here is what made "add" look
-      // like it had done something when it had not.
-      if (!created.length && skipped.length) throw new Error(firstReason(skipped))
-      announceLogins(created)
+      // The account already exists, so this is enrollment, not provisioning:
+      // merge the roster fields onto the profile (same write the Edit modal
+      // makes) and put the uid on the class. The student's dashboard reads
+      // membership straight from student_ids, so they see the class on their
+      // next load. Going through the Flask provision endpoint here is what
+      // used to mint a DUPLICATE account whenever the email didn't match.
+      await updateDoc(doc(db, 'users', student.id), rosterPatch(findFields))
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
       onDone()
     } catch (err) {
       fail(err.message)
@@ -538,11 +551,11 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
           <div className="space-y-4">
             <form onSubmit={lookup} className="flex gap-2">
               <input
-                type="email"
+                type="text"
                 required
-                placeholder="student@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Student ID or LRN"
+                value={idInput}
+                onChange={(e) => setIdInput(e.target.value)}
                 className={`${inputCls} flex-1`}
               />
               <button
@@ -558,7 +571,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
               <div className="border border-slate-200 rounded-lg p-4 space-y-4">
                 <p className="font-medium text-slate-800">
                   {student.last_name}, {student.first_name}
-                  <span className="text-slate-400 font-normal"> · {student.email}</span>
+                  <span className="text-slate-400 font-normal"> · {student.login_id ?? student.email}</span>
                 </p>
                 {renderRosterFields(findFields, setFindFields)}
                 <div className="pt-2 flex flex-col gap-2">
@@ -570,7 +583,6 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
                   >
                     {busy ? 'Adding…' : 'Add to class'}
                   </button>
-                  <SlowHint show={busy} />
                   <button
                     type="button"
                     onClick={onClose}
@@ -772,13 +784,16 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   )
 }
 
-/* CSV import: header row first_name,last_name,email,lrn,birthdate plus the
-   optional roster columns student_number,middle_name,course,year_level,remarks,
-   enrollment_status. Matches registered students by email; preview first. */
-function CsvUploadModal({ classId, onClose, onDone }) {
+/* CSV roster: matches each row against an EXISTING student account by
+   student_number, then lrn, then email, and enrolls the matches. Never
+   creates accounts — under the issued-login scheme the admin makes accounts,
+   and a typo'd ID must surface as "no account", not become a duplicate
+   student nobody can sign in as. Preview first, with unmatched rows named. */
+function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Upload a roster CSV', closeOnBackdrop: false })
+  const { profile } = useAuth()
   const fileRef = useRef(null)
-  const [preview, setPreview] = useState(null) // { students: [] }
+  const [preview, setPreview] = useState(null) // { matched: [], already: [], unmatched: [] }
   const [error, setError] = useState(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
@@ -792,30 +807,56 @@ function CsvUploadModal({ classId, onClose, onDone }) {
       if (rows.length < 2) throw new Error('CSV needs a header row plus at least one student')
       const header = rows[0].map((h) => h.trim().toLowerCase())
       const col = (name) => header.indexOf(name)
-      if (col('email') === -1) {
-        throw new Error('CSV must have an "email" column (expected: email, first_name, last_name)')
+      if (col('student_number') === -1 && col('lrn') === -1) {
+        throw new Error('CSV must have a "student_number" or "lrn" column — that ID is how each row is matched to a student account')
       }
-      const students = []
+      const entries = []
       for (const row of rows.slice(1)) {
         const cell = (name) => (col(name) === -1 ? '' : row[col(name)]?.trim() ?? '')
         const entry = {
+          student_number: cell('student_number'),
+          lrn: cell('lrn'),
+          email: cell('email').toLowerCase(),
           first_name: cell('first_name'),
           last_name: cell('last_name'),
-          email: row[col('email')]?.trim().toLowerCase() ?? '',
-          lrn: cell('lrn'),
-          birthdate: cell('birthdate'),
-          student_number: cell('student_number'),
-          middle_name: cell('middle_name'),
-          course: cell('course'),
-          year_level: cell('year_level'),
-          remarks: cell('remarks'),
-          enrollment_status: cell('enrollment_status'),
         }
-        if (entry.email) {
-          students.push(entry)
+        if (entry.student_number || entry.lrn || entry.email) entries.push(entry)
+      }
+      if (!entries.length) throw new Error('No rows with a student ID found under the header')
+
+      const matched = []
+      const already = []
+      const unmatched = []
+      const seen = new Set()
+      // Sequential on purpose: a class roster is tens of rows, and each match
+      // is one or two indexed equality reads. Parallel adds nothing but load.
+      for (const entry of entries) {
+        const label =
+          `${entry.last_name}, ${entry.first_name}`.replace(/^, |, $/g, '').trim() ||
+          entry.student_number || entry.lrn || entry.email
+        const id = entry.student_number || entry.lrn
+        let account = null
+        let ambiguous = false
+        if (id) {
+          const picked = pickMatch(await findStudentsByNumber(id), profile?.school_id)
+          account = picked.match
+          ambiguous = picked.ambiguous
+        }
+        if (!account && !ambiguous && entry.email) {
+          account = await findStudentByEmail(entry.email)
+        }
+        if (ambiguous) {
+          unmatched.push({ label, id, reason: 'more than one account carries this ID' })
+        } else if (!account) {
+          unmatched.push({ label, id: id || entry.email, reason: 'no student account' })
+        } else if (enrolledIds.includes(account.id) || seen.has(account.id)) {
+          already.push({ label, account })
+        } else {
+          seen.add(account.id)
+          matched.push({ label, account })
         }
       }
-      setPreview({ students })
+      setPreview({ matched, already, unmatched })
     } catch (err) {
       fail(err.message)
     } finally {
@@ -824,41 +865,26 @@ function CsvUploadModal({ classId, onClose, onDone }) {
   }
 
   async function commit() {
+    const uids = preview.matched.map((m) => m.account.id)
+    if (maxStudents > 0 && enrolledIds.length + uids.length > maxStudents) {
+      fail(`This would put the class over its maximum of ${maxStudents} students. Remove some rows or raise the limit in class settings.`)
+      return
+    }
     setBusy(true)
     fail(null)
     try {
-      const res = await api(`/api/classes/${classId}/students/provision`, {
-        method: 'POST',
-        body: { students: preview.students }
-      })
-      const { created, skipped, failed } = provisionOutcome(res)
-
-      /* Nothing imported is a failure however the server labelled it. Closing
-         the modal here -- which is what this did -- is why an upload that
-         imported no one looked like it had worked. */
-      if (!created.length) {
-        fail(
-          failed.length
-            ? `No students were imported. ${firstReason(failed)}`
-            : skipped.length
-              ? `Nothing to import. ${firstReason(skipped)}`
-              : 'No students were imported. Check that the file has a row under the header.',
-        )
-        setBusy(false)
-        return
-      }
-
-      // Partial success: the rows that did not land have to be named, or the
-      // teacher reads the count as the whole file.
-      if (failed.length) {
-        toast.error(
-          `${created.length} imported, ${failed.length} could not be. ${firstReason(failed)}`,
+      // One write: membership is the array on the class doc, and arrayUnion
+      // takes the whole batch. Each student's dashboard picks the class up
+      // from student_ids on their next load — nothing else to sync.
+      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(...uids) })
+      toast.success(`${uids.length} student${uids.length === 1 ? '' : 's'} added to the class.`)
+      if (preview.unmatched.length) {
+        toast.info(
+          `${preview.unmatched.length} row${preview.unmatched.length === 1 ? ' was' : 's were'} not added — ` +
+            'no matching account. Ask your school admin to create those accounts, then upload again.',
+          { duration: 0 },
         )
       }
-      if (skipped.length) {
-        toast.info(`${skipped.length} row${skipped.length === 1 ? '' : 's'} skipped. ${firstReason(skipped)}`)
-      }
-      announceLogins(created)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -874,22 +900,19 @@ function CsvUploadModal({ classId, onClose, onDone }) {
         <div className="space-y-3">
           <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
           <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
-            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — required, matches each student to their ActivKlass account</li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — student full name</li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">lrn</code>, <code className="bg-slate-100 px-1 rounded text-xs">birthdate</code>, <code className="bg-slate-100 px-1 rounded text-xs">student_number</code></li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">course</code>, <code className="bg-slate-100 px-1 rounded text-xs">year_level</code>, <code className="bg-slate-100 px-1 rounded text-xs">middle_name</code></li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">remarks</code>, <code className="bg-slate-100 px-1 rounded text-xs">enrollment_status</code> (AC or IN)</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">student_number</code> or <code className="bg-slate-100 px-1 rounded text-xs">lrn</code> — required, matches each row to the student's account</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — so unmatched rows are readable in the preview</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — optional fallback for students who signed up themselves</li>
           </ul>
           <p className="text-xs text-slate-400">
-            Students without an ActivKlass account get one, and they all start on the same password:{' '}
-            <code className="bg-slate-100 px-1 rounded text-xs">pass1234</code>. Students who already have an account
-            keep their own password and are just enrolled.
+            This upload only enrolls students who already have an account — it never creates one.
+            Rows with no matching account are listed so you can ask your school admin to add them.
           </p>
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
             <table className="w-full min-w-[520px] text-xs">
               <thead>
                 <tr className="bg-slate-50 text-left text-slate-500">
-                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">email</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">student_number</th>
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">first_name</th>
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">last_name</th>
                   <th className="px-3 py-2 font-medium border-b border-slate-200">lrn</th>
@@ -897,13 +920,13 @@ function CsvUploadModal({ classId, onClose, onDone }) {
               </thead>
               <tbody>
                 <tr className="text-slate-600">
-                  <td className="px-3 py-1.5 border-r border-slate-200">juan@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">2024-00187</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Juan</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Dela Cruz</td>
                   <td className="px-3 py-1.5">123456789012</td>
                 </tr>
                 <tr className="text-slate-600 bg-slate-50/60">
-                  <td className="px-3 py-1.5 border-r border-slate-200">maria@email.com</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">2024-00212</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Maria</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Santos</td>
                   <td className="px-3 py-1.5">987654321098</td>
@@ -928,26 +951,46 @@ function CsvUploadModal({ classId, onClose, onDone }) {
           {preview && (
             <>
               <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
-              {preview.students.map((s, idx) => (
-                <div key={idx} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+              {preview.matched.map((m, idx) => (
+                <div key={`m${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
                   <span style={{ color: ink }}>
-                    {s.last_name || s.first_name ? `${s.last_name}, ${s.first_name}` : s.email}
+                    {m.account.last_name}, {m.account.first_name}
+                    <span style={{ color: faint }}> · {m.account.login_id ?? m.account.email}</span>
                   </span>
                   <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
                 </div>
               ))}
+              {preview.already.map((a, idx) => (
+                <div key={`a${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                  <span style={{ color: muted }}>{a.label}</span>
+                  <span style={{ color: muted, fontWeight: 600 }}>already in class</span>
+                </div>
+              ))}
+              {preview.unmatched.map((u, idx) => (
+                <div key={`u${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                  <span style={{ color: ink }}>
+                    {u.label}
+                    {u.id ? <span style={{ color: faint }}> · {u.id}</span> : null}
+                  </span>
+                  <span style={{ color: red, fontWeight: 600 }}>{u.reason}</span>
+                </div>
+              ))}
             </div>
+            {preview.unmatched.length > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                {preview.unmatched.length} row{preview.unmatched.length === 1 ? ' has' : 's have'} no
+                matching student account and will not be added. Ask your school admin to create those
+                accounts, then upload this file again.
+              </p>
+            )}
             <button
               onClick={commit}
-              disabled={busy || preview.students.length === 0}
+              disabled={busy || preview.matched.length === 0}
               className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
               style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
-              {busy ? 'Importing…' : `Import ${preview.students.length} student${preview.students.length === 1 ? '' : 's'}`}
+              {busy ? 'Adding…' : `Add ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'} to class`}
             </button>
-            <SlowHint show={busy}>
-              Setting up their accounts — a few seconds each. Leave this open until it finishes.
-            </SlowHint>
           </>
         )}
 

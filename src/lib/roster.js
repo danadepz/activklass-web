@@ -21,6 +21,35 @@ export async function fetchUsersByIds(ids) {
   return users
 }
 
+/**
+ * Find registered students by exact student number, falling back to LRN.
+ *
+ * Returns an ARRAY: the same number can legitimately exist at two schools, so
+ * the caller disambiguates (prefer the teacher's own school_id) rather than
+ * this helper guessing. Admin-issued accounts may have no email at all — the
+ * ID is the only key a teacher's class list reliably carries.
+ */
+export async function findStudentsByNumber(idText) {
+  const needle = String(idText ?? '').trim()
+  if (!needle) return []
+  const byNumber = await getDocs(
+    query(
+      collection(db, 'users'),
+      where('role', '==', 'student'),
+      where('student_number', '==', needle),
+    ),
+  )
+  if (!byNumber.empty) return byNumber.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const byLrn = await getDocs(
+    query(
+      collection(db, 'users'),
+      where('role', '==', 'student'),
+      where('lrn', '==', needle),
+    ),
+  )
+  return byLrn.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
 /** Find a registered student by exact email. Returns the user doc or null. */
 export async function findStudentByEmail(email) {
   const needle = String(email ?? '').trim().toLowerCase()
