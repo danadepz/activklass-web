@@ -12,9 +12,11 @@
  * The doc id IS the lowercased abbreviation ("ucb" for University of
  * Cebu-Banilad), the same doc-id-as-uniqueness trick as teacher_group_codes:
  * once one teacher adds UCB, the next teacher from that school finds it in
- * the dropdown instead of creating a near-duplicate. Reads are public in
- * firestore.rules because the registration form renders before any account
- * exists; creates require the just-created Firebase session.
+ * the dropdown instead of creating a near-duplicate. Names are deduplicated
+ * too, through schoolNameKey — two teachers typing the same school with
+ * different spacing or punctuation land on one entry, not two. Reads are
+ * public in firestore.rules because the registration form renders before any
+ * account exists; creates require the just-created Firebase session.
  */
 import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
@@ -22,6 +24,23 @@ import { auth, db } from './firebase'
 /** The doc id a given abbreviation lives under. */
 export function schoolAbbrKey(abbreviation) {
   return String(abbreviation ?? '').trim().toLowerCase()
+}
+
+/**
+ * The comparison key for a school NAME: accents folded, lowercased, every run
+ * of punctuation or whitespace collapsed to a single space. "University of
+ * Cebu-Banilad", "University of Cebu - Banilad" and "UNIVERSITY OF CEBU –
+ * BANILAD" all produce the same key, so teachers who type the same school
+ * differently still land on the same directory entry. Matching only — the
+ * displayed and stored name keeps the spelling the first teacher entered.
+ */
+export function schoolNameKey(name) {
+  return String(name ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
 }
 
 /** Every directory entry, A→Z by name: [{id, name, abbreviation}]. */
@@ -40,6 +59,14 @@ export async function findSchoolByAbbr(abbreviation) {
   return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
+/** The entry whose name matches after normalization, or null. Works signed out. */
+export async function findSchoolByName(name) {
+  const key = schoolNameKey(name)
+  if (!key) return null
+  const all = await fetchSchoolDirectory()
+  return all.find((s) => schoolNameKey(s.name) === key) ?? null
+}
+
 /**
  * The error message when an abbreviation already belongs to a DIFFERENT
  * school, or '' when it is free or names the same school (which callers may
@@ -50,8 +77,7 @@ export async function findSchoolByAbbr(abbreviation) {
 export async function abbrConflictError(abbreviation, name) {
   const existing = await findSchoolByAbbr(abbreviation)
   if (!existing) return ''
-  const wanted = String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
-  if (String(existing.name).toLowerCase() === wanted) return ''
+  if (schoolNameKey(existing.name) === schoolNameKey(name)) return ''
   return (
     `“${String(abbreviation).trim().toUpperCase()}” is already used by ${existing.name}. ` +
     'If that is your school, pick it from the list; otherwise choose a different abbreviation.'
@@ -60,18 +86,20 @@ export async function abbrConflictError(abbreviation, name) {
 
 /**
  * Add a school so later registrants find it in the dropdown. Signed-in only.
- * Returns {id, name, abbreviation} — the existing entry when the abbreviation
- * already names the same school, else the newly created one. Throws the
+ * Returns {id, name, abbreviation} — the existing entry when the name already
+ * matches one (per schoolNameKey), else the newly created one. Throws the
  * abbrConflictError message when the abbreviation belongs to another school.
  */
 export async function addSchoolToDirectory({ name, abbreviation }) {
   const cleanName = String(name ?? '').trim().replace(/\s+/g, ' ')
   const abbr = String(abbreviation ?? '').trim().toUpperCase()
+  // The same school typed differently — "Cebu - Banilad" for an existing
+  // "Cebu-Banilad" — reuses the existing entry (its abbreviation included)
+  // instead of listing the school twice under two abbreviations.
+  const sameSchool = await findSchoolByName(cleanName)
+  if (sameSchool) return sameSchool
   const existing = await findSchoolByAbbr(abbr)
-  if (existing) {
-    if (String(existing.name).toLowerCase() === cleanName.toLowerCase()) return existing
-    throw new Error(await abbrConflictError(abbr, cleanName))
-  }
+  if (existing) throw new Error(await abbrConflictError(abbr, cleanName))
   await setDoc(doc(db, 'school_directory', schoolAbbrKey(abbr)), {
     name: cleanName,
     abbreviation: abbr,

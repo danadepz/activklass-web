@@ -72,7 +72,7 @@ src/lib/quizGrading.js   src/lib/classForm.js     src/lib/notifications.js
 src/lib/gradebook.js     src/lib/quizToRecord.js  src/lib/questionBank.js
 src/lib/remediationRecovery.js
 src/lib/quizPool.js      src/lib/quizFeedback.js
-src/lib/quizAttempts.js
+src/lib/quizAttempts.js  src/lib/schoolDirectory.js
 ```
 
 **`quizPool.js`, `quizFeedback.js` and `quizAttempts.js` exist twice.** Each has a TypeScript port
