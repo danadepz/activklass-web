@@ -161,7 +161,7 @@ export default function Login() {
         {notice && <AuthNotice>{notice}</AuthNotice>}
 
         <div>
-          <label htmlFor="login-email" style={authLabelStyle}>Email or login ID</label>
+          <label htmlFor="login-email" style={authLabelStyle}>Enter username</label>
           <input
             id="login-email"
             className="ak-input"
