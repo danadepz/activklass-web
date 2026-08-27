@@ -61,14 +61,14 @@ const ROW_SPEC = {
     ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
-    ['personal_email', 'Optional — their own inbox, like sample.juan@gmail.com, kept for password recovery. Not what they sign in with.'],
+    ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com. This upload is the only place it gets on file (they can only confirm it later, not add it); without one, staff resets are their only recovery. Never the sign-in.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
   teacher: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
     ['department', 'Optional.'],
-    ['personal_email', 'Optional — their own inbox, like sample.maria@gmail.com, kept for password recovery. Not what they sign in with.'],
+    ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com. This upload is the only place it gets on file (they can only confirm it later, not add it); without one, staff resets are their only recovery. Never the sign-in.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
 }

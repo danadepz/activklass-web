@@ -370,10 +370,13 @@ function CreateUserForm({ onCreated, settings }) {
         )}
 
         {(role === 'teacher' || role === 'student') && (
-          <label style={labelStyle}>
-            Personal email <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
-            {/* Their own inbox — not all students have a school email. Saved
-                for password recovery; the sign-in stays the issued login. */}
+          <label style={labelStyle}
+                 title="Recorded here or nowhere: the account owner only confirms this address later — they cannot add one themselves. Without it, staff resets are their only way back in.">
+            Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — their password recovery)</span>
+            {/* This form is the ONLY place an address gets on file (the
+                owner's dashboard card just confirms it). Still optional —
+                not everyone has an email — but skipping it leaves staff
+                resets as the account's only recovery. */}
             <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
                    onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
           </label>
