@@ -18,6 +18,7 @@ const Register = lazyRoute(() => import('@/routes/register'), { full: true })
 const ForgotPassword = lazyRoute(() => import('@/routes/forgot-password'), { full: true })
 const ResetPassword = lazyRoute(() => import('@/routes/reset-password'), { full: true })
 const ForcedChangePassword = lazyRoute(() => import('@/routes/change-password'), { full: true })
+const PendingVerification = lazyRoute(() => import('@/routes/pending-verification'), { full: true })
 
 // ─── Student portal ──────────────────────────────────────────────────────────
 const StudentLayout       = lazyRoute(() => import('@/routes/student/_layout'), { full: true })
@@ -43,6 +44,7 @@ const QuizBuilderPage     = lazyRoute(() => import('@/routes/teacher/quizzes.$qu
 const AdminUsersPage      = lazyRoute(() => import('@/routes/admin/index'), { full: true })
 const SuperAdminLayout    = lazyRoute(() => import('@/routes/superadmin/_layout'), { full: true })
 const SuperAdminSubscribersPage = lazyRoute(() => import('@/routes/superadmin/index'))
+const SuperAdminVerificationsPage = lazyRoute(() => import('@/routes/superadmin/verifications'))
 const GradingSetupPage    = lazyRoute(() => import('@/routes/teacher/grading'))
 const TeacherAccountPage  = lazyRoute(() => import('@/routes/teacher/account'))
 const AnnouncementsPage   = lazyRoute(() => import('@/routes/teacher/announcements'))
@@ -76,6 +78,12 @@ export default function App() {
           visitor, and the form reauthenticates before it changes anything. */}
       <Route element={<ProtectedRoute allowTempPassword />}>
         <Route path="/change-password" element={ForcedChangePassword} />
+      </Route>
+
+      {/* A self-registered teacher waiting on our ID check. Same opt-out
+          pattern as /change-password, for the same loop reason. */}
+      <Route element={<ProtectedRoute allowUnverified />}>
+        <Route path="/pending-verification" element={PendingVerification} />
       </Route>
 
       {/* Teacher */}
@@ -127,6 +135,7 @@ export default function App() {
       <Route element={<ProtectedRoute superAdmin />}>
         <Route path="/superadmin" element={SuperAdminLayout}>
           <Route index element={SuperAdminSubscribersPage} />
+          <Route path="verifications" element={SuperAdminVerificationsPage} />
         </Route>
       </Route>
 

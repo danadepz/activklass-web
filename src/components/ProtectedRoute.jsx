@@ -23,7 +23,12 @@ function FullScreenMessage({ children }) {
  * Only /change-password sets it — that is the screen the gate sends people to,
  * so gating it too would be a redirect loop.
  */
-export default function ProtectedRoute({ roles, superAdmin = false, allowTempPassword = false }) {
+export default function ProtectedRoute({
+  roles,
+  superAdmin = false,
+  allowTempPassword = false,
+  allowUnverified = false,
+}) {
   const { status, profile, errorDetail, isSuperAdmin } = useAuth()
 
   if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
@@ -48,9 +53,23 @@ export default function ProtectedRoute({ roles, superAdmin = false, allowTempPas
   if (!allowTempPassword && profile.is_temp_password) {
     return <Navigate to="/change-password" replace />
   }
+  /* Same shape, second flag. A teacher who registered on their own carries
+     `verification_status` from the moment the profile exists, and only a
+     developer moves it to 'approved' (routes/superadmin/verifications). An
+     admin-issued teacher never has the field, so the gate does not see them.
+     Only /pending-verification opts out, for the same redirect-loop reason as
+     above. Workflow gate, not security — see the note in that route. */
+  if (!allowUnverified && awaitingVerification(profile)) {
+    return <Navigate to="/pending-verification" replace />
+  }
   if (superAdmin && !isSuperAdmin) return <Navigate to="/portal" replace />
   if (roles && !roles.includes(profile.role)) return <Navigate to="/portal" replace />
   return <Outlet />
+}
+
+function awaitingVerification(profile) {
+  const v = profile?.verification_status
+  return profile?.role === 'teacher' && Boolean(v) && v !== 'approved'
 }
 
 /** Sends "/" to the right home page per role. */
@@ -70,6 +89,7 @@ export function RoleHomeRedirect() {
   // Checked ahead of the super-admin branch so a developer account on a
   // temporary password is not waved past its own gate.
   if (profile.is_temp_password) return <Navigate to="/change-password" replace />
+  if (awaitingVerification(profile)) return <Navigate to="/pending-verification" replace />
   // Developers land in the ops console. Checked before role, since we hold a
   // normal role too — the claim is what distinguishes us.
   if (isSuperAdmin) return <Navigate to="/superadmin" replace />

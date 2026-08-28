@@ -17,7 +17,10 @@ export default function SuperAdminLayout() {
   const { profile } = useAuth()
   const { pathname } = useLocation()
 
-  const tabs = [{ to: '/superadmin', label: 'Subscribers' }]
+  const tabs = [
+    { to: '/superadmin', label: 'Subscribers' },
+    { to: '/superadmin/verifications', label: 'Verifications' },
+  ]
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
