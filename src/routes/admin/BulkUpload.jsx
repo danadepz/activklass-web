@@ -21,26 +21,20 @@ const OPTIONAL = [
   'course', 'year_level',
 ]
 
-/* One template per role, holding exactly the data gathered for that role —
-   the download follows the role chosen above it. Students get one Grade 12 &
-   below example (LRN + grade/section) and one college example (student
-   number only, course, with the year in the grade column since grade is
-   stored as year_level either way). */
+/* One template per role, holding exactly the columns gathered for that role —
+   the download follows the role chosen above it. Headers only: an earlier
+   version shipped sample rows (Ana Bautista, Maria Santos…) to show the
+   format, and a downloaded template read as if it already held someone's
+   data — and uploaded unedited, it would have created those people. The
+   per-column rules live in the ROW_SPEC table on the card instead. */
 const TEMPLATES = {
   student: {
     columns: ['first_name', 'middle_name', 'last_name', 'student_number', 'lrn',
               'grade', 'section', 'course', 'birthdate', 'personal_email', 'password'],
-    rows: [
-      ['Ana', '', 'Bautista', '2024-00123', '136728190501', 'Grade 9', 'Rizal', '', '2010-03-14', '', ''],
-      ['Juan', 'Reyes', 'Dela Cruz', '2022-04567', '', '3rd Year', '', 'BSIT', '2004-07-01', 'sample.juan@gmail.com', ''],
-    ],
   },
   teacher: {
     columns: ['first_name', 'middle_name', 'last_name', 'employee_number', 'department',
               'personal_email', 'password'],
-    rows: [
-      ['Maria', '', 'Santos', 'T-2024-018', 'Mathematics', 'sample.maria@gmail.com', ''],
-    ],
   },
 }
 
@@ -198,18 +192,14 @@ export default function BulkUpload({ onDone, settings }) {
   }
 
   async function downloadTemplate() {
-    // The example rows leave `password` empty on purpose: that is the normal
-    // case — the login is issued from the school's prefix and the last six
-    // digits of the LRN / student number / employee ID, and the password
-    // falls back to the default. An .xlsx rather than a CSV because the
-    // headers are bold, UPPERCASE and sized to their text, which CSV cannot
-    // carry; the uploader reads .xlsx back directly.
+    // An .xlsx rather than a CSV because the headers are bold, UPPERCASE and
+    // sized to their text, which CSV cannot carry; the uploader reads .xlsx
+    // back directly.
     const template = TEMPLATES[uploadRole]
     if (!template) return
     await downloadXlsx(
       stampedName(`${uploadRole}-upload-template`).replace(/\.csv$/, '.xlsx'),
       template.columns,
-      template.rows,
     )
   }
 

@@ -17,8 +17,9 @@ async function excel() {
  * Download a spreadsheet: bold UPPERCASE headers, each column auto-sized to
  * its longest text. `columns` are the lowercase keys the uploader parses; the
  * uppercasing is presentation only (the parser lowercases headers anyway).
+ * `rows` is optional — the upload templates ship headers only.
  */
-export async function downloadXlsx(filename, columns, rows) {
+export async function downloadXlsx(filename, columns, rows = []) {
   const ExcelJS = await excel()
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Template')
