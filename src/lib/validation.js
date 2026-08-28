@@ -182,3 +182,40 @@ export function emailError(value) {
   if (!EMAIL_RE.test(text)) return 'Enter a valid email address, like name@school.edu.ph.'
   return ''
 }
+
+/* A Philippine mobile or landline number, as people actually type it:
+   09171234567, +63 917 123 4567, (032) 255-1234. Digits, spaces, dashes,
+   parentheses and a leading + are accepted; what is left after stripping
+   those must be 7–13 digits, so a stray letter or a 4-digit typo fails. */
+const PHONE_CHARS_RE = /^\+?[\d\s()-]+$/
+
+/**
+ * @param {string} value
+ * @param {object} [opts]
+ * @param {boolean} [opts.required=true]
+ */
+export function phoneError(value, { required = true } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return required ? 'Phone number is required.' : ''
+  const digits = text.replace(/\D/g, '')
+  if (!PHONE_CHARS_RE.test(text) || digits.length < 7 || digits.length > 13) {
+    return 'Enter a valid phone number, like 0917 123 4567.'
+  }
+  return ''
+}
+
+/**
+ * A shareable https link — the attachment path everywhere in this app, since
+ * uploads are unavailable on the Spark plan. Must parse as a URL and be https;
+ * "1", "drive" and a bare domain all fail.
+ */
+export function linkError(value, { label = 'Link' } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return `${label} is required.`
+  let url
+  try { url = new URL(text) } catch { return `${label} must be a full web address starting with https://.` }
+  if (url.protocol !== 'https:' || !url.hostname.includes('.')) {
+    return `${label} must be a full web address starting with https://.`
+  }
+  return ''
+}

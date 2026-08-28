@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   emailError, nameError, passwordError, tempPasswordError, yearLevelError,
-  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError,
+  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
 } from './validation'
 
 describe('nameError', () => {
@@ -152,5 +152,32 @@ describe('emailError', () => {
     expect(emailError('')).not.toBe('')
     expect(emailError('ana@school')).not.toBe('')
     expect(emailError('not an email')).not.toBe('')
+  })
+})
+
+describe('phoneError', () => {
+  it('accepts Philippine numbers however they are typed', () => {
+    expect(phoneError('09171234567')).toBe('')
+    expect(phoneError('+63 917 123 4567')).toBe('')
+    expect(phoneError('(032) 255-1234')).toBe('')
+  })
+  it('rejects blanks, letters and wrong lengths', () => {
+    expect(phoneError('')).not.toBe('')
+    expect(phoneError('', { required: false })).toBe('')
+    expect(phoneError('0917 ABC 4567')).not.toBe('')
+    expect(phoneError('1234')).not.toBe('')
+    expect(phoneError('12345678901234')).not.toBe('')
+  })
+})
+
+describe('linkError', () => {
+  it('accepts an https share link', () => {
+    expect(linkError('https://drive.google.com/file/d/abc/view')).toBe('')
+  })
+  it('rejects blanks, non-https and non-URLs', () => {
+    expect(linkError('')).not.toBe('')
+    expect(linkError('1')).not.toBe('')
+    expect(linkError('drive.google.com/x')).not.toBe('')
+    expect(linkError('http://example.com/id.jpg')).not.toBe('')
   })
 })
