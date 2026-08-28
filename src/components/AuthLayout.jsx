@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Check, Eye, EyeOff, AlertCircle, ArrowRight } from './icons'
-import { ink, navy, gold, muted, cream, serifAlt as serif, mono, sansFamily as sans } from '@/theme'
+import { ink, navy, gold, goldDeep, inkMuted, muted, cream, serifAlt as serif, mono, sansFamily as sans } from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * AuthLayout — two-panel shell for Login / Register.
@@ -49,6 +49,7 @@ export function SubmitButton({ children, ...props }) {
         justifyContent: 'center',
         gap: 10,
         opacity: props.disabled ? 0.7 : 1,
+        ...props.style,
       }}
     >
       {children}
@@ -165,7 +166,102 @@ export function BrandMark({ size = 32, onNavy = false }) {
 
 // --- shell ---------------------------------------------------------------
 
-export default function AuthLayout({ title, subtitle, children }) {
+export default function AuthLayout({ title, subtitle, titleSize, variant, children }) {
+  // variant="card": the whole screen is the brand navy, and ONE white
+  // rounded container sits in the middle, split in two — the brand / value
+  // pitch on its left half, the heading + form on its right half. The
+  // default two-panel shell below is untouched (Login uses it).
+  if (variant === 'card') {
+    return (
+      <div
+        className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 md:px-8"
+        style={{ background: navy, color: ink, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      >
+        {/* the wandering rings from the brand panel, five of them, behind the container */}
+        <div aria-hidden="true" style={{ position: 'absolute', top: -160, left: -120, width: 480, height: 480, border: '1px solid rgba(245,197,24,0.18)', borderRadius: '50%', animation: 'ak-wander-a 46s linear infinite' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: -60, right: -140, width: 400, height: 400, border: '1px solid rgba(245,197,24,0.12)', borderRadius: '50%', animation: 'ak-wander-b 38s linear infinite', animationDelay: '-12s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', bottom: -140, left: '18%', width: 360, height: 360, border: '1px solid rgba(63,169,245,0.16)', borderRadius: '50%', animation: 'ak-wander-c 52s linear infinite', animationDelay: '-20s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', bottom: -180, right: -80, width: 520, height: 520, border: '1px solid rgba(63,169,245,0.12)', borderRadius: '50%', animation: 'ak-wander-a 58s linear infinite', animationDelay: '-30s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: '35%', left: '42%', width: 240, height: 240, border: '1px solid rgba(245,197,24,0.14)', borderRadius: '50%', animation: 'ak-wander-b 44s linear infinite', animationDelay: '-6s' }} />
+        <div aria-hidden="true" style={{ position: 'absolute', top: '15%', right: '12%', width: 260, height: 260, background: 'radial-gradient(circle, rgba(245,197,24,0.18), transparent 65%)', filter: 'blur(10px)', animation: 'ak-wander-c 60s linear infinite', animationDelay: '-35s' }} />
+
+        <div
+          className="relative grid w-full overflow-hidden lg:grid-cols-2"
+          style={{ maxWidth: 1480, minHeight: 'min(760px, calc(100vh - 64px))', background: '#FFFFFF', borderRadius: 28, boxShadow: '0 40px 80px -30px rgba(0,0,0,0.55)', animation: 'ak-swap 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
+        >
+          {/* LEFT half — brand + value prop, on cream. Desktop only. */}
+          <section
+            className="hidden lg:flex lg:flex-col lg:items-center lg:justify-center"
+            style={{ background: cream, padding: 64, borderRight: '1px solid rgba(14,42,92,0.08)' }}
+          >
+            <div className="flex w-full flex-col" style={{ maxWidth: 440 }}>
+              <Link to="/" className="flex w-fit items-center gap-3" style={{ textDecoration: 'none', color: navy, marginBottom: 40 }}>
+                <BrandMark />
+                <span style={{ ...serif, fontSize: 26, letterSpacing: '-0.01em' }}>ActivKlass</span>
+              </Link>
+
+              <div className="inline-flex w-fit items-center gap-2.5" style={{ padding: '8px 16px 8px 10px', background: 'rgba(14,42,92,0.06)', border: '1px solid rgba(14,42,92,0.1)', borderRadius: 999, marginBottom: 28 }}>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', background: gold, display: 'grid', placeItems: 'center', color: navy }}>
+                  <Check className="h-3 w-3" />
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: navy }}>For DepEd K–12 &amp; CHED classrooms</span>
+              </div>
+
+              <h2 style={{ ...serif, fontSize: 'clamp(36px, 3.6vw, 48px)', lineHeight: 1.02, letterSpacing: '-0.025em', margin: '0 0 32px', color: ink, textWrap: 'balance' }}>
+                Class records that don't just <em style={{ fontStyle: 'italic', color: goldDeep }}>record</em>.
+              </h2>
+
+              <div className="flex flex-col gap-4">
+                {PERKS.map((perk) => (
+                  <div key={perk} className="flex items-start gap-3.5">
+                    <span style={{ width: 26, height: 26, borderRadius: '50%', background: gold, color: navy, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    <span style={{ fontSize: 16, color: inkMuted, lineHeight: 1.45 }}>{perk}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2.5" style={{ fontSize: 13, color: muted, marginTop: 40 }}>
+                <span style={{ ...mono, fontSize: 13, background: 'rgba(14,42,92,0.06)', padding: '5px 10px', borderRadius: 6, color: navy }}>
+                  🔒 RA 10173
+                </span>
+                <span>Privacy-first by design</span>
+              </div>
+            </div>
+          </section>
+
+          {/* RIGHT half — heading + form, centred. */}
+          <main className="flex items-center justify-center px-6 py-12 md:px-12">
+            {/* Wide enough for a two-column form, and the same on every
+                step, so the container never resizes as the form advances. */}
+            <div className="w-full" style={{ maxWidth: 680 }}>
+              <div className="mb-8 flex justify-center lg:hidden">
+                <Link to="/" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
+                  <BrandMark />
+                  <span style={{ ...serif, fontSize: 22, color: navy }}>ActivKlass</span>
+                </Link>
+              </div>
+
+              <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(30px, 6vw, 40px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink, textAlign: 'center', textWrap: 'balance' }}>
+                {title}
+              </h1>
+              {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 28px', lineHeight: 1.5, textAlign: 'center' }}>{subtitle}</p>}
+
+              {children}
+
+              <div style={{ textAlign: 'center', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 12, color: '#9AA6BD', lineHeight: 1.5 }}>
+                Protected under the Philippine Data Privacy Act of 2012.
+                <br />
+                Your data is never shared without consent.
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr]"
@@ -174,7 +270,7 @@ export default function AuthLayout({ title, subtitle, children }) {
       {/* LEFT — navy brand panel (desktop only); pinned so it stays in view
           while a tall form (register) scrolls the right column. */}
       <aside
-        className="relative hidden overflow-hidden lg:flex lg:flex-col lg:sticky lg:top-0 lg:self-start lg:h-screen"
+        className="relative hidden overflow-hidden lg:flex lg:flex-col lg:items-center lg:sticky lg:top-0 lg:self-start lg:h-screen"
         style={{ background: navy, color: cream, padding: 56 }}
       >
         <div aria-hidden="true" style={{ position: 'absolute', top: -140, right: -100, width: 460, height: 460, border: '1px solid rgba(245,197,24,0.16)', borderRadius: '50%', animation: 'ak-wander-a 46s linear infinite' }} />
@@ -189,7 +285,7 @@ export default function AuthLayout({ title, subtitle, children }) {
         </Link>
 
         {/* value prop — vertically centered in the panel */}
-        <div className="relative" style={{ maxWidth: 460, marginTop: 'auto', marginBottom: 'auto', padding: '40px 0' }}>
+        <div className="relative w-full" style={{ maxWidth: 460, marginTop: 'auto', marginBottom: 'auto', padding: '40px 0' }}>
           <div className="inline-flex items-center gap-2.5" style={{ padding: '8px 16px 8px 10px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 999, marginBottom: 34 }}>
             <span style={{ width: 18, height: 18, borderRadius: '50%', background: gold, display: 'grid', placeItems: 'center', color: navy }}>
               <Check className="h-3 w-3" />
@@ -237,18 +333,18 @@ export default function AuthLayout({ title, subtitle, children }) {
 
           {/* heading + form animate in together on each route swap */}
           <div style={{ animation: 'ak-swap 0.4s cubic-bezier(0.22,1,0.36,1) both' }}>
-            <h1 style={{ ...serif, fontSize: 'clamp(30px, 6vw, 40px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
+            <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(30px, 6vw, 40px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
               {title}
             </h1>
             {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 32px', lineHeight: 1.5 }}>{subtitle}</p>}
 
             {children}
-          </div>
 
-          <div style={{ textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 12, color: '#9AA6BD', lineHeight: 1.5 }}>
-            Protected under the Philippine Data Privacy Act of 2012.
-            <br />
-            Your data is never shared without consent.
+            <div style={{ textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 12, color: '#9AA6BD', lineHeight: 1.5 }}>
+              Protected under the Philippine Data Privacy Act of 2012.
+              <br />
+              Your data is never shared without consent.
+            </div>
           </div>
         </div>
       </main>
