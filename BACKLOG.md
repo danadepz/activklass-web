@@ -1160,3 +1160,52 @@ Still open from this round:
 - BulkUpload CSV path only checks password length, not the new letter+number
   rule or name characters.
 - Student-facing forms (contest evidence, profile) not re-audited this round.
+
+## Registration & subscriptions pane — 2026-08-29
+
+What this pane built today, so the next session starts from the right place.
+Decisions are the owner's; the numbers are proposals the owner may revise.
+
+**`/register` is now a six-step walk, one page, both account types** (`routes/register.jsx`,
+`AuthLayout` `variant="card"`: navy screen, one white container, left pitch / right form):
+1. **Account type** — Individual (a teacher on their own) or Institution (a school).
+2. **About you** — first/last name, gender (he/she/others), phone (`phoneError`, new).
+3. **Your school** — directory pick or add, campus (optional), private/public,
+   academic calendar (school year / semesters / trimesters — **recorded only, not
+   billed by**; owner reverted a per-term split the same day), position.
+4. **Sign-in details** — email, password, confirm (green "Passwords match").
+5. Individual: **Verify identity** — ID type, number, and an https **share link** to a
+   photo (no uploads on Spark; `linkError`, new). Institution: same step is Seats.
+6. Individual: **Students** slider → "Start free trial". Institution: **Seats** — teachers
+   (20–500) × **students per teacher** (30–300), total is the product → "Request access".
+
+**Pricing (mock-up, `lib/pricing.js`, reasoning in its header):** ₱1,200 per teacher seat +
+₱60 per student seat, **per school year**, same rate on both paths so they cannot be played
+against each other (1 teacher + 120 students = ₱8,400; 20 × 120 = ₱168,000 = 20 × ₱8,400).
+Teacher seats carry the AI cost (~₱26/month typical on gemini-3.6-flash, ~₱430 at the daily
+cap); students are Firestore reads only (~₱2–3/month). Shown as an **Estimate**. 30-day
+trial is a preview *before* the paid year, not a credit against it.
+
+**ID verification for self-registered teachers (the devs check):** profile gets
+`verification_status: 'pending'`; `ProtectedRoute` holds the account on
+`/pending-verification` (same pattern as the temp-password gate) until a developer approves
+it on the new **`/superadmin/verifications`** tab (Firestore-direct; Open ID / Approve /
+Reject with a note the teacher sees; rejected teachers resubmit). Approval also stamps
+`subscription_status: 'trial'` + `trial_ends_at` (30 days) so the wait does not eat the trial.
+Admin-issued teachers never carry the field.
+
+**Institution path today:** creates a normal teacher account (`school_request_pending`),
+writes `subscription_requests/{id}` (details + seats, signed with own uid), signs out, shows
+"Request sent". Owner has since said **both paths will go through a payment gateway** after
+choosing seats — that supersedes the request-queue design once a gateway is approved.
+
+**Still open / not built:**
+- **Backend rules not deployed.** `../activklass-backend/firestore.rules` gained
+  `subscription_requests` and the verification/trial key guards on `users` — run
+  `firebase deploy --only firestore:rules` from the backend repo, or the Institution submit
+  and the Approve button fail **(cross-repo)**.
+- **Trial expiry is recorded, not enforced** — nothing locks anything at `trial_ends_at`.
+- **Payment gateway** (PayMongo suggested — checkout for individuals, invoice + bank
+  transfer for schools) needs explicit approval; it is a new paid service.
+- No superadmin list of `subscription_requests` yet (read them in the Firebase console).
+- **Browser walkthrough of the whole register flow still owed** (verified by build + tests).

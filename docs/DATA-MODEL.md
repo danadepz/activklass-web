@@ -15,7 +15,7 @@ sites in `src/`, not from memory.
 
 | Collection | Written by the web client? | Notes |
 |---|---|---|
-| `users/{uid}` | yes (teacher edits roster, admin edits profiles) | Holds `role` — the string the rules read for every authorization decision. `first_name`, `last_name`, `email`, `is_temp_password`. |
+| `users/{uid}` | yes (teacher edits roster, admin edits profiles, superadmin reviews verifications) | Holds `role` — the string the rules read for every authorization decision. `first_name`, `last_name`, `email`, `is_temp_password`. A self-registered teacher also carries `verification_status` (`pending` → `approved`/`rejected`, set only by the superadmin claim), `verification_id_type`/`_number`/`_link` (a share link — no uploads on Spark) and, on rejection, `verification_note`. `ProtectedRoute` holds anyone not `approved` on `/pending-verification`; admin-issued teachers never have the field. Self-subscribed accounts also carry `subscription_status: 'trial'` and `trial_ends_at` (30 days — stamped at approval for individuals, at registration for institution requesters). **Nothing enforces the expiry yet**; it is recorded so the gate can be built server-side. |
 | `classes/{classId}` | yes | `teacher_id`, `student_ids[]`, `subject`, `subject_code`, `section`, `grade_level`, `syllabus_id`. The roster is the array — there is no join collection. |
 | `gradebooks/{classId}` | yes | Doc id **is** the class id. `configured`, `periods[]`, `components[]`, `grading_mode` (default `deped_k12`), `overrides{}`. |
 | `quizzes/{quizId}` | yes | `class_ids[]` is the assignment. |
@@ -29,6 +29,7 @@ sites in `src/`, not from memory.
 | `consent_records/{uid}` | yes | RA 10173 parental consent. |
 | `grade_contests/{id}`, `attendance_contests/{id}` | yes | Student disputes. |
 | `grading_presets/{uid}` | yes | A teacher's saved grading setup. |
+| `subscription_requests/{id}` | yes (create only, signed with own `uid`) | The "Institution" path on `/register`. The person creates a normal teacher account (`school_request_pending: true`) and leaves a request for the ActivKlass team — their details plus the seats they chose (`teacher_seats` 20–500, `students_per_teacher` 30–300, `student_seats` = the product, `academic_calendar` school_year/semestral/trimestral; the page shows a per-school-year estimate from `lib/pricing.js`; the calendar is recorded, not billed by); the rules pin the shape and only the superadmin tier can read it. No screen lists these yet — the superadmin reads them in the Firebase console. |
 | `student_performance/{classId_studentId}`, `attendance_summaries/{classId_studentId}` | yes | Composite ids built by helper functions — never hand-assemble them. |
 
 ## Subcollections

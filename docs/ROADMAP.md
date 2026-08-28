@@ -75,6 +75,11 @@ Still open at this altitude:
 - `[~]` **The CSV bulk-upload path was not re-audited** against the new password and name
   rules.
 - `[ ]` **Student-facing forms** (contest evidence, profile) have not had a validation pass.
+- `[~]` **Self-service registration and subscriptions** (2026-08-29): the six-step
+  `/register` walk, seat sizing with a mock-up estimate, and the developer-reviewed ID
+  check are built and pass build + tests. Open: the backend rules deploy **(cross-repo)**,
+  trial expiry is recorded but not enforced, the payment gateway is undecided, and the
+  browser walkthrough is owed. Details in `BACKLOG.md` (registration pane, 2026-08-29).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
