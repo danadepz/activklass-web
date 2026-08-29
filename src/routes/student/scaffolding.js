@@ -56,7 +56,25 @@ export function quizzesForTopic(topicId, quizzes = []) {
  * from 0%, and is shown differently.
  */
 export function topicMastery(topicId, quizzes = [], attemptsByQuiz = {}) {
-  const linked = quizzesForTopic(topicId, quizzes)
+  return masteryOf(quizzesForTopic(topicId, quizzes), attemptsByQuiz)
+}
+
+/**
+ * The quizzes a remediation offers as its mastery test: every quiz linked to
+ * its topic, plus the one the teacher attached to the plan itself —
+ * `recommended_quiz_id`, which is what features/classes/remediation.js writes
+ * onto each student's copy. That quiz may carry a different topic_id, or none
+ * (the plan's topic can be null too), and the topic-only lookup never showed it.
+ */
+export function remediationQuizzes(r, quizzes = []) {
+  const linked = quizzesForTopic(r?.topic_id, quizzes)
+  const pinned = r?.recommended_quiz_id ? quizzes.find((q) => q.id === r.recommended_quiz_id) : null
+  if (pinned && !linked.some((q) => q.id === pinned.id)) return [pinned, ...linked]
+  return linked
+}
+
+/** Mastery over an explicit set of quizzes. Best scored attempt wins. */
+export function masteryOf(linked = [], attemptsByQuiz = {}) {
   let best = null
   let attempts = 0
 
@@ -64,7 +82,7 @@ export function topicMastery(topicId, quizzes = [], attemptsByQuiz = {}) {
     const total = quizTotalPoints(q)
     if (!total) continue
     for (const a of attemptsByQuiz[q.id] ?? []) {
-      if (a.total_score == null) continue // still being marked
+      if (a.total_score == null) continue // still being marked, or still open
       attempts += 1
       const pct = (a.total_score / total) * 100
       if (best == null || pct > best) best = pct

@@ -6,16 +6,18 @@ import { db } from '@/lib/firebase'
 import { loadSyllabus } from '@/lib/studentData'
 import { useAuth } from '@/context/useAuth'
 import Markdown from '@/components/Markdown'
-import { TrendingUp, BookOpen, AlertCircle, ArrowRight, Check, X } from '@/components/icons'
-import { navy, ink, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { TrendingUp, ArrowRight, Check, X } from '@/components/icons'
+import { navy, ink, goldDeep, muted, faint, green, line, serif, mono } from '@/theme'
+import { attemptsAllowedFor, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import {
   BUCKETS,
   RESOURCE_META,
   assignedToStudent,
   findTopic,
+  masteryOf,
   quizTotalPoints,
+  remediationQuizzes,
   resourceState,
-  topicMastery,
 } from './scaffolding'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -27,6 +29,14 @@ import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
  * it: Take Test Mastery (sit the quiz linked to the topic; the result moves the
  * mastery figure) and Review Materials (the resources the teacher attached to
  * that topic in the syllabus).
+ *
+ * What a card can show is exactly what the publish path writes onto each
+ * student's copy — see assignmentFrom() in features/classes/remediation.js:
+ * topic, title, guidance, recommended_quiz_id, class_id. This page used to
+ * read study_guide_markdown / practice_items / recommended_materials /
+ * weakness_description, which nothing on the web or in /api/remediate has
+ * ever written, so the teacher's guidance never reached the student and every
+ * card was a heading over two empty modules.
  */
 async function loadScaffolding(studentId) {
   const remSnap = await getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentId)))
@@ -98,60 +108,6 @@ function SectionLabel({ children }) {
   )
 }
 
-function PracticeItem({ item, index }) {
-  const [show, setShow] = useState(false)
-  return (
-    <div style={{ border: `1px solid ${line}`, borderRadius: 12, padding: '13px 16px' }}>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <span style={{ ...mono, fontSize: 12, fontWeight: 700, color: navy, flexShrink: 0 }}>Q{index + 1}</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, color: ink, lineHeight: 1.5 }}>{item.prompt}</div>
-          {(item.options ?? []).length > 0 && (
-            <ul style={{ margin: '8px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {item.options.map((o, oi) => (
-                <li key={oi} style={{ fontSize: 13, color: muted }}>{o}</li>
-              ))}
-            </ul>
-          )}
-          {show ? (
-            <div style={{ marginTop: 8, fontSize: 13, color: green, fontWeight: 600 }}>
-              Answer: <span style={{ ...mono }}>{item.answer}</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShow(true)}
-              style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: blueText, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              Show answer
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MaterialCard({ m }) {
-  return (
-    <a
-      href={m.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="ak-card-hov"
-      style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 12, padding: '13px 15px', textDecoration: 'none' }}
-    >
-      <span style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(63,169,245,0.12)', color: blueText, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-        <BookOpen className="h-[18px] w-[18px]" />
-      </span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink }}>{m.title}</span>
-        {m.description && <span style={{ display: 'block', fontSize: 12.5, color: muted, marginTop: 1 }}>{m.description}</span>}
-      </span>
-      <ArrowRight className="h-4 w-4 shrink-0" style={{ color: '#CBD5E1' }} />
-    </a>
-  )
-}
-
 /* ─────────────────────── Take Test Mastery ─────────────────────── */
 
 /**
@@ -159,23 +115,17 @@ function MaterialCard({ m }) {
  * their mastery of it. Nothing here writes: mastery is recomputed from attempts,
  * so finishing a quiz is what moves the number.
  */
-function TakeTestMastery({ r, quizzes, attemptsByQuiz }) {
-  const mastery = topicMastery(r.topic_id, quizzes, attemptsByQuiz)
+function TakeTestMastery({ r, quizzes, attemptsByQuiz, studentId }) {
+  const linked = remediationQuizzes(r, quizzes)
+  const mastery = masteryOf(linked, attemptsByQuiz)
   const bucket = BUCKETS[mastery.bucket]
 
-  if (!r.topic_id) {
+  if (linked.length === 0) {
     return (
       <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '14px 16px', margin: 0 }}>
-        This review guide isn&apos;t linked to a module topic, so there&apos;s no mastery test to take.
-      </p>
-    )
-  }
-
-  if (mastery.quizzes.length === 0) {
-    return (
-      <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '14px 16px', margin: 0 }}>
-        No mastery test has been assigned for this topic yet. Work through the guide above —
-        your teacher may publish one to check your progress.
+        {r.topic_id
+          ? 'No mastery test has been published for this topic yet. Work through the materials above — your teacher may publish one to check your progress.'
+          : 'This review guide isn’t linked to a module topic, and no mastery test has been attached to it yet.'}
       </p>
     )
   }
@@ -211,12 +161,18 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz }) {
       <div className="flex flex-col gap-2.5">
         {mastery.quizzes.map((quiz) => {
           const attempts = attemptsByQuiz[quiz.id] ?? []
-          const allowed = quiz.attempts_allowed ?? 1
-          const used = attempts.length
+          // An open attempt is not a used one. Counting it showed "1 of 1
+          // used" and no button to the student who was still sitting it.
+          // Same rule as the class page's Topics tab and lib/quizAttempts.
+          const finished = finishedAttempts(attempts)
+          const live = openAttempt(attempts)
+          const allowed = attemptsAllowedFor(quiz, studentId)
+          const used = finished.length
           const total = quizTotalPoints(quiz)
-          const best = attempts.length ? Math.max(...attempts.map((a) => a.total_score ?? 0)) : null
-          const canTake = quiz.status === 'published' && used < allowed
-          const latest = attempts[0] ?? null
+          const scored = finished.map((a) => a.total_score).filter((v) => v != null)
+          const best = scored.length ? Math.max(...scored) : null
+          const canTake = quiz.status === 'published' && (live || used < allowed)
+          const latest = finished[finished.length - 1] ?? null
 
           return (
             <div
@@ -227,9 +183,11 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz }) {
               <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>{quiz.title}</div>
                 <div style={{ fontSize: 12.5, color: faint, marginTop: 2 }}>
-                  {best == null
-                    ? `${total} point${total === 1 ? '' : 's'} · not taken`
-                    : `Best ${best}/${total} · ${used} of ${allowed} attempt${allowed === 1 ? '' : 's'} used`}
+                  {live
+                    ? 'In progress — carry on where you left off'
+                    : best == null
+                      ? `${total} point${total === 1 ? '' : 's'} · not taken`
+                      : `Best ${best}/${total} · ${used} of ${allowed} attempt${allowed === 1 ? '' : 's'} used`}
                 </div>
               </div>
 
@@ -239,7 +197,7 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz }) {
                   className="transition hover:brightness-110"
                   style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none' }}
                 >
-                  {used > 0 ? 'Retake' : 'Take test'}
+                  {live ? 'Resume' : used > 0 ? 'Retake' : 'Take test'}
                 </Link>
               ) : latest ? (
                 <Link
@@ -372,7 +330,7 @@ function ReviewMaterials({ syllabus, topicId, onOpenNote }) {
 
 /* ─────────────────────────── card ─────────────────────────── */
 
-function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, onOpenNote }) {
+function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOpenNote }) {
   return (
     <article style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 'clamp(18px, 3vw, 26px)' }}>
       <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 10 }}>
@@ -388,20 +346,13 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, onOpenNote }) {
         {r.topic || r.topic_id || 'Review Guide'}
       </h2>
 
-      {r.weakness_description && (
-        <div style={{ display: 'flex', gap: 10, background: 'rgba(192,57,43,0.05)', border: '1px solid rgba(192,57,43,0.18)', borderRadius: 12, padding: '12px 14px', marginBottom: 18 }}>
-          <AlertCircle className="h-4 w-4" style={{ color: red, flexShrink: 0, marginTop: 2 }} />
-          <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
-            <strong style={{ color: ink }}>Identified gap:</strong> {r.weakness_description}
-          </p>
-        </div>
-      )}
-
-      {r.study_guide_markdown && (
+      {/* What the teacher wrote when they published this — the one field on
+          the assignment that is theirs, and the reason the card exists. */}
+      {r.guidance?.trim() && (
         <section style={{ marginBottom: 20 }}>
-          <SectionLabel>Study guide</SectionLabel>
-          <div style={{ background: 'rgba(14,42,92,0.02)', border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px' }}>
-            <Markdown text={r.study_guide_markdown} />
+          <SectionLabel>From your teacher</SectionLabel>
+          <div style={{ background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 14, padding: '16px 18px' }}>
+            <Markdown text={r.guidance} />
           </div>
         </section>
       )}
@@ -413,32 +364,10 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, onOpenNote }) {
       </section>
 
       {/* Module: Take Test Mastery — sit the quiz, move the mastery figure. */}
-      <section style={{ marginBottom: (r.practice_items ?? []).length > 0 || (r.recommended_materials ?? []).length > 0 ? 20 : 0 }}>
+      <section>
         <SectionLabel>Take test mastery</SectionLabel>
-        <TakeTestMastery r={r} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />
+        <TakeTestMastery r={r} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={studentId} />
       </section>
-
-      {(r.practice_items ?? []).length > 0 && (
-        <section style={{ marginBottom: (r.recommended_materials ?? []).length > 0 ? 20 : 0 }}>
-          <SectionLabel>Targeted practice</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {r.practice_items.map((item, idx) => (
-              <PracticeItem key={idx} item={item} index={idx} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {(r.recommended_materials ?? []).length > 0 && (
-        <section>
-          <SectionLabel>Recommended resources</SectionLabel>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {r.recommended_materials.map((m, idx) => (
-              <MaterialCard key={idx} m={m} />
-            ))}
-          </div>
-        </section>
-      )}
     </article>
   )
 }
@@ -503,6 +432,7 @@ export default function StudentRemediation() {
               syllabus={data.syllabusByClass[r.class_id] ?? null}
               quizzes={data.quizzesByClass[r.class_id] ?? []}
               attemptsByQuiz={data.attemptsByQuiz}
+              studentId={profile.id}
               onOpenNote={setActiveNote}
             />
           ))}
