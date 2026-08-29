@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
+import { schoolSuspended } from '../lib/schoolStatus'
 
 function FullScreenMessage({ children }) {
   return (
@@ -28,8 +29,9 @@ export default function ProtectedRoute({
   superAdmin = false,
   allowTempPassword = false,
   allowUnverified = false,
+  allowSuspended = false,
 }) {
-  const { status, profile, errorDetail, isSuperAdmin } = useAuth()
+  const { status, profile, school, errorDetail, isSuperAdmin } = useAuth()
 
   if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
   if (status === 'signed_out') return <Navigate to="/login" replace />
@@ -62,6 +64,12 @@ export default function ProtectedRoute({
   if (!allowUnverified && awaitingVerification(profile)) {
     return <Navigate to="/pending-verification" replace />
   }
+  /* Third gate, same shape: only /suspended opts out, for the same
+     redirect-loop reason. Workflow gate, not security -- records stay
+     readable under the rules; what stops is the app. */
+  if (!allowSuspended && schoolSuspended(school, isSuperAdmin)) {
+    return <Navigate to="/suspended" replace />
+  }
   if (superAdmin && !isSuperAdmin) return <Navigate to="/portal" replace />
   if (roles && !roles.includes(profile.role)) return <Navigate to="/portal" replace />
   return <Outlet />
@@ -72,9 +80,10 @@ function awaitingVerification(profile) {
   return profile?.role === 'teacher' && Boolean(v) && v !== 'approved'
 }
 
+
 /** Sends "/" to the right home page per role. */
 export function RoleHomeRedirect() {
-  const { status, profile, errorDetail, isSuperAdmin } = useAuth()
+  const { status, profile, school, errorDetail, isSuperAdmin } = useAuth()
   if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
   if (status === 'signed_out') return <Navigate to="/login" replace />
   if (status === 'not_registered') return <Navigate to="/register" replace />
@@ -90,6 +99,7 @@ export function RoleHomeRedirect() {
   // temporary password is not waved past its own gate.
   if (profile.is_temp_password) return <Navigate to="/change-password" replace />
   if (awaitingVerification(profile)) return <Navigate to="/pending-verification" replace />
+  if (schoolSuspended(school, isSuperAdmin)) return <Navigate to="/suspended" replace />
   // Developers land in the ops console. Checked before role, since we hold a
   // normal role too — the claim is what distinguishes us.
   if (isSuperAdmin) return <Navigate to="/superadmin" replace />

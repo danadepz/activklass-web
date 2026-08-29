@@ -46,6 +46,7 @@ const SuperAdminLayout    = lazyRoute(() => import('@/routes/superadmin/_layout'
 const SuperAdminSubscribersPage = lazyRoute(() => import('@/routes/superadmin/index'))
 const SuperAdminVerificationsPage = lazyRoute(() => import('@/routes/superadmin/verifications'))
 const SuperAdminRequestsPage = lazyRoute(() => import('@/routes/superadmin/requests'))
+const Suspended           = lazyRoute(() => import('@/routes/suspended'), { full: true })
 const GradingSetupPage    = lazyRoute(() => import('@/routes/teacher/grading'))
 const TeacherAccountPage  = lazyRoute(() => import('@/routes/teacher/account'))
 const AnnouncementsPage   = lazyRoute(() => import('@/routes/teacher/announcements'))
@@ -85,6 +86,13 @@ export default function App() {
           pattern as /change-password, for the same loop reason. */}
       <Route element={<ProtectedRoute allowUnverified />}>
         <Route path="/pending-verification" element={PendingVerification} />
+      </Route>
+
+      {/* A member of a school whose subscription is switched off. Same
+          opt-out pattern; the screen itself bounces anyone not actually
+          suspended back to /portal. */}
+      <Route element={<ProtectedRoute allowSuspended />}>
+        <Route path="/suspended" element={Suspended} />
       </Route>
 
       {/* Teacher */}

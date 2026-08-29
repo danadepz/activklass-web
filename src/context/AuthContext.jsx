@@ -20,6 +20,13 @@ export function AuthProvider({ children }) {
   const [status, setStatus] = useState('loading')
   const [errorDetail, setErrorDetail] = useState(null)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  /* The member's school document, when the profile carries a school_id.
+     Loaded here rather than in a hook because ProtectedRoute gates on its
+     subscription_status and runs before any page: a suspended school is
+     suspended for everyone in it. Null for solo teachers and superadmins
+     without a school, and null when the read fails -- a missing school must
+     never lock anyone out, so the gate only acts on a status it has seen. */
+  const [school, setSchool] = useState(null)
 
   const loadProfile = useCallback(async () => {
     try {
@@ -41,7 +48,18 @@ export function AuthProvider({ children }) {
         setStatus('not_registered')
         return
       }
-      setProfile({ id: uid, ...snap.data() })
+      const data = snap.data()
+      let schoolDoc = null
+      if (data.school_id) {
+        try {
+          const schoolSnap = await getDoc(doc(db, 'schools', data.school_id))
+          if (schoolSnap.exists()) schoolDoc = { id: schoolSnap.id, ...schoolSnap.data() }
+        } catch (err) {
+          console.warn('[AuthContext] school load failed; treating as no school:', err.code ?? '', err)
+        }
+      }
+      setSchool(schoolDoc)
+      setProfile({ id: uid, ...data })
       setStatus('signed_in')
       setErrorDetail(null)
     } catch (err) {
@@ -74,6 +92,7 @@ export function AuthProvider({ children }) {
         loadProfile()
       } else {
         setProfile(null)
+        setSchool(null)
         setIsSuperAdmin(false)
         setStatus('signed_out')
       }
@@ -96,7 +115,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider
       value={{
-        firebaseUser, profile, status, errorDetail, isSuperAdmin, logout,
+        firebaseUser, profile, school, status, errorDetail, isSuperAdmin, logout,
         refreshProfile: loadProfile, markPasswordChanged,
       }}
     >
