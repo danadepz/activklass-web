@@ -789,7 +789,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
   )
 }
 
-function QuizzesTab({ classId, quizzes, attemptsByQuiz }) {
+function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
   if (quizzes.length === 0) {
     return <Empty icon={<FileText className="h-6 w-6" />} title="No quizzes yet" text="Quizzes your teacher publishes for this class will show up here." />
   }
@@ -797,14 +797,19 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz }) {
     <div className="flex flex-col gap-3">
       {quizzes.map((quiz) => {
         const attempts = attemptsByQuiz[quiz.id] ?? []
-        const latest = attempts[0] ?? null
-        const allowed = quiz.attempts_allowed ?? 1
-        const used = attempts.length
+        // An open attempt is not a used one. Counting it showed "Attempts 1/1"
+        // and no Take button to the student still sitting it, with a "View
+        // result" link to an unfinished attempt. Same rule as the Topics tab
+        // and lib/quizAttempts; extra attempts a teacher granted count too.
+        const finished = finishedAttempts(attempts)
+        const live = openAttempt(attempts)
+        const latest = finished[finished.length - 1] ?? null
+        const allowed = attemptsAllowedFor(quiz, studentId)
+        const used = finished.length
         const points = quizPoints(quiz)
-        const canTake = quiz.status === 'published' && used < allowed
-        const best = attempts.length
-          ? Math.max(...attempts.map((a) => a.total_score ?? 0))
-          : null
+        const canTake = quiz.status === 'published' && (live || used < allowed)
+        const scored = finished.map((a) => a.total_score).filter((v) => v != null)
+        const best = scored.length ? Math.max(...scored) : null
         return (
           <div key={quiz.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -842,7 +847,7 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz }) {
                     to={`/student/classes/${classId}/quizzes/${quiz.id}`}
                     style={{ padding: '9px 16px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none' }}
                   >
-                    {used > 0 ? 'Retake' : 'Take quiz'}
+                    {live ? 'Resume' : used > 0 ? 'Retake' : 'Take quiz'}
                   </Link>
                 ) : !latest ? (
                   <span style={{ fontSize: 12.5, color: faint }}>{quiz.status === 'closed' ? 'Not taken' : 'No attempts left'}</span>
@@ -1376,7 +1381,7 @@ export default function StudentClassDetail() {
       </div>
 
       {tab === 'topics' && <TopicsTab syllabus={syllabus} classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
-      {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
+      {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={profile.id} />}
       {tab === 'grades' && (
         <GradesTab
           entry={entry}
