@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -580,6 +580,7 @@ export default function ScaffoldTopicsPage() {
   const [recoveringPlan, setRecoveringPlan] = useState(null)
   const [error, setError] = useState(null)
   const [editingPlan, setEditingPlan] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['fs-scaffolds', classId],
@@ -718,11 +719,38 @@ export default function ScaffoldTopicsPage() {
   if (isLoading) return <SkeletonList count={5} height={72} label="Loading scaffold topics" />
   if (isError || !data) return <p style={{ color: red }}>Class not found.</p>
 
-  const { rows, topicCount, linkedQuizzes } = data
+  /* Arriving from the Performance page's below-85 list carries the student
+     in the URL; the page then opens on the topics that student is weak in.
+     Every plan started from here still targets topic.affectedIds, so the
+     student is one of the targets, never the only one. */
+  const focusId = searchParams.get('student')
+  const focusName = focusId ? data.nameById?.[focusId] : null
+  const allRows = data.rows
+  const rows = focusName ? allRows.filter((r) => (r.affectedIds ?? []).includes(focusId)) : allRows
+  const { topicCount, linkedQuizzes } = data
+  const focusBanner = focusName && (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 12, padding: '10px 14px' }}>
+      <span style={{ fontSize: 13.5, color: ink }}>
+        Showing the {rows.length} topic{rows.length === 1 ? '' : 's'} where <strong>{focusName}</strong> is below mastery
+        {rows.length === 0 && allRows.length > 0 ? ' — none; this student is at or above mastery on every tracked topic' : ''}.
+      </span>
+      <button onClick={() => setSearchParams({})} style={{ fontSize: 12.5, fontWeight: 700, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+        Show all topics
+      </button>
+    </div>
+  )
   const needs = rows.filter((r) => bucketOf(r.mastery) === 'needs').sort((a, b) => a.mastery - b.mastery)
   const developing = rows.filter((r) => bucketOf(r.mastery) === 'developing').sort((a, b) => a.mastery - b.mastery)
   const mastered = rows.filter((r) => bucketOf(r.mastery) === 'mastered').sort((a, b) => b.mastery - a.mastery)
 
+  if (rows.length === 0 && allRows.length > 0) {
+    return (
+      <div>
+        {header}
+        {focusBanner}
+      </div>
+    )
+  }
   if (rows.length === 0) {
     return (
       <div>
@@ -764,6 +792,8 @@ export default function ScaffoldTopicsPage() {
       {error && (
         <p role="alert" className="mb-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
       )}
+
+      {focusBanner}
 
       {/* count strip */}
       <div className="mb-[22px] grid grid-cols-2 gap-3.5 lg:grid-cols-4">

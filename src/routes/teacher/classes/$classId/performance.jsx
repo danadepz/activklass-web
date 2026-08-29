@@ -331,6 +331,16 @@ export default function PerformancePage() {
                         <div style={{ fontSize: 12, color: muted, marginTop: 3 }}>{weakestComponent(r)}</div>
                       </div>
                       <span style={{ ...serif, fontSize: 22, lineHeight: 1, color: goldDeep }}>{fmt(r.grade)}</span>
+                      {/* Hand-off to Scaffold Topics with the student carried
+                          in the URL, so that page opens on the topics this
+                          student is weak in instead of the whole class. */}
+                      <Link
+                        to={`/teacher/classes/${classId}/scaffolds?student=${r.student_id}`}
+                        title={`Scaffold topics where ${r.first_name} needs help`}
+                        style={{ fontSize: 12, fontWeight: 700, color: navy, textDecoration: 'none', whiteSpace: 'nowrap', padding: '6px 10px', border: `1px solid rgba(14,42,92,0.18)`, borderRadius: 8, background: '#FFFFFF' }}
+                      >
+                        Scaffold →
+                      </Link>
                     </div>
                   ))}
                 </div>
