@@ -6,15 +6,9 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, ageFromBirthdate } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus } from '@/lib/studentData'
 import { TrendingUp, CalendarCheck, BookOpen, AlertCircle, ShieldCheck, ChevronRight } from '@/components/icons'
-import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serif, mono } from '@/theme'
+import { formatGrade, gradeAsPercent, gradeTone } from './gradeDisplay'
 
-function gradeTone(grade) {
-  if (grade == null) return { fg: faint, label: '—' }
-  if (grade >= 90) return { fg: green, label: 'Outstanding' }
-  if (grade >= 85) return { fg: blueText, label: 'Very Satisfactory' }
-  if (grade >= 75) return { fg: goldDeep, label: 'Satisfactory' }
-  return { fg: red, label: 'Needs work' }
-}
 
 /* Animated circular gauge (SVG). `value` is 0–100; `null` shows a dash. */
 function Gauge({ value, size = 132, stroke = 12, color = gold, label, sublabel }) {
@@ -52,7 +46,7 @@ function Gauge({ value, size = 132, stroke = 12, color = gold, label, sublabel }
 }
 
 function ClassCard({ c }) {
-  const tone = gradeTone(c.current_grade)
+  const tone = gradeTone(c.current_grade, c.grade_mode)
   return (
     <Link
       to={`/student/classes/${c.id}`}
@@ -69,7 +63,7 @@ function ClassCard({ c }) {
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ ...serif, fontSize: 30, lineHeight: 1, color: tone.fg }}>
-            {c.current_grade == null ? '—' : Math.round(c.current_grade)}
+            {formatGrade(c.current_grade, c.grade_mode)}
           </div>
           <div style={{ fontSize: 10.5, color: faint, marginTop: 3 }}>current grade</div>
         </div>
@@ -84,7 +78,7 @@ function ClassCard({ c }) {
           )}
         </div>
         <div style={{ height: 7, borderRadius: 999, background: 'rgba(14,42,92,0.07)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${c.current_grade == null ? 0 : Math.min(100, c.current_grade)}%`, background: `linear-gradient(90deg, ${gold}, #3FA9F5)`, transition: 'width 0.8s' }} />
+          <div style={{ height: '100%', width: `${Math.min(100, gradeAsPercent(c.current_grade, c.grade_mode) ?? 0)}%`, background: `linear-gradient(90deg, ${gold}, #3FA9F5)`, transition: 'width 0.8s' }} />
         </div>
       </div>
     </Link>
@@ -136,6 +130,7 @@ async function loadDashboard(profile) {
         ...c,
         teacher_name: teacherName(c.teacher_id),
         current_grade: entry?.final_grade ?? null,
+        grade_mode: entry?.mode ?? null,
         attendance_rate: attendance.rate,
         module_count: syllabus?.modules?.length ?? 0,
       }
@@ -161,10 +156,9 @@ export default function StudentDashboard() {
   })
 
   const classes = data?.classes ?? []
-  const graded = classes.filter((c) => c.current_grade != null)
-  const mastery = graded.length
-    ? Math.round(graded.reduce((s, c) => s + c.current_grade, 0) / graded.length)
-    : null
+  // The gauge speaks percent; a 1.0–5.0 point grade goes in through its band.
+  const graded = classes.map((c) => gradeAsPercent(c.current_grade, c.grade_mode)).filter((v) => v != null)
+  const mastery = graded.length ? Math.round(graded.reduce((s, v) => s + v, 0) / graded.length) : null
   const rates = classes.filter((c) => c.attendance_rate != null)
   const attendanceRate = rates.length
     ? Math.round(rates.reduce((s, c) => s + c.attendance_rate, 0) / rates.length)

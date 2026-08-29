@@ -6,16 +6,10 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry } from '@/lib/studentData'
 import { BookOpen, ChevronRight } from '@/components/icons'
-import { navy, ink, gold, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { navy, ink, gold, muted, faint, line, serif, mono } from '@/theme'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { formatGrade, gradeColor } from '../gradeDisplay'
 
-function gradeColor(g) {
-  if (g == null) return faint
-  if (g >= 90) return green
-  if (g >= 85) return blueText
-  if (g >= 75) return '#8B6A00'
-  return red
-}
 
 function classBadge(c) {
   const base = (c.subject_code || c.subject || c.section || '').toUpperCase()
@@ -37,7 +31,7 @@ async function loadClasses(profile) {
   return Promise.all(
     raw.map(async (c) => {
       const entry = await loadStudentEntry(c.id, profile.id)
-      return { ...c, teacher_name: teacherName(c.teacher_id), current_grade: entry?.final_grade ?? null }
+      return { ...c, teacher_name: teacherName(c.teacher_id), current_grade: entry?.final_grade ?? null, grade_mode: entry?.mode ?? null }
     }),
   )
 }
@@ -96,8 +90,8 @@ export default function StudentClassesIndex() {
               </div>
               <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(14,42,92,0.07)' }}>
                 <span style={{ ...mono, fontSize: 12.5, color: muted }}>{c.academic_year ?? c.school_year ?? ''}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(c.current_grade) }}>
-                  {c.current_grade == null ? 'No grade yet' : `Grade ${Math.round(c.current_grade)}`}
+                <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(c.current_grade, c.grade_mode) }}>
+                  {c.current_grade == null ? 'No grade yet' : `Grade ${formatGrade(c.current_grade, c.grade_mode)}`}
                 </span>
               </div>
             </Link>

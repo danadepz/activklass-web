@@ -10,6 +10,7 @@ import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, 
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 import { attemptsAllowedFor, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicMastery } from '../../scaffolding'
+import { formatGrade, gradeColor, isPointScale, passNote } from '../../gradeDisplay'
 import ClassStandingForecast from '@/components/ClassStandingForecast'
 import AttachmentField from '@/components/AttachmentField'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -34,13 +35,6 @@ const TABS = [
 
 const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number(q.points) || 0), 0)
 
-function gradeColor(g) {
-  if (g == null) return faint
-  if (g >= 90) return green
-  if (g >= 85) return blueText
-  if (g >= 75) return goldDeep
-  return red
-}
 
 async function loadClassDetail(classId, profile) {
   const classSnap = await getDoc(doc(db, 'classes', classId))
@@ -501,10 +495,10 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: muted }}>Current grade</div>
-          <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class.</div>
+          <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class · {passNote(entry.mode)}</div>
         </div>
-        <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade) }}>
-          {Math.round(entry.final_grade)}
+        <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade, entry.mode) }}>
+          {formatGrade(entry.final_grade, entry.mode)}
         </div>
       </div>
 
@@ -512,7 +506,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
         ? periods.map((p) => (
             <div key={p.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 20px', display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: 700, color: ink }}>{p.name}</span>
-              <span style={{ fontWeight: 700, color: gradeColor(p.grade) }}>{p.grade == null ? '—' : Math.round(p.grade)}</span>
+              <span style={{ fontWeight: 700, color: gradeColor(p.grade, entry.mode) }}>{formatGrade(p.grade, entry.mode)}</span>
             </div>
           ))
         : periods.map((period) => {
@@ -523,8 +517,8 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
                 {/* Period header */}
                 <div className="flex items-center justify-between" style={{ padding: '14px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
                   <span style={{ ...serif, fontSize: 18, color: ink }}>{period.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade) }}>
-                    Grade {period.grade == null ? '—' : Math.round(period.grade)}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade, entry.mode) }}>
+                    Grade {formatGrade(period.grade, entry.mode)}
                   </span>
                 </div>
 
@@ -1093,7 +1087,10 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
   const forecast = (
     <ClassStandingForecast
       studentId={studentId}
-      grade={entry?.final_grade ?? null}
+      // The forecast's prior-grade input is a percent. A 1.0–5.0 point grade
+      // fed in as one reads as a certain fail, so on that scale it is withheld
+      // and the model works from attendance and quiz scores alone.
+      grade={isPointScale(entry?.mode) ? null : (entry?.final_grade ?? null)}
       attendanceRate={attendance?.rate ?? null}
       quizAverage={quizAverage ?? null}
       attendanceLog={attendance?.log}
@@ -1136,7 +1133,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
     <div className="flex flex-col gap-4">
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MetricCard label="Current grade" value={Math.round(entry.final_grade)} valueColor={gradeColor(entry.final_grade)} tint="rgba(14,42,92,0.07)" />
+        <MetricCard label="Current grade" value={formatGrade(entry.final_grade, entry.mode)} valueColor={gradeColor(entry.final_grade, entry.mode)} tint="rgba(14,42,92,0.07)" />
         <MetricCard label="Your average" value={`${youAvg}%`} sub="across graded items" valueColor={gradeColor(youAvg)} tint="rgba(63,169,245,0.13)" />
         <MetricCard
           label="vs class"
@@ -1356,7 +1353,7 @@ export default function StudentClassDetail() {
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
             <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.6)', letterSpacing: '0.05em' }}>CURRENT GRADE</div>
             <div style={{ ...serif, fontSize: 40, lineHeight: 1, color: finalGrade == null ? 'rgba(255,255,255,0.6)' : gold, marginTop: 2 }}>
-              {finalGrade == null ? '—' : Math.round(finalGrade)}
+              {formatGrade(finalGrade, entry?.mode)}
             </div>
           </div>
         </div>
