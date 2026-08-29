@@ -88,6 +88,19 @@ Still open at this altitude:
   groups with an "Available on a paid plan" hint. *Verified:* `subscription.test.js` (9),
   `npm run test` 498 passing, `npm run build` clean. **Browser walkthrough owed**; trial
   expiry still unenforced; the provision endpoint's prefix issue is **(cross-repo)**.
+- `[~]` **Schools join by request** (2026-08-30, "Tier 2"): the superadmin console gets a
+  **School requests** queue over `subscription_requests`; **Approve** creates the school
+  and its trial subscription on the seats the school chose and promotes the requester to
+  its admin in one Flask batch (`POST /api/superadmin/requests/{id}/approve`,
+  **cross-repo**); the approval notice is a copy-ready message, sent by hand; a
+  **suspended or cancelled school is suspended for everyone in it** (status mirrored onto
+  `schools/{id}`, gated in `ProtectedRoute`, `/suspended` screen); the welcome page links a
+  school to `/register?type=institution`. *Verified:* `npm run test` 523/523,
+  `npm run build` clean, `tests/smoke_superadmin.py` covers the endpoint and the mirror.
+  **Open:** the browser walk of the five-step demo (request → approve → notice → admin
+  signs in → suspend/reactivate); seat prices still unconfirmed; trial expiry and seat
+  limits still unenforced. Plan: the "Tier 2 Build Plan" artifact; decisions in
+  `OPEN-QUESTIONS.md`.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
