@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
 import { downloadCsv, stampedName } from '@/lib/csv'
+import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError } from '@/lib/validation'
 import {
   ENROLLMENT_STATUS_LABELS,
@@ -651,6 +652,82 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   )
 }
 
+/* The guardians linked to one student, with a way to remove one.
+   Codes are minted by the student and redeemed in the parent app, so the
+   teacher's part is oversight: see who is attached and cut a link that should
+   not be there. Teachers may read and delete guardian_links and may mark the
+   code's revoked list (firestore.rules), which is what revokeGuardianLink
+   does -- a removed guardian cannot re-link with the same six characters. */
+function GuardiansSection({ student }) {
+  const queryClient = useQueryClient()
+  const queryKey = ['fs-guardians', student.id]
+  const { data: links, isLoading, isError } = useQuery({ queryKey, queryFn: () => listMyGuardians(student.id) })
+  const [busyId, setBusyId] = useState(null)
+
+  async function revoke(link) {
+    const who = link.guardian_name ?? link.guardian_email ?? 'this guardian'
+    if (!(await confirmDialog({
+      title: `Remove ${who} as ${student.first_name}'s guardian?`,
+      message: `They lose access to ${student.first_name}'s records at once and cannot re-link with the same code. The student can issue a new code later if that changes.`,
+      confirmLabel: 'Remove guardian',
+      tone: 'danger',
+    }))) return
+    setBusyId(link.link_id)
+    try {
+      await revokeGuardianLink(link.link_id)
+      toast.success(`${who} no longer has access to ${student.first_name}'s records.`)
+      queryClient.invalidateQueries({ queryKey })
+    } catch {
+      toast.error('The guardian could not be removed. Try again.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-700">Linked guardians</span>
+        {links && <span className="text-xs text-slate-500">{links.length}</span>}
+      </div>
+      {isLoading ? (
+        <p className="mt-2 text-xs text-slate-500">Loading…</p>
+      ) : isError ? (
+        <p className="mt-2 text-xs text-red-600">Guardians could not be loaded right now.</p>
+      ) : links.length === 0 ? (
+        <p className="mt-2 text-xs text-slate-500">
+          No guardian is linked. The student shares a code from their Parental Access panel, and the parent redeems it in the ActivKlass app.
+        </p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {links.map((l) => (
+            <li key={l.link_id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm text-slate-800">
+                  {l.guardian_name ?? l.guardian_email ?? 'Guardian'}
+                  {l.relationship_type && <span className="text-slate-500"> · {l.relationship_type}</span>}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {l.status === 'approved' ? 'Approved' : "Pending the student's approval"}
+                  {l.guardian_email && l.guardian_name ? ` · ${l.guardian_email}` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => revoke(l)}
+                disabled={busyId === l.link_id}
+                className="shrink-0 rounded-lg border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                {busyId === l.link_id ? 'Removing…' : 'Remove'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 /* Edit roster fields on one student (rules allow teachers to maintain these). */
 // 2026-06-20: Added first_name and last_name fields so teachers can correct student names
 function EditStudentModal({ student, classId, onClose, onDone }) {
@@ -756,6 +833,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
             ))}
           </select>
         </label>
+        <GuardiansSection student={student} />
         <div className="flex gap-3 justify-between pt-2">
           <button
             onClick={removeFromClass}
