@@ -102,6 +102,54 @@ New shared queries go in `src/hooks/`, not into a route file.
 
 ---
 
+## Subscription / pricing lane
+
+```
+src/lib/pricing.js                 ← every peso figure, seat rates, trial length, estimates
+src/lib/pricing.test.js
+src/lib/subscription.js            ← Flask wrappers for /api/subscription/* + describeSubscription
+src/lib/subscription.test.js
+src/hooks/useMySubscription.js     ← the signed-in teacher's plan, as their screens describe it
+src/components/SubscriptionBadge.jsx
+src/routes/admin/SubscriptionTab.jsx
+```
+
+Added 2026-08-30 so one person can own the pricing side of the system —
+what a seat costs, how the estimate is built, when a trial ends, what a trial
+locks — without touching the pages that merely display it.
+
+**One lane for both paths, deliberately.** Solo teachers and institutions are
+priced from the *same* two per-seat rates (`pricing.js` records why: 20
+teachers × 120 students costs exactly 20 solo subscriptions, so neither path
+can be played against the other). Splitting them into "solo pricing" and
+"school pricing" files is how that rule drifts; keep them in one file with one
+owner. The rates themselves (₱1,200 teacher / ₱60 student per school year)
+are still awaiting the owner's confirmation — if this lane changes them, tell
+the **School sub** pane, whose group doc quotes them.
+
+**Boundaries.** `routes/register.jsx` stays Shared: the seat-sizing step on it
+imports `pricing.js`, but the page is the auth flow. Change the numbers here
+and the estimate follows; change the *step* and announce first — or extract it
+into a component under this lane and stop announcing. `superadmin/
+verifications.jsx` (Admin lane) imports `trialEndsFrom`; that is a consumer,
+not an owner. `routes/admin/SubscriptionTab.jsx` is carved out of
+`routes/admin/**` and listed here instead; the rest of that folder stays with
+the Admin page lane. `teacher/StudentAccounts.jsx` is *not* here: it is a tab
+of `teacher/students.jsx` that only reads `useMySubscription` to decide whether
+to render, and every edit to it moves with that page — Class setup lane.
+
+**The price is set in the other repo.** `pricing.js` is what the client
+*shows*. The plan table, seat limits and trial gate are Flask
+(`/api/subscription/*`) and `firestore.rules` in `activklass-backend`. Owning
+this lane without the matching backend module means owning the display of a
+price but not the price — claim both.
+
+**Files in this lane before it existed** carried a header saying "owned by
+the logic lane"; the table never said so. They were unowned. Fixed here rather
+than in the headers, because the table is what panes read.
+
+---
+
 # Page lanes
 
 For work inside one screen. Each page belongs to one pane at a time.
@@ -110,10 +158,10 @@ For work inside one screen. Each page belongs to one pane at a time.
 |---|---|
 | **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
 | **Class detail** | `teacher/classes/$classId/**` |
-| **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx` |
+| **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx`, `teacher/StudentAccounts.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
-| **Admin** | `routes/admin/**`, `routes/superadmin/**`, `teacher/account.jsx` |
+| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx` |
 
 **Why Classes is now two lanes.** It was one — `teacher/classes/**` plus the
 four teacher-level pages plus `features/classes/**` — and in practice two panes
