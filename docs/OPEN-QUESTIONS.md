@@ -116,3 +116,11 @@ record. **(cross-repo)**
   TC-TIN-015/030). It never changes the score: the teacher edits the cell in the record
   grid and saves, which is what runs `syncEntries`. That is the shipped behaviour and the
   panel says so — the test cases are to be rewritten to assert it, not the code changed.
+- **A suspended school is suspended for everyone in it** (owner's, 2026-08-30). When the
+  superadmin marks a school `suspended`, the admin console **and every teacher and student
+  account under that `school_id`** are held on a "subscription suspended — ask your school
+  office" screen until reactivation. It is a gate, not a deletion: nothing is removed and
+  everything returns when the status flips back. Solo teachers (no `school_id`) are never
+  touched by it. **Not built yet** — today the status is a label; the gate belongs in
+  `components/ProtectedRoute` beside the temp-password check, reading the school's
+  subscription. Seat prices in `lib/pricing.js` remain unconfirmed; the owner deferred them.
