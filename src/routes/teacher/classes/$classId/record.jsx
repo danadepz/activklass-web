@@ -19,6 +19,7 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
+import { downloadCsv, stampedName } from '@/lib/csv'
 import { ArrowRight, Plus } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
@@ -316,6 +317,31 @@ function RecordGrid({ classId, record, refetch }) {
     return s ? s.last_name : ''
   }
 
+  /* Per-student scores for this period, one column per assessment, so a
+     figure in the sheet can be checked against the cell it came from. The
+     cross-class Reports export is one row per class -- no encoded score can
+     be verified from it. Saved values only: an unsaved edit is not a record. */
+  function exportCsv() {
+    const header = ['Student']
+    for (const component of byComponent) {
+      for (const a of component.assessments) header.push(`${a.title} (/${fmt(a.total_points)})`)
+      header.push(`${component.name} % (${fmt(component.weight_percent)}%)`)
+    }
+    header.push('Override', `${record.period.name} grade`)
+    const rows = record.students.map((student) => {
+      const grade = record.grades[student.student_id]
+      const row = [`${student.last_name}, ${student.first_name}`]
+      for (const component of byComponent) {
+        for (const a of component.assessments) row.push(cellText(record.scores[a.id]?.[student.student_id]))
+        row.push(fmt(grade?.components?.[component.id]))
+      }
+      row.push(grade?.override != null ? fmt(grade.override) : '', fmt(grade?.grade))
+      return row
+    })
+    const slug = String(record.period.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    downloadCsv(stampedName(`record-${slug || 'period'}`), [header, ...rows])
+  }
+
   async function saveAll() {
     setSaving(true)
     setError(null)
@@ -464,6 +490,15 @@ function RecordGrid({ classId, record, refetch }) {
           <strong style={{ color: ink }}>X</strong> for excused, or leave blank.
         </p>
         <div className="flex flex-wrap gap-2.5">
+          <button
+            onClick={exportCsv}
+            disabled={record.students.length === 0}
+            title="Download this period's saved scores, one row per student"
+            className="transition hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={btnGhostSm}
+          >
+            Export CSV
+          </button>
           <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : { ...btnGhostSm, color: muted }}>
             {locked ? '🔒 Unlock period' : 'Lock period'}
           </button>
