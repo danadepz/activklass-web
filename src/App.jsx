@@ -45,6 +45,7 @@ const AdminUsersPage      = lazyRoute(() => import('@/routes/admin/index'), { fu
 const SuperAdminLayout    = lazyRoute(() => import('@/routes/superadmin/_layout'), { full: true })
 const SuperAdminSubscribersPage = lazyRoute(() => import('@/routes/superadmin/index'))
 const SuperAdminVerificationsPage = lazyRoute(() => import('@/routes/superadmin/verifications'))
+const SuperAdminRequestsPage = lazyRoute(() => import('@/routes/superadmin/requests'))
 const GradingSetupPage    = lazyRoute(() => import('@/routes/teacher/grading'))
 const TeacherAccountPage  = lazyRoute(() => import('@/routes/teacher/account'))
 const AnnouncementsPage   = lazyRoute(() => import('@/routes/teacher/announcements'))
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="/superadmin" element={SuperAdminLayout}>
           <Route index element={SuperAdminSubscribersPage} />
           <Route path="verifications" element={SuperAdminVerificationsPage} />
+          <Route path="requests" element={SuperAdminRequestsPage} />
         </Route>
       </Route>
 

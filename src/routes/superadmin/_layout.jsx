@@ -20,6 +20,7 @@ export default function SuperAdminLayout() {
   const tabs = [
     { to: '/superadmin', label: 'Subscribers' },
     { to: '/superadmin/verifications', label: 'Verifications' },
+    { to: '/superadmin/requests', label: 'School requests' },
   ]
 
   return (
