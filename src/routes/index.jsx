@@ -756,6 +756,17 @@ export default function Landing() {
                     I already have one →
                   </Link>
                 </div>
+                {/* The button above is written for one teacher. A principal
+                    reading it needs to know the school path exists and that
+                    it is a request, not a sign-up -- the team sets a school
+                    up after reviewing it. */}
+                <p style={{ fontSize: 14, lineHeight: 1.55, color: 'rgba(250,250,246,0.7)', margin: '22px 0 0', maxWidth: 480 }}>
+                  Registering a whole school?{' '}
+                  <Link to="/register?type=institution" className="font-semibold transition hover:opacity-80" style={{ color: gold, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                    Request access for your campus
+                  </Link>
+                  {' '}— tell us your seats and the ActivKlass team sets you up.
+                </p>
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }}>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { Timestamp, addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -104,14 +104,19 @@ export default function Register() {
   // Signed in with Firebase but no ActivKlass profile yet — e.g. a registration
   // that failed halfway. Only the profile fields are needed to finish.
   const completing = status === 'not_registered' && firebaseUser !== null
+  // /register?type=institution -- the landing page's "registering a whole
+  // school?" link -- skips the chooser and opens on the school path. Read
+  // once, at mount: the chooser stays reachable with Back.
+  const [searchParams] = useSearchParams()
+  const preset = searchParams.get('type') === 'institution' && !completing ? 'institution' : null
 
   // First question, before any details: who is this account for? A solo
   // teacher goes on to create an account here. A school does not — its
   // subscription is arranged with the ActivKlass team, so that path ends in
   // a request for the team rather than an account.
-  const [kind, setKind] = useState(completing ? 'individual' : null)
+  const [kind, setKind] = useState(completing ? 'individual' : preset)
   // 1 = chooser, 2…N = the steps in STEPS[kind], 'sent' = request confirmed.
-  const [step, setStep] = useState(completing ? 2 : 1)
+  const [step, setStep] = useState(completing || preset ? 2 : 1)
 
   const [form, setForm] = useState({
     firstName: '',
