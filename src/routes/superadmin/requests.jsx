@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
 import { approveRequest } from '@/lib/superadmin'
+import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Dialog, Field, inputCls } from './index'
@@ -35,6 +36,20 @@ async function fetchPending() {
     .sort((a, b) => (a.created_at?.seconds ?? 0) - (b.created_at?.seconds ?? 0))
 }
 
+/* The last few approvals, so the notice can be copied again after the
+   dialog is gone -- a lost email must not mean a lost school. */
+async function fetchApproved() {
+  const snap = await getDocs(
+    query(collection(db, 'subscription_requests'), where('status', '==', 'approved')),
+  )
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.decided_at?.seconds ?? 0) - (a.decided_at?.seconds ?? 0))
+    .slice(0, 8)
+}
+
+const signInUrl = () => `${window.location.origin}/login`
+
 function when(ts) {
   const d = ts?.toDate?.()
   return d ? d.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
@@ -50,6 +65,29 @@ export default function SuperAdminRequestsPage() {
   const [declining, setDeclining] = useState(null) // request id whose note box is open
   const [note, setNote] = useState('')
   const [approving, setApproving] = useState(null) // the request open in the approve dialog
+  const [message, setMessage] = useState(null) // { school, subject, body } to copy
+  const { data: approved } = useQuery({ queryKey: ['sa-requests-approved'], queryFn: fetchApproved })
+
+  /* Rebuild the notice for a request approved earlier. The trial end lives
+     on the subscription, which the superadmin claim may read directly. */
+  const reopen = useMutation({
+    mutationFn: async (r) => {
+      const sub = r.school_id ? await getDoc(doc(db, 'subscriptions', r.school_id)) : null
+      const data = sub?.exists() ? sub.data() : {}
+      return approvalMessage({
+        schoolName: data.name ?? r.school_name,
+        campus: r.campus,
+        firstName: r.first_name,
+        email: r.email,
+        teacherSeats: data.limits?.teacher_seats ?? r.teacher_seats,
+        studentSeats: data.limits?.student_seats ?? r.student_seats,
+        trialEndsAt: data.trial_ends_at ?? null,
+        signInUrl: signInUrl(),
+      })
+    },
+    onSuccess: (m, r) => setMessage({ school: r.school_name, ...m }),
+    onError: () => toast.error('Could not rebuild the message. Try again.'),
+  })
 
   const decline = useMutation({
     mutationFn: async ({ id, note }) => {
@@ -197,12 +235,115 @@ export default function SuperAdminRequestsPage() {
             toast.success(
               `${res.school.name} is set up. ${res.admin.first_name ?? 'The requester'} is now its admin and signs in with the password they already have.`,
             )
+            setMessage({
+              school: res.school.name,
+              ...approvalMessage({
+                schoolName: res.school.name,
+                campus: res.school.campus,
+                firstName: res.admin.first_name,
+                email: res.admin.email,
+                teacherSeats: res.subscription.limits?.teacher_seats,
+                studentSeats: res.subscription.limits?.student_seats,
+                trialEndsAt: res.subscription.trial_ends_at,
+                signInUrl: signInUrl(),
+              }),
+            })
             queryClient.invalidateQueries({ queryKey: ['sa-requests'] })
+            queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
             queryClient.invalidateQueries({ queryKey: ['sa-subscribers'] })
           }}
         />
       )}
+
+      {message && <MessageDialog message={message} onClose={() => setMessage(null)} />}
+
+      {approved?.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                The notice is sent by hand. Open it again here if it did not go out.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-3 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/40">
+            {approved.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <div className="min-w-0 text-sm">
+                  <span className="font-semibold text-zinc-200">{r.school_name}</span>
+                  <span className="text-zinc-500"> · {r.email} · {when(r.decided_at)}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={reopen.isPending && reopen.variables?.id === r.id}
+                  onClick={() => reopen.mutate(r)}
+                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+                >
+                  Approval message
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
+  )
+}
+
+/**
+ * The notice to send, with a Copy button.
+ *
+ * Plain text so it pastes into any mail client. The subject is copied with
+ * it, on its own line, because the person sending has to type it otherwise
+ * and the subject is what the school searches for later.
+ */
+function MessageDialog({ message, onClose }) {
+  const box = useRef(null)
+  const full = `Subject: ${message.subject}\n\n${message.body}`
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(full)
+      toast.success('Copied. Paste it into an email to the school.')
+    } catch {
+      // Clipboard access can be refused on a forwarded port; fall back to
+      // selecting the text so one keystroke does the same job.
+      box.current?.select()
+      toast.error('Copy was blocked by the browser — the text is selected, press Ctrl+C.')
+    }
+  }
+
+  return (
+    <Dialog
+      title={`Approval notice — ${message.school}`}
+      subtitle="Sent by hand: copy this into an email to the school. Nothing goes out automatically."
+      onClose={onClose}
+    >
+      <textarea
+        ref={box}
+        readOnly
+        rows={18}
+        value={full}
+        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs leading-relaxed text-zinc-200"
+      />
+      <div className="mt-4 flex gap-3">
+        <button
+          type="button"
+          onClick={copy}
+          className="flex-1 rounded-lg bg-amber-400 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-300"
+        >
+          Copy message
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-lg border border-zinc-800 py-2.5 text-sm font-semibold text-zinc-400"
+        >
+          Done
+        </button>
+      </div>
+    </Dialog>
   )
 }
 
