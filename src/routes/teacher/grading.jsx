@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
+import { syncEntries } from '@/lib/gradebook'
 import { GRADING_MODES, GRADING_PRESETS, rebalanceWeights, redistributeWeights, weightsValid } from '@/lib/grading'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
@@ -273,25 +274,44 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       },
     })
 
+    const skipped = res?.skipped ?? []
+    const firestoreSynced = res?.firestore_synced !== false
+    const skippedIds = new Set(skipped.map((s) => s.class_id))
+    const applied = selectedClassIds.filter((cid) => !skippedIds.has(cid))
+
+    /* New weights change every computed grade, and the teacher's grid
+       recomputes from `assessments` on its own -- but a student reads only
+       the derived `entries` doc (DATA-MODEL §1), which nobody rewrites unless
+       we do it here. Without this the student keeps the old grade until some
+       unrelated score edit happens to sync. Only when the gradebook docs
+       actually updated: syncing off a stale gradebook would just re-stamp
+       the old weights. */
+    let entriesSynced = true
+    if (firestoreSynced) {
+      const results = await Promise.allSettled(applied.map((cid) => syncEntries(cid)))
+      entriesSynced = results.every((r) => r.status === 'fulfilled')
+    }
+
     queryClient.invalidateQueries({ queryKey: ['fs-grading-preset', profile.id] })
     for (const cid of selectedClassIds) {
       queryClient.invalidateQueries({ queryKey: ['fs-grading-setup', cid] })
       queryClient.invalidateQueries({ queryKey: ['fs-record', cid] })
     }
 
-    return {
-      skipped: res?.skipped ?? [],
-      requested: selectedClassIds.length,
-      firestoreSynced: res?.firestore_synced !== false,
-    }
+    return { skipped, requested: selectedClassIds.length, firestoreSynced, entriesSynced }
   }
 
-  const flash = ({ skipped = [], requested = 0, firestoreSynced = true } = {}) => {
+  const flash = ({ skipped = [], requested = 0, firestoreSynced = true, entriesSynced = true } = {}) => {
     setError(null)
     if (!firestoreSynced) {
       // SQLite took the save but the cloud mirror did not — the one state the
       // teacher can fix themselves by saving again.
       reportError('Saved to the class records, but the cloud copy did not update. Save again to retry.')
+      setSaved('')
+      return
+    }
+    if (!entriesSynced) {
+      reportError('Grading setup saved, but the grades students see were not refreshed. Save again to retry.')
       setSaved('')
       return
     }

@@ -390,14 +390,31 @@ function CreateUserForm({ onCreated, settings }) {
       </div>
 
       {(role === 'teacher' || role === 'student') && (
-        <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
-          {loginPreview
-            ? <>They will sign in as <strong style={{ color: ink }}>{loginPreview}</strong></>
-            : prefix
+        loginPreview ? (
+          /* The one line the admin must carry away from this form — the exact
+             string this person types to sign in (NOT their full ID number,
+             which is the mistake this callout exists to prevent). */
+          <div style={{
+            marginTop: 14, padding: '12px 16px', borderRadius: 10,
+            background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.18)',
+            display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: ink }}>They will sign in as</span>
+            <strong style={{ ...mono, fontSize: 19, fontWeight: 800, color: navy, letterSpacing: '0.03em' }}>
+              {loginPreview}
+            </strong>
+            <span style={{ fontSize: 12.5, color: faint }}>
+              — this exact form, not the full {role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee number'}
+            </span>
+          </div>
+        ) : (
+          <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
+            {prefix
               ? `Their login will be ${prefix}-<last 6 digits of their ${
                   role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee ID'}>`
               : 'No login prefix is set for your school yet — set it in the card above.'}
-        </p>
+          </p>
+        )
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
@@ -488,14 +505,20 @@ function UserRow({ user, isSelf, onChanged }) {
   return (
     <tr style={{ borderTop: `1px solid ${line}` }}>
       <td style={{ padding: '12px 14px' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: ink }}>
           {user.last_name}, {user.first_name}
           {isSelf && <span style={{ ...mono, fontSize: 11, color: faint, marginLeft: 8 }}>you</span>}
         </div>
-        {/* Issued accounts show the login people actually type (snhs-789012);
-            the email field holds the internal identifier and stays hidden. */}
-        <div style={{ fontSize: 12.5, color: muted }}>{user.login_id ?? user.email}</div>
         {error && <div style={{ fontSize: 12, color: red, marginTop: 4 }}>{error}</div>}
+      </td>
+
+      <td style={{ padding: '12px 14px' }}>
+        {/* Issued accounts show the login people actually type (snhs-789012);
+            the email field holds the internal identifier and stays hidden.
+            Admins and parents sign in with a real email, so that shows here. */}
+        <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>
+          {user.login_id ?? user.email}
+        </span>
       </td>
 
       <td style={{ padding: '12px 14px' }}>
@@ -627,8 +650,8 @@ export default function UsersTab() {
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
                 <thead>
                   <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
-                    {['Name', 'Role', 'Status', ''].map((h, i) => (
-                      <th key={h || i} style={{ ...th, color: muted, textAlign: i === 3 ? 'right' : 'left' }}>{h}</th>
+                    {['Name', 'Sign-in', 'Role', 'Status', ''].map((h, i) => (
+                      <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 4 ? 'right' : 'left' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>

@@ -707,15 +707,19 @@ function TeacherGroupCard() {
 
 function SignOutCard() {
   return (
-    <div style={card}>
-      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Sign out</h2>
-      <p style={{ fontSize: 13.5, color: muted, margin: '0 0 14px' }}>
-        End your session on this device. You will be asked to confirm first.
-      </p>
+    <div style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+      <div>
+        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign out</h2>
+        <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
+          End your session on this device. You will be asked to confirm first.
+        </p>
+      </div>
       <SignOutButton
         style={{
-          padding: '10px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans,
+          padding: '9px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans,
           color: '#FAFAF6', background: red, border: 'none', borderRadius: 10, cursor: 'pointer',
+          flexShrink: 0,
         }}
       />
     </div>
@@ -727,7 +731,7 @@ function SignOutCard() {
  *  signing out (moved here from the portal header). */
 export default function TeacherAccountPage() {
   return (
-    <div style={{ display: 'grid', gap: 22, maxWidth: 860 }}>
+    <div style={{ display: 'grid', gap: 22, maxWidth: 860, margin: '0 auto', width: '100%' }}>
       <div>
         <h1 style={{ ...serif, fontSize: 'clamp(24px,3.2vw,30px)', color: ink, margin: '0 0 4px' }}>
           Account

@@ -223,7 +223,7 @@ export default function StudentsPage() {
             ))}
           </select>
         </Field>
-        <Field label="Risk level">
+        <Field label="Filter by:">
           <select
             value={riskFilter}
             onChange={(e) => setRiskFilter(e.target.value)}

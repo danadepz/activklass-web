@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { notifyStudents } from '@/lib/notifications'
 import { useAuth } from '@/context/useAuth'
 import { navy, line, sansUiFamily as sans, cream } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
@@ -51,11 +52,11 @@ function EmptyState({ filtered }) {
     <div style={{ textAlign: 'center', padding: '64px 32px', color: '#9AA6BD' }}>
       <div style={{ fontSize: 48, marginBottom: 16 }}>📢</div>
       <div style={{ fontWeight: 700, fontSize: 16, color: '#6A7A95', marginBottom: 8 }}>
-        {filtered ? 'No announcements for this class' : 'No announcements yet'}
+        {filtered ? 'No announcements in this category' : 'No announcements yet'}
       </div>
       <div style={{ fontSize: 13 }}>
         {filtered
-          ? 'Switch to "All Classes" or create a new one.'
+          ? 'Switch the filter back to "All" or post a new one.'
           : 'Use the form above to post your first announcement.'}
       </div>
     </div>
@@ -109,7 +110,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
             <div style={{ fontWeight: 700, fontSize: 15, color: '#0A1733', lineHeight: 1.3 }}>
               {item.title}
             </div>
-            {item.class_id == null && (
+            {(item.class_id == null || item.broadcast_id) && (
               <div style={{ fontSize: 11, color: '#6A7A95', marginTop: 3 }}>
                 📣 All classes
               </div>
@@ -206,32 +207,77 @@ export default function AnnouncementsPage() {
       const snap = await getDocs(
         query(collection(db, 'announcements'), where('teacher_id', '==', profile.id)),
       )
-      return snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      // A global post is one document per class sharing a broadcast_id (see
+      // the create mutation). The teacher sees it once; deleting it removes
+      // every sibling.
+      const seen = new Map()
+      const rows = []
+      for (const d of docs) {
+        if (!d.broadcast_id) { rows.push({ ...d, sibling_ids: [d.id] }); continue }
+        const first = seen.get(d.broadcast_id)
+        if (first) first.sibling_ids.push(d.id)
+        else { const row = { ...d, sibling_ids: [d.id] }; seen.set(d.broadcast_id, row); rows.push(row) }
+      }
+      return rows.sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
     },
     enabled: !!profile?.id,
   })
 
-  /* ── create ── */
+  /* ── create ──
+     "All my classes" used to be a single document with class_id: null. No
+     student screen queries for null — each reads
+     where('class_id', '==', classId) — so a global post reached nobody. It is
+     now written once per class (same broadcast_id) so the existing student
+     queries match, and each class roster gets a bell notification, which the
+     rules only allow per owned class anyway. */
   const createMut = useMutation({
-    mutationFn: (fields) =>
-      addDoc(collection(db, 'announcements'), {
-        ...fields,
-        teacher_id: profile.id,
-        created_at: serverTimestamp(),
-      }),
+    mutationFn: async (fields) => {
+      const targets = fields.class_id
+        ? classes.filter((c) => c.id === fields.class_id)
+        : classes
+      if (!targets.length) throw new Error('You have no classes to post this to yet.')
+      const broadcast_id = fields.class_id ? null : doc(collection(db, 'announcements')).id
+      const batch = writeBatch(db)
+      for (const c of targets) {
+        batch.set(doc(collection(db, 'announcements')), {
+          ...fields,
+          class_id: c.id,
+          broadcast_id,
+          teacher_id: profile.id,
+          created_at: serverTimestamp(),
+        })
+      }
+      await batch.commit()
+      // Best-effort: the announcement is posted even if the bell fails.
+      const prefix = fields.category === 'urgent' ? 'Urgent announcement' : 'New announcement'
+      await Promise.all(targets.map((c) =>
+        notifyStudents({
+          studentIds: c.student_ids ?? [],
+          classId: c.id,
+          createdBy: profile.id,
+          type: 'announcement',
+          message: `${prefix}: ${fields.title}`,
+          link: `/student/classes/${c.id}`,
+        }).catch(() => {}),
+      ))
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fs-announcements'] })
       setForm({ title: '', content: '', category: 'general', class_id: '', expires_at: '', linked_resource_type: '', linked_resource_id: '' })
       setFormErr('')
     },
-    onError: (e) => setFormErr(e.message ?? 'Failed to post announcement'),
+    onError: (e) => setFormErr(e.message?.startsWith('You have no classes') ? e.message : 'The announcement could not be posted. Please try again.'),
   })
 
   /* ── delete ── */
   const deleteMut = useMutation({
-    mutationFn: (id) => deleteDoc(doc(db, 'announcements', id)),
+    mutationFn: async (id) => {
+      const ids = announcements.find((a) => a.id === id)?.sibling_ids ?? [id]
+      const batch = writeBatch(db)
+      for (const sid of ids) batch.delete(doc(db, 'announcements', sid))
+      await batch.commit()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['fs-announcements'] }),
     onError: () => setDeletingId(null),
     onSettled: () => setDeletingId(null),
