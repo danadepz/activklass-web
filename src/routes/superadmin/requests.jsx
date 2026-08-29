@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
+import { approveRequest } from '@/lib/superadmin'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { Dialog, Field, inputCls } from './index'
 
 /**
  * School access requests -- the "Institution" path on /register.
@@ -47,6 +49,7 @@ export default function SuperAdminRequestsPage() {
   const { data: rows, isLoading, error } = useQuery({ queryKey: ['sa-requests'], queryFn: fetchPending })
   const [declining, setDeclining] = useState(null) // request id whose note box is open
   const [note, setNote] = useState('')
+  const [approving, setApproving] = useState(null) // the request open in the approve dialog
 
   const decline = useMutation({
     mutationFn: async ({ id, note }) => {
@@ -135,15 +138,13 @@ export default function SuperAdminRequestsPage() {
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {/* Wired in the next commit: approval creates the school
-                        through Flask and needs the endpoint first. */}
                     <button
                       type="button"
-                      disabled
-                      title="Approval arrives with the next update"
-                      className="rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-bold text-zinc-950 disabled:opacity-40"
+                      disabled={busy}
+                      onClick={() => setApproving(r)}
+                      className="rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
                     >
-                      Approve
+                      Approve…
                     </button>
                     <button
                       type="button"
@@ -186,6 +187,135 @@ export default function SuperAdminRequestsPage() {
           })}
         </ul>
       )}
+
+      {approving && (
+        <ApproveDialog
+          request={approving}
+          onClose={() => setApproving(null)}
+          onDone={(res) => {
+            setApproving(null)
+            toast.success(
+              `${res.school.name} is set up. ${res.admin.first_name ?? 'The requester'} is now its admin and signs in with the password they already have.`,
+            )
+            queryClient.invalidateQueries({ queryKey: ['sa-requests'] })
+            queryClient.invalidateQueries({ queryKey: ['sa-subscribers'] })
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * Review-and-confirm before the school is created.
+ *
+ * Everything starts as what the school asked for; the superadmin can correct
+ * a name or negotiate the seats here, and what they confirm is what the
+ * server writes. There is no password field on purpose: the requester's own
+ * account becomes the admin, and they keep the password they chose.
+ */
+function ApproveDialog({ request, onClose, onDone }) {
+  const [form, setForm] = useState({
+    name: request.school_name ?? '',
+    campus: request.campus ?? '',
+    school_year_current: '',
+    teacher_seats: String(request.teacher_seats ?? ''),
+    student_seats: String(request.student_seats ?? ''),
+  })
+  const [error, setError] = useState(null)
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const requester = `${request.first_name ?? ''} ${request.last_name ?? ''}`.trim() || request.email
+
+  const approve = useMutation({
+    mutationFn: () =>
+      approveRequest(request.id, {
+        name: form.name.trim(),
+        campus: form.campus.trim(),
+        school_year_current: form.school_year_current.trim() || null,
+        teacher_seats: Number(form.teacher_seats),
+        student_seats: Number(form.student_seats),
+      }),
+    onSuccess: onDone,
+    onError: (err) => setError(err.message),
+  })
+
+  const submit = (e) => {
+    e.preventDefault()
+    setError(null)
+    if (!form.name.trim()) return setError('The school needs a name.')
+    const t = Number(form.teacher_seats)
+    const s = Number(form.student_seats)
+    if (!Number.isInteger(t) || t < 1 || !Number.isInteger(s) || s < 1) {
+      return setError('Seats must be whole numbers above zero.')
+    }
+    approve.mutate()
+  }
+
+  const annual = estimateAnnual(Number(form.teacher_seats) || 0, Number(form.student_seats) || 0)
+
+  return (
+    <Dialog
+      title={`Approve ${request.school_name || 'this school'}`}
+      subtitle="Creates the school and its subscription on a 30-day trial, and makes the requester its admin. Check the details; what you confirm is what gets written."
+      onClose={onClose}
+    >
+      <form onSubmit={submit} className="space-y-4">
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300">
+            {error}
+          </div>
+        )}
+
+        <Field label="School name">
+          <input value={form.name} onChange={set('name')} className={inputCls} />
+        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Campus" hint="Optional.">
+            <input value={form.campus} onChange={set('campus')} className={inputCls} />
+          </Field>
+          <Field label="Current school year" hint="Optional.">
+            <input value={form.school_year_current} onChange={set('school_year_current')} className={inputCls} placeholder="2026-2027" />
+          </Field>
+        </div>
+
+        <div className="border-t border-zinc-800 pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Seats</p>
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <Field label="Teacher seats">
+              <input type="number" min="1" step="1" value={form.teacher_seats} onChange={set('teacher_seats')} className={inputCls} />
+            </Field>
+            <Field label="Student seats">
+              <input type="number" min="1" step="1" value={form.student_seats} onChange={set('student_seats')} className={inputCls} />
+            </Field>
+          </div>
+          <p className="mt-2 text-[11px] text-zinc-500">
+            They asked for {Number(request.teacher_seats ?? 0).toLocaleString('en-PH')} teachers × {Number(request.students_per_teacher ?? 0).toLocaleString('en-PH')} students each.
+            Estimate at these seats: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year — an estimate until the prices are confirmed.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2.5 text-xs text-zinc-400">
+          <span className="font-semibold text-zinc-200">{requester}</span> ({request.email}) becomes the school's admin.
+          Their account is promoted in place — same email, same password, no temporary credential to send.
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={approve.isPending}
+            className="flex-1 rounded-lg bg-emerald-400 py-2.5 text-sm font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+          >
+            {approve.isPending ? 'Creating the school…' : 'Approve and create the school'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-zinc-800 py-2.5 text-sm font-semibold text-zinc-400"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Dialog>
   )
 }

@@ -56,6 +56,22 @@ export function createSubscriber({
 }
 
 /**
+ * Approve a school's access request from /register.
+ *
+ * One call, one batch on the server: the school, its subscription on trial
+ * with the seats the school chose, the requester promoted to its admin, and
+ * the request marked approved. Every field in `overrides` is optional and
+ * defaults to what the request says -- name, campus, school_year_current,
+ * teacher_seats, student_seats.
+ */
+export function approveRequest(requestId, overrides = {}) {
+  return api(`/api/superadmin/requests/${requestId}/approve`, {
+    method: 'POST',
+    body: overrides,
+  })
+}
+
+/**
  * Change plan, status, or negotiated seat limits.
  *
  * Send only what changes. `limits` is merged onto the current values, so a

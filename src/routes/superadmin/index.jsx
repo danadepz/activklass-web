@@ -68,7 +68,7 @@ function SeatMeter({ label, slot }) {
   )
 }
 
-function Field({ label, hint, children }) {
+export function Field({ label, hint, children }) {
   return (
     <label className="block">
       <span className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -80,7 +80,7 @@ function Field({ label, hint, children }) {
   )
 }
 
-const inputCls =
+export const inputCls =
   'mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400/50 focus:outline-none'
 
 /**
@@ -422,7 +422,7 @@ export default function SuperAdminSubscribersPage() {
   )
 }
 
-function Dialog({ title, subtitle, children, onClose }) {
+export function Dialog({ title, subtitle, children, onClose }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: title, closeOnBackdrop: false })
   return (
     <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-6">
