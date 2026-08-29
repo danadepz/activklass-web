@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { CALENDARS, estimateAnnual, pesos } from '@/lib/pricing'
+import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 
@@ -123,8 +123,11 @@ export default function SuperAdminRequestsPage() {
                       </dd>
                       <dt className="text-zinc-500">Estimate</dt>
                       <dd className="text-zinc-300">
+                        {/* The same figure, the same way, as the seats step on
+                            /register showed it to them -- so what they saw and
+                            what we approve on is one number, not two. */}
                         <span className="font-mono">{pesos(estimateAnnual(teacherSeats, studentSeats))}</span> per school year
-                        <span className="text-zinc-500"> · shown to them as an estimate; prices not yet confirmed</span>
+                        <span className="text-zinc-500"> · {pesos(estimateAnnual(teacherSeats, studentSeats) / MONTHS_PER_SCHOOL_YEAR)} / month · first {TRIAL_DAYS} days free · shown to them as an estimate; prices not yet confirmed</span>
                       </dd>
                       <dt className="text-zinc-500">Requested</dt>
                       <dd className="text-zinc-300">{when(r.created_at)}</dd>
