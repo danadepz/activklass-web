@@ -30,6 +30,9 @@ const FRIENDLY_ERRORS = {
   'auth/wrong-password': 'Incorrect login or password.',
   'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
   'auth/invalid-email': 'That email or login ID is not valid.',
+  // Deactivate (admin Users tab, solo teacher's Student accounts) disables the
+  // Firebase user; unmapped, the student only saw the generic line below.
+  'auth/user-disabled': 'This account has been deactivated. Ask your teacher or school to reactivate it.',
 }
 
 /* The page's two stages. An account still on its staff-issued password
