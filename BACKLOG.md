@@ -1209,3 +1209,28 @@ choosing seats — that supersedes the request-queue design once a gateway is ap
   transfer for schools) needs explicit approval; it is a new paid service.
 - No superadmin list of `subscription_requests` yet (read them in the Firebase console).
 - **Browser walkthrough of the whole register flow still owed** (verified by build + tests).
+
+## Solo subscriber pane — 2026-08-30
+
+What a teacher on their own subscription sees, built against the account
+`maria.santos@activklass.test` (plan `plus`, active, school `ucb`).
+
+- **Indicator in two places:** `SubscriptionChip` under the login id in the sidebar card,
+  `SubscriptionBox` in the dashboard header. Both read `useMySubscription()`, which resolves
+  through `/api/subscription/mine` and falls back to the profile's `trial_ends_at` when
+  Flask is down — the badge must never take a page down.
+- **Students page has two tabs for solo teachers:** Directory (unchanged) and Student
+  accounts (`routes/teacher/StudentAccounts.jsx`, Class setup lane). The form is always
+  visible; the level, grade and section come from the chosen class (`education_level`), so
+  a College class hides the LRN field. Three buttons: Add student · Download template ·
+  Create accounts from a file. Both paths post to the same provision endpoint, which now
+  issues `<prefix>-<last 6 digits>` logins from the teacher's school **(cross-repo,
+  `app/api/classes.py`)**. The account list shows each student's classes.
+- **Decided:** one step — account + enrolment together. A two-step "master list, then per-
+  class roster" was rejected for a solo teacher (same person does both jobs; the endpoint
+  already reuses an existing account on a second class).
+- **Trial locks:** quiz bank and teacher groups are greyed with `PaidPlanHint` only for
+  `kind` trial/expired; a legacy teacher with no record is never locked.
+- **Open:** browser walkthrough of every screen above; trial expiry unenforced; the class
+  detail lane's `announceLogins()` toast should prefer `login_id` over `email`.
+

@@ -80,6 +80,14 @@ Still open at this altitude:
   check are built and pass build + tests. Open: the backend rules deploy **(cross-repo)**,
   trial expiry is recorded but not enforced, the payment gateway is undecided, and the
   browser walkthrough is owed. Details in `BACKLOG.md` (registration pane, 2026-08-29).
+- `[~]` **Solo subscriber dashboard** (2026-08-30): a teacher on their own plan sees a
+  Subscribed / Free trial chip beside their name and a status box on the dashboard
+  (`describeSubscription` in `lib/subscription.js`, `useMySubscription`), the Students page
+  gains a **Student accounts** tab — add one student, download the template, create
+  accounts from a file, reset, deactivate — and a trial greys out the quiz bank and teacher
+  groups with an "Available on a paid plan" hint. *Verified:* `subscription.test.js` (9),
+  `npm run test` 498 passing, `npm run build` clean. **Browser walkthrough owed**; trial
+  expiry still unenforced; the provision endpoint's prefix issue is **(cross-repo)**.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
