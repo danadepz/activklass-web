@@ -5,6 +5,7 @@ import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where
 import { db } from '@/lib/firebase'
 import { draftToQuestions, generateQuiz } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
+import { finishedAttempts } from '@/lib/quizAttempts'
 import {
   REMEDIATION_PUBLISHED,
   createRemediationPlan,
@@ -116,7 +117,35 @@ async function loadScaffolds(classId) {
     nameById,
     rosterIds: ids,
     remediation,
+    // Kept for the remediation panel: a plan is "completed" by a student when
+    // they have a FINISHED attempt on its practice quiz. Nothing is written --
+    // completion is read off the same attempts mastery is.
+    attemptsByQuiz,
+    quizzes,
   }
+}
+
+/* Per-student completion of one plan, from attempts on its practice quiz.
+   Returns null when the plan has no quiz -- there is then nothing a student
+   can finish, and saying "0 of 5 completed" would read as a failing class. */
+function completionOf(plan, attemptsByQuiz, quizzes) {
+  const quizId = plan.recommended_quiz_id
+  if (!quizId) return null
+  const quiz = quizzes.find((q) => q.id === quizId)
+  const total = (quiz?.questions ?? []).reduce((s, x) => s + (Number(x.points) || 0), 0)
+  const targets = (plan.assignments ?? []).map((a) => a.student_id).filter(Boolean)
+  const byStudent = {}
+  for (const a of attemptsByQuiz[quizId] ?? []) (byStudent[a.student_id] ??= []).push(a)
+  const rows = targets.map((sid) => {
+    const done = finishedAttempts(byStudent[sid] ?? [])
+    const best = done.reduce((m, a) => (a.total_score != null && (m == null || a.total_score > m) ? a.total_score : m), null)
+    return {
+      student_id: sid,
+      completed: done.length > 0,
+      bestPct: best != null && total ? Math.round((best / total) * 100) : null,
+    }
+  })
+  return { rows, completed: rows.filter((r) => r.completed).length, total: rows.length }
 }
 
 function bucketOf(m) {
@@ -142,7 +171,8 @@ function SectionHead({ dot, title, note }) {
  * the student query nor the security rule can see it. Publishing is what fans
  * it out into per-student assignments — see features/classes/remediation.js.
  */
-function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, onUnpublish, onDelete, onRecover }) {
+function RemediationPanel({ plans, legacy, nameById, attemptsByQuiz, quizzes, busy, onEdit, onPublish, onUnpublish, onDelete, onRecover }) {
+  const [openId, setOpenId] = useState(null)
   if (!plans.length && !legacy.length) return null
 
   return (
@@ -161,8 +191,11 @@ function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, on
           // students actually hold; saying so is the difference between "done"
           // and "you still have to re-publish".
           const stale = published && reach !== targets.length
+          const completion = published ? completionOf(plan, attemptsByQuiz ?? {}, quizzes ?? []) : null
+          const open = openId === plan.id
           return (
-            <div key={plan.id} className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '16px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+            <div key={plan.id} style={{ padding: '16px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div style={{ minWidth: 240, flex: 1 }}>
                 <div className="flex items-center gap-2.5">
                   <span style={{ fontSize: 15, fontWeight: 700, color: ink }}>{plan.title}</span>
@@ -187,6 +220,22 @@ function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, on
                     </>
                   )}
                 </div>
+                {published && (
+                  <div className="mt-1.5" style={{ fontSize: 12 }}>
+                    {completion ? (
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(open ? null : plan.id)}
+                        aria-expanded={open}
+                        style={{ fontWeight: 700, color: completion.completed === completion.total && completion.total > 0 ? green : navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: sans }}
+                      >
+                        {completion.completed} of {completion.total} completed the practice quiz {open ? '▴' : '▾'}
+                      </button>
+                    ) : (
+                      <span style={{ color: faint }}>No practice quiz attached — completion is not tracked for this plan.</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -239,6 +288,19 @@ function RemediationPanel({ plans, legacy, nameById, busy, onEdit, onPublish, on
                   Delete
                 </button>
               </div>
+            </div>
+            {open && completion && (
+              <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" style={{ listStyle: 'none', margin: '12px 0 0', padding: 0 }}>
+                {completion.rows.map((r) => (
+                  <li key={r.student_id} className="flex items-center justify-between gap-3" style={{ fontSize: 12.5, padding: '6px 10px', borderRadius: 8, background: r.completed ? 'rgba(31,138,91,0.07)' : 'rgba(14,42,92,0.03)' }}>
+                    <span style={{ color: ink }}>{nameById[r.student_id] ?? r.student_id}</span>
+                    <span style={{ ...mono, fontSize: 11.5, fontWeight: 700, color: r.completed ? green : faint }}>
+                      {r.completed ? `Completed${r.bestPct != null ? ` · best ${r.bestPct}%` : ''}` : 'Not started'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             </div>
           )
         })}
@@ -904,6 +966,8 @@ export default function ScaffoldTopicsPage() {
         plans={data.remediation?.plans ?? []}
         legacy={data.remediation?.legacy ?? []}
         nameById={data.nameById ?? {}}
+        attemptsByQuiz={data.attemptsByQuiz ?? {}}
+        quizzes={data.quizzes ?? []}
         busy={busy}
         onEdit={setEditingPlan}
         onRecover={setRecoveringPlan}
