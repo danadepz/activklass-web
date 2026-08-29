@@ -107,3 +107,12 @@ record. **(cross-repo)**
   only, so a deep link there bypasses it the way the web used to **(cross-repo)**.
 - **Quiz-bank folder filtering is client-side.** Server-side would need a composite index
   per filter shape for a few hundred documents.
+- **Institutional teachers see the same Reports page as solo teachers** (owner's,
+  2026-08-30, from the Institutional Teacher test audit, TC-TIN-036). The on-screen
+  summary and Export CSV render for both; there is no `school_id` gate on
+  `/teacher/reports` and none is wanted. The test sheet's "Generate Reports must be
+  absent" check passes as written because no such control exists for anyone.
+- **Accepting a grade contest records the decision only** (owner's, 2026-08-30,
+  TC-TIN-015/030). It never changes the score: the teacher edits the cell in the record
+  grid and saves, which is what runs `syncEntries`. That is the shipped behaviour and the
+  panel says so — the test cases are to be rewritten to assert it, not the code changed.
