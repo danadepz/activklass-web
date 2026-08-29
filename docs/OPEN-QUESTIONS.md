@@ -124,3 +124,7 @@ record. **(cross-repo)**
   touched by it. **Not built yet** — today the status is a label; the gate belongs in
   `components/ProtectedRoute` beside the temp-password check, reading the school's
   subscription. Seat prices in `lib/pricing.js` remain unconfirmed; the owner deferred them.
+- **School approval is announced by hand** (owner's, 2026-08-30). After the superadmin
+  provisions a school from its request, the console shows a ready-to-copy message (admin
+  login, temporary password, sign-in link) and a human sends it. No mail provider is added
+  for this; automatic email stays off the table with the rest of the paid services.
