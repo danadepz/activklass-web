@@ -14,6 +14,8 @@ import {
 } from '@/lib/teacherGroups'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
+import { useMySubscription } from '@/hooks/useMySubscription'
+import { PaidPlanHint } from '@/components/SubscriptionBadge'
 
 const GB = 1024 ** 3
 
@@ -662,6 +664,7 @@ function GroupDetail({ group, flash, onChanged }) {
 
 function TeacherGroupCard() {
   const qc = useQueryClient()
+  const { locks } = useMySubscription()
   const { data, isLoading } = useQuery({
     queryKey: ['teacher-group'],
     queryFn: fetchMyGroup,
@@ -681,6 +684,22 @@ function TeacherGroupCard() {
     return <div style={card}><p style={{ color: faint, margin: 0 }}>Loading your group…</p></div>
   }
   if (data?.group) return <GroupDetail group={data.group} flash={flash} onChanged={onChanged} />
+  // A trial may see what a group is, not start or join one. The card stays
+  // on screen, greyed, so the teacher learns what a paid plan adds; a member
+  // whose trial began after they joined keeps the group they are already in.
+  if (locks.teacherGroups) {
+    return (
+      <div style={{ ...card, position: 'relative' }} aria-disabled="true">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>Teacher group</h2>
+          <PaidPlanHint />
+        </div>
+        <div style={{ opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }}>
+          <GroupOnboarding pendingRequest={data?.pending_request} flash={flash} onChanged={onChanged} />
+        </div>
+      </div>
+    )
+  }
   return <GroupOnboarding pendingRequest={data?.pending_request} flash={flash} onChanged={onChanged} />
 }
 

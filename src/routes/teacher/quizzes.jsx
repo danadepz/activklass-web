@@ -24,6 +24,8 @@ import { toast } from '@/components/ui/toast'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { useMySubscription } from '@/hooks/useMySubscription'
+import { PaidPlanHint } from '@/components/SubscriptionBadge'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
@@ -106,6 +108,7 @@ function GenerateQuizModal({ classes, onClose }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a quiz with AI', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()
+  const { locks } = useMySubscription()
   const [selectedClassId, setSelectedClassId] = useState(classes[0]?.id ?? '')
   const [form, setForm] = useState({
     topic_id: '',
@@ -221,7 +224,7 @@ function GenerateQuizModal({ classes, onClose }) {
 
       // After the quiz doc, never before: the quiz is what the teacher asked
       // for, and a bank write that fails must not cost them the generation.
-      if (form.save_to_bank) {
+      if (form.save_to_bank && !locks.quizBank) {
         try {
           const result = await bankQuestions({
             teacherId: profile.id,
@@ -340,12 +343,15 @@ function GenerateQuizModal({ classes, onClose }) {
             </p>
           </div>
 
-          <label className="flex items-start gap-2.5 cursor-pointer" style={{ borderTop: '1px solid rgba(14,42,92,0.07)', paddingTop: 16 }}>
+          {/* The bank is a paid-plan feature: a trial sees the option, greyed,
+              and the generation itself goes ahead without banking. */}
+          <label className="flex items-start gap-2.5" style={{ borderTop: '1px solid rgba(14,42,92,0.07)', paddingTop: 16, cursor: locks.quizBank ? 'not-allowed' : 'pointer', opacity: locks.quizBank ? 0.55 : 1 }}>
             <input
               type="checkbox"
-              checked={form.save_to_bank}
+              checked={form.save_to_bank && !locks.quizBank}
+              disabled={locks.quizBank}
               onChange={(e) => setForm((f) => ({ ...f, save_to_bank: e.target.checked }))}
-              style={{ marginTop: 2, accentColor: navy, width: 15, height: 15, cursor: 'pointer' }}
+              style={{ marginTop: 2, accentColor: navy, width: 15, height: 15, cursor: locks.quizBank ? 'not-allowed' : 'pointer' }}
             />
             <span>
               <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>
@@ -356,6 +362,7 @@ function GenerateQuizModal({ classes, onClose }) {
               </span>
             </span>
           </label>
+          {locks.quizBank && <PaidPlanHint style={{ marginTop: 8 }} />}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
@@ -1105,6 +1112,7 @@ export default function QuizzesIndexPage() {
   // Ongoing first: it is the only tab that can need attention today.
   const [filter, setFilter] = useState('ongoing')
   const [activeTab, setActiveTab] = useState('quizzes') // 'quizzes' or 'bank'
+  const { locks } = useMySubscription()
   const [showCreate, setShowCreate] = useState(false)
   const [showGenerate, setShowGenerate] = useState(false)
 
@@ -1197,7 +1205,7 @@ export default function QuizzesIndexPage() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          📚 Quiz Bank
+          📚 Quiz Bank{locks.quizBank && <span aria-hidden> 🔒</span>}
         </button>
       </div>
 
@@ -1244,7 +1252,23 @@ export default function QuizzesIndexPage() {
           )}
         </>
       ) : (
-        <QuizBankBrowser syllabi={syllabi ?? []} />
+        locks.quizBank ? (
+          /* Greyed, not hidden: the trial should see what the bank is. The
+             browser is read-only under the overlay; saving is blocked above. */
+          <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '12px 16px', marginBottom: 12, background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 12 }}>
+              <span style={{ fontSize: 13.5, color: ink }}>
+                <strong>The Quiz Bank is not included in the free trial.</strong> Your questions are still generated and saved to each quiz — the bank is where they become reusable across quizzes.
+              </span>
+              <PaidPlanHint />
+            </div>
+            <div style={{ opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }} aria-disabled="true">
+              <QuizBankBrowser syllabi={syllabi ?? []} />
+            </div>
+          </div>
+        ) : (
+          <QuizBankBrowser syllabi={syllabi ?? []} />
+        )
       )}
 
       {showCreate && (
