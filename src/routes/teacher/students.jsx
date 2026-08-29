@@ -4,6 +4,8 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
 import { navy, navyDeep, ink, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import { useMySubscription } from '@/hooks/useMySubscription'
+import StudentAccounts from './StudentAccounts'
 
 const classLabel = (c) =>
   c.subject_code ? `${c.subject_code} · ${c.section ?? ''}`.trim() : c.section || c.subject || c.name || 'Class'
@@ -91,6 +93,10 @@ function RiskBadge({ probability }) {
 export default function StudentsPage() {
   const { data: classes } = useTeacherClasses()
   const { data: rows, isLoading, isError } = useTeacherStudents()
+  // A solo subscriber manages their own students' accounts here; a
+  // school-issued teacher's admin does it in the admin console instead.
+  const { isSolo } = useMySubscription()
+  const [tab, setTab] = useState('directory') // 'directory' | 'accounts' -- accounts is solo-only
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('all')
   const [riskFilter, setRiskFilter] = useState('all')
@@ -118,9 +124,30 @@ export default function StudentsPage() {
           Students
         </h1>
         <p style={{ fontSize: 15, color: muted, margin: 0 }}>
-          Every student across your classes, in one place — search by name, or sort to see who needs attention.
+          {tab === 'accounts'
+            ? 'Issue your students’ logins, reset a password, or deactivate anyone who leaves.'
+            : 'Every student across your classes, in one place — search by name, or sort to see who needs attention.'}
         </p>
       </div>
+    </div>
+  )
+
+  /* A solo subscriber has no school admin, so the account work lives here as a
+     second tab. A school-issued teacher sees the directory alone. */
+  const tabs = isSolo && (
+    <div className="flex border-b border-slate-200" style={{ marginBottom: 18 }}>
+      {[['directory', '📋 Directory'], ['accounts', '🪪 Student accounts']].map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setTab(id)}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition ${
+            tab === id ? 'border-[#0E2A5C] text-[#0E2A5C]' : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 
@@ -139,6 +166,8 @@ export default function StudentsPage() {
     return (
       <div>
         {header}
+        {tabs}
+        {tab === 'accounts' ? <StudentAccounts classes={[]} rows={[]} /> : (
         <div className="text-center" style={{ background: '#FFFFFF', border: '1px dashed rgba(14,42,92,0.18)', borderRadius: 16, padding: '56px 28px', maxWidth: 920 }}>
           <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No classes yet</h3>
           <p style={{ fontSize: 14, color: muted, margin: '0 0 20px' }}>Create a class and add a roster to see students here.</p>
@@ -146,6 +175,7 @@ export default function StudentsPage() {
             Go to My Classes
           </Link>
         </div>
+        )}
       </div>
     )
   }
@@ -153,7 +183,10 @@ export default function StudentsPage() {
   return (
     <div>
       {header}
+      {tabs}
 
+      {tab === 'accounts' ? <StudentAccounts classes={classes ?? []} rows={list} /> : (
+      <>
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-3" style={{ marginBottom: 18 }}>
         <Field label="Search">
@@ -284,6 +317,8 @@ export default function StudentsPage() {
         Low are our own bands on that score (50%+ / 35–49% / under 35%) — the model itself only flags
         high risk at 50%, so "High" here always agrees with it; "Medium" is an earlier heads-up.
       </p>
+      </>
+      )}
     </div>
   )
 }
