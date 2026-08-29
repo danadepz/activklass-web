@@ -124,6 +124,12 @@ record. **(cross-repo)**
   touched by it. **Not built yet** — today the status is a label; the gate belongs in
   `components/ProtectedRoute` beside the temp-password check, reading the school's
   subscription. Seat prices in `lib/pricing.js` remain unconfirmed; the owner deferred them.
+- **Solo teachers are billed per school year** (owner's, 2026-08-30). One payment per
+  10-month school year — own seat plus the students they handle — the same period as an
+  institution, whatever academic calendar their school runs on. Not monthly, not per
+  semester. `lib/pricing.js` already prices this way (`estimateSolo`); this closes the
+  billing-period question that the register and solo panes had left open. The gateway that
+  collects it is still undecided and still needs approval as a new paid service.
 - **School approval is announced by hand** (owner's, 2026-08-30). After the superadmin
   provisions a school from its request, the console shows a ready-to-copy message (admin
   login, temporary password, sign-in link) and a human sends it. No mail provider is added
