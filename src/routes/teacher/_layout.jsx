@@ -8,6 +8,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { SubscriptionChip } from '@/components/SubscriptionBadge'
 
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
@@ -441,6 +442,7 @@ export default function TeacherLayout() {
                 <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.login_id ?? profile.email}
                 </div>
+                <SubscriptionChip style={{ maxWidth: 130 }} />
               </div>
             </NavLink>
 
@@ -502,6 +504,7 @@ export default function TeacherLayout() {
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
                 </span>
+                <SubscriptionChip style={{ alignSelf: 'flex-start' }} />
               </span>
             </NavLink>
           </div>

@@ -5,6 +5,7 @@ import { navy, ink, gold, goldDeep, goldChart, muted, faint, blueText, blue, gre
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { formatSchedule } from '@/lib/schedule'
 import { MetricCard, Panel } from '@/components/ui/Card'
+import { SubscriptionBox } from '@/components/SubscriptionBadge'
 
 const QUICK_ACTIONS = [
   { to: '/teacher/classes', label: 'New class', hint: 'Add a section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
@@ -230,7 +231,10 @@ export default function TeacherDashboard() {
             {profile.first_name} {profile.last_name}
           </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+          {/* Plan status: "Subscribed · Plus plan", "Free trial · 12 days left",
+              or "School plan · <school>". Links to the Account page. */}
+          <SubscriptionBox />
           <span className="hidden sm:inline-flex items-center gap-2" style={{ ...mono, padding: '9px 14px', fontSize: 12.5, color: '#3A4A6B', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 10 }}>
             📅 {today}
           </span>
