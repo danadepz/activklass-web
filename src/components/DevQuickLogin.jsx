@@ -21,7 +21,10 @@ export default function DevQuickLogin({ onPick, disabled = false }) {
 
   let accounts
   try {
-    accounts = JSON.parse(atob(raw))
+    // atob() yields one char per byte; decode those bytes as UTF-8 so a "·"
+    // in a label renders as itself rather than as "Â·".
+    const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0))
+    accounts = JSON.parse(new TextDecoder().decode(bytes))
   } catch {
     return null // a malformed value should never break the real login form
   }
