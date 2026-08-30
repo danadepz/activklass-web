@@ -86,7 +86,7 @@ export default function ServerStatus() {
     >
       <span>
         <strong style={{ fontWeight: 700 }}>The ActivKlass server is not responding.</strong>{' '}
-        Adding students, uploading a roster, teacher groups and the admin page will not work until it is
+        Adding students, uploading a roster and the admin page will not work until it is
         back. Everything else is fine — this is not something you did.
       </span>
       <button
