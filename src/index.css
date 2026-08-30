@@ -48,9 +48,20 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* The page never scrolls sideways. Wide content (grade tables, the
+     superadmin table, the scaffold rows) scrolls inside its own overflow-x
+     container; anything that still pokes past the viewport at a phone width
+     is clipped here instead of handing every page a horizontal scrollbar.
+     Set on html so it propagates to the viewport and vertical scrolling and
+     the sticky headers keep working. */
+  html {
+    overflow-x: hidden;
+  }
+
   body {
     background-color: var(--color-slate-50);
     color: var(--color-slate-800);
+    overflow-x: hidden;
   }
 
   /* Headings use the humanist display face; body inherits Inter. */
