@@ -1245,3 +1245,28 @@ What a teacher on their own subscription sees, built against the account
   are now dead — delete them (and the `teacher_group_id` reference in `institution.py`
   absorption) when the backend pane has a moment. `locks.teacherGroups` still greys the card
   on a trial.
+
+## Roster-scope pane — 2026-08-31
+- **Rules now scope every student read to the teacher who handles them.** Before: `isTeacher()`
+  granted every teacher every student's `users`, `quiz_attempts`, `student_performance`,
+  `attendance_summaries`, `remediations`, `gradebooks/*/entries`, `consent_records`,
+  `guardian_links`/`guardian_codes` — the screens were scoped, the rules were not. After:
+  `handlesStudent()` (reads `users.teacher_ids`) and `teachesClass()` (reads
+  `classes.teacher_id`), with the four client roster writes, the two class deletes and the
+  three student lookups moved to Flask (`lib/roster.js`, `lib/classes.js`). Per-class list
+  queries carry `where('class_id', '==', …)`; two composite indexes added **(cross-repo)**.
+- **Verified:** `npm run test:rules` 46/46 (10 new: foreign teacher denied everywhere, every
+  forgery refused, student self-reads intact); `npm run test` 531; build clean; backend
+  `test_roster_sync.py` 5/5 and `smoke_classes.py` asserts `teacher_ids` on provision; the
+  emulator confirmed a `documentId() in` query is judged per document, so `fetchUsersByIds`'
+  13 call sites needed no change. Live data backfilled (`scripts/backfill_teacher_ids.py`, 17
+  students).
+- **Owed:** `firebase deploy --only firestore:rules,firestore:indexes` from the backend (the
+  deploy was not permitted from this pane); a browser pass as Maria after it — the two
+  student-facing readers of `{path=**}/entries` (mobile) should be checked against the
+  narrowed collection-group rule. The SQL-era `enroll_student`/`drop_student`/`search_students`
+  endpoints in `classes.py` are now doubly dead.
+- **Lanes touched** (no pane was open for them; every hunk is the mechanical swap above):
+  Class detail (`$classId/index.jsx`, `history.jsx`, `scaffolds.jsx`), Class setup
+  (`classes/index.jsx`), logic (`roster.js`, `classes.js`, `useTeacherStudents.js`,
+  `useQuizRecordSync.js`, `remediation.js`, `gradeRecovery.js`), quiz (`quizzes.$quizId.jsx`).

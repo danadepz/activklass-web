@@ -148,3 +148,12 @@ record. **(cross-repo)**
   list is the identity review, which now accepts only a school/employee ID or a PRC
   license. The Flask group endpoints (`api/teacher_groups.py`) are unused and left in
   place; `teacher_group_id` on a profile means nothing to the web client now.
+- **A teacher handles the students in their own classes, and nobody else's** (owner's,
+  2026-08-31). Not a school-wide roster, not the colleagues' students: a teacher reads a
+  student's profile, work and guardian records only while that student is on a class the
+  teacher owns. Enforced in `firestore.rules`, not just on the screens, through the
+  server-written `users.teacher_ids` and `classes.teacher_id`; every roster change now
+  goes through Flask so that field can never be wrong or forged. The one deliberate
+  exception is `GET /api/students/lookup`: an exact-key search (student number, LRN or
+  email) that returns roster fields only, because to put an existing account on a class a
+  teacher has to be able to find it.

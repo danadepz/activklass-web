@@ -103,6 +103,10 @@ looks like six unrelated broken features; that has already happened in a walkthr
 - Assume a feature is broken because it errored. Check that Flask is up first.
 - Trust a docstring or a comment as a fact — two walkthrough defects traced to one sentence
   that had been wrong for weeks, in the very file the endpoint was in.
+- Write `isTeacher()` on a rule that guards a student's data. That means *any* teacher, at
+  any school — the screens were scoped for months while the database was open to every
+  teacher on the platform. Guard by the class owner or by `users.teacher_ids`, and remember a
+  list query must carry the filter the rule reads (`class_id`), or the owner is refused too.
 - Ship a gate without auditing **every** path that writes the flag it reads. The forced
   password change shipped covering five of six account-creation paths; the missed one was
   `superadmin.py`, the account that matters most. A gate is only as good as its flag.

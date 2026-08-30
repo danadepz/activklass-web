@@ -15,9 +15,9 @@ sites in `src/`, not from memory.
 
 | Collection | Written by the web client? | Notes |
 |---|---|---|
-| `users/{uid}` | yes (teacher edits roster, admin edits profiles, superadmin reviews verifications) | Holds `role` — the string the rules read for every authorization decision. `first_name`, `last_name`, `email`, `is_temp_password`. A self-registered teacher also carries `verification_status` (`pending` → `approved`/`rejected`, set only by the superadmin claim), `verification_id_type`/`_number`/`_link` (a share link — no uploads on Spark) and, on rejection, `verification_note`. `ProtectedRoute` holds anyone not `approved` on `/pending-verification`; admin-issued teachers never have the field. Self-subscribed accounts also carry `subscription_status: 'trial'` and `trial_ends_at` (30 days — stamped at approval for individuals, at registration for institution requesters). **Nothing enforces the expiry yet**; it is recorded so the gate can be built server-side. A student a teacher provisions (`POST /api/classes/{id}/students/provision`, from the class page or the solo teacher's Students → Student accounts tab) also carries `login_id` and, when one was given, `personal_email`; the login prefix is the school's `login_prefix` for an institution teacher and `teaching_school_id` (the `school_directory` id, e.g. `ucb`) for a solo teacher. `teaching_school_id` / `teaching_school_name` are affiliation only (never billing) and are what groups colleagues: the Account page's **Your school** card (`useSchoolColleagues`) lists every verified, active teacher with the same `teaching_school_id` — no group document, code, request or invite exists any more; a teacher without the field picks their school from the directory there and writes it onto their own profile. |
+| `users/{uid}` | yes (teacher edits roster, admin edits profiles, superadmin reviews verifications) | Holds `role` — the string the rules read for every authorization decision. `first_name`, `last_name`, `email`, `is_temp_password`. A self-registered teacher also carries `verification_status` (`pending` → `approved`/`rejected`, set only by the superadmin claim), `verification_id_type`/`_number`/`_link` (a share link — no uploads on Spark) and, on rejection, `verification_note`. `ProtectedRoute` holds anyone not `approved` on `/pending-verification`; admin-issued teachers never have the field. Self-subscribed accounts also carry `subscription_status: 'trial'` and `trial_ends_at` (30 days — stamped at approval for individuals, at registration for institution requesters). **Nothing enforces the expiry yet**; it is recorded so the gate can be built server-side. A student a teacher provisions (`POST /api/classes/{id}/students/provision`, from the class page or the solo teacher's Students → Student accounts tab) also carries `login_id` and, when one was given, `personal_email`; the login prefix is the school's `login_prefix` for an institution teacher and `teaching_school_id` (the `school_directory` id, e.g. `ucb`) for a solo teacher. `teaching_school_id` / `teaching_school_name` are affiliation only (never billing) and are what groups colleagues: the Account page's **Your school** card (`useSchoolColleagues`) lists every verified, active teacher with the same `teaching_school_id` — no group document, code, request or invite exists any more; a teacher without the field picks their school from the directory there and writes it onto their own profile. A **student** also carries `teacher_ids[]` — the `teacher_id` of every class they are on, **written only by Flask** (`services/roster_sync.py`, on every roster change) and the field the rules read to decide whether a teacher may see the student at all; no client may write it. |
 | `schools/{schoolId}` | no (read only) | `name`, `login_prefix`, `contact_email`, `school_year_current`, and `subscription_status` — a **mirror of `subscriptions/{schoolId}.status`** written by the superadmin API on provision, approval and every status change. Any member of the school may read their own school document; none may read the subscription. `AuthContext` loads it with the profile as `school`, and `ProtectedRoute` sends everyone in a `suspended`/`cancelled` school to `/suspended` (`lib/schoolStatus.js`). Superadmins are never gated; a school doc without the field never gates. |
-| `classes/{classId}` | yes | `teacher_id`, `student_ids[]`, `subject`, `subject_code`, `section`, `grade_level`, `syllabus_id`. The roster is the array — there is no join collection. |
+| `classes/{classId}` | yes | `teacher_id`, `student_ids[]`, `subject`, `subject_code`, `section`, `grade_level`, `syllabus_id`. The roster is the array — there is no join collection. **A client may no longer write `student_ids`, `teacher_id`, or delete a class**: roster changes go through `addToRoster` / `removeFromRoster` (`lib/roster.js` → `POST`/`DELETE /api/classes/{id}/roster`) and `deleteClassSection` (`lib/classes.js` → `DELETE /api/classes/{id}`), which rewrite each student's `teacher_ids` in the same request. A teacher creates a class empty. |
 | `gradebooks/{classId}` | yes | Doc id **is** the class id. `configured`, `periods[]`, `components[]`, `grading_mode` (default `deped_k12`), `overrides{}`. |
 | `quizzes/{quizId}` | yes | `class_ids[]` is the assignment. |
 | `quiz_attempts/{attemptId}` | yes (student) | See the lifecycle rule below. |
@@ -44,7 +44,7 @@ gradebooks/{classId}/entries/{studentId}    DERIVED — see below
 
 ---
 
-## The three rules that break things silently
+## The four rules that break things silently
 
 ### 1. `entries` is derived, and it is the only grade a student may read
 `gradebooks/{classId}/entries/{studentId}` is computed from `assessments`, not authored.
@@ -71,6 +71,23 @@ Saving from the syllabus page writes `syllabi/{id}` **and** the class resolves t
 `classes/{classId}/syllabus/current`. Both paths exist in the client. When you change how
 a syllabus is resolved, check both, and check `classes.syllabus_id` — that is the field a
 student actually reads a syllabus through.
+
+### 4. A teacher reads only the students they handle — and the rules prove it from the query
+Since 2026-08-31 `isTeacher()` no longer opens student data. A teacher may read a
+student's profile, attempts, risk snapshot, remediations, grade entries, guardian
+links and consent only for a student on a class they own, and the rules decide that
+in two ways: `users.teacher_ids` (server-written, see the `users` row) for anything
+keyed by the student, and `classes/{class_id}.teacher_id` for anything keyed by the
+class. **A list query must carry the fact the rule needs**: every teacher-side read of
+`quiz_attempts`, `student_performance` and `remediations` now includes
+`where('class_id', '==', classId)` (a `quiz_id`-only query is refused even for the
+owner — the engine cannot prove it), and the `(quiz_id, class_id)` /
+`(plan_id, class_id)` composite indexes live in the backend's
+`firestore.indexes.json`. `fetchUsersByIds` needs nothing extra: a `documentId() in`
+query is judged per document. Looking up a student to enrol — someone the teacher
+does not yet handle — goes through `GET /api/students/lookup` (exact number, LRN or
+email; roster fields only). Verified in `lib/firestoreRules.test.js` under
+`npm run test:rules`.
 
 ---
 

@@ -108,6 +108,19 @@ Still open at this altitude:
   signs in → suspend/reactivate); seat prices still unconfirmed; trial expiry and seat
   limits still unenforced. Plan: the "Tier 2 Build Plan" artifact; decisions in
   `OPEN-QUESTIONS.md`.
+- `[x]` **A teacher sees only the students they handle** (2026-08-31). The rules used to
+  let *any* teacher read *any* student's profile, attempts, risk, remediations, grades,
+  guardian links and consent — the screens were scoped, the database was not. Now
+  `users.teacher_ids` (server-written from the rosters, `services/roster_sync.py`) and
+  `classes.teacher_id` gate every one of those; a client can no longer write a roster,
+  change an owner, delete a class, or touch `teacher_ids` — those five paths go through
+  `POST`/`DELETE /api/classes/{id}/roster`, `DELETE /api/classes/{id}` and the provision
+  endpoint **(cross-repo)**. *Verified:* `npm run test:rules` 46/46 against the real rules
+  engine, including a foreign teacher denied on every collection and every forgery
+  refused; `tests/test_roster_sync.py` (5) and `smoke_classes.py` assert `teacher_ids`
+  lands on provision; the live project was backfilled (17 students). **Deploy of the
+  rules and indexes is owed** — `firebase deploy --only firestore:rules,firestore:indexes`
+  from the backend repo — and until it runs, nothing is enforced.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 

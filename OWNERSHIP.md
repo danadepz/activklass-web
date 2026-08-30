@@ -313,3 +313,11 @@ already did it. `git diff` before committing, always.
 (Admin lane) mounts in place of the old teacher-group block. The Admin lane
 was not open at the time — that swap is a one-line import and mount, the rest
 of `account.jsx` is untouched. `src/lib/teacherGroups.js` no longer exists.
+
+**Roster scope, 2026-08-31 (solo pane):** `lib/roster.js` gained `addToRoster` /
+`removeFromRoster` and `lib/classes.js` gained `deleteClassSection` — the only
+sanctioned ways to change a roster or delete a class, because the rules refuse
+the client `arrayUnion`/`arrayRemove`/`deleteDoc` they replaced. A lane that
+adds a new enrol/unenrol path must go through them, or the student is enrolled
+and invisible. `lib/classes.js` and `lib/admin.js` are still unowned; whoever
+takes the logic lane next should claim them.
