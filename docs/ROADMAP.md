@@ -88,6 +88,13 @@ Still open at this altitude:
   groups with an "Available on a paid plan" hint. *Verified:* `subscription.test.js` (9),
   `npm run test` 498 passing, `npm run build` clean. **Browser walkthrough owed**; trial
   expiry still unenforced; the provision endpoint's prefix issue is **(cross-repo)**.
+  Later the same day the **code-based teacher group was replaced by the school itself**:
+  the Account page's **Your school** card lists every verified teacher who registered with
+  the same `teaching_school_id` (`hooks/useSchoolColleagues`, `teacher/SchoolColleagues.jsx`)
+  — nothing to create, share, request or approve; `lib/teacherGroups.js` is gone and the
+  Flask group endpoints are unused **(cross-repo, left in place)**. *Verified:*
+  `SchoolColleagues.test.jsx` (5), `npm run test` 528/528, `npm run build` clean; the
+  browser walk is owed with the rest of the solo screens.
 - `[~]` **Schools join by request** (2026-08-30, "Tier 2"): the superadmin console gets a
   **School requests** queue over `subscription_requests`; **Approve** creates the school
   and its trial subscription on the seats the school chose and promotes the requester to

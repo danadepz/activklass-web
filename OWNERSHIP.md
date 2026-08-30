@@ -306,3 +306,10 @@ already did it. `git diff` before committing, always.
 - Backend API is flat and teacher-owned: `/api/quizzes`, `/api/syllabus`. The
   class-nested routes are gone. `PUT` on a quiz or syllabus **replaces** its
   `class_ids` — always resend them, or the assignment is wiped.
+
+**Added 2026-08-30 (solo pane):** `src/hooks/useSchoolColleagues.js` sits in
+`src/hooks/**` and so belongs to the Data/logic lane by the rule above;
+`src/routes/teacher/SchoolColleagues.jsx` is the card `teacher/account.jsx`
+(Admin lane) mounts in place of the old teacher-group block. The Admin lane
+was not open at the time — that swap is a one-line import and mount, the rest
+of `account.jsx` is untouched. `src/lib/teacherGroups.js` no longer exists.

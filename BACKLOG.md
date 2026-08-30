@@ -1234,3 +1234,14 @@ What a teacher on their own subscription sees, built against the account
 - **Open:** browser walkthrough of every screen above; trial expiry unenforced; the class
   detail lane's `announceLogins()` toast should prefer `login_id` over `email`.
 
+- **Teacher groups → "Your school" (later on 2026-08-30).** Owner: colleagues at the same
+  school are grouped by that fact, with no code, request or invite. `hooks/useSchoolColleagues`
+  queries `users` where `role == teacher` and `teaching_school_id == mine` (rules already let
+  a teacher read teacher profiles; two equality filters need no index) and keeps only
+  verified, active accounts; `teacher/SchoolColleagues.jsx` renders it on the Account page,
+  with a directory picker for an account that predates the school step. Removed:
+  `lib/teacherGroups.js`, the group block in `account.jsx`, the "teacher groups" mention in
+  `ServerStatus`. **Cross-repo, not done:** `api/teacher_groups.py` and its three collections
+  are now dead — delete them (and the `teacher_group_id` reference in `institution.py`
+  absorption) when the backend pane has a moment. `locks.teacherGroups` still greys the card
+  on a trial.

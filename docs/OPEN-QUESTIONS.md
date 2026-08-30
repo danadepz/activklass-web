@@ -140,3 +140,11 @@ record. **(cross-repo)**
   stranger out — the two remaining IDs are the ones a school or the PRC issued to a
   teacher. Records already carrying `government_id` still show their raw value in the
   superadmin review table; none exist outside test data.
+- **Colleagues are grouped by school, automatically** (owner's, 2026-08-30). A solo
+  teacher's "group" is every other verified teacher who registered with the same
+  `teaching_school_id` — no group to create, no code to share, no request, no invite. The
+  code-based teacher group on the Account page was replaced by a **Your school** card
+  that simply lists them. What keeps a stranger who picks "UCB" at sign-up out of UCB's
+  list is the identity review, which now accepts only a school/employee ID or a PRC
+  license. The Flask group endpoints (`api/teacher_groups.py`) are unused and left in
+  place; `teacher_group_id` on a profile means nothing to the web client now.
