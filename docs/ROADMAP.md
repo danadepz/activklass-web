@@ -118,9 +118,12 @@ Still open at this altitude:
   endpoint **(cross-repo)**. *Verified:* `npm run test:rules` 46/46 against the real rules
   engine, including a foreign teacher denied on every collection and every forgery
   refused; `tests/test_roster_sync.py` (5) and `smoke_classes.py` assert `teacher_ids`
-  lands on provision; the live project was backfilled (17 students). **Deploy of the
-  rules and indexes is owed** — `firebase deploy --only firestore:rules,firestore:indexes`
-  from the backend repo — and until it runs, nothing is enforced.
+  lands on provision; the live project was backfilled (17 students), then the rules and
+  indexes were **deployed 2026-08-31** (the owner ran it; the predeploy gate re-ran the
+  46 rules tests first) and proven live through the Firestore REST API as Maria and as a
+  second seeded teacher: 16/16 — own students readable, the other teacher's refused in
+  both directions, every forgery (teacher_ids, student_ids, class delete, editing a
+  foreign student) 403, an ordinary own-class edit still 200.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 

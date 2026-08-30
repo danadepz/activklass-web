@@ -1261,7 +1261,7 @@ What a teacher on their own subscription sees, built against the account
   emulator confirmed a `documentId() in` query is judged per document, so `fetchUsersByIds`'
   13 call sites needed no change. Live data backfilled (`scripts/backfill_teacher_ids.py`, 17
   students).
-- **Owed:** `firebase deploy --only firestore:rules,firestore:indexes` from the backend (the
+- **Deployed 2026-08-31** by the owner and proven live over the REST API (16/16, see ROADMAP). Was owed: `firebase deploy` from the backend (the
   deploy was not permitted from this pane); a browser pass as Maria after it — the two
   student-facing readers of `{path=**}/entries` (mobile) should be checked against the
   narrowed collection-group rule. The SQL-era `enroll_student`/`drop_student`/`search_students`
