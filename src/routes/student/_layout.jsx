@@ -103,6 +103,12 @@ export default function StudentLayout() {
           background: navy,
           color: cream,
           borderBottom: '1px solid rgba(255,255,255,0.08)',
+          /* clip, not hidden: the decorative ring below hangs 60px past the
+             right edge and was widening the whole document -- the sideways
+             scrollbar on the student dashboard -- while the notification
+             dropdown still needs to overflow downward. Same fix as the
+             teacher header. */
+          overflowX: 'clip',
         }}
       >
         {/* decorative rings — desktop only */}
