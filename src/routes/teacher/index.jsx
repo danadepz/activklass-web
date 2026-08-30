@@ -4,6 +4,7 @@ import { Layers, Users, TrendingUp, AlertCircle, Check, Plus, CalendarCheck, Fil
 import { navy, ink, gold, goldDeep, goldChart, muted, faint, blueText, blue, green, line, serifAlt as serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { formatSchedule } from '@/lib/schedule'
+import { academicTerm } from '@/lib/classForm'
 import { MetricCard, Panel } from '@/components/ui/Card'
 import { SubscriptionBox } from '@/components/SubscriptionBadge'
 
@@ -399,7 +400,7 @@ export default function TeacherDashboard() {
                             </td>
                             <td style={tdStyle}>{c.subject || '—'}</td>
                             <td style={{ ...tdStyle, ...mono, fontSize: 12 }}>{formatSchedule(c.schedule) || '—'}</td>
-                            <td style={{ ...tdStyle, ...mono, fontSize: 12 }}>{c.academic_year}</td>
+                            <td style={{ ...tdStyle, ...mono, fontSize: 12 }}>{academicTerm(c)}</td>
                             <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: ink }}>
                               {count}
                               {c.max_students ? ` / ${c.max_students}` : ''}

@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { emptyClassForm } from '@/lib/classForm'
+import { emptyClassForm, academicTerm } from '@/lib/classForm'
 import { deleteClassSection } from '@/lib/classes'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
@@ -627,7 +627,7 @@ export default function ClassesPage() {
                   </div>
 
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    {c.academic_year && <div style={{ fontSize: 13, color: muted }}>{c.academic_year}</div>}
+                    {academicTerm(c) && <div style={{ fontSize: 13, color: muted }}>{academicTerm(c)}</div>}
                     {formatSchedule(c.schedule) && <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>{formatSchedule(c.schedule)}</div>}
                   </div>
 
@@ -717,7 +717,7 @@ export default function ClassesPage() {
                     className="flex items-center justify-between mt-auto pt-4"
                     style={{ borderTop: `1px solid ${line}`, marginTop: 16 }}
                   >
-                    <span style={{ fontSize: 13, color: muted }}>{c.academic_year || '—'}</span>
+                    <span style={{ fontSize: 13, color: muted }}>{academicTerm(c) || '—'}</span>
                     <span style={{ borderRadius: 999, background: 'rgba(14,42,92,0.07)', color: navy, padding: '4px 11px', fontSize: 12, fontWeight: 700 }}>
                       {count}{c.max_students ? ` / ${c.max_students}` : ''} student{count === 1 && !c.max_students ? '' : 's'}
                     </span>

@@ -3,7 +3,7 @@ import { NavLink, Link, Outlet, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { classToForm } from '@/lib/classForm'
+import { classToForm, academicTerm } from '@/lib/classForm'
 import { formatSchedule } from '@/lib/schedule'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, ink, gold, goldDeep, muted, serif, mono, sansFamily as sans } from '@/theme'
@@ -109,7 +109,7 @@ export default function ClassLayout() {
               {clazz && (
                 <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 9 }}>
                   {clazz.subject && <MetaChip icon="📘">{clazz.subject}</MetaChip>}
-                  {clazz.academic_year && <MetaChip icon="🗓" monoFace>{clazz.academic_year}</MetaChip>}
+                  {academicTerm(clazz) && <MetaChip icon="🗓" monoFace>{academicTerm(clazz)}</MetaChip>}
                   {scheduleChips.map((s) => (
                     <MetaChip key={s} icon="🕑" monoFace>{s}</MetaChip>
                   ))}

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { yearLevelError } from '@/lib/validation'
+import { yearLevelError, semesterError, SEMESTERS } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
@@ -135,7 +135,7 @@ const MAX_UNITS = 12
    worth scrolling to. */
 const FIELD_ORDER = [
   'subject_code', 'section', 'subject', 'schedule',
-  'grade_level', 'max_students', 'academic_year', 'units',
+  'grade_level', 'max_students', 'academic_year', 'units', 'semester',
 ]
 
 /* Returns { field: message } -- one message per input, keyed by the field it
@@ -199,6 +199,8 @@ function validate(form, selectedDays, originalMaxStudents = null) {
     } else if (Number(units) < MIN_UNITS || Number(units) > MAX_UNITS) {
       errors.units = `Course units must be between ${MIN_UNITS} and ${MAX_UNITS}.`
     }
+    const semesterProblem = semesterError(form.semester)
+    if (semesterProblem) errors.semester = semesterProblem
   }
 
   return errors
@@ -220,6 +222,7 @@ function buildMeta(form) {
     max_students: Number.parseInt(form.max_students, 10),
     academic_year: form.academic_year.trim() || '2026-2027',
     units: form.education_level === 'College' && form.units.trim() ? Number.parseFloat(form.units) : null,
+    semester: form.education_level === 'College' && form.semester ? form.semester : null,
   }
 }
 
@@ -294,6 +297,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     // Units are only required for College, so the message stops applying the
     // moment the level changes.
     clearError('units')
+    clearError('semester')
   }
 
   // Update schedule string helper
@@ -687,8 +691,9 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             </div>
           </div>
 
-          {/* Row 5: Conditional - Course Units (only for College) */}
+          {/* Row 5: Conditional - Course Units + Semester (only for College) */}
           {educationLevel === 'College' && (
+          <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Course Units</span>
               <input
@@ -707,6 +712,25 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               />
               <FieldError id="err-units" message={errors.units} />
             </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Semester</span>
+              <select
+                required
+                value={form.semester}
+                onChange={set('semester')}
+                data-field="semester"
+                aria-invalid={!!errors.semester}
+                aria-describedby={errors.semester ? 'err-semester' : undefined}
+                className={fieldCls(errors.semester)}
+              >
+                <option value="">Select semester</option>
+                {SEMESTERS.map((sem) => (
+                  <option key={sem.value} value={sem.value}>{sem.label}</option>
+                ))}
+              </select>
+              <FieldError id="err-semester" message={errors.semester} />
+            </label>
+          </div>
           )}
 
           {/* Syllabus Upload */}

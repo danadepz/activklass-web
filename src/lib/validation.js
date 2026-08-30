@@ -100,6 +100,28 @@ export function yearLevelError(value, { level, required = true } = {}) {
   return isGrade || isYear ? '' : 'Enter a level like "Grade 10" or "1st Year".'
 }
 
+/* College terms. A CHED subject is a semester offering, so a college class
+   carries which one; K-12 runs the whole school year and stores null. */
+export const SEMESTERS = [
+  { value: '1st', label: '1st Semester' },
+  { value: '2nd', label: '2nd Semester' },
+  { value: 'summer', label: 'Midyear / Summer' },
+]
+export const SEMESTER_VALUES = SEMESTERS.map((s) => s.value)
+
+/** Short label for a stored semester value: "1st Sem", "Midyear". */
+export function semesterLabel(value) {
+  if (value === 'summer') return 'Midyear'
+  return SEMESTER_VALUES.includes(value) ? `${value} Sem` : ''
+}
+
+/** Required for a college class; must be one of SEMESTERS. */
+export function semesterError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'Semester is required for a college class.'
+  return SEMESTER_VALUES.includes(text) ? '' : 'Pick a semester from the list.'
+}
+
 /* School-issued identifiers: student numbers like "2024-00123", employee
    numbers like "T-2024-018". Letters, digits, dots and hyphens, starting
    alphanumeric so "-" alone cannot pass. Mirrors the backend's sanitizer for

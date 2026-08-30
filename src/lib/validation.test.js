@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   emailError, nameError, passwordError, tempPasswordError, yearLevelError,
+  semesterError, semesterLabel,
   idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
 } from './validation'
 
@@ -179,5 +180,22 @@ describe('linkError', () => {
     expect(linkError('1')).not.toBe('')
     expect(linkError('drive.google.com/x')).not.toBe('')
     expect(linkError('http://example.com/id.jpg')).not.toBe('')
+  })
+})
+
+describe('semesterError / semesterLabel', () => {
+  it('accepts the three college terms', () => {
+    expect(semesterError('1st')).toBe('')
+    expect(semesterError('2nd')).toBe('')
+    expect(semesterError('summer')).toBe('')
+  })
+  it('requires a value and rejects anything off the list', () => {
+    expect(semesterError('')).toBe('Semester is required for a college class.')
+    expect(semesterError('3rd')).toBe('Pick a semester from the list.')
+  })
+  it('labels a stored value and stays blank for none', () => {
+    expect(semesterLabel('1st')).toBe('1st Sem')
+    expect(semesterLabel('summer')).toBe('Midyear')
+    expect(semesterLabel(null)).toBe('')
   })
 })
