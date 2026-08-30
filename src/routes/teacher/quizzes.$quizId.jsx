@@ -546,7 +546,7 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
           `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
         )
       const attemptsSnap = await getDocs(
-        query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId)),
+        query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId), where('class_id', '==', classId)),
       )
       const attempts = {}
       attemptsSnap.forEach((d) => {

@@ -59,7 +59,7 @@ async function loadScaffolds(classId) {
   const attemptsByQuiz = {}
   await Promise.all(
     quizzes.map(async (q) => {
-      const aSnap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', q.id)))
+      const aSnap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', q.id), where('class_id', '==', classId)))
       attemptsByQuiz[q.id] = aSnap.docs.map((d) => d.data())
     }),
   )

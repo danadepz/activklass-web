@@ -1,23 +1,15 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
+import { deleteClassSection } from '@/lib/classes'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError } from '@/lib/validation'
-import {
-  ENROLLMENT_STATUS_LABELS,
-  REMARKS_OPTIONS,
-  STATUS_LABELS,
-  ageFromBirthdate,
-  fetchUsersByIds,
-  findStudentByEmail,
-  findStudentsByNumber,
-  parseCsv,
-} from '@/lib/roster'
+import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { Users, Check, Clock, Layers } from '@/components/icons'
 import { MetricCard } from '@/components/ui/Card'
@@ -372,14 +364,13 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     setBusy(true)
     fail(null)
     try {
-      // The account already exists, so this is enrollment, not provisioning:
-      // merge the roster fields onto the profile (same write the Edit modal
-      // makes) and put the uid on the class. The student's dashboard reads
-      // membership straight from student_ids, so they see the class on their
-      // next load. Going through the Flask provision endpoint here is what
-      // used to mint a DUPLICATE account whenever the email didn't match.
+      // The account already exists, so this is enrollment, not provisioning
+      // (the provision endpoint used to mint a DUPLICATE account whenever the
+      // email didn't match). Roster first, then the profile: the rules let a
+      // teacher edit a student only once they handle them, and it is the
+      // roster write that makes that true.
+      await addToRoster(classId, [student.id])
       await updateDoc(doc(db, 'users', student.id), rosterPatch(findFields))
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(student.id) })
       onDone()
     } catch (err) {
       fail(err.message)
@@ -785,7 +776,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
     }))) return
     setBusy(true)
     try {
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(student.id) })
+      await removeFromRoster(classId, student.id)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -951,10 +942,10 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
     setBusy(true)
     fail(null)
     try {
-      // One write: membership is the array on the class doc, and arrayUnion
-      // takes the whole batch. Each student's dashboard picks the class up
-      // from student_ids on their next load — nothing else to sync.
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayUnion(...uids) })
+      // One request: the server puts the whole batch on the roster and
+      // rewrites each student's teacher_ids, so they show up for this
+      // teacher and on their own dashboards on the next load.
+      await addToRoster(classId, uids)
       toast.success(`${uids.length} student${uids.length === 1 ? '' : 's'} added to the class.`)
       if (preview.unmatched.length) {
         toast.info(
@@ -1171,7 +1162,7 @@ export default function ClassDetailPage() {
       typeToConfirm: 'DELETE',
     }))) return
     try {
-      await deleteDoc(doc(db, 'classes', classId))
+      await deleteClassSection(classId)
       navigate('/teacher/classes')
     } catch (err) {
       fail(err.message)
@@ -1187,7 +1178,7 @@ export default function ClassDetailPage() {
       tone: 'danger',
     }))) return
     try {
-      await updateDoc(doc(db, 'classes', classId), { student_ids: arrayRemove(s.id) })
+      await removeFromRoster(classId, s.id)
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
     } catch (err) {

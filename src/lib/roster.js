@@ -1,5 +1,6 @@
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore'
 import { db } from './firebase'
+import { api } from './api'
 
 /**
  * Fetch users docs by uid list (chunked — Firestore 'in' caps at 30 ids).
@@ -32,36 +33,37 @@ export async function fetchUsersByIds(ids) {
 export async function findStudentsByNumber(idText) {
   const needle = String(idText ?? '').trim()
   if (!needle) return []
-  const byNumber = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('role', '==', 'student'),
-      where('student_number', '==', needle),
-    ),
-  )
-  if (!byNumber.empty) return byNumber.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const byLrn = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('role', '==', 'student'),
-      where('lrn', '==', needle),
-    ),
-  )
-  return byLrn.docs.map((d) => ({ id: d.id, ...d.data() }))
+  // Through Flask since 2026-08-31: a teacher may read only the students they
+  // handle (firestore.rules), and the one they are looking for here is, by
+  // definition, not yet one of them. The endpoint answers exact keys only,
+  // with the roster fields only.
+  const res = await api(`/api/students/lookup?student_number=${encodeURIComponent(needle)}`)
+  return res?.students ?? []
 }
 
 /** Find a registered student by exact email. Returns the user doc or null. */
 export async function findStudentByEmail(email) {
   const needle = String(email ?? '').trim().toLowerCase()
   if (!needle) return null
-  const snap = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('email', '==', needle),
-      where('role', '==', 'student'),
-    ),
-  )
-  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }
+  const res = await api(`/api/students/lookup?email=${encodeURIComponent(needle)}`)
+  return res?.students?.[0] ?? null
+}
+
+/**
+ * Roster membership goes through Flask, never a client arrayUnion/arrayRemove.
+ *
+ * The rules refuse every client write to classes.student_ids: the server
+ * rewrites each student's teacher_ids in the same request
+ * (services/roster_sync.py), and that field is what lets the teacher read the
+ * student at all. A client-side roster write would enrol a student the
+ * teacher then cannot see.
+ */
+export function addToRoster(classId, studentIds) {
+  return api(`/api/classes/${classId}/roster`, { method: 'POST', body: { student_ids: studentIds } })
+}
+
+export function removeFromRoster(classId, studentId) {
+  return api(`/api/classes/${classId}/roster/${studentId}`, { method: 'DELETE' })
 }
 
 export function ageFromBirthdate(birthdate) {

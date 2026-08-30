@@ -25,7 +25,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, deleteDoc, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 
 const RULES_PATH = fileURLToPath(
   new URL('../../../activklass-backend/firestore.rules', import.meta.url),
@@ -52,9 +52,15 @@ function ctx(uid) {
 async function seedRoles() {
   await testEnv.withSecurityRulesDisabled(async (admin) => {
     const db = admin.firestore()
-    await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B' })
-    await setDoc(doc(db, 'users', OTHER_STUDENT), { role: 'student', first_name: 'C', last_name: 'D' })
+    // Since 2026-08-31 a teacher acts only on the students they handle:
+    // TEACHER owns class-1 (the class every seeded attempt names) with both
+    // students on it, and each student carries the server-written
+    // teacher_ids the rules read. Without this, every "the teacher can"
+    // test below would be denied for the wrong reason.
+    await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B', teacher_ids: [TEACHER] })
+    await setDoc(doc(db, 'users', OTHER_STUDENT), { role: 'student', first_name: 'C', last_name: 'D', teacher_ids: [TEACHER] })
     await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R' })
+    await setDoc(doc(db, 'classes', 'class-1'), { teacher_id: TEACHER, student_ids: [STUDENT, OTHER_STUDENT] })
   })
 }
 
@@ -222,7 +228,7 @@ describe('quiz_attempts · the teacher', () => {
     )
   })
 
-  it('can read any attempt, and delete one', async () => {
+  it('can read an attempt in their class, and delete one', async () => {
     await assertSucceeds(getDoc(doc(ctx(TEACHER), 'quiz_attempts', 'a1')))
     await assertSucceeds(deleteDoc(doc(ctx(TEACHER), 'quiz_attempts', 'a1')))
   })
@@ -542,5 +548,106 @@ describe('school_directory · the registration page dropdown', () => {
     })
     await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'ucb'), { name: 'Hijacked U' }))
     await assertFails(deleteDoc(doc(ctx(TEACHER), 'school_directory', 'ucb')))
+  })
+})
+
+/* ────────────────────────────────────────────────────────────────────────
+ * A teacher handles the students in their own classes (2026-08-31).
+ *
+ * users.teacher_ids is written by the server from the rosters
+ * (services/roster_sync.py); the rules read it. OWN_TEACHER owns class-1
+ * with STUDENT on it; FOREIGN_TEACHER owns nothing STUDENT is on. Every
+ * read a teacher screen makes is tried as both, and every way a client
+ * could forge the link is tried as the owner.
+ * ──────────────────────────────────────────────────────────────────────── */
+const OWN_TEACHER = TEACHER
+const FOREIGN_TEACHER = 'teacher-2'
+
+async function seedRoster() {
+  await testEnv.withSecurityRulesDisabled(async (admin) => {
+    const db = admin.firestore()
+    await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T' })
+    await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B', teacher_ids: [OWN_TEACHER] })
+    await setDoc(doc(db, 'classes', 'class-1'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT] })
+    await setDoc(doc(db, 'classes', 'class-2'), { teacher_id: FOREIGN_TEACHER, student_ids: [] })
+    await setDoc(doc(db, 'student_performance', `class-1_${STUDENT}`), { class_id: 'class-1', student_id: STUDENT, risk_probability: 0.2 })
+    await setDoc(doc(db, 'remediations', 'plan-1'), { kind: 'plan', class_id: 'class-1', created_by: OWN_TEACHER })
+    await setDoc(doc(db, 'guardian_links', `${STUDENT}_g1`), { student_uid: STUDENT, guardian_uid: 'g1', status: 'approved' })
+    await setDoc(doc(db, 'consent_records', STUDENT), { parent_id: 'g1', status: 'approved', is_minor: true })
+    await setDoc(doc(db, 'gradebooks', 'class-1'), { configured: true })
+    await setDoc(doc(db, 'gradebooks', 'class-1', 'entries', STUDENT), { student_id: STUDENT, final: 90 })
+  })
+  await seedAttempt('a-own', { status: 'submitted', total_score: 8 })
+}
+
+describe('a teacher reads only the students they handle', () => {
+  beforeEach(seedRoster)
+
+  it('the roster query the whole app uses: documentId in [...] is judged per student', async () => {
+    const q = (uid) => getDocs(query(collection(ctx(uid), 'users'), where(documentId(), 'in', [STUDENT])))
+    await assertSucceeds(q(OWN_TEACHER))
+    await assertFails(q(FOREIGN_TEACHER))
+  })
+
+  it('a single profile read follows the same line', async () => {
+    await assertSucceeds(getDoc(doc(ctx(OWN_TEACHER), 'users', STUDENT)))
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'users', STUDENT)))
+  })
+
+  it('teacher profiles stay readable by every teacher (the Your school card)', async () => {
+    await assertSucceeds(getDoc(doc(ctx(FOREIGN_TEACHER), 'users', OWN_TEACHER)))
+  })
+
+  it('quiz attempts, risk snapshots and remediations: the class owner, through a class_id filter', async () => {
+    for (const coll of ['quiz_attempts', 'student_performance', 'remediations']) {
+      const q = (uid) => getDocs(query(collection(ctx(uid), coll), where('class_id', '==', 'class-1')))
+      await assertSucceeds(q(OWN_TEACHER))
+      await assertFails(q(FOREIGN_TEACHER))
+    }
+    // and without the filter the rules cannot prove ownership, so even the owner is refused
+    await assertFails(getDocs(query(collection(ctx(OWN_TEACHER), 'quiz_attempts'), where('quiz_id', '==', 'quiz-1'))))
+  })
+
+  it('grade entries: the class owner only', async () => {
+    await assertSucceeds(getDoc(doc(ctx(OWN_TEACHER), 'gradebooks', 'class-1', 'entries', STUDENT)))
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'gradebooks', 'class-1', 'entries', STUDENT)))
+  })
+
+  it('guardian links and consent: the student’s own teacher, via a get() on the student', async () => {
+    const links = (uid) => getDocs(query(collection(ctx(uid), 'guardian_links'), where('student_uid', '==', STUDENT)))
+    await assertSucceeds(links(OWN_TEACHER))
+    await assertFails(links(FOREIGN_TEACHER))
+    await assertSucceeds(getDoc(doc(ctx(OWN_TEACHER), 'consent_records', STUDENT)))
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'consent_records', STUDENT)))
+  })
+
+  it('a teacher edits roster fields only on a student they handle', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(OWN_TEACHER), 'users', STUDENT), { section: 'Rizal' }))
+    await assertFails(updateDoc(doc(ctx(FOREIGN_TEACHER), 'users', STUDENT), { section: 'Rizal' }))
+  })
+
+  it('no client can forge the link: teacher_ids is server-owned', async () => {
+    await assertFails(updateDoc(doc(ctx(OWN_TEACHER), 'users', STUDENT), { teacher_ids: [OWN_TEACHER, FOREIGN_TEACHER] }))
+    await assertFails(updateDoc(doc(ctx(FOREIGN_TEACHER), 'users', STUDENT), { teacher_ids: [FOREIGN_TEACHER] }))
+    await assertFails(updateDoc(doc(ctx(STUDENT), 'users', STUDENT), { teacher_ids: [] }))
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'users', 'new-student'), { role: 'student', teacher_ids: [OWN_TEACHER] }))
+  })
+
+  it('no client can change a roster or an owner: that is Flask’s (services/roster_sync.py)', async () => {
+    await assertFails(updateDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-1'), { student_ids: [] }))
+    await assertFails(updateDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-1'), { teacher_id: FOREIGN_TEACHER }))
+    await assertFails(deleteDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-1')))
+    // the edits a teacher still makes on their own class go through
+    await assertSucceeds(updateDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-1'), { section: 'Rizal' }))
+    // creating a class: own, and empty
+    await assertSucceeds(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-new'), { teacher_id: OWN_TEACHER, student_ids: [] }))
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-x'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT] }))
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-y'), { teacher_id: FOREIGN_TEACHER, student_ids: [] }))
+  })
+
+  it('a student still reads their own records', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'users', STUDENT)))
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'gradebooks', 'class-1', 'entries', STUDENT)))
+    await assertSucceeds(getDocs(query(collection(ctx(STUDENT), 'quiz_attempts'), where('student_id', '==', STUDENT))))
   })
 })

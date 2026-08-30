@@ -1,5 +1,16 @@
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from './firebase'
+import { api } from './api'
+
+/**
+ * Delete a class section through Flask. A client deleteDoc is refused by the
+ * rules since 2026-08-31: the server has to take this teacher off every
+ * former student's teacher_ids as the roster disappears
+ * (services/roster_sync.py). Only the class document goes, as before.
+ */
+export function deleteClassSection(classId) {
+  return api(`/api/classes/${classId}`, { method: 'DELETE' })
+}
 
 /**
  * A teacher's classes, from Firestore.

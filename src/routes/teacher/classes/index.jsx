@@ -9,9 +9,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
+import { deleteClassSection } from '@/lib/classes'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
@@ -343,7 +344,7 @@ function DeleteConfirmModal({ cls, onClose, onDeleted }) {
     setBusy(true)
     setError(null)
     try {
-      await deleteDoc(doc(db, 'classes', cls.id))
+      await deleteClassSection(cls.id)
       onDeleted()
     } catch (err) {
       setError(err.message)

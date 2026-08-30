@@ -81,7 +81,7 @@ async function loadHistory(classId) {
 
   await Promise.all(
     quizzes.map(async (q) => {
-      const aSnap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', q.id)))
+      const aSnap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', q.id), where('class_id', '==', classId)))
       aSnap.forEach((d) => {
         const a = d.data()
         const ts = toDate(a.submitted_at ?? a.graded_at ?? a.updated_at ?? a.created_at)

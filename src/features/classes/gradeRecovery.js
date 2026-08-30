@@ -50,7 +50,7 @@ async function remediationPercents(quizId, classId) {
   const total = quizTotalPoints(quiz)
   if (!total) throw new Error('The practice quiz is worth no points.')
 
-  const snap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId)))
+  const snap = await getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId), where('class_id', '==', classId)))
   const byStudent = {}
   snap.docs.forEach((d) => {
     const a = d.data()

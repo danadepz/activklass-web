@@ -44,7 +44,7 @@ async function loadRiskByStudent(classId, studentIds) {
     const chunk = ids.slice(i, i + 30)
     try {
       const snap = await getDocs(
-        query(collection(db, 'student_performance'), where(documentId(), 'in', chunk)),
+        query(collection(db, 'student_performance'), where(documentId(), 'in', chunk), where('class_id', '==', classId)),
       )
       snap.forEach((d) => {
         const data = d.data()

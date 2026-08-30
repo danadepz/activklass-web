@@ -34,14 +34,16 @@ import {
 
 /** Attempts for one quiz in one class, keyed by student. */
 async function attemptsByStudentFor(quizId, classId) {
+  // Both fields in the query: the rules let a teacher read an attempt only
+  // for a class they own, and they can prove that only from a class_id
+  // filter on the query itself. The (quiz_id, class_id) composite index is
+  // in the backend's firestore.indexes.json.
   const snap = await getDocs(
-    query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId)),
+    query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId), where('class_id', '==', classId)),
   )
   const byStudent = {}
   snap.docs.forEach((d) => {
     const a = d.data()
-    // Filtered in memory rather than as a second `where`: a two-field query
-    // needs a composite index, and a quiz's attempts are one class-sized set.
     if (a.class_id !== classId) return
     ;(byStudent[a.student_id] ??= []).push(a)
   })

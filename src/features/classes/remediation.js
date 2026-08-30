@@ -164,7 +164,7 @@ export async function publishRemediation(plan) {
   }
 
   const existing = await getDocs(
-    query(collection(db, 'remediations'), where('plan_id', '==', plan.id)),
+    query(collection(db, 'remediations'), where('plan_id', '==', plan.id), where('class_id', '==', plan.class_id)),
   )
   const byStudent = {}
   existing.forEach((d) => {
@@ -208,7 +208,7 @@ export async function publishRemediation(plan) {
  */
 export async function unpublishRemediation(plan) {
   const existing = await getDocs(
-    query(collection(db, 'remediations'), where('plan_id', '==', plan.id)),
+    query(collection(db, 'remediations'), where('plan_id', '==', plan.id), where('class_id', '==', plan.class_id)),
   )
   const batch = writeBatch(db)
   existing.forEach((d) => batch.delete(doc(db, 'remediations', d.id)))
@@ -223,7 +223,7 @@ export async function unpublishRemediation(plan) {
 /** Remove a plan and everything it published. */
 export async function deleteRemediationPlan(plan) {
   const existing = await getDocs(
-    query(collection(db, 'remediations'), where('plan_id', '==', plan.id)),
+    query(collection(db, 'remediations'), where('plan_id', '==', plan.id), where('class_id', '==', plan.class_id)),
   )
   const batch = writeBatch(db)
   existing.forEach((d) => batch.delete(doc(db, 'remediations', d.id)))
