@@ -12,7 +12,6 @@ import { ink, muted, navy, line } from '@/theme'
 export const ID_TYPES = [
   { value: 'school_id', label: 'School / employee ID' },
   { value: 'prc', label: 'PRC license' },
-  { value: 'government_id', label: 'Government ID' },
 ]
 
 /**

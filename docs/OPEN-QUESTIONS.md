@@ -134,3 +134,9 @@ record. **(cross-repo)**
   provisions a school from its request, the console shows a ready-to-copy message (admin
   login, temporary password, sign-in link) and a human sends it. No mail provider is added
   for this; automatic email stays off the table with the rest of the paid services.
+- **A self-registered teacher verifies with a School / employee ID or a PRC license only**
+  (owner's, 2026-08-30). Government ID was removed from the choices: it proves who a
+  person is, not that they are a teacher, and the check exists to keep an unreviewed
+  stranger out — the two remaining IDs are the ones a school or the PRC issued to a
+  teacher. Records already carrying `government_id` still show their raw value in the
+  superadmin review table; none exist outside test data.
