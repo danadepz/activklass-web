@@ -24,7 +24,7 @@ vi.mock('@/lib/firebase', () => ({ db: {} }))
 vi.mock('@/lib/schoolDirectory', () => ({ fetchSchoolDirectory: vi.fn(async () => []) }))
 
 import SchoolColleaguesCard from './SchoolColleagues.jsx'
-import { pickColleagues } from '@/hooks/useSchoolColleagues'
+import { colleagueGroup, pickColleagues } from '@/hooks/useSchoolColleagues'
 
 const render = (el) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><MemoryRouter>{el}</MemoryRouter></QueryClientProvider>)
 
@@ -81,5 +81,54 @@ describe('SchoolColleaguesCard', () => {
     expect(html).toContain('Save school')
     expect(html).toContain('grouped with you automatically')
     state.profile = { ...state.profile, teaching_school_id: 'ucb' }
+  })
+})
+
+describe('colleagueGroup', () => {
+  const school = { id: 'demo-school-sanroque', name: 'Saint Roque National High School' }
+
+  it('groups an admin-issued teacher by the school that pays for them', () => {
+    // The bug this replaced: teaching_school_id is written only by
+    // registration and the picker, so this teacher had none and the card
+    // came up empty for the people who most obviously are a school.
+    const g = colleagueGroup({ id: 'me', school_id: 'demo-school-sanroque' }, school)
+    expect(g.field).toBe('school_id')
+    expect(g.id).toBe('demo-school-sanroque')
+    expect(g.schoolName).toBe('Saint Roque National High School')
+    expect(g.issued).toBe(true)
+  })
+
+  it('groups a solo teacher by the school they declared', () => {
+    const g = colleagueGroup({ id: 'me', teaching_school_id: 'ucb', teaching_school_name: 'UCB' }, null)
+    expect(g.field).toBe('teaching_school_id')
+    expect(g.id).toBe('ucb')
+    expect(g.schoolName).toBe('UCB')
+    expect(g.issued).toBe(false)
+  })
+
+  it('prefers the paying school when a teacher somehow carries both', () => {
+    // Someone who registered alone, named a school, and was later put on a
+    // school's roll. The roll is the stronger claim.
+    const g = colleagueGroup(
+      { id: 'me', school_id: 'demo-school-sanroque', teaching_school_id: 'ucb', teaching_school_name: 'UCB' },
+      school,
+    )
+    expect(g.field).toBe('school_id')
+    expect(g.schoolName).toBe('Saint Roque National High School')
+  })
+
+  it('has nothing to group by when the teacher has no school of either kind', () => {
+    // What sends the card to the directory picker -- and the only case that
+    // should, now that an issued teacher is no longer swept in here.
+    expect(colleagueGroup({ id: 'me' }, null).id).toBe('')
+    expect(colleagueGroup(null, null).id).toBe('')
+  })
+
+  it('never puts one school name over another school list', () => {
+    // The school document has not loaded yet (a failed read is null by
+    // design in AuthContext). Better an empty heading than the affiliation
+    // label sitting above colleagues drawn from the paying school.
+    const g = colleagueGroup({ id: 'me', school_id: 'demo-school-sanroque', teaching_school_name: 'UCB' }, null)
+    expect(g.schoolName).toBe('')
   })
 })

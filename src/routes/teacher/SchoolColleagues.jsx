@@ -14,7 +14,7 @@ import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { useMySubscription } from '@/hooks/useMySubscription'
-import { useSchoolColleagues } from '@/hooks/useSchoolColleagues'
+import { colleagueGroup, useSchoolColleagues } from '@/hooks/useSchoolColleagues'
 import { fetchSchoolDirectory } from '@/lib/schoolDirectory'
 import Button from '@/components/ui/Button'
 import { PaidPlanHint } from '@/components/SubscriptionBadge'
@@ -73,7 +73,7 @@ function ChooseSchool() {
 }
 
 function Colleagues() {
-  const { schoolName, colleagues, isLoading, isError } = useSchoolColleagues()
+  const { schoolName, colleagues, isLoading, isError, issued } = useSchoolColleagues()
   const n = colleagues.length
   return (
     <>
@@ -86,8 +86,10 @@ function Colleagues() {
       {isError && <p role="alert" style={{ color: red, fontSize: 13, margin: 0 }}>Could not load your colleagues right now. Try again in a moment.</p>}
       {!isLoading && !isError && n === 0 && (
         <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
-          No other teachers from {schoolName || 'your school'} yet. Anyone who registers with your school
-          appears here on their own — nothing to share, request or approve.
+          No other teachers from {schoolName || 'your school'} yet.{' '}
+          {issued
+            ? 'Everyone your school adds appears here on their own — nothing to share, request or approve.'
+            : 'Anyone who registers with your school appears here on their own — nothing to share, request or approve.'}
         </p>
       )}
       {n > 0 && (
@@ -108,9 +110,14 @@ function Colleagues() {
 }
 
 export default function SchoolColleaguesCard() {
-  const { profile } = useAuth()
+  const { profile, school } = useAuth()
   const { locks } = useMySubscription()
-  if (!profile?.teaching_school_id) return <div style={card}><ChooseSchool /></div>
+  // Only a teacher with no school at all is asked to pick one. An
+  // admin-issued teacher used to land here too, since they carry school_id
+  // and never teaching_school_id -- offered a directory dropdown for a school
+  // they already belong to, which on save would have written an affiliation
+  // id that need not even match the school paying for them.
+  if (!colleagueGroup(profile, school).id) return <div style={card}><ChooseSchool /></div>
   // A trial may see what the school list is, not use it -- the same lock the
   // teacher group carried, kept so the paid plan still reads as adding it.
   if (locks.teacherGroups) {
