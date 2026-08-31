@@ -76,16 +76,21 @@ const RISK_LEVEL_STYLE = {
   low: { label: 'Low risk', color: green, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
 }
 
-function RiskBadge({ probability }) {
+function RiskBadge({ probability, training }) {
   const level = riskLevel(probability)
   if (level == null) {
     return <span style={{ fontSize: 12.5, color: faint }}>—</span>
   }
   const { label, color, bg, border } = RISK_LEVEL_STYLE[level]
+  // The dagger marks a score the model produced from generated data, and the
+  // footnote below the table says what that means. A title attribute would
+  // not do: a disclosure nobody can see is not a disclosure.
+  const synthetic = training?.real_data === false
   return (
     <span className="inline-flex items-center gap-1.5" style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
       {label}
       <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>{Math.round(probability * 100)}%</span>
+      {synthetic && <span style={{ fontWeight: 700, opacity: 0.75 }}>†</span>}
     </span>
   )
 }
@@ -289,7 +294,7 @@ export default function StudentsPage() {
                       )}
                     </td>
                     <td style={td}>
-                      <RiskBadge probability={r.riskProbability} />
+                      <RiskBadge probability={r.riskProbability} training={r.riskTraining} />
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <Link
@@ -317,6 +322,16 @@ export default function StudentsPage() {
         Low are our own bands on that score (50%+ / 35–49% / under 35%) — the model itself only flags
         high risk at 50%, so "High" here always agrees with it; "Medium" is an earlier heads-up.
       </p>
+
+      {list.some((r) => r.riskTraining?.real_data === false) && (
+        <p style={{ fontSize: 12.5, color: faint, margin: '10px 2px 0', maxWidth: 720 }}>
+          <strong style={{ color: goldDeep }}>† Not trained on real class data.</strong>{' '}
+          {list.find((r) => r.riskTraining?.real_data === false)?.riskTraining?.summary
+            ?? 'These scores come from a model trained on generated student trajectories, not on '
+             + 'real ActivKlass history — no term has finished yet. Treat a score as a prompt to '
+             + 'look at the student now, not as evidence about how they will finish.'}
+        </p>
+      )}
       </>
       )}
     </div>

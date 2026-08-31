@@ -33,9 +33,16 @@ const classLabel = (c) =>
 
 /**
  * Best-effort read of this class's student_performance snapshots, keyed by
- * student id -> risk_probability. `at_risk` isn't read separately: it's the
- * backend's own flag at the same 0.5 line the caller buckets on, so nothing
- * is lost by deriving it from the probability instead of carrying both.
+ * student id -> { probability, training }. `at_risk` isn't read separately:
+ * it's the backend's own flag at the same 0.5 line the caller buckets on, so
+ * nothing is lost by deriving it from the probability instead of carrying
+ * both.
+ *
+ * `model_training` rides along because the model is still trained on generated
+ * data (risk_model.py TRAINING_BASIS, real_data: false). This page used to
+ * keep the probability alone, so a teacher read "High risk 81%" here with
+ * nothing saying where the 81% came from -- while the Performance tab, which
+ * shows the same number, says so plainly.
  */
 async function loadRiskByStudent(classId, studentIds) {
   const ids = studentIds.map((sid) => performanceDocId(classId, sid))
@@ -48,7 +55,10 @@ async function loadRiskByStudent(classId, studentIds) {
       )
       snap.forEach((d) => {
         const data = d.data()
-        byStudent[data.student_id] = data.risk_probability ?? null
+        byStudent[data.student_id] = {
+          probability: data.risk_probability ?? null,
+          training: data.model_training ?? null,
+        }
       })
     } catch {
       // Snapshot is optional -- a missing/unreadable chunk just leaves those
@@ -92,7 +102,8 @@ async function loadClassRows(c) {
       mode: gb.grading_mode ?? 'deped_k12',
       configured,
       grade,
-      riskProbability: risk[u.id] ?? null,
+      riskProbability: risk[u.id]?.probability ?? null,
+      riskTraining: risk[u.id]?.training ?? null,
     }
   })
 }
