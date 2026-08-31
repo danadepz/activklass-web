@@ -133,6 +133,22 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false)
+
+  /* The spreadsheet writer is only fetched on the first download, so that
+     click can sit for a second or two with nothing on screen moving. Without
+     this the button looked dead and a second click handed over two files. */
+  async function onDownloadTemplate() {
+    if (preparing) return
+    setPreparing(true)
+    try {
+      await downloadTemplate()
+    } catch {
+      setError('The template could not be prepared. Try that again in a moment.')
+    } finally {
+      setPreparing(false)
+    }
+  }
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   // The class decides the level: the teacher picked Elementary / High School /
@@ -265,8 +281,9 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
         <button type="submit" style={{ ...btnPrimary, opacity: busy ? 0.5 : 1 }} disabled={busy}>
           {busy ? 'Adding…' : 'Add student'}
         </button>
-        <button type="button" style={btnGhost} onClick={downloadTemplate} title="An .xlsx with the columns filled in below, headers only">
-          Download template
+        <button type="button" style={{ ...btnGhost, opacity: preparing ? 0.55 : 1 }} disabled={preparing}
+                onClick={onDownloadTemplate} title="An .xlsx with the columns filled in below, headers only">
+          {preparing ? 'Preparing…' : 'Download template'}
         </button>
         <button type="button" style={{ ...btnGhost, ...(fileOpen ? { background: 'rgba(14,42,92,0.08)' } : {}) }} onClick={onToggleFile}>
           {fileOpen ? 'Hide file upload' : 'Create accounts from a file'}

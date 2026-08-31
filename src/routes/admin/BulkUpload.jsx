@@ -161,6 +161,7 @@ export default function BulkUpload({ onDone, settings, users }) {
   const [parseError, setParseError] = useState('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false)
 
   // Every row, not the eight the preview shows — the line under the table is
   // the only place a repeat on row 40 ever gets mentioned.
@@ -228,11 +229,21 @@ export default function BulkUpload({ onDone, settings, users }) {
     // sized to their text, which CSV cannot carry; the uploader reads .xlsx
     // back directly.
     const template = TEMPLATES[uploadRole]
-    if (!template) return
-    await downloadXlsx(
-      stampedName(`${uploadRole}-upload-template`).replace(/\.csv$/, '.xlsx'),
-      template.columns,
-    )
+    if (!template || preparing) return
+    // The spreadsheet writer is only fetched on the first download, so that
+    // click can sit for a second or two with nothing on screen moving — the
+    // tester read that as a dead button and clicked again, getting two files.
+    setPreparing(true)
+    try {
+      await downloadXlsx(
+        stampedName(`${uploadRole}-upload-template`).replace(/\.csv$/, '.xlsx'),
+        template.columns,
+      )
+    } catch {
+      setParseError('The template could not be prepared. Try that again in a moment.')
+    } finally {
+      setPreparing(false)
+    }
   }
 
   return (
@@ -321,10 +332,12 @@ export default function BulkUpload({ onDone, settings, users }) {
             </label>
             <button type="button"
                     style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10,
-                             display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                             display: 'inline-flex', alignItems: 'center', gap: 8,
+                             opacity: preparing ? 0.55 : 1, cursor: preparing ? 'default' : 'pointer' }}
+                    disabled={preparing}
                     onClick={downloadTemplate}>
               <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
-              Download template
+              {preparing ? 'Preparing…' : 'Download template'}
             </button>
             {fileName && (
               <span style={{ ...mono, fontSize: 12, color: faint }}>
