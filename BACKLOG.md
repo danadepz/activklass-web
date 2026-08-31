@@ -357,6 +357,11 @@ The real fix remains a MELC list to check against. DepEd publishes the 2020
 MELCs per learning area; even one subject loaded as a JSON lookup would turn
 `unverified` into a real answer for that subject.
 
+**2026-08-31 (Syllabus pane): the page half is done** — the status now renders beside
+every generated code, and the end-to-end run this item was waiting on happened. What
+that run actually showed, and what is still not covered, is in the Syllabus pane
+section at the end of this file.
+
 ## 16. ~~A 429 does not trigger the model fallback~~ — done **(cross-repo)**
 
 Fixed in `7834aa0`. `client.py` now catches `errors.ClientError`, checks for
@@ -1333,3 +1338,72 @@ while uploads are off on Spark; point it at the CSV validator instead. TC-009/TC
 pending the owner's storage decision — links remain the supported attachment path, and the
 syllabus page still renders an Upload File button that cannot succeed
 (`teacher/syllabus.jsx:153`, `:179`) — worth a ticket for that pane.
+
+## Syllabus pane — 2026-08-31 (MELC status on the page, item 15)
+
+### The bug was not the one the item described
+Item 15 said the syllabus page "renders `melc_code` as a bare string". It does not, and
+did not: `toDraftState` never copied `melc_code` or `melc_status` out of the draft, and
+`save()` never wrote them back. The generated competency codes were **dropped on the way
+into the editor** and were **absent from the saved syllabus document** — a teacher never
+saw a code at all, right or wrong, and nothing downstream could have read one.
+
+That makes the fix larger than adding a label: the value had to be carried into editor
+state and persisted before there was anything to label. Worth naming because the item was
+written from reading `lib/ai.js`, where the codes plainly exist, and not from the page that
+was supposed to show them — the same shape as the CLAUDE.md warning about trusting a
+docstring over the file.
+
+### What changed (`teacher/syllabus.jsx` only)
+- `toDraftState` and `save()` carry and persist `melc_code` + `melc_status`.
+- A `MelcCode` badge under each topic title, gated on `melc_status` — a topic a teacher
+  typed has none and shows nothing. Wording is `MELC_STATUS_LABEL` verbatim; the AI lane
+  owns what we may claim about a code, and restating it here is how the two drift.
+- A status with no label renders **nothing at all**, code included. Showing a bare code is
+  the bug, so an unknown status must not fall back to showing one.
+- The AI-draft banner gained the what-to-do half: check each code against your own MELC
+  copy before saving. No vendor and no exception text in either string.
+
+### The end-to-end run that was owed (quota was available: 2 of 20 calls used)
+Signed in as `srnhs-260102` (Grace Abad), Flask and Vite both up.
+
+**Run 1 — straight through `generateSyllabus`** from the page context, MATH10 /
+Mathematics / Grade 10 / 8 weeks. Returned in 33.6s: 2 modules, 8 topics, **all 8
+`unverified`**, `melcWarnings` empty, `structureWarnings` empty. Codes were `M10AL-Ia-1`
+through `M10AL-Ii-j-1`.
+
+**Run 2 — the real modal**, same subject, 10 weeks, with a note deliberately asking it to
+"open with a short review of the prerequisite Grade 9 competencies" — the case item 15
+says produces Grade 9 codes on a Grade 10 request. 4 modules, 11 topics: **1 `absent`,
+10 `unverified`**, no warnings. Saved, and the codes and statuses were confirmed in the
+Firestore document afterwards — the persistence half, which previously wrote nothing.
+
+**The grade-mismatch case did not reproduce.** Asked point-blank for Grade 9 prerequisite
+material, the model wrote the review topic with an **empty** `melc_code` rather than a
+Grade 9 one, so it came back `absent`. Two runs, twenty-one topics, zero `grade_mismatch`
+and zero `malformed`. That is not evidence the checker is wrong — it is evidence the
+example in item 15 is not reliably reproducible on today's model, and nobody should read
+a clean run as the checker having proved anything.
+
+### What is verified, and how honestly
+- `absent` and `unverified` — **rendered from real model output**, on screen, in the editor.
+- `grade_mismatch` and `malformed` — **rendered from a hand-patched fixture**, not from a
+  generation. I wrote the two statuses onto the saved document, reloaded the editor, read
+  the badges back (correct wording, distinct amber/red tones), then restored the document
+  to exactly what the model produced. Recording this as synthetic on purpose: the render is
+  proven, the model producing those two statuses is not.
+- `npm run test` 551/551, `npm run build` clean, eslint on the file unchanged at its one
+  pre-existing `no-unused-vars` (`isNewDraft`).
+
+### Still open
+- **`unverified` is the honest ceiling** until a MELC list exists to check against. Nothing
+  here makes a code true; the page now says so instead of implying otherwise.
+- **`melcWarnings` still only reach `console.warn`.** The per-topic badge cannot express
+  the one warning that spans topics — the same competency claimed by two of them. A teacher
+  sees neither. That needs a draft-level summary, which this change does not add.
+- **The code is display-only.** There is no input for it, so a teacher who spots a wrong
+  code can only delete the topic. Deliberate: an editable code makes the stored status
+  stale the moment it is typed over, and a stale status is worse than none.
+- **Left in Firestore:** syllabus `468901cb-53c6-4ce6-bfa4-8a36cf65f07c` ("Grade 10
+  Mathematics Syllabus", `source: ai_generated`, assigned to no class) under Grace Abad,
+  from run 2. Test data — delete when convenient.

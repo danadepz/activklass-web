@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { deleteDoc, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { generateSyllabus } from '@/lib/ai'
+import { generateSyllabus, MELC_STATUS_LABEL } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { Plus, Trash, Edit, Sparkles } from '@/components/icons'
 import { ink } from '@/theme'
@@ -37,6 +37,10 @@ function toDraftState(tree, source) {
         _key: newKey(),
         id: t.id ?? null,
         title: t.title ?? '',
+        // Kept, not dropped: the status beside a code is the only thing that
+        // tells a teacher whether it was ever checked (see MelcCode below).
+        melc_code: t.melc_code ?? '',
+        melc_status: t.melc_status ?? null,
         objectivesText: (t.learning_objectives ?? t.objectives ?? []).join('\n'),
         resources: (t.resources ?? []).map((r) => ({
           _key: newKey(),
@@ -57,6 +61,35 @@ function emptyTopic() {
 
 function emptyModule() {
   return { _key: newKey(), id: null, title: '', description: '', published: true, topics: [emptyTopic()] }
+}
+
+/**
+ * What we actually know about a generated topic's competency code.
+ *
+ * Only a generated topic carries `melc_status`; one a teacher typed has none
+ * and shows nothing. The wording is `MELC_STATUS_LABEL` verbatim -- the AI lane
+ * owns what we are entitled to claim about a code, and restating it in our own
+ * words here is exactly how the page and the checker drift apart.
+ *
+ * A bare code reads as DepEd-confirmed, because nothing beside it says otherwise.
+ */
+function MelcCode({ code, status }) {
+  // No label means a status this page has no wording for. Showing the code
+  // alone is the bug being fixed, so show nothing at all instead.
+  const label = status ? MELC_STATUS_LABEL[status] : null
+  if (!label) return null
+  const tone = {
+    unverified: 'bg-amber-50 border-amber-200 text-amber-900',
+    grade_mismatch: 'bg-amber-50 border-amber-200 text-amber-900',
+    malformed: 'bg-red-50 border-red-200 text-red-700',
+    absent: 'bg-slate-100 border-slate-200 text-slate-500',
+  }[status]
+  return (
+    <div className={`mt-2 flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${tone}`}>
+      {code && <span className="font-mono font-semibold tracking-tight">{code}</span>}
+      <span>{label}</span>
+    </div>
+  )
 }
 
 function TopicResourceEditor({ syllabusId, topic, onChange }) {
@@ -507,6 +540,8 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
         topics: m.topics.map((t) => ({
           id: t.id || newId(),
           title: t.title,
+          melc_code: t.melc_code ?? '',
+          melc_status: t.melc_status ?? null,
           learning_objectives: t.objectivesText
             .split('\n')
             .map((line) => line.trim())
@@ -579,7 +614,8 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
           <h3 className="text-lg font-bold text-slate-800">Syllabus Details</h3>
           {isAiDraft && (
             <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
-              ✨ AI-generated draft — review and edit below, then save.
+              ✨ AI-generated draft — review and edit below, then save. Competency codes are
+              suggestions: check each one against your own MELC copy before you save.
             </p>
           )}
           {error && (
@@ -677,6 +713,7 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                       ×
                     </button>
                   </div>
+                  <MelcCode code={topic.melc_code} status={topic.melc_status} />
                   <textarea
                     rows={Math.max(2, topic.objectivesText.split('\n').length)}
                     placeholder={'Learning objectives — one per line\ne.g. Identify proper and improper fractions'}
