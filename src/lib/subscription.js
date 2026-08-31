@@ -10,6 +10,34 @@
 import { api } from './api'
 
 /**
+ * Who a teacher belongs to -- 'school' | 'solo' | 'none'.
+ *
+ * The one stored fact behind this is users/{uid}.school_id: a teacher whose
+ * profile carries it is issued by a school and that school pays for them; a
+ * teacher without it is on their own. Everything else about the account is a
+ * consequence of that, so nothing is stored twice and nothing can drift.
+ *
+ * This answers "who does this teacher belong to", NOT "what plan are they
+ * on". The plan question is describeSubscription() below, which resolves
+ * through Flask; this reads the profile alone and cannot fail. That matters
+ * for the screens that shape themselves around it -- a stopped Flask must
+ * never take a capability away from the teacher who is entitled to it.
+ *
+ * Three states, not two, and 'solo' is not simply the absence of 'school':
+ * a self-registered teacher who was approved but never subscribed is 'none'.
+ * Anything that means "belongs to a school" must ask for 'school' by name
+ * rather than test for not-solo, or it sweeps that teacher in with the
+ * institutional ones.
+ */
+export function accountKind(profile) {
+  if (profile?.school_id) return 'school'
+  // The markers a self-subscribed account carries from registration; a
+  // resolved subscription is not needed and not consulted.
+  if (profile?.subscription_status || profile?.trial_ends_at) return 'solo'
+  return 'none'
+}
+
+/**
  * Which subscription applies to the signed-in user, resolved server-side.
  *
  * An admin's is their school's, found through users/{uid}.school_id; a solo

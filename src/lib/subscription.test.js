@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSubscription, toMillis } from './subscription'
+import { accountKind, describeSubscription, toMillis } from './subscription'
 
 const NOW = Date.parse('2026-08-29T08:00:00Z')
 const days = (n) => new Date(NOW + n * 24 * 60 * 60 * 1000)
@@ -84,5 +84,37 @@ describe('describeSubscription', () => {
   it('suspended and cancelled read as lapsed', () => {
     expect(describeSubscription({ profile: {}, subscription: { status: 'suspended' } }).label).toBe('Subscription paused')
     expect(describeSubscription({ profile: {}, subscription: { status: 'cancelled' } }).label).toBe('Subscription ended')
+  })
+})
+
+describe('accountKind', () => {
+  it('a teacher issued by a school belongs to it, whatever else they carry', () => {
+    expect(accountKind({ school_id: 'demo-school-sanroque' })).toBe('school')
+    // Affiliation and trial markers do not outrank who pays.
+    expect(accountKind({
+      school_id: 'demo-school-sanroque',
+      teaching_school_id: 'srnhs',
+      subscription_status: 'trial',
+    })).toBe('school')
+  })
+
+  it('a teacher on their own plan is solo', () => {
+    expect(accountKind({ subscription_status: 'active' })).toBe('solo')
+    expect(accountKind({ trial_ends_at: 1790000000000 })).toBe('solo')
+  })
+
+  it("teaching_school_id is affiliation, not billing, and never makes a teacher institutional", () => {
+    // A solo teacher who named their school in the directory so the Account
+    // page can list colleagues. Reading this field instead of school_id
+    // would misclassify every one of them.
+    expect(accountKind({ teaching_school_id: 'srnhs', subscription_status: 'trial' })).toBe('solo')
+  })
+
+  it('an approved teacher who never subscribed is neither, and that is the trap', () => {
+    expect(accountKind({})).toBe('none')
+    expect(accountKind(null)).toBe('none')
+    expect(accountKind(undefined)).toBe('none')
+    // Written out because !== 'solo' is what a caller reaches for by mistake.
+    expect(accountKind({}) === 'school').toBe(false)
   })
 })

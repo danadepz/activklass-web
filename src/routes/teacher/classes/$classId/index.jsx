@@ -11,6 +11,7 @@ import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError } from '@/lib/validation'
 import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
+import { accountKind } from '@/lib/subscription'
 import { Users, Check, Clock, Layers } from '@/components/icons'
 import { MetricCard } from '@/components/ui/Card'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -300,15 +301,15 @@ function pickMatch(matches, schoolId) {
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const { profile } = useAuth()
-  /* Who may create an account, not who may enrol one.
-     A teacher issued by a school has an admin whose job this is, so they get
-     the lookup only; a solo subscriber has nobody above them and keeps both.
-     Read straight off the profile rather than useMySubscription().isSolo:
-     that one resolves through Flask, and a stopped Flask would take the tab
-     away from the solo teacher who is the only person entitled to it.
-     Client-side shaping -- the provision endpoint still accepts any teacher
-     who owns the class, so this is the UI telling one story, not a gate. */
-  const schoolIssued = Boolean(profile?.school_id)
+  /* Who may create an account, not who may enrol one. A teacher issued by a
+     school has an admin whose job this is, so they get the lookup only; a
+     solo subscriber has nobody above them and keeps both. accountKind reads
+     the profile alone -- useMySubscription().isSolo resolves through Flask,
+     and a stopped Flask would take the tab away from the solo teacher who is
+     the only person entitled to it. Client-side shaping: the provision
+     endpoint still accepts any teacher who owns the class, so this is the UI
+     telling one story, not a gate. */
+  const schoolIssued = accountKind(profile) === 'school'
   const [tab, setTab] = useState('find') // 'find' | 'create' -- 'create' is solo-only
   const [error, setError] = useState(null)
   const fail = failWith(setError)
