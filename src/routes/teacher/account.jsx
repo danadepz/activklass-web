@@ -6,7 +6,7 @@ import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
-import { changePlan, fetchPlans, fetchSubscription, formatBytes } from '@/lib/subscription'
+import { changePlan, describeSubscription, fetchPlans, fetchSubscription, formatBytes } from '@/lib/subscription'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -124,10 +124,34 @@ function ProfileCard() {
   )
 }
 
-/* ── Subscription (solo teacher) ────────────────────────────────── */
+/* ── Subscription ───────────────────────────────────────────────── */
+
+/**
+ * Which kind of subscription this account is under, said the same way on
+ * every branch of the card below.
+ *
+ * A tester read the old card as evasive, and she was right: it hedged ("if
+ * your school subscribed…") on the one branch where the plan lookup failed,
+ * directly above a card naming her school. Nothing about the type needed that
+ * lookup -- when it fails, the profile still says whether a school covers this
+ * teacher -- so the card states it first, on every branch.
+ */
+function PlanType({ label, detail }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap', margin: '0 0 10px' }}>
+      <span style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+        color: navy, background: 'rgba(14,42,92,0.07)', borderRadius: 20, padding: '3px 10px',
+      }}>
+        {label}
+      </span>
+      {detail && <span style={{ fontSize: 12.5, color: muted }}>{detail}</span>}
+    </div>
+  )
+}
 
 function SubscriptionCard() {
-  const { profile } = useAuth()
+  const { profile, school } = useAuth()
   const qc = useQueryClient()
   const [err, setErr] = useState('')
 
@@ -144,19 +168,47 @@ function SubscriptionCard() {
     onError: (e) => setErr(e.message),
   })
 
+  // The same helper the badge and the dashboard box read, so the three cannot
+  // drift. It answers from the profile, which means it is still right on the
+  // branches below where the plan lookup itself failed.
+  const view = describeSubscription({ profile, subscription: data?.subscription ?? null })
+  const isSchool = view.kind === 'school'
+  const typeLabel = (onSchoolPlan) => (onSchoolPlan ? 'Institution subscription' : 'Individual teacher')
+  // school.name is the school's own document; view.detail is the affiliation
+  // name carried on the profile, which is all a teacher without one has.
+  const schoolName = school?.name || view.detail
+
   if (isLoading) return <div style={card}><p style={{ color: faint, margin: 0 }}>Loading subscription…</p></div>
 
   // A teacher on an institution plan has no subscription of their own -- their
-  // school holds it. Saying so is more useful than an error.
+  // school holds it. Which of the two this is comes from the profile, not from
+  // the failed lookup, so the card names it instead of covering both.
   if (isError) {
     return (
       <div style={card}>
-        <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Subscription</h2>
-        <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
-          {error?.status === 404
-            ? 'No individual subscription on this account. If your school subscribed, your administrator manages the plan and seats for everyone.'
-            : error?.message ?? 'Could not load your subscription.'}
-        </p>
+        <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Subscription</h2>
+        {error?.status !== 404 ? (
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
+            {error?.message ?? 'Could not load your subscription.'}
+          </p>
+        ) : isSchool ? (
+          <>
+            <PlanType label={typeLabel(true)} detail={schoolName} />
+            <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
+              Your school's administrator manages the plan and the seats for everyone, so there is
+              nothing to pay or choose here.
+            </p>
+          </>
+        ) : (
+          <>
+            <PlanType label={typeLabel(false)} />
+            <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
+              {view.kind === 'none'
+                ? 'There is no subscription on this account, and no school plan covering it.'
+                : `${view.label} — ${view.detail}. This plan is on your own account, not a school's.`}
+            </p>
+          </>
+        )}
       </div>
     )
   }
@@ -171,7 +223,8 @@ function SubscriptionCard() {
   if (isAbsorbed(sub)) {
     return (
       <div style={card}>
-        <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Subscription</h2>
+        <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Subscription</h2>
+        <PlanType label="Institution subscription" detail={schoolName} />
         <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
           Your school covers your ActivKlass plan. Your administrator manages the plan and the seats
           for everyone, so there is nothing to pay or choose here.
@@ -188,7 +241,13 @@ function SubscriptionCard() {
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 2px' }}>Your subscription</h2>
+          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your subscription</h2>
+          {/* A record loaded, so its own type is the fact -- not the profile's
+              school_id. A school-issued teacher may still hold a plan of their
+              own, and calling that "institution" would contradict the plan
+              picker sitting right under it. */}
+          <PlanType label={typeLabel(sub.type === 'institution')}
+                    detail={sub.type === 'institution' ? schoolName : null} />
           <p style={{ fontSize: 13, color: muted, margin: 0 }}>
             {sub.period_label} · {sub.period_start} → {sub.period_end}
           </p>
