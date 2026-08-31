@@ -297,6 +297,25 @@ function pickMatch(matches, schoolId) {
   return { match: null, ambiguous: true }
 }
 
+/**
+ * Has this account been switched off?
+ *
+ * Deactivating a student leaves their users document in place — status
+ * 'inactive', login disabled — so a lookup still finds them, which is right:
+ * the teacher has to be able to see who it is. Enrolling one is not. That is
+ * the failure the CSV path was built to avoid, arriving by the other door: a
+ * name on the roster, in the gradebook and on the attendance sheet, for
+ * someone who cannot sign in, sit a quiz or read a grade, with nothing on the
+ * page saying so. The lookup endpoint returns `status` for exactly this.
+ *
+ * Tested against 'inactive', not `!== 'active'`: the same field also carries
+ * the academic states in STATUS_LABELS ('needs_remediation', 'mastered'), and
+ * those students are very much enrollable.
+ */
+function isDeactivated(account) {
+  return account?.status === 'inactive'
+}
+
 /* Add a registered student by ID (or email), or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
@@ -350,6 +369,12 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         )
       } else if (enrolledIds.includes(found.id)) {
         fail('That student is already in this class.')
+      } else if (isDeactivated(found)) {
+        const who = `${found.first_name ?? ''} ${found.last_name ?? ''}`.trim()
+        fail(
+          `${who ? `${who}'s account` : 'That account'} has been deactivated, so they cannot sign in. ` +
+            'Re-enable it first, then add them to this class.',
+        )
       } else {
         setStudent(found)
         setFindFields({
@@ -943,6 +968,8 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           unmatched.push({ label, id, reason: 'more than one account carries this ID' })
         } else if (!account) {
           unmatched.push({ label, id: id || entry.email, reason: 'no student account' })
+        } else if (isDeactivated(account)) {
+          unmatched.push({ label, id: id || entry.email, reason: 'account is deactivated' })
         } else if (enrolledIds.includes(account.id) || seen.has(account.id)) {
           already.push({ label, account })
         } else {
@@ -1072,9 +1099,9 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
             </div>
             {preview.unmatched.length > 0 && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                {preview.unmatched.length} row{preview.unmatched.length === 1 ? ' has' : 's have'} no
-                matching student account and will not be added. Ask your school admin to create those
-                accounts, then upload this file again.
+                {preview.unmatched.length} row{preview.unmatched.length === 1 ? '' : 's'} will not be
+                added, for the reason shown beside each. Ask your school admin to create or re-enable
+                those accounts, then upload this file again.
               </p>
             )}
             <button
