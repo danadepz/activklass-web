@@ -1259,7 +1259,18 @@ export default function ClassDetailPage() {
     const ask = currentlyActive
       ? {
           title: `Disable ${who}'s account?`,
-          message: 'They are signed out immediately and cannot log in until you re-enable it. They stay on this roster.',
+          /* Says the cross-class consequence BEFORE the decision. The exact
+             count only comes back from the disable call itself, so the dialog
+             states the possibility and the banner below states the number --
+             a tester met the number first and had already committed by then.
+             It also names Remove, the class-scoped action people reach here
+             looking for. */
+          message:
+            'They are signed out immediately and cannot log in until you re-enable it. ' +
+            'They stay on this roster.\n\n' +
+            'This switches off their sign-in everywhere, not just here: if they are also ' +
+            'enrolled in another teacher’s class, it signs them out of that too.\n\n' +
+            'To take them off this class only, use Remove instead — their account is untouched.',
           confirmLabel: 'Disable account',
           tone: 'danger',
         }
@@ -1285,8 +1296,10 @@ export default function ClassDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
 
       /* Disabling is an ACCOUNT action, not a class one: it signs them out of
-         the whole platform. The backend reports how many other teachers' classes
-         they are in so we can say so rather than letting it surprise someone. */
+         the whole platform. The confirm dialog has already warned that this may
+         reach other teachers' classes; the count the backend returns can only
+         be known after the call, so this confirms the number rather than
+         breaking the news. */
       if (currentlyActive && result?.also_enrolled_elsewhere > 0) {
         setNotice(
           `${who} is also enrolled in ${result.also_enrolled_elsewhere} class(es) taught by ` +
