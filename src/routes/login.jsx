@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
-import { toAuthEmail } from '@/lib/logins'
+import { toAuthEmail, wrongCredentialMessage } from '@/lib/logins'
 import { passwordError, PASSWORD_RULE } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
@@ -25,9 +25,7 @@ import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { navy, ink } from '@/theme'
 
 const FRIENDLY_ERRORS = {
-  'auth/invalid-credential': 'Incorrect login or password.',
   'auth/user-not-found': 'No account found with that email or login ID.',
-  'auth/wrong-password': 'Incorrect login or password.',
   'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
   'auth/invalid-email': 'That email or login ID is not valid.',
   // Deactivate (admin Users tab, solo teacher's Student accounts) disables the
@@ -37,20 +35,15 @@ const FRIENDLY_ERRORS = {
 
 /* "Incorrect login or password." is true and useless: it never says WHICH
    credential this account signs in with, and the two kinds of account here
-   have different ones. A school-issued account signs in with its login ID
-   (snhs-123456) and a teacher who signed up themselves with their email
-   address — so a tester who types the other one gets a correct-looking
-   rejection for an account that is perfectly fine. Both reported cases were
-   exactly that, from opposite sides, so the two hints are written together:
-   what was typed tells us which half to suggest. */
+   have different ones. Both reported lock-outs were exactly that, from
+   opposite sides. The wording lives in lib/logins.js beside toAuthEmail —
+   the same module decides what an identifier IS, and it is reachable from
+   logins.test.js, which a message defined in this route file was not. */
 const WRONG_CREDENTIAL = new Set(['auth/invalid-credential', 'auth/wrong-password'])
 
 function signInError(code, identifier) {
-  const message = FRIENDLY_ERRORS[code] ?? 'Sign in failed. Please try again.'
-  if (!WRONG_CREDENTIAL.has(code)) return message
-  return identifier.includes('@')
-    ? `${message} If your school gave you a login ID (like snhs-123456), sign in with that rather than an email address.`
-    : `${message} If you signed up for ActivKlass yourself, sign in with the email address you registered with.`
+  if (WRONG_CREDENTIAL.has(code)) return wrongCredentialMessage(identifier)
+  return FRIENDLY_ERRORS[code] ?? 'Sign in failed. Please try again.'
 }
 
 /* The page's two stages. An account still on its staff-issued password

@@ -339,3 +339,12 @@ the client `arrayUnion`/`arrayRemove`/`deleteDoc` they replaced. A lane that
 adds a new enrol/unenrol path must go through them, or the student is enrolled
 and invisible. `lib/classes.js` and `lib/admin.js` are still unowned; whoever
 takes the logic lane next should claim them.
+
+**`lib/logins.js`, added 2026-09-01 (T-01/T-02 debug pane).** It was in no lane
+— the third `lib/` module found that way — and it is the module `login.jsx`
+(Shared) leans on to decide what a typed identifier *is*. It lands in **Shared**
+rather than a page lane, because both auth routes and the admin credential
+screens read it and none of them owns it. The sign-in copy for a rejected
+credential lives here beside `toAuthEmail` on purpose: the rule and the sentence
+that explains the rule drift apart the moment they sit in different files, and
+in `login.jsx` the sentence was unreachable from any test.
