@@ -7,6 +7,7 @@
 import { Link } from 'react-router-dom'
 import { gold, green, red, goldDeep, muted, line, mono } from '@/theme'
 import { useMySubscription } from '@/hooks/useMySubscription'
+import { useAuth } from '@/context/useAuth'
 
 const TONE = {
   active:  { fg: green,     bg: 'rgba(31,138,91,0.12)',   border: 'rgba(31,138,91,0.3)' },
@@ -40,11 +41,52 @@ export function SubscriptionChip({ style }) {
   )
 }
 
-/** Dashboard box: label, detail and a link to the Account page. */
+/**
+ * Dashboard box: label, detail and -- for a teacher who owns their plan -- a
+ * link to the Account page to manage it.
+ *
+ * A teacher issued by a school gets a different box, because they own
+ * nothing here: their school pays and their admin administers. Sending them
+ * to /teacher/account under the words "Manage your plan" offered a control
+ * that is not theirs. Theirs states the school and, when the school document
+ * carries one, the address to ask -- which is the question they actually
+ * arrive with, since a school teacher cannot create a student account and
+ * the class page now tells them to ask their admin for one.
+ *
+ * Branching on view.kind rather than accountKind(profile) is deliberate:
+ * describeSubscription already reads profile.school_id first, so 'school' is
+ * true with Flask stopped, and it additionally catches a teacher absorbed
+ * into an institution subscription whose school_id has not moved yet.
+ */
 export function SubscriptionBox() {
   const view = useMySubscription()
+  const { school } = useAuth()
   if (view.isLoading || view.kind === 'none') return null
   const tone = TONE[view.kind] ?? TONE.none
+
+  if (view.kind === 'school') {
+    const adminEmail = school?.contact_email
+    return (
+      <div
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 10, background: tone.bg, border: `1px solid ${tone.border}` }}
+      >
+        <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: tone.fg, flexShrink: 0 }} />
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: tone.fg, letterSpacing: '0.01em' }}>{view.label}</span>
+          <span style={{ ...mono, fontSize: 11, color: tone.fg, opacity: 0.85 }}>{school?.name || view.detail}</span>
+          {adminEmail && (
+            <a
+              href={`mailto:${adminEmail}`}
+              style={{ ...mono, fontSize: 10.5, color: tone.fg, opacity: 0.85, textDecoration: 'underline', marginTop: 2 }}
+            >
+              Ask your admin
+            </a>
+          )}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <Link
       to="/teacher/account"

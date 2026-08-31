@@ -300,7 +300,7 @@ function pickMatch(matches, schoolId) {
 /* Add a registered student by ID (or email), or create a new manual student record. */
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
-  const { profile } = useAuth()
+  const { profile, school } = useAuth()
   /* Who may create an account, not who may enrol one. A teacher issued by a
      school has an admin whose job this is, so they get the lookup only; a
      solo subscriber has nobody above them and keeps both. accountKind reads
@@ -345,7 +345,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       if (!found) {
         fail(
           schoolIssued
-            ? 'No student account matches that ID. Ask your school admin to create the account, then add the student here.'
+            ? `No student account matches that ID. Ask your school admin${adminSuffix(school)} to create the account, then add the student here.`
             : 'No student account matches that ID. Use "Create New Manually" to add them yourself.',
         )
       } else if (enrolledIds.includes(found.id)) {
@@ -870,6 +870,14 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
   )
 }
 
+/* The school's contact address, in parentheses, when the school document
+   carries one -- so "ask your school admin" names someone reachable rather
+   than an office the teacher has to go find. Empty string when it does not,
+   which is every solo teacher and any school seeded before the field. */
+function adminSuffix(school) {
+  return school?.contact_email ? ` (${school.contact_email})` : ''
+}
+
 /* CSV roster: matches each row against an EXISTING student account by
    student_number, then lrn, then email, and enrolls the matches. Never
    creates accounts — under the issued-login scheme the admin makes accounts,
@@ -877,7 +885,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
    student nobody can sign in as. Preview first, with unmatched rows named. */
 function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Upload a roster CSV', closeOnBackdrop: false })
-  const { profile } = useAuth()
+  const { profile, school } = useAuth()
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { matched: [], already: [], unmatched: [] }
   const [error, setError] = useState(null)
@@ -967,7 +975,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
       if (preview.unmatched.length) {
         toast.info(
           `${preview.unmatched.length} row${preview.unmatched.length === 1 ? ' was' : 's were'} not added — ` +
-            'no matching account. Ask your school admin to create those accounts, then upload again.',
+            `no matching account. Ask your school admin${adminSuffix(school)} to create those accounts, then upload again.`,
           { duration: 0 },
         )
       }
