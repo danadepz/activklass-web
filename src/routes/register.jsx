@@ -255,7 +255,9 @@ export default function Register() {
     }
     // 1. Firebase identity — skipped when completing an existing session.
     if (!auth.currentUser) {
-      await createUserWithEmailAndPassword(auth, form.email, form.password)
+      // Trimmed, because sign-in trims too (lib/logins.js) — the address the
+      // account is created under and the one typed later must agree.
+      await createUserWithEmailAndPassword(auth, form.email.trim(), form.password)
     }
     // 2. A newly declared school goes into the public directory first, so
     // the next teacher from that school finds it in the dropdown. Requires

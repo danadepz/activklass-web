@@ -35,6 +35,24 @@ const FRIENDLY_ERRORS = {
   'auth/user-disabled': 'This account has been deactivated. Ask your teacher or school to reactivate it.',
 }
 
+/* "Incorrect login or password." is true and useless: it never says WHICH
+   credential this account signs in with, and the two kinds of account here
+   have different ones. A school-issued account signs in with its login ID
+   (snhs-123456) and a teacher who signed up themselves with their email
+   address — so a tester who types the other one gets a correct-looking
+   rejection for an account that is perfectly fine. Both reported cases were
+   exactly that, from opposite sides, so the two hints are written together:
+   what was typed tells us which half to suggest. */
+const WRONG_CREDENTIAL = new Set(['auth/invalid-credential', 'auth/wrong-password'])
+
+function signInError(code, identifier) {
+  const message = FRIENDLY_ERRORS[code] ?? 'Sign in failed. Please try again.'
+  if (!WRONG_CREDENTIAL.has(code)) return message
+  return identifier.includes('@')
+    ? `${message} If your school gave you a login ID (like snhs-123456), sign in with that rather than an email address.`
+    : `${message} If you signed up for ActivKlass yourself, sign in with the email address you registered with.`
+}
+
 /* The page's two stages. An account still on its staff-issued password
    (is_temp_password on the profile) does not leave the login page to replace
    it: the form expands in place — new password + confirm appear below the
@@ -143,7 +161,7 @@ export default function Login() {
               : 'Could not set the new password. Check your connection and try again.',
         )
       } else {
-        setError(FRIENDLY_ERRORS[err.code] ?? 'Sign in failed. Please try again.')
+        setError(signInError(err.code, email.trim()))
       }
     } finally {
       setSubmitting(false)
@@ -164,7 +182,7 @@ export default function Login() {
         {notice && <AuthNotice>{notice}</AuthNotice>}
 
         <div>
-          <label htmlFor="login-email" style={authLabelStyle}>Enter username</label>
+          <label htmlFor="login-email" style={authLabelStyle}>Email or login ID</label>
           <input
             id="login-email"
             className="ak-input"
@@ -172,7 +190,7 @@ export default function Login() {
             required
             disabled={settingPassword}
             autoComplete="username"
-            placeholder="Enter your username"
+            placeholder="you@school.edu.ph or snhs-123456"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={{ ...authInputStyle, opacity: settingPassword ? 0.6 : 1 }}
