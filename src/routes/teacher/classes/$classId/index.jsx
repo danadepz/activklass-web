@@ -300,7 +300,16 @@ function pickMatch(matches, schoolId) {
 function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const { profile } = useAuth()
-  const [tab, setTab] = useState('find') // 'find' | 'create'
+  /* Who may create an account, not who may enrol one.
+     A teacher issued by a school has an admin whose job this is, so they get
+     the lookup only; a solo subscriber has nobody above them and keeps both.
+     Read straight off the profile rather than useMySubscription().isSolo:
+     that one resolves through Flask, and a stopped Flask would take the tab
+     away from the solo teacher who is the only person entitled to it.
+     Client-side shaping -- the provision endpoint still accepts any teacher
+     who owns the class, so this is the UI telling one story, not a gate. */
+  const schoolIssued = Boolean(profile?.school_id)
+  const [tab, setTab] = useState('find') // 'find' | 'create' -- 'create' is solo-only
   const [error, setError] = useState(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
@@ -333,7 +342,11 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         found = picked.match
       }
       if (!found) {
-        fail('No student account matches that ID. Ask your school admin to create the account first, or use "Create New" to add them yourself.')
+        fail(
+          schoolIssued
+            ? 'No student account matches that ID. Ask your school admin to create the account, then add the student here.'
+            : 'No student account matches that ID. Use "Create New Manually" to add them yourself.',
+        )
       } else if (enrolledIds.includes(found.id)) {
         fail('That student is already in this class.')
       } else {
@@ -524,11 +537,14 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
 
-        {/* Tab switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
-          {tabBtn('find', 'Find Registered Student')}
-          {tabBtn('create', 'Create New Manually')}
-        </div>
+        {/* Tab switcher -- one tab is no choice, so a school-issued teacher
+            sees no switcher at all rather than a lone disabled-looking tab. */}
+        {!schoolIssued && (
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
+            {tabBtn('find', 'Find Registered Student')}
+            {tabBtn('create', 'Create New Manually')}
+          </div>
+        )}
 
         {isFull && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -1395,7 +1411,7 @@ export default function ClassDetailPage() {
         </div>
         {students.length === 0 ? (
           <div style={{ padding: '56px 24px', textAlign: 'center', color: faint, fontSize: 14 }}>
-            No students yet. Add them by email or upload a CSV roster.
+            No students yet. Add them by ID or email, or upload a CSV roster.
           </div>
         ) : filteredStudents.length === 0 ? (
           <p className="p-8 text-center text-slate-400">No students match your search or filter.</p>
