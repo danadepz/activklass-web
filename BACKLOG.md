@@ -1270,3 +1270,66 @@ What a teacher on their own subscription sees, built against the account
   Class detail (`$classId/index.jsx`, `history.jsx`, `scaffolds.jsx`), Class setup
   (`classes/index.jsx`), logic (`roster.js`, `classes.js`, `useTeacherStudents.js`,
   `useQuizRecordSync.js`, `remediation.js`, `gradeRecovery.js`), quiz (`quizzes.$quizId.jsx`).
+
+## Solo vs institutional pane — 2026-08-31
+The owner's decision this session: a solo subscriber and a teacher issued by a school are
+different accounts and should not get the same screens. Four commits, all pushed.
+
+- **Only a solo teacher creates a student account** — `97babb9`. The class page told two
+  stories: Bulk Upload correctly refuses to create accounts (it matches each CSV row against
+  an existing one and names what it could not match), while Add Student sat beside it
+  offering a "Create New Manually" tab to everyone. The same teacher who could not create
+  fifty accounts from a file could create them one at a time. That tab and its switcher are
+  no longer rendered for a teacher with a `school_id`; the failed-lookup copy split the same
+  way. **Client-side shaping, not a gate** —
+  `POST /api/classes/{id}/students/provision` is still guarded only by teacher role and
+  class ownership, so it would accept a school teacher's request made directly. Worth
+  closing server-side before anything but the demo leans on it **(cross-repo)**.
+- **`accountKind(profile)` — one name for the distinction** — `8a18261`. Returns
+  `'school' | 'solo' | 'none'` from `users/{uid}.school_id`, derived and never stored: an
+  `account_type` field beside `school_id` would be a second source of truth that provision,
+  request approval, promotion to admin and cancellation would each have to keep in step,
+  and a drift would show as wrong screens rather than an error. Reads the profile alone, so
+  it holds with Flask stopped — `useMySubscription().isSolo` does not, and a stopped Flask
+  would have hidden the create tab from the only teacher entitled to it. **Three states, not
+  two:** an approved teacher who never subscribed is `'none'`, so `!isSolo` does not mean
+  "institutional". Purely additive to the subscription lane; `describeSubscription` and
+  `isSolo` untouched, adopting it there is that pane's call.
+- **The dashboard box stops offering a plan to a school teacher** — `ea6f7c7`. For
+  `kind: 'school'` it no longer links to `/teacher/account` under "Manage your plan" — that
+  teacher owns nothing there — and where `schools/{id}.contact_email` exists it carries an
+  "Ask your admin" mailto. That address is what `97babb9` created the need for: it removed
+  their ability to create an account and left the app telling them to ask an admin it never
+  named. The class page now names it at both places it says so (lookup failure, CSV
+  unmatched toast) through one `adminSuffix()`. Solo/active/trial/expired/lapsed untouched.
+- **The colleagues card finds the school that issued the teacher** — `9ee8629`. "Your
+  school" grouped by `teaching_school_id`, which only self-registration and the card's own
+  picker ever write — no backend path sets it. So it ran backwards: empty for admin-issued
+  teachers who genuinely are a school, populated for solo teachers who merely share a school
+  name. Worse, the outer guard showed those teachers "Tell us where you teach" for a school
+  they already belong to, and saving would have written an affiliation id that need not match
+  the school paying for them. Now `school_id` first, `teaching_school_id` as fallback, picker
+  only when neither exists, heading name following the same split. No rules or index change —
+  the query keeps `role == 'teacher'`, which is what the rules prove the read from.
+
+**Verified:** `npm run test` 551/551 (14 new across `subscription.test.js` and
+`SchoolColleagues.test.jsx`), `npm run build` clean, eslint unchanged at baseline.
+
+**Owed:** the browser walk — none of these four has been looked at by a human. One pass as
+`srnhs-260101` (institutional: no create tab, non-clickable school box, populated colleagues)
+against any solo teacher (both tabs, trial chip, directory-picked school) covers all of it.
+
+**Lanes touched, each with a heads-up sent first:** Class detail (mine), Subscription/pricing
+(`subscription.js`, `SubscriptionBadge.jsx` — Pricing pane), logic + solo
+(`useSchoolColleagues.js`, `SchoolColleagues.jsx` — Solo Sub pane). `teacher/index.jsx` was
+deliberately **not** touched: doing the split inside `SubscriptionBox` covered it and kept
+the Syllabus lane closed.
+
+**Test-case rewrites owed to the members' sheet** (from the audit artifact, Teacher —
+Institutional): TC-006 and TC-007 were written as if a class is created with its roster —
+it is created empty and populated after — and TC-006's institutional version must now drop
+the create path entirely. TC-010 ("invalid file is rejected") would pass for the wrong reason
+while uploads are off on Spark; point it at the CSV validator instead. TC-009/TC-020 are held
+pending the owner's storage decision — links remain the supported attachment path, and the
+syllabus page still renders an Upload File button that cannot succeed
+(`teacher/syllabus.jsx:153`, `:179`) — worth a ticket for that pane.
