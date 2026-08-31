@@ -6,7 +6,12 @@
  * with columns sized to their text — and whoever downloads an .xlsx template
  * will hand back an .xlsx file, so the uploader must read one too. exceljs is
  * ~1 MB, so it is imported lazily on the first download or .xlsx upload.
+ *
+ * Owned by the Admin pane (see OWNERSHIP.md). The download itself is
+ * `saveBlob` in lib/csv.js -- one implementation, so the detached-anchor bug
+ * cannot be fixed in one file and left standing in the other.
  */
+import { saveBlob } from './csv'
 
 async function excel() {
   const mod = await import('exceljs')
@@ -31,15 +36,9 @@ export async function downloadXlsx(filename, columns, rows = []) {
   rows.forEach((r) => ws.addRow(r))
 
   const buffer = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buffer], {
+  saveBlob(filename, new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  }))
 }
 
 /* One cell to a plain trimmed string. Excel hands back typed values: dates

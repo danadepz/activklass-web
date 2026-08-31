@@ -1,8 +1,14 @@
 /**
  * CSV building and download.
  *
- * Owned by the logic lane (see OWNERSHIP.md). reports.jsx grew its own copy of
- * this; anything new should import from here rather than add a third.
+ * Owned by the Admin pane (see OWNERSHIP.md -- this file used to claim the
+ * logic lane in a comment the table never backed up, so it had no owner at
+ * all). reports.jsx grew its own copy of this; anything new should import
+ * from here rather than add a third.
+ *
+ * `saveBlob` is the one place a file leaves the app. Both download helpers
+ * here and in lib/xlsx.js go through it, because they previously carried the
+ * same eight lines and therefore the same bug twice.
  */
 
 /**
@@ -25,17 +31,32 @@ export function toCsv(rows) {
   return rows.map((row) => row.map(csvCell).join(',')).join('\n')
 }
 
-/** Triggers a browser download. Returns nothing; failures are browser-level. */
-export function downloadCsv(filename, rows) {
-  // A BOM so Excel opens UTF-8 correctly -- without it Filipino names with
-  // accents render as mojibake, which looks like data corruption to a user.
-  const blob = new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8' })
+/**
+ * Hand a blob to the browser as a download.
+ *
+ * The anchor MUST be in the document when it is clicked. Chrome fires a
+ * download from a detached anchor; Firefox, Safari and several download
+ * blockers silently ignore it -- which is how "Export CSV not functioning"
+ * (tester ticket T-03) looked intermittent for weeks. Revoking is deferred
+ * to a macrotask for the same reason: Firefox resolves the object URL after
+ * the click returns, so revoking inline can cancel the download it started.
+ */
+export function saveBlob(filename, blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+/** Triggers a browser download. Returns nothing; failures are browser-level. */
+export function downloadCsv(filename, rows) {
+  // A BOM so Excel opens UTF-8 correctly -- without it Filipino names with
+  // accents render as mojibake, which looks like data corruption to a user.
+  saveBlob(filename, new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8' }))
 }
 
 /** `activklass-users-2026-08-18.csv` */

@@ -659,7 +659,14 @@ export default function UsersTab() {
                   <option value="all">All roles</option>
                   {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <button style={btnGhost} onClick={exportCsv} disabled={!shown.length}>Export CSV</button>
+                {/* A disabled button with no reason reads as a broken one -- which is
+                    what a tester reported. Say which it is, the way the row's own
+                    Deactivate button does. */}
+                <button style={btnGhost} onClick={exportCsv} disabled={!shown.length}
+                        title={shown.length ? `Download these ${shown.length} users as a CSV file`
+                                            : 'Nothing to export — no users match this filter'}>
+                  Export CSV
+                </button>
               </div>
             }
           />

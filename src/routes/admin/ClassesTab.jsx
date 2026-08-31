@@ -81,7 +81,11 @@ export default function ClassesTab() {
                   <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
                   Show archived
                 </label>
-                <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}>Export CSV</button>
+                <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}
+                        title={rows.length ? `Download these ${rows.length} classes as a CSV file`
+                                           : 'Nothing to export — no classes match this filter'}>
+                  Export CSV
+                </button>
               </div>
             }
           />

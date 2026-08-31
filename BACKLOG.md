@@ -1407,3 +1407,57 @@ a clean run as the checker having proved anything.
 - **Left in Firestore:** syllabus `468901cb-53c6-4ce6-bfa4-8a36cf65f07c` ("Grade 10
   Mathematics Syllabus", `source: ai_generated`, assigned to no class) under Grace Abad,
   from run 2. Test data — delete when convenient.
+
+## Export downloads — T-03 (admin pane) — 2026-08-31
+
+Tester ticket `andecobs-12` (Derickk): "Export CSV not functioning." Fixed; the cause was
+one missing line, and it had been shipping for as long as the helper has existed.
+
+- **A detached anchor is not a download.** `lib/csv.js` `downloadCsv` and `lib/xlsx.js`
+  `downloadXlsx` each built an `<a>`, set `download`, called `click()` and revoked the
+  object URL — without ever putting the anchor in the document. Chromium fires a download
+  from a detached anchor; Gecko does not. Every export, template and logins button in the
+  app goes through those two functions, so *all* of them were broken for anyone on Firefox
+  and fine for everyone on Chrome. That asymmetry is why it read as intermittent and
+  survived several walkthroughs: the people driving the demo were all on Chrome.
+- **One implementation now, not two.** The two helpers carried the same eight lines and
+  therefore the same defect twice — the ticket had to name both files. They now share
+  `saveBlob(filename, blob)` in `csv.js`: append, click, remove, and revoke on a
+  `setTimeout(…, 0)` because Gecko resolves the `blob:` URL after the click returns, so
+  revoking inline can cancel the download it just started.
+- **The disabled Export button was the other half the tester felt.** Both admin Export CSV
+  buttons go `disabled` when the filter matches nothing, with no reason given — which
+  reads as "the button is broken", not "there is nothing to export". They now carry a
+  `title` either way (`Download these 12 users as a CSV file` / `Nothing to export — no
+  users match this filter`), matching the idiom the Deactivate button in the same file
+  already used. Chosen over exporting a headers-only file: a file that arrives empty is a
+  second thing to explain, and the empty state beside the button already says the same
+  sentence.
+- **`csv.test.js` is new** and pins the mechanism rather than the symptom: a stub document
+  records the order of events and asserts `click` happened while the anchor was *in* the
+  document, plus that the URL is not revoked before the click is handled. The old code
+  fails both. Without this the bug is invisible to CI forever, since the runner has no DOM
+  and every human here is on Chrome.
+
+**Verified:** `npm run test` 556/556 in 30 files; `npm run build` clean in 736 ms. Driven
+in Chrome as Grace Abad — Students → Student accounts → Download template (.xlsx, 6.6 kB,
+opens in Excel) and a class record → Export CSV (BOM present, `"Bagtas, Noel"` quoted
+correctly). Driven in Brave as Derick Lungcob — both helpers produce correct files.
+
+**Not verified, and it is the half the ticket actually turns on: Firefox.** It is not
+installed on this machine, and the owner's call was to ship rather than install it. Brave
+was tried as a stand-in and cannot answer the question — it is Chromium, and the
+pre-fix detached-anchor shape *downloaded fine there*, exactly as in Chrome. So the
+evidence is "the fix works and nothing regressed on Chromium", plus a unit test pinning
+the Gecko-relevant mechanism. **Derick is owed the confirmation in Firefox**; until he
+gives it, T-03 is fixed-on-reasoning, not fixed-on-observation.
+
+One thing worth writing down for whoever tests downloads next: Chromium throttles repeated
+programmatic downloads per tab, and once it trips, *everything* after it silently fails.
+Two measurements were wasted reading that as the fix not working. Use a fresh tab per
+download, or you will misread your own result.
+
+**Housekeeping:** `lib/csv.js` and `lib/xlsx.js` were in **no lane** — and `csv.js`'s
+header claimed the logic lane, which the table never backed up. Both are now in the Admin
+lane in `OWNERSHIP.md`, with the boundary written down (Admin owns the files, not the
+right to change what they return — three other panes call them).

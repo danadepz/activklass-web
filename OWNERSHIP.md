@@ -161,7 +161,7 @@ For work inside one screen. Each page belongs to one pane at a time.
 | **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx`, `teacher/StudentAccounts.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
-| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx` |
+| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx`, `src/lib/csv.js`, `src/lib/xlsx.js` |
 
 **Why Classes is now two lanes.** It was one — `teacher/classes/**` plus the
 four teacher-level pages plus `features/classes/**` — and in practice two panes
@@ -198,6 +198,24 @@ only the first one is true here.
 **If a file is not in this table or under Shared, it has no owner.** Say so in
 the other panes before you touch it, and add it here in the same commit. The
 table is only useful while it is complete.
+
+**`lib/csv.js` and `lib/xlsx.js`, added 2026-08-31 (T-03 debug pane).** They
+were in no lane. `csv.js` carried a header comment claiming the logic lane —
+the second file to do that, and the table never backed either of them up, so
+the header read as ownership while the document read as nobody. The comment is
+now corrected rather than left to be re-discovered.
+
+They land in **Admin** because that is where the buttons are (`UsersTab`,
+`ClassesTab`, `BulkUpload` — three of the five call sites) and because the
+tester ticket that forced the question was an admin one. Recording the
+awkward half honestly: this is a *page* lane taking two `lib/` modules, and
+`teacher/classes/$classId/**` and `teacher/StudentAccounts.jsx` call them too.
+So the boundary is narrower than the row suggests — **Admin owns the two
+files, not the right to change what they return.** A signature change here
+edits three other panes' screens, so announce that the way Shared is
+announced; a fix inside `saveBlob`, `csvCell` or `readXlsxRows` is lane-local.
+If a fourth caller appears, that is the argument for moving them to the
+Data/logic lane, which is where a concern this cross-cutting really belongs.
 
 ## Shared
 
