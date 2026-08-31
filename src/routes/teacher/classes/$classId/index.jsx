@@ -9,7 +9,7 @@ import { deleteClassSection } from '@/lib/classes'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError } from '@/lib/validation'
-import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
+import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
 import { Users, Check, Clock, Layers } from '@/components/icons'
@@ -350,10 +350,15 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
       // for self-registered students, recognized by the '@' no ID can contain.
       const needle = idInput.trim()
       let found = null
+      let teacherMatch = false
       if (needle.includes('@')) {
-        found = await findStudentByEmail(needle)
+        const res = await findStudentByEmail(needle)
+        found = res.student
+        teacherMatch = res.teacherMatch
       } else {
-        const picked = pickMatch(await findStudentsByNumber(needle), profile?.school_id)
+        const res = await findStudentsByNumber(needle)
+        teacherMatch = res.teacherMatch
+        const picked = pickMatch(res.students, profile?.school_id)
         if (picked.ambiguous) {
           fail('More than one student account carries that ID. Ask your school admin which account is your student, then add them by email.')
           setBusy(false)
@@ -361,7 +366,14 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
         }
         found = picked.match
       }
-      if (!found) {
+      /* Ahead of every other outcome, including a student that really was
+         found. A tester typed her own teacher ID here and got a filled-in
+         Grade 7 form back, because a different person's student number
+         happens to be the same digits -- so the case to guard is the one
+         where the search succeeded, not the one where it came up empty. */
+      if (teacherMatch) {
+        fail(teacherAccountMessage(needle))
+      } else if (!found) {
         fail(
           schoolIssued
             ? `No student account matches that ID. Ask your school admin${adminSuffix(school)} to create the account, then add the student here.`
@@ -436,9 +448,16 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
     setBusy(true)
     fail(null)
     try {
-      // Client-side duplicate check before manual creation
+      // Client-side duplicate check before manual creation. A teacher's
+      // address is a duplicate too -- provisioning would fail on the taken
+      // Auth email with nothing saying whose it is.
       const existing = await findStudentByEmail(newEmail)
-      if (existing) {
+      if (existing.teacherMatch) {
+        fail(teacherAccountMessage(newEmail))
+        setBusy(false)
+        return
+      }
+      if (existing.student) {
         fail('A student with this email is already registered. Please use the "Find Registered Student" tab to add them.')
         setBusy(false)
         return
@@ -956,15 +975,22 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
         const id = entry.student_number || entry.lrn
         let account = null
         let ambiguous = false
+        let teacherMatch = false
         if (id) {
-          const picked = pickMatch(await findStudentsByNumber(id), profile?.school_id)
+          const res = await findStudentsByNumber(id)
+          teacherMatch = res.teacherMatch
+          const picked = pickMatch(res.students, profile?.school_id)
           account = picked.match
           ambiguous = picked.ambiguous
         }
-        if (!account && !ambiguous && entry.email) {
-          account = await findStudentByEmail(entry.email)
+        if (!account && !ambiguous && !teacherMatch && entry.email) {
+          const res = await findStudentByEmail(entry.email)
+          account = res.student
+          teacherMatch = res.teacherMatch
         }
-        if (ambiguous) {
+        if (teacherMatch) {
+          unmatched.push({ label, id: id || entry.email, reason: 'that ID belongs to a teacher account' })
+        } else if (ambiguous) {
           unmatched.push({ label, id, reason: 'more than one account carries this ID' })
         } else if (!account) {
           unmatched.push({ label, id: id || entry.email, reason: 'no student account' })

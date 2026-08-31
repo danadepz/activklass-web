@@ -23,30 +23,64 @@ export async function fetchUsersByIds(ids) {
 }
 
 /**
+ * What a lookup found: the student accounts, and whether the same key also
+ * names a teacher.
+ *
+ * `teacherMatch` is the answer to a question the roster search never asked.
+ * A student number and a teacher's ID number are different fields on
+ * different documents, so one number can name a student AND a teacher with
+ * nothing detecting it -- which is what a tester hit: she typed her own
+ * teacher ID into Add Student and was handed a filled-in Grade 7 form for
+ * the unrelated student who happens to carry that number. Both records were
+ * real; only the silence was the bug. The flag rides along with every lookup
+ * because the collision case is precisely the one where a student *was*
+ * found, so "no match, then check" would never fire.
+ */
+function shapeLookup(res) {
+  return { students: res?.students ?? [], teacherMatch: res?.teacher_match === true }
+}
+
+/**
  * Find registered students by exact student number, falling back to LRN.
  *
- * Returns an ARRAY: the same number can legitimately exist at two schools, so
- * the caller disambiguates (prefer the teacher's own school_id) rather than
- * this helper guessing. Admin-issued accounts may have no email at all — the
- * ID is the only key a teacher's class list reliably carries.
+ * `students` is an ARRAY: the same number can legitimately exist at two
+ * schools, so the caller disambiguates (prefer the teacher's own school_id)
+ * rather than this helper guessing. Admin-issued accounts may have no email
+ * at all -- the ID is the only key a teacher's class list reliably carries.
  */
 export async function findStudentsByNumber(idText) {
   const needle = String(idText ?? '').trim()
-  if (!needle) return []
+  if (!needle) return { students: [], teacherMatch: false }
   // Through Flask since 2026-08-31: a teacher may read only the students they
   // handle (firestore.rules), and the one they are looking for here is, by
   // definition, not yet one of them. The endpoint answers exact keys only,
   // with the roster fields only.
   const res = await api(`/api/students/lookup?student_number=${encodeURIComponent(needle)}`)
-  return res?.students ?? []
+  return shapeLookup(res)
 }
 
-/** Find a registered student by exact email. Returns the user doc or null. */
+/** Find a registered student by exact email. `student` is the user doc or null. */
 export async function findStudentByEmail(email) {
   const needle = String(email ?? '').trim().toLowerCase()
-  if (!needle) return null
+  if (!needle) return { student: null, teacherMatch: false }
   const res = await api(`/api/students/lookup?email=${encodeURIComponent(needle)}`)
-  return res?.students?.[0] ?? null
+  const { students, teacherMatch } = shapeLookup(res)
+  return { student: students[0] ?? null, teacherMatch }
+}
+
+/**
+ * What to say when the thing a teacher typed names a teacher account.
+ *
+ * Said instead of offering the enrolment form, not alongside it: the whole
+ * defect was that the form appeared. The second sentence matters as much as
+ * the first -- a student whose number really does collide with some teacher's
+ * ID still has to be enrollable, and their own email is the key that does not
+ * collide.
+ */
+export function teacherAccountMessage(needle) {
+  return String(needle ?? '').includes('@')
+    ? 'That email belongs to a teacher account, not a student. Add the student using their own email address.'
+    : 'That ID belongs to a teacher account, not a student. If a student really carries the same number, add them by email instead.'
 }
 
 /**
