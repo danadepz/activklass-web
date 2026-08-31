@@ -1,12 +1,13 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
 import { emailError } from '@/lib/validation'
 import { bulkCreateUsers } from '@/lib/admin'
 import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
-import { navy, ink, muted, faint, green, red, line, mono } from '@/theme'
+import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
 import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
+import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
 import CardHead from './CardHead'
 import RolePicker from './RolePicker'
@@ -113,6 +114,31 @@ function rowLogin(row, prefix) {
 }
 
 /**
+ * Whether this row is someone the school already has, said in the preview
+ * rather than found afterwards in the users table. A row is checked against
+ * the directory *and* against the rows above it, since one sheet listing the
+ * same person twice is the commoner mistake of the two.
+ *
+ * A parsed row carries the same `first_name` / `last_name` / `personal_email`
+ * keys a profile does, so the earlier rows go through the same two calls the
+ * directory does. `tone: 'error'` is a reused address, which belongs to one
+ * person; `'warn'` is a shared name, which is allowed and merely worth seeing.
+ */
+function rowDuplicate(row, index, rows, users) {
+  const earlier = rows.slice(0, index)
+  const email = row.personal_email || row.email
+  const owner = accountWithEmail(users, email)
+  if (owner) return { tone: 'error', note: `${email} is already ${describeAccount(owner)}’s` }
+  if (accountWithEmail(earlier, email)) return { tone: 'error', note: `${email} is on an earlier row` }
+  const onFile = accountsNamed(users, row.first_name, row.last_name)
+  if (onFile.length) return { tone: 'warn', note: `same name as ${onFile.map(describeAccount).join(', ')}` }
+  if (accountsNamed(earlier, row.first_name, row.last_name).length) {
+    return { tone: 'warn', note: 'same name as an earlier row' }
+  }
+  return null
+}
+
+/**
  * Bulk Upload Teachers / Bulk Upload Students.
  *
  * One component for both: the CSV is identical apart from the role, so a
@@ -124,7 +150,7 @@ function rowLogin(row, prefix) {
  * inbox, like sample.maria@gmail.com — is stored on the profile for password
  * recovery, because not everyone has a school email; it is never the login.
  */
-export default function BulkUpload({ onDone, settings }) {
+export default function BulkUpload({ onDone, settings, users }) {
   const prefix = settings?.school?.login_prefix ?? ''
   // The role rows get when the file carries no `role` column. No preselected
   // role, same as the manual form: picking one is deliberate, and the
@@ -135,6 +161,12 @@ export default function BulkUpload({ onDone, settings }) {
   const [parseError, setParseError] = useState('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
+
+  // Every row, not the eight the preview shows — the line under the table is
+  // the only place a repeat on row 40 ever gets mentioned.
+  const dupes = useMemo(() => rows.map((r, i) => rowDuplicate(r, i, rows, users)), [rows, users])
+  const reusedEmails = dupes.filter((d) => d?.tone === 'error').length
+  const sharedNames = dupes.filter((d) => d?.tone === 'warn').length
 
   async function onFile(e) {
     const file = e.target.files?.[0]
@@ -320,11 +352,19 @@ export default function BulkUpload({ onDone, settings }) {
                 {rows.slice(0, 8).map((r, i) => {
                   const problem = rowProblem(r, prefix)
                   const login = rowLogin(r, prefix)
+                  const dup = dupes[i]
                   const number = r.role === 'student' ? r.student_number : r.employee_number
                   return (
                     <tr key={i} style={{ borderTop: `1px solid ${line}`, color: problem ? red : ink }}>
                       <td style={{ padding: '8px 14px' }}>{login || <em>{problem || 'no login'}</em>}</td>
-                      <td style={{ padding: '8px 14px' }}>{[r.first_name, r.last_name].filter(Boolean).join(' ') || <em>missing</em>}</td>
+                      <td style={{ padding: '8px 14px' }}>
+                        {[r.first_name, r.last_name].filter(Boolean).join(' ') || <em>missing</em>}
+                        {dup && (
+                          <div style={{ fontSize: 11.5, marginTop: 2, color: dup.tone === 'error' ? red : goldDeep }}>
+                            {dup.note}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ padding: '8px 14px' }}>{r.role}</td>
                       <td style={{ padding: '8px 14px' }}>
                         {number || (r.role === 'admin' ? '—' : <em>missing</em>)}
@@ -351,6 +391,21 @@ export default function BulkUpload({ onDone, settings }) {
               </div>
             )}
           </div>
+
+          {/* Said once, over the whole file: the table shows eight rows, and
+              the repeat is as likely to be on row 40. Not a block — an
+              address can be a typo and a shared name can be two real people,
+              and only the person holding the list knows which. */}
+          {(reusedEmails > 0 || sharedNames > 0) && (
+            <div style={{ marginBottom: 12 }}>
+              <Notice tone={reusedEmails ? 'error' : 'warn'}>
+                {[
+                  reusedEmails && `${reusedEmails} row${reusedEmails === 1 ? '' : 's'} reuse${reusedEmails === 1 ? 's' : ''} an email that already belongs to someone`,
+                  sharedNames && `${sharedNames} row${sharedNames === 1 ? '' : 's'} repeat${sharedNames === 1 ? 's' : ''} a name already on file`,
+                ].filter(Boolean).join(', and ')} — check them before creating, or each becomes a separate account.
+              </Notice>
+            </div>
+          )}
 
           <button style={btnPrimary} onClick={upload} disabled={busy}>
             {busy ? 'Creating…' : `Create ${rows.length} account${rows.length === 1 ? '' : 's'}`}

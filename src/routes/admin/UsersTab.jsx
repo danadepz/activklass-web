@@ -14,6 +14,7 @@ import {
   emailError, nameError, tempPasswordError,
   idNumberError, lrnError, schoolNameError, schoolAbbrError,
 } from '@/lib/validation'
+import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
 import RolePicker from './RolePicker'
 import CardHead from './CardHead'
@@ -151,7 +152,7 @@ function splitPair(text) {
   return [head.trim(), rest.join('-').trim()]
 }
 
-function CreateUserForm({ onCreated, settings }) {
+function CreateUserForm({ onCreated, settings, users }) {
   // No default role: 'teacher' meant an admin who never touched the picker
   // silently created a teacher, which is the most privileged non-admin role
   // here. Picking one is now deliberate, and nothing else renders until it is.
@@ -188,7 +189,7 @@ function CreateUserForm({ onCreated, settings }) {
     onError: (e) => { setError(e.message); setDone('') },
   })
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
     setDone('')
     if (!role) return setError('Pick a role for this user.')
@@ -223,7 +224,32 @@ function CreateUserForm({ onCreated, settings }) {
     if (role !== 'admin' && !prefix) {
       return setError('Set your school’s login prefix above first — it is what their sign-in login is issued from.')
     }
+
+    // Nothing else here notices that a person is already on file: an account
+    // is keyed by the number it was issued from, so the same teacher entered
+    // twice under two employee numbers used to become two live accounts in
+    // silence. An address belongs to one person and is refused; a name is
+    // only asked about, because two people really can share one.
+    // Cleared before the dialog, not after it: the previous attempt's message
+    // otherwise sits behind the question, answering something else.
     setError('')
+    const typedEmail = (role === 'admin' ? form.email : form.personalEmail).trim()
+    const taken = accountWithEmail(users, typedEmail)
+    if (taken) {
+      return setError(
+        `${describeAccount(taken)} already uses ${typedEmail}. One address can only bring one account back, so this person needs their own.`,
+      )
+    }
+    const twins = accountsNamed(users, form.firstName, form.lastName)
+    if (twins.length) {
+      const ok = await confirmDialog({
+        title: `${form.firstName.trim()} ${form.lastName.trim()} is already on file`,
+        message: `${twins.map(describeAccount).join(', ')} — same name. Two people really can share one, so this is only a check: creating another makes a separate account with its own login.`,
+        confirmLabel: 'Create anyway',
+      })
+      if (!ok) return
+    }
+
     mut.mutate({
       // Admins need a real inbox (password recovery goes there); teacher and
       // student logins are issued server-side from the school's prefix.
@@ -613,8 +639,8 @@ export default function UsersTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <LoginPrefixCard settings={settings} pending={schoolPending} error={schoolError}
                        onRetry={refetchSchool} onSaved={refreshSchool} />
-      <BulkUpload onDone={refresh} settings={settings} />
-      <CreateUserForm onCreated={refresh} settings={settings} />
+      <BulkUpload onDone={refresh} settings={settings} users={users} />
+      <CreateUserForm onCreated={refresh} settings={settings} users={users} />
 
       <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
