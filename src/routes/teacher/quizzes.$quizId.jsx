@@ -646,6 +646,13 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
   )
 }
 
+/* One class's gradebook is ready to take scores. The publish notice and the hint
+   beside the class checkbox have to agree about that, so they read it here
+   instead of each spelling the condition out. */
+function hasGradeConfig(gb) {
+  return Boolean(gb?.configured && gb.components?.length && gb.periods?.length)
+}
+
 function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfirm, isPublishing }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Publish quiz', closeOnBackdrop: false })
   const [mappings, setMappings] = useState({})
@@ -665,7 +672,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
     let blocked = null
     for (const c of assignedClasses) {
       const gb = gradebooksMap?.[c.id]
-      if (!gb || !gb.configured || !gb.components?.length || !gb.periods?.length) {
+      if (!hasGradeConfig(gb)) {
         err = `Class "${c.section} · ${c.subject}" has no Grade Config yet, so there is nowhere to record the scores. Set its components and grading periods, then publish.`
         blocked = blocked ?? c
         continue
@@ -1189,11 +1196,29 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <div className="space-y-1.5 max-h-40 overflow-y-auto border border-slate-100 p-2 rounded-lg">
             {classes.map((clazz) => {
               const checked = assignedClassIds.includes(clazz.id)
+              /* Said here rather than only at Publish. Ticking a class with no
+                 Grade Config refuses the quiz at the very last step, which reads
+                 as "I press Publish and nothing happens" -- this is that same
+                 refusal, one screen earlier and next to the thing causing it.
+                 `gradebooksMap` is undefined until the gradebooks arrive: no tag
+                 while it is, or every class is accused as the page settles. */
+              const needsConfig = gradebooksMap && !hasGradeConfig(gradebooksMap[clazz.id])
               return (
-                <label key={clazz.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-sm">
-                  <input type="checkbox" checked={checked} onChange={() => toggleClass(clazz.id)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4" />
-                  <span>{clazz.section} · {clazz.subject}</span>
-                </label>
+                <div key={clazz.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded text-sm">
+                  <label className="flex min-w-0 flex-1 items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={checked} onChange={() => toggleClass(clazz.id)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4" />
+                    <span className="truncate">{clazz.section} · {clazz.subject}</span>
+                  </label>
+                  {needsConfig && (
+                    <Link
+                      to={`/teacher/classes/${clazz.id}/grading`}
+                      className="shrink-0 underline"
+                      style={{ color: goldDeep, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                    >
+                      no Grade Config yet →
+                    </Link>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -1655,7 +1680,7 @@ export default function QuizBuilderPage() {
               AI-generated draft — review every question and answer key before publishing.
             </div>
           )}
-          <BuilderForm key={quiz.id} quiz={quiz} classes={classes ?? []} gradebooksMap={gradebooks ?? {}} refetch={refetch} syllabi={syllabi ?? []} />
+          <BuilderForm key={quiz.id} quiz={quiz} classes={classes ?? []} gradebooksMap={gradebooks} refetch={refetch} syllabi={syllabi ?? []} />
         </>
       ) : (
         <div className="max-w-3xl mt-6">
