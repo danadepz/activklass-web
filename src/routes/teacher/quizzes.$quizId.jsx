@@ -1537,16 +1537,26 @@ export default function QuizBuilderPage() {
   // Load all teacher classes
   const { data: classes } = useTeacherClasses()
 
-  // Load all teacher gradebooks
+  /* One read per class, keyed by the class id -- deliberately NOT a query over
+     the `gradebooks` collection. The rules guard `gradebooks/{classId}` through
+     a get() on the parent class, and on a list there is no classId to bind, so
+     the get() resolves to null and the whole query is refused (proven against
+     the real rules engine: "Null value error" at the gradebooks read rule).
+     That refusal is silent here -- `data` just stays undefined -- and the
+     publish check then reads it as "this class has no Grade Config", for every
+     teacher and every quiz, however well configured the class really was. A
+     read by document id is what the rules can prove, and is the shape
+     `hooks/useTeacherStudents.js` already uses for the same documents. */
+  const classIds = (classes ?? []).map((c) => c.id)
   const { data: gradebooks } = useQuery({
-    queryKey: ['fs-gradebooks', profile?.id],
+    queryKey: ['fs-gradebooks', profile?.id, classIds],
     queryFn: async () => {
-      const snap = await getDocs(
-        query(collection(db, 'gradebooks'), where('teacher_id', '==', profile.id)),
+      const snaps = await Promise.all(
+        classIds.map((id) => getDoc(doc(db, 'gradebooks', id))),
       )
-      return Object.fromEntries(snap.docs.map((d) => [d.id, d.data()]))
+      return Object.fromEntries(snaps.filter((s) => s.exists()).map((s) => [s.id, s.data()]))
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.id && classIds.length > 0,
   })
 
   const assignedClasses = (classes ?? []).filter((c) => (quiz?.class_ids ?? []).includes(c.id))
