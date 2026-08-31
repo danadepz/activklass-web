@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { Timestamp, addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import {
   emailError,
@@ -33,7 +33,10 @@ import { BookOpen, Users, Check } from '@/components/icons'
 import { ID_TYPES } from '@/routes/pending-verification'
 
 const FRIENDLY_ERRORS = {
-  'auth/email-already-in-use': 'That email is already in use. Try signing in instead.',
+  // Only ever reached once signing in with the same password has also been
+  // refused (createAccount below), so the address is not theirs to finish.
+  'auth/email-already-in-use':
+    'That email already has an account, and this password does not match it. Sign in with the right password, reset it from "Forgot your password?", or use a different email address.',
   'auth/weak-password': 'Password must be at least 6 characters.',
   'auth/invalid-email': 'That email address is not valid.',
 }
@@ -220,7 +223,17 @@ export default function Register() {
     try {
       await createAccount()
     } catch (err) {
-      setError(FRIENDLY_ERRORS[err.code] ?? err.message ?? 'Registration failed.')
+      // Raw exception text is not a message anyone should have to read, and
+      // once step 1 has run the account exists: whatever failed after it, the
+      // way back in is the SAME email and password, which now finishes the
+      // half-made account instead of being refused as taken.
+      console.error('[register] could not finish the account:', err.code ?? '', err)
+      setError(
+        FRIENDLY_ERRORS[err.code] ??
+          (auth.currentUser
+            ? 'Your account was created, but we could not finish setting it up. Try again with the same email address and password.'
+            : 'We could not create your account. Check your connection and try again.'),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -254,10 +267,42 @@ export default function Register() {
       if (clash) { setError(clash); return }
     }
     // 1. Firebase identity — skipped when completing an existing session.
+    let created = false
     if (!auth.currentUser) {
-      // Trimmed, because sign-in trims too (lib/logins.js) — the address the
-      // account is created under and the one typed later must agree.
-      await createUserWithEmailAndPassword(auth, form.email.trim(), form.password)
+      try {
+        // Trimmed, because sign-in trims too (lib/logins.js) — the address the
+        // account is created under and the one typed later must agree.
+        await createUserWithEmailAndPassword(auth, form.email.trim(), form.password)
+        created = true
+      } catch (err) {
+        if (err.code !== 'auth/email-already-in-use') throw err
+        // A run that failed at step 2 or 3 left the account behind. The
+        // `completing` walk picks that up, but only while the session lives —
+        // sign out, another browser, another machine, and the retry lands here
+        // instead, where "already in use" used to be the end of the road: taken
+        // on registration, and no profile to sign in with either. The same
+        // email AND password is proof enough it is the same person, so sign
+        // them in and finish the account they already own.
+        try {
+          await signInWithEmailAndPassword(auth, form.email.trim(), form.password)
+        } catch {
+          throw err // someone else's address, or not the password it was made with
+        }
+      }
+    }
+    // Whenever the account was already there — this session's half-made one, or
+    // the one just signed into — it may be a FINISHED account, and step 3 does
+    // not merge: it would rewrite that person's name, school and role with
+    // whatever this form is holding. Only a missing profile is a registration
+    // left to finish; a complete one just means they are signed in, so take
+    // them in instead.
+    if (!created) {
+      const existing = await getDoc(doc(db, 'users', auth.currentUser.uid))
+      if (existing.exists()) {
+        await refreshProfile()
+        navigate('/portal')
+        return
+      }
     }
     // 2. A newly declared school goes into the public directory first, so
     // the next teacher from that school finds it in the dropdown. Requires
