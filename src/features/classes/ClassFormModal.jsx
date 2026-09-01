@@ -212,8 +212,16 @@ function FieldError({ id, message }) {
   return <p id={id} role="alert" className="mt-1 text-xs text-red-600">{message}</p>
 }
 
-function buildMeta(form) {
-  return {
+/* `writeCollegeFields` false leaves units and semester exactly as they are
+   stored. Those are the two inputs only the College form renders, so writing
+   null from a form that never showed them would discard a value the teacher
+   was never given the chance to keep -- every list would stop printing a
+   semester nobody cleared. An edit that opened as College still writes both,
+   so moving a class down to K-12 clears them, which is a choice made on
+   screen. */
+export function buildMeta(form, { writeCollegeFields = true } = {}) {
+  const isCollege = form.education_level === 'College'
+  const meta = {
     education_level: form.education_level,
     subject_code: form.subject_code.trim(),
     subject: form.subject.trim(),
@@ -222,9 +230,12 @@ function buildMeta(form) {
     grade_level: form.grade_level.trim(),
     max_students: Number.parseInt(form.max_students, 10),
     academic_year: form.academic_year.trim() || '2026-2027',
-    units: form.education_level === 'College' && form.units.trim() ? Number.parseFloat(form.units) : null,
-    semester: form.education_level === 'College' && form.semester ? form.semester : null,
   }
+  if (writeCollegeFields) {
+    meta.units = isCollege && form.units.trim() ? Number.parseFloat(form.units) : null
+    meta.semester = isCollege && form.semester ? form.semester : null
+  }
+  return meta
 }
 
 export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, onClose, onSaved }) {
@@ -235,6 +246,10 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     return { ...base, academic_year: normalizeAcademicYear(base.academic_year).value }
   })
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
+
+  /* Was the College block on screen when this form opened? An edit that never
+     showed it leaves units and semester alone instead of nulling them. */
+  const [openedAsCollege] = useState(() => form.education_level === 'College')
 
   /* The capacity this class was already saved with. Held so validate() can let
      an over-cap number through untouched while still refusing a new one -- see
@@ -411,7 +426,9 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     setSaving(true)
     setError(null)
     try {
-      const meta = buildMeta(form)
+      const meta = buildMeta(form, {
+        writeCollegeFields: mode !== 'edit' || educationLevel === 'College' || openedAsCollege,
+      })
       let targetRef
       if (mode === 'edit') {
         targetRef = doc(db, 'classes', classId)
