@@ -528,9 +528,14 @@ function UserRow({ user, isSelf, onChanged }) {
     // The length rule now blocks inside the dialog instead of failing after
     // it closes — the old prompt() sent you back to the row with an error and
     // an empty field, having thrown the typed password away.
+    // "should change it" undersold what actually happens: the reset endpoint
+    // stamps is_temp_password back on (backend app/api/admin.py:700), so the
+    // holder is held on /change-password until they pick their own. Saying
+    // "should" leaves the admin thinking a weak reset stays weak -- the same
+    // silence that made the create form read as having no rule at all (T-16).
     const pw = await promptDialog({
       title: 'Set a new password',
-      message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they should change it after signing in.`,
+      message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they will be asked to choose a new password the next time they sign in.`,
       label: 'New password',
       placeholder: `e.g. ${DEFAULT_PASSWORD}`,
       confirmLabel: 'Set password',
