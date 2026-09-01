@@ -196,6 +196,17 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
       ...(level ? (isG12 ? { grade_level: level } : { year_level: level }) : {}),
     }
 
+    /* An account is not an entry that can be taken back: the sign-in exists
+       the moment this returns, and the only way out is to deactivate it. The
+       login is quoted because it is derived, not typed -- the last six digits
+       of the number above -- so this is the first place the teacher sees the
+       thing they will be reading out. */
+    if (!(await confirmDialog({
+      title: `Create an account for ${form.firstName.trim()} ${form.lastName.trim()}?`,
+      message: `They are enrolled in ${chosen ? classLabel(chosen) : 'the class'} and sign in as ${loginPreview}. An account cannot be deleted afterwards, only deactivated.`,
+      confirmLabel: 'Create account',
+    }))) return
+
     setBusy(true)
     try {
       const res = await provisionInto(form.classId, [row])
@@ -336,6 +347,21 @@ function BulkCreate({ classes, prefix, onDone }) {
 
   async function upload() {
     if (!classId || !ready.length) return
+    /* Same one-shot request as the admin bulk upload: every row is created
+       server-side in a single call, so this is the last point where backing
+       out changes anything. The rows the file already lost to validation are
+       named here rather than only in the list above it. */
+    const dropped = rows.length - ready.length
+    if (!(await confirmDialog({
+      title: `Create ${ready.length} account${ready.length === 1 ? '' : 's'}?`,
+      message:
+        (dropped
+          ? `${dropped} row${dropped === 1 ? ' is' : 's are'} incomplete and will be left out. `
+          : '') +
+        'Each remaining row becomes a separate account, enrolled and able to sign in straight away. Creating cannot be stopped once it starts.',
+      confirmLabel: 'Create accounts',
+    }))) return
+
     setBusy(true); setResult(null)
     try {
       const res = await provisionInto(classId, ready)

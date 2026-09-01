@@ -6,6 +6,7 @@ import { emptyClassForm } from '@/lib/classForm'
 import { useAuth } from '@/context/useAuth'
 import { uploadAttachment } from '@/lib/attachments'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 
 /* Split so the error border replaces the normal one rather than sitting beside
@@ -395,6 +396,18 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
       if (typeof el?.focus === 'function') el.focus({ preventScroll: true })
       return
     }
+    /* Asked after validation, not before: a question about a form that is
+       about to be rejected is a question about nothing. The class is named
+       back rather than described, because the field the teacher most often
+       gets wrong here is which section they are editing. */
+    const label = [form.subject_code, form.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ')
+    if (!(await confirmDialog({
+      title: mode === 'edit' ? `Save changes to "${label}"?` : `Create "${label}"?`,
+      message: mode === 'edit'
+        ? 'Everyone on the roster sees the updated details the next time they open the class. Nothing recorded against it changes.'
+        : 'It joins your class list with an empty roster — you enrol students from the class page afterwards.',
+      confirmLabel: mode === 'edit' ? 'Save changes' : 'Create class',
+    }))) return
     setSaving(true)
     setError(null)
     try {
