@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -6,6 +6,8 @@ import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } 
 import { approveRequest } from '@/lib/superadmin'
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
+import MessageDialog from './MessageDialog'
+import { PENDING_REQUESTS_KEY, fetchPendingRequests } from './queues'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Dialog, Field, inputCls } from './index'
 
@@ -26,15 +28,6 @@ import { Dialog, Field, inputCls } from './index'
  */
 
 const CALENDAR_LABEL = Object.fromEntries(CALENDARS.map((c) => [c.value, c.label]))
-
-async function fetchPending() {
-  const snap = await getDocs(
-    query(collection(db, 'subscription_requests'), where('status', '==', 'pending')),
-  )
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.created_at?.seconds ?? 0) - (b.created_at?.seconds ?? 0))
-}
 
 /* The last few approvals, so the notice can be copied again after the
    dialog is gone -- a lost email must not mean a lost school. */
@@ -61,7 +54,10 @@ function n(v) {
 
 export default function SuperAdminRequestsPage() {
   const queryClient = useQueryClient()
-  const { data: rows, isLoading, error } = useQuery({ queryKey: ['sa-requests'], queryFn: fetchPending })
+  const { data: rows, isLoading, error } = useQuery({
+    queryKey: PENDING_REQUESTS_KEY,
+    queryFn: fetchPendingRequests,
+  })
   const [declining, setDeclining] = useState(null) // request id whose note box is open
   const [note, setNote] = useState('')
   const [approving, setApproving] = useState(null) // the request open in the approve dialog
@@ -101,7 +97,7 @@ export default function SuperAdminRequestsPage() {
       toast.success(`${school} declined. Their teacher account is untouched.`)
       setDeclining(null)
       setNote('')
-      queryClient.invalidateQueries({ queryKey: ['sa-requests'] })
+      queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
     },
     onError: () => toast.error('That did not save. Check the rules deploy and try again.'),
   })
@@ -248,14 +244,22 @@ export default function SuperAdminRequestsPage() {
                 signInUrl: signInUrl(),
               }),
             })
-            queryClient.invalidateQueries({ queryKey: ['sa-requests'] })
+            queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
             queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
             queryClient.invalidateQueries({ queryKey: ['sa-subscribers'] })
           }}
         />
       )}
 
-      {message && <MessageDialog message={message} onClose={() => setMessage(null)} />}
+      {message && (
+        <MessageDialog
+          title={`Approval notice — ${message.school}`}
+          subtitle="Sent by hand: copy this into an email to the school. Nothing goes out automatically."
+          message={message}
+          copiedHint="Copied. Paste it into an email to the school."
+          onClose={() => setMessage(null)}
+        />
+      )}
 
       {approved?.length > 0 && (
         <div className="mt-10">
@@ -288,62 +292,6 @@ export default function SuperAdminRequestsPage() {
         </div>
       )}
     </div>
-  )
-}
-
-/**
- * The notice to send, with a Copy button.
- *
- * Plain text so it pastes into any mail client. The subject is copied with
- * it, on its own line, because the person sending has to type it otherwise
- * and the subject is what the school searches for later.
- */
-function MessageDialog({ message, onClose }) {
-  const box = useRef(null)
-  const full = `Subject: ${message.subject}\n\n${message.body}`
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(full)
-      toast.success('Copied. Paste it into an email to the school.')
-    } catch {
-      // Clipboard access can be refused on a forwarded port; fall back to
-      // selecting the text so one keystroke does the same job.
-      box.current?.select()
-      toast.error('Copy was blocked by the browser — the text is selected, press Ctrl+C.')
-    }
-  }
-
-  return (
-    <Dialog
-      title={`Approval notice — ${message.school}`}
-      subtitle="Sent by hand: copy this into an email to the school. Nothing goes out automatically."
-      onClose={onClose}
-    >
-      <textarea
-        ref={box}
-        readOnly
-        rows={18}
-        value={full}
-        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs leading-relaxed text-zinc-200"
-      />
-      <div className="mt-4 flex gap-3">
-        <button
-          type="button"
-          onClick={copy}
-          className="flex-1 rounded-lg bg-amber-400 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-300"
-        >
-          Copy message
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 rounded-lg border border-zinc-800 py-2.5 text-sm font-semibold text-zinc-400"
-        >
-          Done
-        </button>
-      </div>
-    </Dialog>
   )
 }
 

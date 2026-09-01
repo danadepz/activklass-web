@@ -1,11 +1,19 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Timestamp, collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { Timestamp, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { trialEndsFrom } from '@/lib/pricing'
+import { teacherApprovalMessage } from '@/lib/approvalMessage'
 import { db } from '@/lib/firebase'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ID_TYPES } from '@/routes/pending-verification'
+import MessageDialog from './MessageDialog'
+import {
+  APPROVED_TEACHERS_KEY,
+  PENDING_TEACHERS_KEY,
+  fetchApprovedTeachers,
+  fetchPendingTeachers,
+} from './queues'
 
 /**
  * Identity checks for self-registered teachers.
@@ -26,18 +34,7 @@ import { ID_TYPES } from '@/routes/pending-verification'
 
 const LABEL = Object.fromEntries(ID_TYPES.map((t) => [t.value, t.label]))
 
-async function fetchPending() {
-  const snap = await getDocs(
-    query(
-      collection(db, 'users'),
-      where('role', '==', 'teacher'),
-      where('verification_status', '==', 'pending'),
-    ),
-  )
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.verification_submitted_at?.seconds ?? 0) - (b.verification_submitted_at?.seconds ?? 0))
-}
+const signInUrl = () => `${window.location.origin}/login`
 
 function when(ts) {
   const d = ts?.toDate?.()
@@ -46,12 +43,25 @@ function when(ts) {
 
 export default function SuperAdminVerificationsPage() {
   const queryClient = useQueryClient()
-  const { data: rows, isLoading, error } = useQuery({ queryKey: ['sa-verifications'], queryFn: fetchPending })
+  const { data: rows, isLoading, error } = useQuery({
+    queryKey: PENDING_TEACHERS_KEY,
+    queryFn: fetchPendingTeachers,
+  })
+  const { data: approved } = useQuery({
+    queryKey: APPROVED_TEACHERS_KEY,
+    queryFn: fetchApprovedTeachers,
+  })
   const [rejecting, setRejecting] = useState(null) // uid whose note box is open
   const [note, setNote] = useState('')
+  const [message, setMessage] = useState(null) // { name, subject, body } to copy
 
   const review = useMutation({
     mutationFn: async ({ uid, status, note }) => {
+      /* Computed once and both written and returned, so the date in the
+         letter is the date in the database. Building it again in onSuccess
+         would be a second clock reading, and a teacher told the wrong last
+         day of their free month has been told the wrong thing. */
+      const trialEndsAt = status === 'approved' ? trialEndsFrom() : null
       await updateDoc(doc(db, 'users', uid), {
         verification_status: status,
         verification_note: status === 'rejected' ? note.trim() : '',
@@ -60,15 +70,32 @@ export default function SuperAdminVerificationsPage() {
         // registered — the days spent waiting on us are not theirs to lose.
         ...(status === 'approved' && {
           subscription_status: 'trial',
-          trial_ends_at: Timestamp.fromDate(trialEndsFrom()),
+          trial_ends_at: Timestamp.fromDate(trialEndsAt),
         }),
       })
+      return { trialEndsAt }
     },
-    onSuccess: (_, { status, name }) => {
+    onSuccess: ({ trialEndsAt }, { status, name, teacher }) => {
       toast.success(status === 'approved' ? `${name} approved — their account is open and the free month has started.` : `${name} sent back with your note.`)
+      /* Approving opens the account silently: nothing reaches the teacher,
+         who is still watching /pending-verification. No mail provider exists
+         (Spark, no Cloud Functions), so the notice is written here and sent
+         by hand, exactly as the school requests queue does it. */
+      if (status === 'approved') {
+        setMessage({
+          name,
+          ...teacherApprovalMessage({
+            firstName: teacher?.first_name,
+            email: teacher?.email,
+            trialEndsAt,
+            signInUrl: signInUrl(),
+          }),
+        })
+      }
       setRejecting(null)
       setNote('')
-      queryClient.invalidateQueries({ queryKey: ['sa-verifications'] })
+      queryClient.invalidateQueries({ queryKey: PENDING_TEACHERS_KEY })
+      queryClient.invalidateQueries({ queryKey: APPROVED_TEACHERS_KEY })
     },
     onError: () => toast.error('That did not save. Check the rules deploy and try again.'),
   })
@@ -137,7 +164,7 @@ export default function SuperAdminVerificationsPage() {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => review.mutate({ uid: t.id, status: 'approved', name })}
+                      onClick={() => review.mutate({ uid: t.id, status: 'approved', name, teacher: t })}
                       className="rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
                     >
                       Approve
@@ -182,6 +209,55 @@ export default function SuperAdminVerificationsPage() {
             )
           })}
         </ul>
+      )}
+
+      {message && (
+        <MessageDialog
+          title={`Welcome notice — ${message.name}`}
+          subtitle="Sent by hand: copy this into an email to the teacher. Nothing goes out automatically."
+          message={message}
+          copiedHint="Copied. Paste it into an email to the teacher."
+          onClose={() => setMessage(null)}
+        />
+      )}
+
+      {approved?.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            The notice is sent by hand. Open it again here if it did not go out.
+          </p>
+          <ul className="mt-3 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/40">
+            {approved.map((t) => {
+              const name = `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim() || t.email
+              return (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                  <div className="min-w-0 text-sm">
+                    <span className="font-semibold text-zinc-200">{name}</span>
+                    <span className="text-zinc-500"> · {t.email} · {when(t.verification_reviewed_at)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMessage({
+                        name,
+                        ...teacherApprovalMessage({
+                          firstName: t.first_name,
+                          email: t.email,
+                          trialEndsAt: t.trial_ends_at,
+                          signInUrl: signInUrl(),
+                        }),
+                      })
+                    }
+                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500"
+                  >
+                    Welcome notice
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       )}
     </div>
   )

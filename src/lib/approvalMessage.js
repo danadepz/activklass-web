@@ -78,3 +78,55 @@ export function approvalMessage({
 
   return { subject, body }
 }
+
+/**
+ * The message a self-registered teacher receives when their ID check passes.
+ *
+ * Hand-sent for the same reason as the school notice above, but a different
+ * letter, because a solo teacher arrives differently: nobody issued them
+ * anything. They made the account and chose the password themselves and have
+ * been sitting on /pending-verification since, so the two questions this has
+ * to answer are "am I in?" and "what do I sign in with?" -- and the answer to
+ * the second is nothing new. Saying so explicitly is the point: the schools
+ * letter can talk about credentials we created, and this one must not, or a
+ * teacher goes looking for a password that was never sent.
+ *
+ * @param {object} p
+ * @param {string} [p.firstName]  for the greeting
+ * @param {string} p.email        what they registered with, and sign in with
+ * @param {Date|{toDate:Function}|string|null} [p.trialEndsAt]
+ * @param {string} p.signInUrl
+ * @returns {{ subject: string, body: string }}
+ */
+export function teacherApprovalMessage({ firstName, email, trialEndsAt, signInUrl }) {
+  const until = fmtDate(trialEndsAt)
+  const trialLine = until
+    ? `Your first 30 days are free, until ${until}. Nothing is due today; we will send the invoice before then.`
+    : 'Your first 30 days are free. Nothing is due today; we will send the invoice before then.'
+
+  const subject = 'Your ActivKlass account is verified'
+  const body = [
+    `Hi ${firstName || 'there'},`,
+    '',
+    'We have checked the ID you sent us, and your ActivKlass account is now open.',
+    '',
+    `Sign in: ${signInUrl}`,
+    `Email: ${email}`,
+    'Password: the one you chose when you registered. We did not change it, and there is no activation link to click.',
+    '',
+    trialLine,
+    '',
+    'First steps once you are in:',
+    '1. Create your first class on the Classes page -- subject, section, and school year.',
+    '2. Add your students on the Students page, one at a time or from a file. Each one gets a login and a starting password for you to hand out.',
+    '3. Set up the gradebook for that class before you enter any scores.',
+    '',
+    'The question bank stays locked during the free trial; everything else is open.',
+    '',
+    'Reply to this email if anything does not look right.',
+    '',
+    '— The ActivKlass team',
+  ].join('\n')
+
+  return { subject, body }
+}
