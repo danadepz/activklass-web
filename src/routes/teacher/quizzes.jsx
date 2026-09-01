@@ -1161,7 +1161,7 @@ export default function QuizzesIndexPage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-[clamp(28px,4vw,36px)]" style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: ink }}>Quiz Manager</h2>
+          <h2 className="text-[clamp(28px,4vw,36px)]" style={{ ...serif, color: ink }}>Quiz Manager</h2>
           <p className="text-slate-500 mt-1">
             Build, generate, and manage all your quizzes globally.
           </p>

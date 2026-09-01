@@ -175,7 +175,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
     return (
       <div
         className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 md:px-8"
-        style={{ background: navy, color: ink, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+        style={{ background: navy, color: ink, fontFamily: sans }}
       >
         {/* the wandering rings from the brand panel, five of them, behind the container */}
         <div aria-hidden="true" style={{ position: 'absolute', top: -160, left: -120, width: 480, height: 480, border: '1px solid rgba(245,197,24,0.18)', borderRadius: '50%', animation: 'ak-wander-a 46s linear infinite' }} />
@@ -265,7 +265,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
   return (
     <div
       className="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr]"
-      style={{ background: cream, color: ink, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+      style={{ background: cream, color: ink, fontFamily: sans }}
     >
       {/* LEFT — navy brand panel (desktop only); pinned so it stays in view
           while a tall form (register) scrolls the right column. */}

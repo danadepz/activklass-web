@@ -91,7 +91,7 @@ export default function StudentLayout() {
         minHeight: '100vh',
         background: '#EEF1F6',
         color: '#0A1733',
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+        fontFamily: sans,
       }}
     >
       {/* TOP NAV */}
@@ -322,7 +322,7 @@ export default function StudentLayout() {
             textAlign: 'center'
           }}>
             <h3 style={{
-              fontFamily: "'DM Serif Display', Georgia, serif",
+              ...serif,
               fontSize: 22,
               color: '#0A1733',
               margin: '0 0 12px 0'

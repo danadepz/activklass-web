@@ -68,23 +68,56 @@ export const orangeDeep = '#A85410'
 // Typography
 //
 // Same story as the palette: `const serif = {...}` was redeclared in 25 files,
-// mono in 21, sans in 18. Ready-made style objects (serif/mono) spread
-// straight into style={{ ...serif }}; the *Family strings are for when a
+// mono in 21, sans in 18. Ready-made style objects (heading/mono) spread
+// straight into style={{ ...heading }}; the *Family strings are for when a
 // fontFamily value is needed on its own.
+//
+// ONE FACE, 2026-09-01. Until now the app rendered three: DM Serif Display on
+// headings, Plus Jakarta Sans on body, and Lexend on the landing page. That
+// was deliberate and it was applied from here, so it never drifted -- but a
+// tester read the serif/sans pairing as inconsistency and asked for a single
+// sans-serif throughout, and the owner took the suggestion. Every family below
+// is now the same Plus Jakarta Sans stack, which is why 44 importing files
+// needed no edit.
+//
+// WHAT REPLACED THE SERIF IS WEIGHT, and that is not optional. Tailwind's
+// preflight resets h1-h6 to `font-weight: inherit`, so nothing in this app is
+// bold by default -- a heading read as a heading purely because of its face,
+// and 134 of the 135 sites that spread the token never set a weight. Drop the
+// serif without adding weight and every heading collapses into body copy. So
+// `heading` carries fontWeight 700, and index.css gives the same to the bare
+// h1-h4 rule for the headings that inherit rather than spread. A call site
+// that wants something else still wins: the token is spread first.
 // ---------------------------------------------------------------------------
 
-export const serifFamily = "'DM Serif Display', Georgia, serif"
+/** The one face. Every family token below is this stack, byte for byte the
+ *  same as `--font-sans` / `--font-display` in index.css. */
+export const sansFamily =
+  "'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+
+/** Headings and display text. Same family as body -- size and weight are what
+ *  separate them now, so prefer the `heading` object over this string. */
+export const headingFamily = sansFamily
+
 export const monoFamily = "'JetBrains Mono', ui-monospace, monospace"
-export const sansFamily = "'Plus Jakarta Sans', sans-serif"
 
-/** Used by routes/index.jsx only; a different display face from the rest. */
-export const serifAltFamily = "'Lexend', 'Inter', sans-serif"
-/** Same stack as sansFamily plus a system-ui fallback. */
-export const sansUiFamily = "'Plus Jakarta Sans', system-ui, sans-serif"
+/**
+ * Historical names, kept because 44 files import them and renaming would mean
+ * editing every lane at once. None of them is serif any more and none differs
+ * from the others; new code should use `heading` / `headingFamily` /
+ * `sansFamily`.
+ */
+export const serifFamily = headingFamily
+export const serifAltFamily = headingFamily
+export const sansUiFamily = sansFamily
 
-export const serif = { fontFamily: serifFamily }
+/** Spread into style={{ ...heading }}. The weight is what makes it a heading. */
+export const heading = { fontFamily: headingFamily, fontWeight: 700 }
 export const mono = { fontFamily: monoFamily }
-export const serifAlt = { fontFamily: serifAltFamily }
+
+/** @deprecated aliases of `heading` -- see the note above. */
+export const serif = heading
+export const serifAlt = heading
 
 /** Hairline border colour used for card and table edges throughout. */
 export const line = 'rgba(14,42,92,0.08)'

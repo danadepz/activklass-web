@@ -16,29 +16,22 @@
 /*
  * These two must agree with theme.js, which OWNERSHIP.md names as the single
  * source of truth for typography. They did not, and the app rendered three
- * faces where it meant to render two:
+ * faces where it meant to render two -- --font-display said Lexend while
+ * theme.js's heading token said DM Serif Display, so a heading's face depended
+ * on whether its file happened to spread the token; --font-sans said Inter
+ * while theme.js said Plus Jakarta Sans, the same split on body copy.
  *
- *   --font-display was Lexend, while theme.js's `serif` (spread onto 88
- *   headings) asked for DM Serif Display. So a heading's face depended on
- *   whether its file happened to spread the token -- 88 said DM Serif (and got
- *   Georgia, since the face was not loaded; it is now, see index.html) and 28
- *   inherited Lexend.
+ * As of 2026-09-01 there is one face and the question cannot recur: both
+ * variables are the same stack, and it is the same stack theme.js exports as
+ * `sansFamily`. A tester asked for a single sans-serif throughout and the
+ * owner took it; DM Serif Display and Lexend are no longer loaded.
  *
- *   --font-sans was Inter, while theme.js's `sansFamily` -- imported by 26
- *   files -- asked for Plus Jakarta Sans. Same split, on body copy.
- *
- * Both now point at what theme.js declares. Lexend is still loaded and still
- * the landing page's face: routes/index.jsx spreads `serifAlt` explicitly on
- * all ten of its headings, which theme.js documents as deliberate.
- *
- * To go the other way instead -- standardise on Lexend and Inter -- change
- * serifFamily/sansFamily in theme.js and these two lines together. Changing
- * one without the other is what produced the split in the first place.
+ * To change the face, change it in theme.js and in both lines here together.
+ * Changing one without the other is what produced the split in the first place.
  */
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "DM Serif Display", Georgia, serif;
-
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 @layer base {
@@ -64,9 +57,15 @@
     overflow-x: hidden;
   }
 
-  /* Headings use the humanist display face; body inherits Inter. */
+  /* Headings are the same face as body copy, so weight and size are the only
+     things marking them out. The font-weight is load-bearing, not decoration:
+     Tailwind's preflight resets h1-h6 to `font-weight: inherit`, so without it
+     a heading that does not spread theme.js's `heading` token renders at 400
+     and reads as a paragraph. Anything wanting a different weight -- a utility
+     class, an inline style -- still overrides this base-layer rule. */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
+    font-weight: 700;
     letter-spacing: -0.01em;
   }
 

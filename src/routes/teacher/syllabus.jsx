@@ -5,7 +5,7 @@ import { db } from '@/lib/firebase'
 import { generateSyllabus, MELC_STATUS_LABEL } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
 import { Plus, Trash, Edit, Sparkles } from '@/components/icons'
-import { ink } from '@/theme'
+import { ink, heading } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
@@ -901,7 +901,7 @@ export default function SyllabusIndexPage() {
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-[clamp(28px,4vw,36px)]" style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: ink }}>Syllabus & LMS Manager</h2>
+          <h2 className="text-[clamp(28px,4vw,36px)]" style={{ ...heading, color: ink }}>Syllabus & LMS Manager</h2>
           <p className="text-slate-500 mt-1">
             Create modules globally, attach learning materials, and share them across your classes.
           </p>

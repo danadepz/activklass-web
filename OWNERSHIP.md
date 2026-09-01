@@ -36,7 +36,17 @@ logic together, so a page belongs to exactly one pane at a time.
 src/theme.js          ← all colour + typography tokens
 src/index.css         ← global styles
 src/components/**     ← shared presentational components
+index.html            ← the document shell: which font faces are loaded
 ```
+
+**`index.html` added 2026-09-01 (T-15 build pane).** It was in no lane. It is
+here rather than under Shared because the only thing in it any pane ever edits
+is the Google Fonts `<link>`, and which faces load has to change in the same
+commit as `theme.js` — a face removed from the tokens but still loaded is a
+wasted request, and one added to the tokens but not loaded falls back silently,
+which is exactly how the app came to render Georgia where it meant DM Serif.
+If a pane ever needs the `<head>` for something that is not type — a meta tag,
+a script — that is not this lane's call and should be announced.
 
 `theme.js` is the whole palette and type system. Changing `navy` there
 restyles all 31 files that use it. Before this existed every page redeclared

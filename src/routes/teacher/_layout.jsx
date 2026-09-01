@@ -182,7 +182,7 @@ export default function TeacherLayout() {
         minHeight: '100vh',
         background: '#EEF1F6',
         color: '#0A1733',
-        fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+        fontFamily: sans,
       }}
     >
       {/* TOP NAV */}

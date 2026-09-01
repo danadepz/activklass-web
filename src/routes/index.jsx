@@ -2,14 +2,16 @@ import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
-import { ink, navy, navyDeep, gold, goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono, cream } from '@/theme'
+import { ink, navy, navyDeep, gold, goldDeep, blue, inkMuted as slate, muted, line, serifAlt as serif, mono, cream, sansFamily} from '@/theme'
 
 /* ------------------------------------------------------------------ *
  * Landing — marketing page for ActivKlass.
  *
  * This page deliberately uses its own navy + gold + cream brand
- * identity (Lexend / Plus Jakarta Sans / JetBrains Mono),
- * distinct from the indigo product UI. The palette lives here as inline
+ * identity, distinct from the indigo product UI. Its type is no longer
+ * distinct: it used to set headings in Lexend, and since 2026-09-01 the
+ * whole app is one sans face (theme.js), so `serifAlt` here resolves to
+ * the same stack every other screen uses. The palette lives here as inline
  * styles because the values are bespoke to this page; structural layout
  * stays in Tailwind so the page is responsive. The ak-float / ak-pulse /
  * ak-drift keyframes are defined in index.css.
@@ -177,7 +179,7 @@ export default function Landing() {
   const stepsGridRef = useRevealOnScroll()
   const auditCardRef = useRevealOnScroll()
   return (
-    <div style={{ background: '#FAFAF6', color: ink, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+    <div style={{ background: '#FAFAF6', color: ink, fontFamily: sansFamily }}>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:px-4 focus:py-2 focus:text-white"
