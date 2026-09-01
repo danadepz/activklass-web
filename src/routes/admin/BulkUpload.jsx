@@ -9,6 +9,7 @@ import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/the
 import { confirmDialog } from '@/components/ui/dialogs'
 import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
 import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
+import { summarizeFailures } from './bulkFailures'
 import Notice from './Notice'
 import CardHead from './CardHead'
 import RolePicker from './RolePicker'
@@ -167,6 +168,8 @@ export default function BulkUpload({ onDone, settings, users }) {
   // Every row, not the eight the preview shows — the line under the table is
   // the only place a repeat on row 40 ever gets mentioned.
   const dupes = useMemo(() => rows.map((r, i) => rowDuplicate(r, i, rows, users)), [rows, users])
+  // What came back failed, grouped by reason — see bulkFailures.js.
+  const failures = useMemo(() => summarizeFailures(result?.failed), [result])
   const reusedEmails = dupes.filter((d) => d?.tone === 'error').length
   const sharedNames = dupes.filter((d) => d?.tone === 'warn').length
 
@@ -242,8 +245,10 @@ export default function BulkUpload({ onDone, settings, users }) {
       if (res.summary.created) onDone()
     } catch (err) {
       // A 400 with a body still carries per-row detail worth showing.
+      // No `row`: the request itself fell over, so no one row failed — the
+      // panel says the reason plainly instead of pointing at row 2.
       setResult(err.body ?? { summary: { total: rows.length, created: 0, failed: rows.length },
-                              failed: [{ row: 0, reason: err.message }], created: [] })
+                              failed: [{ reason: err.message }], created: [] })
     } finally {
       setBusy(false)
     }
@@ -456,17 +461,26 @@ export default function BulkUpload({ onDone, settings, users }) {
               ? ' — the created accounts are live; fix the failed rows and upload just those.'
               : ''}
           </Notice>
-          {result.failed?.length > 0 && (
+          {/* One line per reason, not per row. A hundred rows failing the
+              same check used to print a hundred all-but-identical lines and
+              bury the one thing they said (andecobs-30). */}
+          {failures.length > 0 && (
             <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 13, color: muted }}>
-              {result.failed.map((f, i) => (
-                <li key={i}>
-                  <span style={{ ...mono, fontSize: 12 }}>row {f.row + 2}</span>{' '}
-                  {f.email ? <strong>{f.email}</strong> : null} — {f.reason}
+              {failures.map((f) => (
+                <li key={f.reason} style={{ marginTop: 3 }}>
+                  {f.rows
+                    ? <>
+                        <strong>{f.count} row{f.count === 1 ? '' : 's'}</strong> — {f.reason}
+                        <span style={{ ...mono, fontSize: 12, color: faint }}>
+                          {' '}· row{f.count === 1 ? '' : 's'} {f.rows}
+                        </span>
+                      </>
+                    : f.reason}
                 </li>
               ))}
             </ul>
           )}
-          {result.failed?.length > 0 && (
+          {failures.some((f) => f.rows) && (
             <p style={{ fontSize: 12, color: faint, marginTop: 8 }}>
               Row numbers match the spreadsheet, counting the header as row 1.
             </p>
