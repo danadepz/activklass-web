@@ -129,13 +129,29 @@ export default function SuperAdminSubscribersPage() {
   const [segment, setSegment] = useState('all')
   const [status, setStatus] = useState('all')
 
-  const { data: plansData } = useQuery({ queryKey: ['sa-plans'], queryFn: fetchPlans })
+  /* staleTime, because both of these are slow enough to notice and neither
+     changes on its own. The plan catalogue is a constant the server compiles
+     in; the subscriber list only moves when someone on this page moves it, and
+     every mutation here already calls `refresh()` to invalidate it. Without a
+     staleTime the query client's default of 0 refetched both on every mount —
+     so switching to Verifications and back, or arriving from a browser Back,
+     paid the full ~1s of /subscribers again for a list that could not have
+     changed. */
+  const { data: plansData } = useQuery({
+    queryKey: ['sa-plans'],
+    queryFn: fetchPlans,
+    staleTime: Infinity,
+  })
   const {
     data,
     isLoading,
     isFetching,
     error,
-  } = useQuery({ queryKey: ['sa-subscribers'], queryFn: fetchSubscribers })
+  } = useQuery({
+    queryKey: ['sa-subscribers'],
+    queryFn: fetchSubscribers,
+    staleTime: 5 * 60 * 1000,
+  })
 
   const plans = plansData?.plans ?? {}
   // Memoised so the `?? []` fallback is not a fresh array on every render,
