@@ -294,7 +294,7 @@ export default function AnnouncementsPage() {
     deleteMut.mutate(id)
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!form.title.trim() || !form.content.trim()) {
       setFormErr('Title and content are required.')
@@ -311,6 +311,23 @@ export default function AnnouncementsPage() {
       expires_at: form.expires_at || null,
       linked_resource_type: form.linked_resource_type || null,
       linked_resource_id: form.linked_resource_id || null,
+    }
+    /* Posting is the one action here that reaches people the moment it is
+       taken: the bell fires per class, and "All my classes" writes one
+       document per class at once (see the create mutation). Deleting it
+       afterwards cannot unsend it, so the counts are quoted before it goes,
+       not after. No question when there is nothing to post to -- the mutation
+       already says so in words, and asking first would only delay it. */
+    const targets = body.class_id ? classes.filter((c) => c.id === body.class_id) : classes
+    if (targets.length) {
+      const readers = new Set(targets.flatMap((c) => c.student_ids ?? [])).size
+      if (!(await confirmDialog({
+        title: body.category === 'urgent' ? 'Post this as an urgent announcement?' : 'Post this announcement?',
+        message:
+          `It appears in ${targets.length} class${targets.length === 1 ? '' : 'es'} straight away and notifies ` +
+          `${readers} student${readers === 1 ? '' : 's'}. You can delete it later, but anyone who has already read it has seen it.`,
+        confirmLabel: 'Post announcement',
+      }))) return
     }
     createMut.mutate(body)
   }
