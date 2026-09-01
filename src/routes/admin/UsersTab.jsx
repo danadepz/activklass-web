@@ -181,7 +181,15 @@ function CreateUserForm({ onCreated, settings, users }) {
     onSuccess: (res) => {
       const login = res.user.login_id ?? res.user.email
       const pw = form.password || DEFAULT_PASSWORD
-      setDone(`Created. They sign in as ${login} with the password “${pw}” — give them both directly, nothing is emailed.`)
+      // The password half of this line is what an admin questions: the field
+      // accepts it on length alone (tempPasswordError), which reads as no rule
+      // at all unless the screen says why. The weakness is bounded --
+      // is_temp_password holds them on /change-password until they pick their
+      // own -- so the banner has to carry that, not just the string itself.
+      setDone(
+        `Created. They sign in as ${login} with the password “${pw}” — give them both directly, nothing is emailed. `
+        + 'They will be asked to choose a new password the first time they sign in.'
+      )
       setForm(blank)
       setError('')
       onCreated()
@@ -412,6 +420,12 @@ function CreateUserForm({ onCreated, settings, users }) {
           Temporary password <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
                  onChange={set('password')} placeholder={`defaults to ${DEFAULT_PASSWORD}`} />
+          {/* Only a length rule guards this field, deliberately -- but a form
+              that takes “12345678” without a word looks like a form with no rule
+              at all, which is how it gets reported. Say where the bound is. */}
+          <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
+            Temporary on purpose — they will be asked to choose a new password the first time they sign in.
+          </span>
         </label>
       </div>
 
