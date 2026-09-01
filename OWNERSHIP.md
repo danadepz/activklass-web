@@ -161,7 +161,7 @@ For work inside one screen. Each page belongs to one pane at a time.
 | **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx`, `teacher/StudentAccounts.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx` |
-| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx`, `src/lib/csv.js`, `src/lib/xlsx.js` |
+| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx`, `src/lib/csv.js`, `src/lib/xlsx.js`, `src/lib/approvalMessage.js` (+ test) |
 
 **Why Classes is now two lanes.** It was one — `teacher/classes/**` plus the
 four teacher-level pages plus `features/classes/**` — and in practice two panes

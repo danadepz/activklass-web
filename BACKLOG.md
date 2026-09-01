@@ -1276,6 +1276,161 @@ What a teacher on their own subscription sees, built against the account
   (`classes/index.jsx`), logic (`roster.js`, `classes.js`, `useTeacherStudents.js`,
   `useQuizRecordSync.js`, `remediation.js`, `gradeRecovery.js`), quiz (`quizzes.$quizId.jsx`).
 
+## Tester tickets — 2026-08-31 (Discord, first `/tickets` run)
+
+Three open tickets (`andecobs-12`, `triplecookiemonster-14`, `andecobs-17`),
+grouped by cause, most important first. Ticket names are the Discord channels;
+the dumps are in `C:\CAPSTONE\_tools\discord\tickets\`.
+
+1. **Issued-login accounts are tried with the personal email** — blocks testing,
+   web. `andecobs-12`: admin created `um-024019` for Derick, who then signed in
+   with `dericklungcob@gmail.com` and got "Incorrect login or password". Not an
+   auth defect: `lib/logins.js` `toAuthEmail` sends anything with `@` to Firebase
+   as-is, and the personal email is never a credential (the bulk-upload card
+   even says "Never the sign-in"). It is a UX defect, and the most likely one
+   every issued account will hit. Cheapest fix: on `auth/invalid-credential`
+   where the identifier contains `@`, add "Accounts issued by a school sign in
+   with the login ID, e.g. `um-024019`, not an email." Larger fix: resolve a
+   personal email to its login server-side.
+2. **Solo teacher registered, then cannot sign in** — blocks testing, web,
+   unconfirmed. `triplecookiemonster-14`: Kristine created an individual
+   account; `register.jsx` navigates to `/portal` without signing out, so she
+   left and came back. Login with `kristine@email.com` → "Incorrect login or
+   password"; re-registering → "That email is already in use". So the Auth user
+   exists and the password does not match what she typed. `kristine@email.com`
+   is not a real inbox, so "Forgot your password?" cannot rescue it. Owner has
+   asked for more info in the ticket. To check: Firebase Auth console for that
+   user; tell testers to register with a real email.
+3. **Export CSV "not functioning"** — wrong behaviour, web. `andecobs-12`.
+   `lib/csv.js` `downloadCsv` clicks an anchor that is never appended to the
+   document; Firefox (and some download blockers) ignore that. Append the
+   anchor to `document.body` before `click()` and remove it after — same for
+   `lib/xlsx.js`. Also the button is disabled when the filter matches nothing,
+   which reads as broken.
+4. **Download template "delayed or not able to download"** — cosmetic, web.
+   `andecobs-12`. `downloadXlsx` lazy-loads ExcelJS on first click (`await
+   excel()`), so the first download waits on a chunk with no feedback. Put the
+   button in a "Preparing…" state while the promise is pending.
+5. **School & login prefix accepts anything** — wrong data, web + backend
+   **(cross-repo)**. `andecobs-12`: school name `asdfasdfsd`, abbreviation `um`
+   saved. `LoginPrefixCard` has no client validation and `/api/admin/school`
+   should be checked. Decide the rule (e.g. 2–6 letters/digits, lowercase,
+   school name ≥ 3 words or ≥ 8 chars) and enforce it both sides.
+6. **Users table has no view, no edit, no created date** — feature gap, web.
+   `andecobs-12`. `routes/admin/UsersTab.jsx` rows carry name, login, role
+   select, status, reset and deactivate only. Owner's note in the ticket: the
+   admin pane is not done yet — this is the list for it. Add a details drawer
+   (created_at, personal email, classes) with edit for name and personal email.
+7. **Same-name users created without a warning** — suggestion, web + backend.
+   `andecobs-12`: two "Does, John" (`um-123553`, `um-012355`). Not a duplicate
+   by the system's key (employee number), so it is allowed; warn on an
+   identical name or personal email before creating.
+8. **Admin has no change-password entry** — feature gap, web. `andecobs-12`
+   says it is listed in the module list. `routes/change-password.jsx` exists;
+   verify the admin sidebar/account page links it.
+9. **Publish blocked by missing Grade Config surprises testers** — not a bug,
+   web. `andecobs-17`: the Publish modal's red notice ("has no Grade Config
+   yet … Open Grade Config for Section C →") is correct and the draft also
+   had 0 questions. Resolved in the ticket. Second tester tripped by a
+   precondition, though: consider showing the same notice beside the class
+   checkbox in "Assign to Classes" at edit time, not only at publish.
+
+Closed since the last note (from `#ticket-logs` close reasons, 2026-08-25 →
+08-30): first-login password change for students; ID choices for
+registration; semester number for college; horizontal overflow bug.
+
+## Tester tickets — 2026-08-31, dispatch cards (ticket pane)
+
+The nine items above now each have a dispatch card in
+`C:\CAPSTONE\_tools\discord\tickets\_dispatch\T-NN-*.md` (ids T-01 … T-09 in item
+order) with the repro, the `file:line` cause, the owning pane per `OWNERSHIP.md`, and
+a paste-ready block; `tickets\_ledger.md` tracks state. One correction to the list
+above: **item 5 is not a defect** — `schoolNameError` / `schoolAbbrError`
+(`lib/validation.js:171-193`, since `58dd263` 2026-08-26) and `admin.py:191-195`
+already enforce the same rule on both sides; `asdfasdfsd` / `um` satisfy it, and a
+format rule cannot tell gibberish from a name. Whether to require the school
+directory instead is an owner decision (card T-05). Ticket `jay_mey-19` (Jami) is a
+pipeline test, no issue.
+
+**Correction to item 2, 2026-08-31 (owner re-triage, T-02).** Item 2 above reads as an
+account/Firebase problem needing the Auth console. It is not — **it is a web defect in
+`src/routes/login.jsx`**, and the card and ledger now say so. The sign-in page labels its
+identifier field **"Enter username"** (placeholder "Enter your username", `login.jsx:169-181`),
+but a self-registered solo teacher has no username: their credential is the email they
+registered with. `toAuthEmail` (`lib/logins.js:34-37`) appends `@activklass.internal` to
+anything without an `@`, so a teacher who obeys the label and types `kristine` is sent to
+Firebase as `kristine@activklass.internal`, which does not exist → the flat "Incorrect login
+or password." (`login.jsx:28,31`); re-registering with the real address then hits the real
+account → "That email is already in use." **Both reported symptoms come from that one label,
+with no Firebase defect.** This is item 1 (T-01) from the other side — issued account typed as
+an email there, email account typed as a username here — one field and one error string, so
+**T-02 is dispatched to the same pane as T-01** (Shared `login.jsx`; two panes must not open
+it at once). Secondary, not the cause: `register.jsx:258` passes `form.email` untrimmed to
+`createUserWithEmailAndPassword` while sign-in trims — `input type="email"` already strips
+surrounding whitespace, but trim it in the same pass so both sides agree. Asking Kristine what
+she typed still confirms it, but no longer blocks the fix.
+
+### Landed since, from the ticket board (2026-08-31, ticket pane)
+
+Recorded here because the board moved and `BACKLOG.md` had not. Each was committed by
+its own debug pane with its own reasoning in the commit body; this is the index, not a
+retelling.
+
+- **T-04 — "Download template" stalls on the first click** — `f03aa5d`. The button now
+  says it is preparing the file, so a slow first click cannot read as a dead one.
+- **T-07 — same-name users created without a warning** — `0cbee11`. A repeated *name*
+  now asks before creating; a repeated *address* is refused outright, since an address
+  is the only route back into a lost account. Matching lives in
+  `routes/admin/duplicates.js` so the Users tab and bulk upload share one definition.
+  Server-side uniqueness of a personal email stays a backend follow-up **(cross-repo)**.
+- **T-09 — publish blocked by a missing Grade Config** — `7d17985`, taken as a
+  suggestion rather than a defect: the class list now says which class has no Grade
+  Config, before you get stopped at Publish.
+- **Found while building T-09, no ticket of its own:** `efe7972` — publish read each
+  class gradebook by id rather than through a list query the rules refuse. Worth an
+  issue id if it recurs.
+
+`andecobs-12` was closed in Discord as housekeeping while three of its issues were
+still open (T-03, T-06, T-08) and one deferred (T-05); the ledger records that
+explicitly so the closure does not read as completion.
+
+## Tester tickets — 2026-09-01, Kristine's second run (ticket pane)
+
+Four tickets from Kristine on the evening of 08-31 (`triplecookiemonster-20/21/22/23`),
+plus her original `-14`, which Ticket Bot closed at 16:04 with no reason given. Cards are
+in `C:\CAPSTONE\_tools\discord\tickets\_dispatch\`; `_ledger.md` holds the state.
+
+1. **A failed registration strands the email** — blocks testing, web. `T-10`, reported
+   twice (`-14`, then `-20` with `abi@email.com`): the account reads as "already in use"
+   yet will not sign in. This is the tail of the same wound as T-02 and the reason her
+   first ticket never really closed. **Fixed, `d9bb830`** — awaiting her confirmation.
+2. **A teacher's ID is found by Add Student and offered as a learner** — wrong data,
+   web + backend. `T-11` (`-21`). **Fixed, `173bfca`.**
+3. **Disabling a student warns about other classes only after the fact** — wrong
+   behaviour, web. `T-12` (`-22`), Class detail lane. **In progress.**
+4. **The account page never says which subscription you are on** — suggestion, web.
+   `T-13` (`-23`). `teacher/account.jsx:150-161` falls back to "No individual
+   subscription on this account. *If* your school subscribed…" on a 404, never consulting
+   the profile — so it cannot tell an institution teacher from a teacher with no plan and
+   hedges to cover both, while the **Your school** card directly beneath names her school.
+   **Dispatched.**
+
+`#20` and `#21` are held at `waiting on tester` rather than `ready to close`: their fixes
+are committed but Kristine is the one who could not sign in, so she confirms. `#17`
+(Derickk, T-09) is `ready to close` — that one was built and needs nobody's confirmation.
+
+**Fixed 2026-08-31 — `3ea3253` closes both T-01 and T-02.** One commit, because both were
+the same field: `src/routes/login.jsx` now labels the identifier **"Email or login ID"**
+(placeholder "you@school.edu.ph or snhs-123456") and `signInError()` continues the message
+into the half the typed identifier points at — an "@" suggests the school-issued login ID
+(T-01), no "@" suggests the email they registered with (T-02); every other Firebase code
+keeps its message. `register.jsx` also trims the email before
+`createUserWithEmailAndPassword`, so both sides normalise alike. *Verified by the fixing
+pane:* `npm run test` 531/531 in 28 files, `npm run build` clean in 795 ms, and four paths
+driven in Chrome on :5173 (email account typed without the "@"; issued account typed as a
+personal email; each still signing in the right way). Ticket `triplecookiemonster-14` is
+**ready to close** — Kristine is owed the reply; `andecobs-12` stays open on T-03…T-08.
+
 ## Solo vs institutional pane — 2026-08-31
 The owner's decision this session: a solo subscriber and a teacher issued by a school are
 different accounts and should not get the same screens. Four commits, all pushed.
@@ -1461,3 +1616,58 @@ download, or you will misread your own result.
 header claimed the logic lane, which the table never backed up. Both are now in the Admin
 lane in `OWNERSHIP.md`, with the boundary written down (Admin owns the files, not the
 right to change what they return — three other panes call them).
+
+---
+
+## T-01 + T-02 re-fixed — 2026-09-01 (debug pane, after `/verify all`)
+
+**The sign-in hint was pointing each tester at the credential they do not own.**
+bug · blocks testing · web · `andecobs-12` (Derickk), `triplecookiemonster-14` and
+`-20` (Kristine). Cards: `_dispatch/T-01-login-id-hint.md`,
+`_dispatch/T-02-solo-teacher-cannot-sign-in.md`. Commit `9f15003`.
+
+`3ea3253` fixed the label — the field reads **Email or login ID** and that half was
+never in doubt — but its hint branched on whether the identifier contained an `@`. That
+reads the identifier as evidence of *what kind of account you have*, and it is not:
+`auth/invalid-credential` is also what a plain mistyped password returns on a perfectly
+correct identifier, and that is the commoner case by far. So a solo teacher who fumbled
+her password on her own email was told to use "a login ID rather than an email address"
+— one she has never had. Kristine posted exactly that screenshot about nine hours after
+the fix landed. The mirror case sent an issued account hunting for a self-registered
+email. T-01's own acceptance line ("a solo-teacher wrong password still shows the plain
+message") was not met, and the `/verify all` pass sent both issues back.
+
+**What changed.** The client cannot tell a wrong password from a wrong identifier —
+Firebase deliberately returns one code for both — so the message stops guessing and names
+both kinds of account, letting the reader recognise their own half. The one thing that
+*is* knowable is shape: text with no `@` that is not `prefix-######` was never a
+credential (`toAuthEmail` sent it to an account that cannot exist), so that case opens
+"That is not an email address or a login ID." rather than blaming the password. That is
+Kristine's literal repro — typing a bare name into a field once labelled "Enter
+username". `isIssuedLoginId()` was checked against `_issued_login` in the backend's
+`app/api/admin.py`, not inferred from the client helper that only previews it.
+
+**Why it shipped untested the first time, and why it cannot again.** `signInError` was
+module-private in `login.jsx`, so nothing could reach it — the verification pass flagged
+this before flagging the defect. Both the rule and the sentence explaining it now live in
+`lib/logins.js` beside `toAuthEmail`. Five assertions in `logins.test.js`, **proved to
+bite**: restoring the `3ea3253` body fails all five, restoring the fix passes.
+
+**Verified:** `npm run test` 563/563 in 30 files; `npm run build` clean in 788 ms. Driven
+in Chrome on :5173 — `abi@email.com` + wrong password (the verification pass's own repro)
+now returns both halves and never names a login ID as the answer; `snhs-100012` + wrong
+password returns both halves from the other side; a bare `kristine` returns the "not an
+email address or a login ID" line; positive control `snhs-260001` with its real password
+still signs in and lands on `/teacher`.
+
+**Not verified, and worth one click after the next Chrome restart:** a *successful*
+sign-in by **email**. Clearing the signed-in session by deleting the origin's IndexedDB
+wedged Chrome's IDB for `localhost:5173` — `indexedDB.open` stops resolving, so every
+later sign-in hangs on `setPersistence`. Self-inflicted by the check rather than a
+product fault, and the success path is untouched by this commit (only the error branch
+changed) with its issued-login half proved live. Recording it rather than implying the
+click happened.
+
+**Housekeeping:** `lib/logins.js` was in **no lane** — the third `lib/` module found that
+way. It is now **Shared** in `OWNERSHIP.md`: both auth routes and the admin credential
+screens read it and none of them owns it.
