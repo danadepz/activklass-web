@@ -1,6 +1,13 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import SignOutButton from '@/components/SignOutButton'
+import {
+  PENDING_REQUESTS_KEY,
+  PENDING_TEACHERS_KEY,
+  fetchPendingRequests,
+  fetchPendingTeachers,
+} from './queues'
 
 /**
  * Shell for the developer console.
@@ -17,10 +24,32 @@ export default function SuperAdminLayout() {
   const { profile } = useAuth()
   const { pathname } = useLocation()
 
+  /* The counts the tabs wear. Same query keys the two queues use, so opening
+     a tab does not re-read what the bar already fetched and acting on one
+     updates the other. Cheap by nature: both collections are what is waiting
+     on us, never what exists. */
+  const { data: pendingTeachers } = useQuery({
+    queryKey: PENDING_TEACHERS_KEY,
+    queryFn: fetchPendingTeachers,
+    staleTime: 60 * 1000,
+  })
+  const { data: pendingRequests } = useQuery({
+    queryKey: PENDING_REQUESTS_KEY,
+    queryFn: fetchPendingRequests,
+    staleTime: 60 * 1000,
+  })
+
+  /* Named for who they serve, not for what the mechanism is called. The
+     queues were already separate -- an ID check for a teacher who signed
+     themselves up, an access request from a school -- but "Verifications"
+     and "School requests" made only one of them say so, and the person on
+     this page is deciding about a customer, not about a document. The count
+     rides on the tab so a queue cannot sit unnoticed behind a page nobody
+     opened. */
   const tabs = [
     { to: '/superadmin', label: 'Subscribers' },
-    { to: '/superadmin/verifications', label: 'Verifications' },
-    { to: '/superadmin/requests', label: 'School requests' },
+    { to: '/superadmin/verifications', label: 'Solo teachers', waiting: pendingTeachers?.length },
+    { to: '/superadmin/requests', label: 'Schools', waiting: pendingRequests?.length },
   ]
 
   return (
@@ -83,6 +112,11 @@ export default function SuperAdminLayout() {
                 }`}
               >
                 {tab.label}
+                {tab.waiting > 0 && (
+                  <span className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                    {tab.waiting}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>
