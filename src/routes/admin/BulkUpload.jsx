@@ -6,6 +6,7 @@ import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
+import { confirmDialog } from '@/components/ui/dialogs'
 import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
 import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
@@ -169,6 +170,14 @@ export default function BulkUpload({ onDone, settings, users }) {
   const reusedEmails = dupes.filter((d) => d?.tone === 'error').length
   const sharedNames = dupes.filter((d) => d?.tone === 'warn').length
 
+  /* One sentence for both places that say it: the red notice under the table,
+     and the confirm the Create button now goes through. Written once so the
+     dialog quotes what is already on screen rather than paraphrasing it. */
+  const concerns = [
+    reusedEmails && `${reusedEmails} row${reusedEmails === 1 ? '' : 's'} reuse${reusedEmails === 1 ? 's' : ''} an email that already belongs to someone`,
+    sharedNames && `${sharedNames} row${sharedNames === 1 ? '' : 's'} repeat${sharedNames === 1 ? 's' : ''} a name already on file`,
+  ].filter(Boolean).join(', and ')
+
   async function onFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -203,6 +212,22 @@ export default function BulkUpload({ onDone, settings, users }) {
   }
 
   async function upload() {
+    /* The only moment this can still be stopped. Once it is away it is a
+       single request that creates every row server-side, so there is nothing
+       to cancel half-way -- a Cancel button beside "Creating…" could only
+       abandon the browser's wait while the accounts were made anyway, which
+       is worse than no button at all. So the counts already computed above
+       get quoted back here, where backing out still changes the outcome. */
+    const ok = await confirmDialog({
+      title: `Create ${rows.length} account${rows.length === 1 ? '' : 's'}?`,
+      message: concerns
+        ? `${concerns} — each becomes a separate account. Creating cannot be stopped once it starts.`
+        : 'Each row becomes a separate account, able to sign in straight away. Creating cannot be stopped once it starts.',
+      confirmLabel: 'Create accounts',
+      tone: reusedEmails ? 'danger' : 'primary',
+    })
+    if (!ok) return
+
     setBusy(true)
     setResult(null)
     try {
@@ -412,10 +437,7 @@ export default function BulkUpload({ onDone, settings, users }) {
           {(reusedEmails > 0 || sharedNames > 0) && (
             <div style={{ marginBottom: 12 }}>
               <Notice tone={reusedEmails ? 'error' : 'warn'}>
-                {[
-                  reusedEmails && `${reusedEmails} row${reusedEmails === 1 ? '' : 's'} reuse${reusedEmails === 1 ? 's' : ''} an email that already belongs to someone`,
-                  sharedNames && `${sharedNames} row${sharedNames === 1 ? '' : 's'} repeat${sharedNames === 1 ? 's' : ''} a name already on file`,
-                ].filter(Boolean).join(', and ')} — check them before creating, or each becomes a separate account.
+                {concerns} — check them before creating, or each becomes a separate account.
               </Notice>
             </div>
           )}
