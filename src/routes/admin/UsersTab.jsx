@@ -248,15 +248,29 @@ function CreateUserForm({ onCreated, settings, users }) {
         `${describeAccount(taken)} already uses ${typedEmail}. One address can only bring one account back, so this person needs their own.`,
       )
     }
+    /* One question, always asked. The duplicate check below used to be the
+       only dialog in this path, which meant the first account of a given name
+       -- the ordinary case -- was created on a single click, and the tester
+       reported exactly that twice (andecobs-26, -27). When there is a twin its
+       wording wins, because it carries more: the plain version tells you what
+       you are about to make, the twin version tells you it may already exist.
+       Either way it names the login, which is derived rather than typed and
+       is the thing the admin will be reading out afterwards. */
     const twins = accountsNamed(users, form.firstName, form.lastName)
-    if (twins.length) {
-      const ok = await confirmDialog({
-        title: `${form.firstName.trim()} ${form.lastName.trim()} is already on file`,
-        message: `${twins.map(describeAccount).join(', ')} — same name. Two people really can share one, so this is only a check: creating another makes a separate account with its own login.`,
+    const who = `${form.firstName.trim()} ${form.lastName.trim()}`
+    const signsIn = role === 'admin' ? typedEmail : loginPreview
+    const ok = await confirmDialog(twins.length
+      ? {
+        title: `${who} is already on file`,
+        message: `${twins.map(describeAccount).join(', ')} — same name. Two people really can share one, so this is only a check: creating another makes a separate account with its own login${signsIn ? `, ${signsIn}` : ''}.`,
         confirmLabel: 'Create anyway',
+      }
+      : {
+        title: `Create a ${role} account for ${who}?`,
+        message: `They sign in as ${signsIn} straight away, and are asked to choose their own password the first time. An account cannot be deleted afterwards, only deactivated.`,
+        confirmLabel: 'Create account',
       })
-      if (!ok) return
-    }
+    if (!ok) return
 
     mut.mutate({
       // Admins need a real inbox (password recovery goes there); teacher and
