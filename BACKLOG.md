@@ -1671,3 +1671,107 @@ click happened.
 **Housekeeping:** `lib/logins.js` was in **no lane** — the third `lib/` module found that
 way. It is now **Shared** in `OWNERSHIP.md`: both auth routes and the admin credential
 screens read it and none of them owns it.
+
+## T-14 confirmation coverage — 2026-09-02 (debug pane, ticket `andecobs-24`/`-25`)
+
+Derickk asked for confirmation pop-ups on every destructive or consequential action and
+listed about twenty of them, with the sentence that made this an audit rather than a
+build: *"If any of the above have already been added to the system … kindly disregard
+those items."* Most were already there. Four were not.
+
+1. **Creating an account had no confirm-before** — `routes/admin/UsersTab.jsx`
+   (`6437ac3`). Reported twice, `andecobs-26` (student) and `andecobs-27` (teacher). A
+   `confirmDialog` already sat in that submit path, which is why the gap survived a
+   reading of the file: it fires only when `accountsNamed` finds a same-name account
+   (T-07). That is a question about a coincidence, not about the action, so the ordinary
+   case — the first account of a given name — went from click to live sign-in with
+   nothing in between. One question is now always asked and names the issued login,
+   which is derived from the last six digits rather than typed.
+2. **Creating a class had none** — `features/classes/ClassFormModal.jsx` (`ef76f73`),
+   reported as `andecobs-31`. The same modal is used for edit, where the fields being
+   changed are the academic year and semester every list and header reads from.
+3. **Creating student accounts had none, on both paths** —
+   `routes/teacher/StudentAccounts.jsx` (`ef76f73`). The single form and the file
+   upload. The file path is the same one-shot POST the admin bulk upload confirms as of
+   `09efd94`, and was the only other caller of that endpoint with no prompt in front of
+   it.
+4. **Posting an announcement had none** — `routes/teacher/announcements.jsx`
+   (`dc96499`). **The dispatch card asserted this one was already covered and it was
+   wrong**; that file's only confirm guards the delete. Posting writes a document per
+   class and fires a bell to every student on every roster it touches. The confirm
+   quotes both counts, computed from the same expression the mutation uses to pick its
+   targets.
+
+**Not added, deliberately, and this is the substance of the ticket.** Saving grades
+(incremental and editable), marking attendance (checked in the code — it does not lock;
+`setDoc` overwrites the day), reactivating an account, enrolling an existing student
+onto a roster, removing a profile photo, and Sign Out, which the tester himself flagged
+as not needing one. A dialog on a safe action is what teaches people to click through
+the dangerous one.
+
+**Already covered, for the record**, since the next pane should not re-audit it: reset
+password (the prompt states the effect and names the login), deactivate, remove from
+roster, delete class / quiz / syllabus / assessment / scaffold (five of those also
+require typing `DELETE`), publishing a quiz (`PublishModal` is the review step), and the
+student's quiz submit (a bespoke modal in `quiz-player.jsx:576`, deliberately left
+alone rather than given a second dialog).
+
+**Open, logged not built:** the record page has no "discard unsaved changes" guard when
+you navigate away mid-edit. The quiz builder has one (`quizzes.$quizId.jsx:860`, which
+needed a custom blocker because `main.jsx` does not mount a data router). That is a
+build in the Class detail lane, not an audit fix.
+
+**Verified:** `npm run test` 595/595 in 33 files, `npm run build` clean. The admin
+dialog was driven in Chrome as an admin — Create teacher quoted the issued login
+`sccu-998877`, Cancel left the user count at 162 with no account made. **The four
+teacher-side call sites were not clicked through**: the only signed-in session available
+was an admin one. Recorded rather than implied.
+
+**Lane note.** Three commits, one per lane (Class setup, Syllabus, Admin). The Admin one
+came last because another pane had uncommitted work in `CreateUserForm` when this pane
+reached it; staging that file would have carried their in-flight edits into this commit,
+so it waited for `75f80c3` / `32c8993` to land. Card: `_dispatch/T-14-confirmation-coverage-audit.md`.
+
+## T-18 bulk-upload failure wall — 2026-09-02 (ticket pane, at the owner's direction, ticket `andecobs-30`)
+
+**Suggestion · clarity. Web, Admin lane. `75f80c3`.** Derickk uploaded 100 teacher rows,
+every one failed, and the result panel printed a hundred lines — almost all of them word
+for word "the email already belongs to another account". His report was four words: too
+long to read.
+
+**The fix was already in the file, applied to the wrong list.** The preview table caps
+itself at `rows.slice(0, 8)` and prints "…and 92 more"; the result panel mapped
+`result.failed` straight through at whatever length it came back. So the panel now groups
+by reason, commonest first, one line each with its count and the spreadsheet rows behind
+it — `100 rows — missing name · rows 2–101`. One reason, the usual case, is one line. Row
+numbers survive as ranges (that is how a tester finds the line in their file) and the
+ranges cap at four runs so a scattered hundred is not a wall of its own.
+
+**Not collapsed into a single generic error,** which is what the ticket literally asked
+for. A file that does not follow the format — wrong headers, no data rows — fails earlier
+and already says so once through `parseError`. These rows parsed; each failed for a reason
+about its data.
+
+The grouping lives in a new `routes/admin/bulkFailures.js` beside `duplicates.js` rather
+than inside the component, so it is testable without rendering the page
+(`bulkFailures.test.js`, 11 tests). `summarizeFailures` also drops the row number the
+network-failure fallback used to invent — it was printing "row 2 —" for a request that
+never reached a row.
+
+**Verified:** `npm run test` 599 passing in 33 files, `npm run build` clean, eslint 38
+against a 41 baseline. Driven in Chrome as admin on 2026-09-02: a 100-row file with every
+`last_name` blank renders `0 created, 100 failed` above the single line above, and a
+two-row file with two different faults still shows both (`1 row — missing name · row 2`,
+`1 row — missing employee_number · row 3`). The user count stayed 162 through both runs —
+those rows are refused in `_prepare_user` before any account is made, which is why that
+file was chosen.
+
+**Two notes for whoever is next in a browser.** The dev server full-reloaded twice from
+other panes' saves and dropped the session mid-run; a reload on a protected route lands on
+`/login` and does not come back, even though the session is intact (navigating to `/admin`
+again shows you still signed in). In dev that is HMR noise, but a refresh mid-demo would
+read as a logout — worth a look, not logged as an issue here. And synthetic clicks stopped
+reaching the page once the Chrome window was in the background; the walk was completed by
+driving the same handlers from the page's own context.
+
+Card: `_dispatch/T-18-bulk-result-wall-of-errors.md`.
