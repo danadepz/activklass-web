@@ -339,11 +339,14 @@ export default function TeacherDashboard() {
             ))}
           </div>
 
-          {/* Class summary — every class the teacher handles */}
-          <Panel
-            title="Your classes"
-            style={{ marginTop: 14, padding: '18px 4px 6px' }}
-            action={
+          {/* Class summary — every class the teacher handles.
+              The panel's side padding is 4px so the six-column table can use
+              the full card width; the cells then add their own 16px, so the
+              heading is rendered here with that same inset instead of through
+              Panel's `title`, which would sit 16px left of the "Class" header. */}
+          <Panel style={{ marginTop: 14, padding: '18px 4px 6px' }}>
+            <div className="mb-4 flex items-center justify-between gap-3" style={{ paddingLeft: 16 }}>
+              <h2 style={{ ...serif, fontSize: 21, margin: 0, color: ink }}>Your classes</h2>
               <Link
                 to="/teacher/classes"
                 className="inline-flex items-center gap-1.5 transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] rounded"
@@ -351,8 +354,7 @@ export default function TeacherDashboard() {
               >
                 Manage classes <span style={{ color: gold }}>→</span>
               </Link>
-            }
-          >
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
