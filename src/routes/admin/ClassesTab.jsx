@@ -28,8 +28,12 @@ export default function ClassesTab() {
     })
   }, [data, search, showArchived])
 
+  // The export follows the search box and the archived toggle — it is the table, not the
+  // school. The search term goes into the filename so the file says what it holds.
+  const slug = search.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
   function exportCsv() {
-    downloadCsv(stampedName('class-oversight'), [
+    downloadCsv(stampedName(slug ? `class-oversight-${slug}` : 'class-oversight'), [
       ['Class', 'Subject', 'Teacher', 'Students', 'Quizzes', 'Attempts', 'Graded', 'Average %', 'Archived'],
       ...rows.map((r) => [
         r.section, r.subject, r.teacherName, r.studentCount, r.quizCount,
@@ -82,9 +86,9 @@ export default function ClassesTab() {
                   Show archived
                 </label>
                 <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}
-                        title={rows.length ? `Download these ${rows.length} classes as a CSV file`
+                        title={rows.length ? `Download ${rows.length === 1 ? 'this class' : `these ${rows.length} classes`} as a CSV file`
                                            : 'Nothing to export — no classes match this filter'}>
-                  Export CSV
+                  {rows.length === 1 ? 'Export 1 class' : `Export ${rows.length} classes`}
                 </button>
               </div>
             }
