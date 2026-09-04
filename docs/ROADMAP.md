@@ -124,6 +124,11 @@ Still open at this altitude:
   second seeded teacher: 16/16 — own students readable, the other teacher's refused in
   both directions, every forgery (teacher_ids, student_ids, class delete, editing a
   foreign student) 403, an ordinary own-class edit still 200.
+- `[ ]` **Syllabus file upload, for real** (decided 2026-09-04): upgrade the Firebase
+  project to Blaze, create the default bucket, deploy `storage.rules` from the backend repo
+  **(cross-repo)**, then prove a PDF upload from the syllabus page in the browser. Until
+  then Upload File fails with the paste-a-link message — the docs no longer call that a
+  plan limit we are keeping.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
@@ -139,6 +144,7 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
 ## What "done" is not
 - **Not deployed.** There is no host, and standing one up is out of scope for the
   defense. See `docs/OPEN-QUESTIONS.md`.
-- **Not production-hardened.** Free Spark plan, one dev machine, seeded pilot data.
+- **Not production-hardened.** Blaze only for Storage's free allowance, one dev machine,
+  seeded pilot data.
 - **Not feature-complete.** A capstone demo shows the system working, not every feature
   a school would eventually want.

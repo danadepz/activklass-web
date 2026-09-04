@@ -3,10 +3,14 @@
 One entry per tool, with the constraint that forced it. Rejected options are recorded
 because the reasoning is what stops a decision being re-litigated.
 
-**The constraint behind most of this: a student budget.** Everything must fit a free tier.
-Firebase stays on **Spark**, which means no Cloud Functions and no Cloud Storage uploads —
-that is a plan limit, not a bug, and links are the supported attachment path
-(`lib/attachments.js`).
+**The constraint behind most of this: a student budget.** Everything fits a free tier,
+with one decided exception: Firebase moves to **Blaze** (owner decision 2026-09-04) because
+the syllabus page's Upload File writes learning materials to Cloud Storage, and Storage is
+Blaze-only on every project. Demo-scale PDFs stay inside Storage's free allowance; a small
+budget alert is the safeguard. Until the upgrade, the bucket and the `storage.rules` deploy
+have all happened, `uploadBytes` still 404s and `lib/attachments.js` turns that into a
+"paste a link instead" message — a link remains a first-class attachment either way.
+Blaze is not being used for Cloud Functions; see below.
 
 | Layer | Choice | Why |
 |---|---|---|
@@ -44,8 +48,9 @@ Model and vendor choices are documented there.
   authorization into a place that is easier to forget to check.
 - **Server-side quiz-bank filtering** — reverted to client-side. Firestore would need a
   composite index per filter shape, for a few hundred documents.
-- **Cloud Functions** — unavailable on Spark. Anything that would have been a function is
-  either a Flask route or client-side.
+- **Cloud Functions** — not used, even once Blaze makes them available. Anything that
+  would have been a function is either a Flask route or client-side, and a second
+  server-side layer next to Flask is not worth having for the demo.
 - **A web portal for guardians** — deliberately not built. Parents are mobile-only;
   `/parent` says so instead of implying one is coming.
 - **Native `alert` / `confirm`** — removed. 36 of them were replaced by the toast and

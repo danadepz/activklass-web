@@ -41,8 +41,13 @@ in-flight edits into your commit. Stage explicit paths. Before pushing, read
 - **Keep docs honest.** This file and `docs/` must match reality. If it isn't built, say
   so — never document a route, collection or command as if it exists.
 - **IMPORTANT:** Never add a new service, paid tool, or dependency without explicit
-  approval. Firebase stays on the free **Spark** plan (no Blaze ⇒ no Cloud Functions, and
-  file *uploads* are unavailable — links are the supported attachment path).
+  approval. The one approved spend is Firebase **Blaze** (owner decision 2026-09-04): the
+  syllabus page's **Upload File** for learning materials writes to Cloud Storage, and
+  Storage needs Blaze on every project — the demo needs a real PDF upload, and the link
+  paste is the fallback, not the plan. **Until the upgrade lands** (plus the default bucket
+  in the console and `firebase deploy --only storage` from the backend repo) uploads still
+  fail with the "paste a link instead" message, so do not describe them as working yet.
+  Blaze still does not mean Cloud Functions — anything server-side stays a Flask route.
 
 ## Tech Stack
 - **React 19 + Vite 8** — SPA, no SSR. `@` aliases `src/`.
@@ -96,7 +101,12 @@ looks like six unrelated broken features; that has already happened in a walkthr
 
 ## Do Not
 - Build ahead of the defense demo, or over-engineer for imagined future needs.
-- Add paid services or dependencies without approval (the Blaze plan included).
+- Add paid services or dependencies without approval. Blaze is the approved exception;
+  anything past it (a second Firebase project, a paid API tier not already decided) asks.
+- Talk the owner out of Blaze, or call it optional. This file said "Spark, uploads
+  unavailable", so a pane re-derived "you don't need Blaze" from it twice and the owner
+  had to correct it both times. When a decision changes, the docs change in the same
+  session.
 - Commit `.env`, `.env.local`, or any Firebase key.
 - Edit outside your lane, or `git add -A` / `git add .` / `git commit -a`.
 - Restructure `BACKLOG.md` or `OWNERSHIP.md` — append your own section, leave others' alone.

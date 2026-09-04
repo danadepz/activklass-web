@@ -86,9 +86,14 @@ record. **(cross-repo)**
   goes there.
 - **Guardians are mobile-only.** `/parent` points at the app rather than implying a web
   portal is coming. Decided rather than deferred.
-- **Firebase stays on Spark.** No Blaze, so no Cloud Functions and no file uploads —
-  syllabus attachments are links. This is a budget decision, not a technical one, and it
-  is the reason for several limitations that otherwise read as bugs.
+- **Firebase moves to Blaze** (owner, 2026-09-04 — reversing the earlier "stays on
+  Spark"). The syllabus page's Upload File for learning materials writes to Cloud Storage,
+  which is Blaze-only, and the demo needs a real PDF upload; the link paste stays as the
+  fallback. What the upgrade needs after the plan change: the default bucket created in
+  the console with the name `VITE_FIREBASE_STORAGE_BUCKET` already carries, then
+  `firebase deploy --only storage` from the backend repo, then one upload proven in the
+  browser — at which point the Spark comments in `lib/attachments.js`, `lib/avatar.js` and
+  the syllabus page's hint text come out. Cloud Functions stay unused regardless.
 - **Superadmin is a Firebase custom claim, not a role string.** An admin can write any
   `users/{uid}` document including `role`, so a role string would be self-grantable.
 - **Native `alert`/`confirm` are gone,** replaced by `components/ui/`. Irreversible deletes
