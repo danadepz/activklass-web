@@ -8,7 +8,8 @@ import { setAccountDisabled } from '@/lib/admin'
 import { deleteClassSection } from '@/lib/classes'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
-import { emailError, nameError, yearLevelError } from '@/lib/validation'
+import { emailError, nameError, yearLevelError, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
+import { classEducationLevel } from '@/lib/classForm'
 import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
@@ -89,6 +90,84 @@ function rosterFieldsError(fields) {
   return (
     nameError(fields.middle_name, { label: 'Middle name', required: false }) ||
     yearLevelError(fields.year_level, { required: false })
+  )
+}
+
+/* T-22: Year and Program used to be typed by hand on every roster form.
+   Year is a closed list of seventeen values (yearLevelError above), so it is
+   now a <select> showing only the half this class belongs to, pre-set to the
+   class's own level. Program stays free text -- "BSIT / JHS / Grade School"
+   is open-ended -- but offers, through a native <datalist>, every program
+   already on this roster plus a starter list of common ones; a new value a
+   teacher types is on the roster from then on, so it is in the list from
+   then on. Nothing is persisted beyond the student document itself. */
+const COMMON_PROGRAMS = {
+  College: [
+    'BSIT', 'BSCS', 'BSIS', 'BSCpE', 'BSCE', 'BSEE', 'BSME', 'BSECE', 'BSA', 'BSBA',
+    'BSAIS', 'BSHM', 'BSTM', 'BSN', 'BSEd', 'BEEd', 'BSCrim', 'BSPsych', 'BSBio', 'AB PolSci',
+    'AB Comm', 'AB English', 'BSSW', 'BSMT', 'BSPT', 'BSPharm', 'BSArch', 'BSMarE',
+  ],
+  'High School': ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL', 'Arts and Design', 'Sports', 'JHS', 'Grade School'],
+}
+
+function yearOptionsFor(clazz) {
+  return classEducationLevel(clazz) === 'College' ? YEAR_LEVELS : GRADE_LEVELS
+}
+
+/* The class form accepts "3rd" and "grade 7" too, so a stored level may not
+   spell an option exactly. Return the option it means, else the value as is
+   (an off-list value is kept and shown rather than silently dropped). */
+function matchYearLevel(value, options) {
+  const text = String(value ?? '').trim()
+  if (!text) return ''
+  const key = text.toLowerCase().replace(/\s+/g, ' ').replace(/^grade(?=\d)/, 'grade ')
+  return options.find((o) => o.toLowerCase() === key || o.toLowerCase() === `${key} year`) ?? text
+}
+
+/* This roster's own programs first (alphabetical), then the common ones it
+   does not already use. Case-insensitive so "bsit" and "BSIT" are one entry. */
+function programSuggestions(students, clazz) {
+  const seen = new Set()
+  const add = (list, v) => {
+    const text = String(v ?? '').trim()
+    if (!text || seen.has(text.toLowerCase())) return
+    seen.add(text.toLowerCase())
+    list.push(text)
+  }
+  const own = []
+  students.forEach((st) => add(own, st.course))
+  own.sort((a, b) => a.localeCompare(b))
+  const common = []
+  ;(COMMON_PROGRAMS[classEducationLevel(clazz)] ?? []).forEach((v) => add(common, v))
+  return [...own, ...common]
+}
+
+function ProgramYearFields({ fields, set, clazz, programs = [] }) {
+  const options = yearOptionsFor(clazz)
+  const year = fields.year_level ?? ''
+  const offList = year && !options.includes(year) ? year : null
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
+        <input className="ak-input" list="ak-programs" autoComplete="off" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} />
+        <datalist id="ak-programs">
+          {programs.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
+      </div>
+      <div>
+        <label style={labelStyle}>Year <span style={optHint}>(opt)</span></label>
+        <select className="ak-input" value={year} onChange={set('year_level')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+          <option value="">—</option>
+          {offList && <option value={offList}>{offList}</option>}
+          {options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      </div>
+    </div>
   )
 }
 
@@ -224,7 +303,7 @@ function announceLogins(created) {
   )
 }
 
-function StudentFields({ fields, setFields }) {
+function StudentFields({ fields, setFields, clazz, programs }) {
   const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
   return (
     <div className="flex flex-col gap-3.5">
@@ -238,16 +317,7 @@ function StudentFields({ fields, setFields }) {
           <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
-          <input className="ak-input" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} />
-        </div>
-        <div>
-          <label style={labelStyle}>Year</label>
-          <input className="ak-input" placeholder="e.g. 1st Year / Grade 10" value={fields.year_level} onChange={set('year_level')} style={fieldStyle} />
-        </div>
-      </div>
+      <ProgramYearFields fields={fields} set={set} clazz={clazz} programs={programs} />
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
@@ -317,7 +387,7 @@ function isDeactivated(account) {
 }
 
 /* Add a registered student by ID (or email), or create a new manual student record. */
-function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
+function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const { profile, school } = useAuth()
   /* Who may create an account, not who may enrol one. A teacher issued by a
@@ -334,6 +404,8 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
+  /* A student added to this class is, by default, in this class's year. */
+  const defaultYear = matchYearLevel(clazz?.grade_level, yearOptionsFor(clazz))
 
   // --- Find existing ---
   const [idInput, setIdInput] = useState('')
@@ -393,7 +465,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
           student_number: found.student_number ?? '',
           middle_name: found.middle_name ?? '',
           course: found.course ?? '',
-          year_level: found.year_level ?? '',
+          year_level: matchYearLevel(found.year_level, yearOptionsFor(clazz)) || defaultYear,
           remarks: found.remarks ?? '',
           enrollment_status: normalizeEnrollmentStatus(found.enrollment_status),
           lrn: found.lrn ?? '',
@@ -433,7 +505,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [newEmail, setNewEmail] = useState('')
-  const [createFields, setCreateFields] = useState(EMPTY_STUDENT_FIELDS)
+  const [createFields, setCreateFields] = useState({ ...EMPTY_STUDENT_FIELDS, year_level: defaultYear })
 
   async function createStudent(e) {
     e.preventDefault()
@@ -530,16 +602,7 @@ function AddStudentModal({ classId, enrolledIds, maxStudents, onClose, onDone })
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
-            <input className="ak-input" placeholder="e.g. BSIT / JHS / Grade School" value={f.course} onChange={handleSet('course')} style={fieldStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Year</label>
-            <input className="ak-input" placeholder="e.g. 1st Year / Grade 10" value={f.year_level} onChange={handleSet('year_level')} style={fieldStyle} />
-          </div>
-        </div>
+        <ProgramYearFields fields={f} set={handleSet} clazz={clazz} programs={programs} />
 
         <div>
           <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
@@ -782,7 +845,7 @@ function GuardiansSection({ student }) {
 
 /* Edit roster fields on one student (rules allow teachers to maintain these). */
 // 2026-06-20: Added first_name and last_name fields so teachers can correct student names
-function EditStudentModal({ student, classId, onClose, onDone }) {
+function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit student', closeOnBackdrop: false })
   // 2026-06-20: Name state — editable first and last name
   const [firstName, setFirstName] = useState(student.first_name ?? '')
@@ -791,7 +854,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
     student_number: student.student_number ?? '',
     middle_name: student.middle_name ?? '',
     course: student.course ?? '',
-    year_level: student.year_level ?? '',
+    year_level: matchYearLevel(student.year_level, yearOptionsFor(clazz)),
     remarks: student.remarks ?? '',
     enrollment_status: student.enrollment_status ?? 'AC',
     lrn: student.lrn ?? '',
@@ -872,7 +935,7 @@ function EditStudentModal({ student, classId, onClose, onDone }) {
             />
           </label>
         </div>
-        <StudentFields fields={fields} setFields={setFields} />
+        <StudentFields fields={fields} setFields={setFields} clazz={clazz} programs={programs} />
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Academic progress</span>
           <select
@@ -1360,6 +1423,7 @@ export default function ClassDetailPage() {
 
   const { clazz, students } = data
   const maxStudents = clazz.max_students ?? 0
+  const programs = programSuggestions(students, clazz)
   const activeCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
   const inactiveCount = students.length - activeCount
 
@@ -1582,6 +1646,8 @@ export default function ClassDetailPage() {
       {modal === 'add' && (
         <AddStudentModal
           classId={classId}
+          clazz={clazz}
+          programs={programs}
           enrolledIds={clazz.student_ids ?? []}
           maxStudents={clazz.max_students ?? 0}
           onClose={() => setModal(null)}
@@ -1601,6 +1667,8 @@ export default function ClassDetailPage() {
         <EditStudentModal
           student={modal}
           classId={classId}
+          clazz={clazz}
+          programs={programs}
           onClose={() => setModal(null)}
           onDone={refresh}
         />
