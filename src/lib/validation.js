@@ -75,6 +75,13 @@ export function tempPasswordError(value, { required = true } = {}) {
 const GRADE_RE = /^grade\s*([1-9]|1[0-2])$/i
 const YEAR_RE = /^(1st|2nd|3rd|4th|5th)(\s+year)?$/i
 
+/* The same seventeen values as option lists, for a form that would rather
+   offer them than validate typing (the roster's Year field, T-22). Kept beside
+   the regexes so a dropdown and the rule cannot drift: validation.test.js
+   passes every entry through yearLevelError for its own level. */
+export const GRADE_LEVELS = Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`)
+export const YEAR_LEVELS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year']
+
 /**
  * Grade/year level.
  * @param {string} value

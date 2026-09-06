@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   emailError, nameError, passwordError, tempPasswordError, yearLevelError,
+  GRADE_LEVELS, YEAR_LEVELS,
   semesterError, semesterLabel,
   idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
 } from './validation'
@@ -75,6 +76,30 @@ describe('yearLevelError', () => {
     expect(yearLevelError('6th Year')).not.toBe('')
     expect(yearLevelError('sophomore')).not.toBe('')
     expect(yearLevelError('10')).not.toBe('')
+  })
+})
+
+/* T-22: the roster's Year dropdown is built from these lists, so every entry
+   must be something the rule accepts for its own level and nothing else --
+   or the dropdown offers a value the form then refuses. */
+describe('GRADE_LEVELS / YEAR_LEVELS', () => {
+  it('cover exactly the values the rule accepts', () => {
+    expect(GRADE_LEVELS).toHaveLength(12)
+    expect(GRADE_LEVELS[0]).toBe('Grade 1')
+    expect(GRADE_LEVELS[11]).toBe('Grade 12')
+    expect(YEAR_LEVELS).toHaveLength(5)
+    expect(YEAR_LEVELS[0]).toBe('1st Year')
+    expect(YEAR_LEVELS[4]).toBe('5th Year')
+  })
+  it('every entry passes yearLevelError for its own level and fails the other', () => {
+    for (const g of GRADE_LEVELS) {
+      expect(yearLevelError(g, { level: 'school' })).toBe('')
+      expect(yearLevelError(g, { level: 'college' })).not.toBe('')
+    }
+    for (const y of YEAR_LEVELS) {
+      expect(yearLevelError(y, { level: 'college' })).toBe('')
+      expect(yearLevelError(y, { level: 'school' })).not.toBe('')
+    }
   })
 })
 
