@@ -1,4 +1,6 @@
 import { useAuth } from '../context/useAuth'
+import { navy, navyDeep, cream, gold, sansFamily } from '@/theme'
+import AuthLayout from './AuthLayout'
 import SignOutButton from './SignOutButton'
 
 /**
@@ -15,24 +17,43 @@ import SignOutButton from './SignOutButton'
  * and the first was actively misleading: it asked a parent to wait for
  * something that is not being built, instead of pointing at the app where
  * their child's records already are.
+ *
+ * It renders in the same branded card shell as /login and /register, so a
+ * guardian who lands here sees the product they signed up for, not an
+ * unfinished page -- the words are the point, the shell just carries them.
  */
 export default function ParentOnMobile() {
   const { profile } = useAuth()
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="bg-white rounded-xl border border-slate-200 p-10 text-center max-w-md">
-        <h1 className="text-2xl font-bold text-indigo-700">ActivKlass</h1>
-        <p className="text-slate-700 mt-4">
-          Hi {profile.first_name} — ActivKlass for guardians is a{' '}
-          <span className="font-semibold">mobile app</span>.
-        </p>
-        <p className="text-slate-700 mt-3">
-          Sign in there with this same email and password to see your child&rsquo;s grades,
-          attendance and quiz results.
-        </p>
-        <SignOutButton className="mt-6 rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700" />
+    <AuthLayout
+      variant="card"
+      title="ActivKlass for guardians is the mobile app"
+      subtitle={`Hi ${profile?.first_name ?? 'there'} — sign in there with this same email and password to see your child’s grades, attendance and quiz results.`}
+    >
+      <div className="flex justify-center">
+        <SignOutButton
+          className="ak-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+          style={{
+            padding: '14px 28px',
+            fontSize: 15,
+            fontWeight: 700,
+            fontFamily: sansFamily,
+            color: cream,
+            background: navy,
+            border: 'none',
+            borderRadius: 11,
+            cursor: 'pointer',
+            boxShadow: `0 3px 0 ${navyDeep}, 0 10px 24px -12px rgba(14,42,92,0.5)`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          Sign out
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: gold }} />
+        </SignOutButton>
       </div>
-    </div>
+    </AuthLayout>
   )
 }
