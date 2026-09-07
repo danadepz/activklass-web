@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/verify-queue-on-start.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking the ticket board for fixed-but-unverified issues…"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
