@@ -505,11 +505,27 @@ function CreateUserForm({ onCreated, settings, users }) {
 
 /* ─────────────────────────── user row ─────────────────────────── */
 
+/**
+ * The identifier a registrar has on paper: a student's number, a teacher's
+ * employee number. The login_id is derived from it (the last six digits behind
+ * the school prefix) and is not what people look someone up by -- T-30.
+ */
+function idNumberOf(u) {
+  return u.student_number || u.employee_number || ''
+}
+
+/** What the Users search box matches against. */
+function userSearchText(u) {
+  return [u.first_name, u.last_name, u.email, u.login_id, u.student_number, u.lrn, u.employee_number]
+    .map((v) => v ?? '').join(' ').toLowerCase()
+}
+
 function UserRow({ user, isSelf, onChanged }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
   const isParent = user.role === 'parent'
+  const idNumber = idNumberOf(user)
   const tint = ROLE_TINT[user.role] ?? ROLE_TINT.student
 
   async function run(label, fn) {
@@ -584,6 +600,19 @@ function UserRow({ user, isSelf, onChanged }) {
         <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>
           {user.login_id ?? user.email}
         </span>
+      </td>
+
+      <td style={{ padding: '12px 14px' }}>
+        {/* The login is only the last six digits of the ID; the registrar has the
+            full number on paper. Students carry student_number (and, in G12, an
+            LRN), teachers employee_number. Admins and parents have neither, so
+            the cell stays blank rather than showing a dash that reads as data. */}
+        {idNumber && (
+          <div style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>{idNumber}</div>
+        )}
+        {user.lrn && (
+          <div style={{ ...mono, fontSize: 11, color: faint, marginTop: idNumber ? 2 : 0 }}>LRN {user.lrn}</div>
+        )}
       </td>
 
       <td style={{ padding: '12px 14px' }}>
@@ -663,14 +692,16 @@ export default function UsersTab() {
     return users.filter((u) => {
       if (roleFilter !== 'all' && u.role !== roleFilter) return false
       if (!q) return true
-      return `${u.first_name ?? ''} ${u.last_name ?? ''} ${u.email ?? ''} ${u.login_id ?? ''}`.toLowerCase().includes(q)
+      return userSearchText(u).includes(q)
     })
   }, [users, roleFilter, search])
 
   function exportCsv() {
     downloadCsv(stampedName('users'), [
-      ['Last name', 'First name', 'Login', 'Role', 'Status'],
-      ...shown.map((u) => [u.last_name, u.first_name, u.login_id ?? u.email, u.role, u.status ?? 'active']),
+      ['Last name', 'First name', 'Login', 'ID number', 'LRN', 'Role', 'Status'],
+      ...shown.map((u) => [
+        u.last_name, u.first_name, u.login_id ?? u.email, idNumberOf(u), u.lrn ?? '', u.role, u.status ?? 'active',
+      ]),
     ])
   }
 
@@ -690,7 +721,7 @@ export default function UsersTab() {
             count={shown.length}
             action={
               <div className="flex flex-wrap items-center gap-3">
-                <input placeholder="Search name, email or login" value={search}
+                <input placeholder="Search name, email, login or ID" value={search}
                        onChange={(e) => setSearch(e.target.value)}
                        style={{ ...field, width: 220, padding: '8px 12px', fontSize: 13 }} />
                 <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
@@ -711,7 +742,7 @@ export default function UsersTab() {
           />
         </div>
 
-        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={5} label="Loading users" /></div>}
+        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={6} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
         {!isLoading && !isError && (
@@ -719,11 +750,11 @@ export default function UsersTab() {
             <p style={{ padding: 28, textAlign: 'center', color: faint }}>No users match that filter.</p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
                 <thead>
                   <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
-                    {['Name', 'Sign-in', 'Role', 'Status', ''].map((h, i) => (
-                      <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 4 ? 'right' : 'left' }}>{h}</th>
+                    {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', ''].map((h, i) => (
+                      <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
