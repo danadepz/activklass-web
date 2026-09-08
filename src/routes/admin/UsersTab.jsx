@@ -212,7 +212,7 @@ function CreateUserForm({ onCreated, settings, users }) {
       (role === 'student'
         ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
           (isG12
-            ? lrnError(form.lrn)
+            ? lrnError(form.lrn, { collegePath: 'set Level to College' })
             : (String(form.studentNumber).replace(/\D/g, '').length < 6
                 ? 'The student number needs at least 6 digits — the last six become their login.'
                 : '')) ||
@@ -380,6 +380,12 @@ function CreateUserForm({ onCreated, settings, users }) {
                 LRN
                 <input style={{ ...field, marginTop: 6 }} inputMode="numeric" maxLength={12}
                        value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" />
+                {/* Level defaults to G12, so an admin entering a college learner
+                    meets this field first and reads its 12-digit rule as the
+                    whole story (T-24). Say who has an LRN before the rule fires. */}
+                <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
+                  DepEd LRN, 12 digits. College students have none — choose College above.
+                </span>
               </label>
             )}
             {isG12 ? (

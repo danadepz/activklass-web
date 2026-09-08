@@ -151,11 +151,20 @@ export function idNumberError(value, { label = 'ID number', required = true } = 
   return ''
 }
 
-/** DepEd Learner Reference Number: exactly 12 digits. */
-export function lrnError(value, { required = true } = {}) {
+/**
+ * DepEd Learner Reference Number: exactly 12 digits. The message names the
+ * other path on purpose — a college learner has no LRN, and an admin who types
+ * a student number here needs to hear that, not just "12 digits" (T-24).
+ * `collegePath` is how the calling form switches a learner to college
+ * ("set Level to College"); leave it blank where the form decides that itself.
+ */
+export function lrnError(value, { required = true, collegePath = '' } = {}) {
   const text = String(value ?? '').trim()
   if (!text) return required ? 'LRN is required.' : ''
-  if (!/^\d{12}$/.test(text)) return 'LRN must be exactly 12 digits.'
+  if (!/^\d{12}$/.test(text)) {
+    return 'LRN must be exactly 12 digits. A learner with no LRN (college) '
+      + (collegePath ? `— ${collegePath} and use the student number instead.` : 'uses the student number instead.')
+  }
   return ''
 }
 

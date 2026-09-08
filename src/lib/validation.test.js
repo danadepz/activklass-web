@@ -130,6 +130,17 @@ describe('lrnError', () => {
     expect(lrnError('1234567890123')).not.toBe('')
     expect(lrnError('12345678901a')).not.toBe('')
   })
+  it('names the college path when the length is wrong (T-24)', () => {
+    // A student number typed into LRN — the tester's 23236953.
+    expect(lrnError('23236953')).toBe(
+      'LRN must be exactly 12 digits. A learner with no LRN (college) uses the student number instead.',
+    )
+    expect(lrnError('23236953', { collegePath: 'set Level to College' })).toBe(
+      'LRN must be exactly 12 digits. A learner with no LRN (college) — set Level to College and use the student number instead.',
+    )
+    // The rule itself is untouched: the hint never makes 8 digits pass.
+    expect(lrnError('123456789012', { collegePath: 'set Level to College' })).toBe('')
+  })
 })
 
 describe('loginPrefixError', () => {
