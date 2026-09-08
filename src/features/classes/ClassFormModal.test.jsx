@@ -20,6 +20,9 @@ vi.mock('firebase/firestore', () => ({
 }))
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'T1', role: 'teacher' } }) }))
 vi.mock('@/lib/attachments', () => ({ uploadAttachment: vi.fn() }))
+// The same-time warning (T-26) reads the teacher's other classes; there is no
+// QueryClient under a static render, so hand it an empty list.
+vi.mock('@/hooks/useTeacherClasses', () => ({ useTeacherClasses: () => ({ data: [] }) }))
 vi.mock('@/components/ui/useDialogBehavior', () => ({
   useDialogBehavior: () => ({ overlayProps: {}, panelProps: {} }),
 }))
@@ -63,6 +66,16 @@ describe('Edit Class', () => {
     const html = editing(highSchool)
     expect(html).not.toContain('Course Units')
     expect(html).not.toContain('Select semester')
+  })
+
+  /* T-26: the day chips come from parseSchedule, which used to scan the whole
+     string with includes() -- the "M" in "PM" pressed Monday on every
+     afternoon class and "TTh" kept only Thursday. */
+  it('presses exactly the days the stored schedule names', () => {
+    const html = editing({ ...highSchool, schedule: 'TTh 1:00 PM – 2:30 PM' })
+    const pressed = [...html.matchAll(/aria-pressed="(true|false)"[^>]*>(M|T|W|Th|F|Sa|Su)<\/button>/g)]
+      .filter((m) => m[1] === 'true').map((m) => m[2])
+    expect(pressed).toEqual(['T', 'Th'])
   })
 })
 

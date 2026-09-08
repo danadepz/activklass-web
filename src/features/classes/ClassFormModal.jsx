@@ -3,6 +3,8 @@ import { yearLevelError, semesterError, SEMESTERS } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
+import { parseSchedule, scheduleOverlap } from '@/lib/schedule'
+import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useAuth } from '@/context/useAuth'
 import { uploadAttachment } from '@/lib/attachments'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -40,47 +42,6 @@ function normalizeAcademicYear(value) {
   const from = Number.isFinite(rawFrom) && rawFrom >= FIRST_YEAR ? rawFrom : FIRST_YEAR
   const to = Number.isFinite(rawTo) && rawTo > from ? rawTo : from + 1
   return { from: String(from), to: String(to), value: `${from}-${to}` }
-}
-
-function parseSchedule(str = '') {
-  const defaults = {
-    days: [],
-    startHour: '8',
-    startMinute: '00',
-    startPeriod: 'AM',
-    endHour: '9',
-    endMinute: '30',
-    endPeriod: 'AM'
-  }
-  if (!str.trim()) return defaults
-
-  // Match days
-  const days = []
-  if (str.includes('M')) days.push('M')
-  if (str.includes('Th')) {
-    days.push('Th')
-  } else if (str.includes('T')) {
-    days.push('T')
-  }
-  if (str.includes('W')) days.push('W')
-  if (str.includes('F')) days.push('F')
-  if (str.includes('Sa')) days.push('Sa')
-  if (str.includes('Su')) days.push('Su')
-
-  // Match times
-  const matches = [...str.matchAll(/(\d+):(\d+)\s*(AM|PM)/ig)]
-  if (matches.length >= 2) {
-    return {
-      days,
-      startHour: matches[0][1],
-      startMinute: matches[0][2],
-      startPeriod: matches[0][3].toUpperCase(),
-      endHour: matches[1][1],
-      endMinute: matches[1][2],
-      endPeriod: matches[1][3].toUpperCase()
-    }
-  }
-  return { ...defaults, days }
 }
 
 /* School-day bounds. The pickers are 12-hour, so nothing stops a teacher
@@ -227,6 +188,12 @@ function FieldError({ id, message }) {
    semester nobody cleared. An edit that opened as College still writes both,
    so moving a class down to K-12 clears them, which is a choice made on
    screen. */
+/* "SCI9-SPEC · Curie" -- the way My Classes names a class, so the warning
+   points at the card the teacher will recognise. */
+function classLabel(c) {
+  return [c.subject_code, c.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ') || c.subject || 'another class'
+}
+
 export function buildMeta(form, { writeCollegeFields = true } = {}) {
   const isCollege = form.education_level === 'College'
   const meta = {
@@ -249,6 +216,10 @@ export function buildMeta(form, { writeCollegeFields = true } = {}) {
 export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, onClose, onSaved }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Class details', closeOnBackdrop: false })
   const { profile } = useAuth()
+  // The teacher's other classes, for the same-time warning on submit. The
+  // list page already holds this query, so it costs nothing on Create; on
+  // Edit from a class page it is one read.
+  const { data: myClasses } = useTeacherClasses()
   const [form, setForm] = useState(() => {
     const base = initial ?? emptyClassForm()
     return { ...base, academic_year: normalizeAcademicYear(base.academic_year).value }
@@ -424,12 +395,27 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
        back rather than described, because the field the teacher most often
        gets wrong here is which section they are editing. */
     const label = [form.subject_code, form.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ')
+    /* T-26: two classes on "TTh 1:00 PM – 2:30 PM" went through without a
+       word. Warn, do not block -- co-teaching and placeholder times are real,
+       and the teacher knows better than the form. Only this teacher's live
+       classes count (an archived one is not meeting), and never the class
+       being edited, or every Save would flag itself. */
+    const clashes = (myClasses ?? [])
+      .filter((c) => c.id !== classId && !c.archived_at)
+      .map((c) => ({ clazz: c, hit: scheduleOverlap(form.schedule, c.schedule) }))
+      .filter((x) => x.hit)
+    const clashText = clashes
+      .map(({ clazz, hit }) => `${classLabel(clazz)} (${hit.label})`)
+      .join(' and ')
+    const verb = mode === 'edit' ? 'Save' : 'Create'
     if (!(await confirmDialog({
       title: mode === 'edit' ? `Save changes to "${label}"?` : `Create "${label}"?`,
-      message: mode === 'edit'
-        ? 'Everyone on the roster sees the updated details the next time they open the class. Nothing recorded against it changes.'
-        : 'It joins your class list with an empty roster — you enrol students from the class page afterwards.',
-      confirmLabel: mode === 'edit' ? 'Save changes' : 'Create class',
+      message: clashes.length
+        ? `This meets at the same time as ${clashText}. ${verb} anyway?`
+        : mode === 'edit'
+          ? 'Everyone on the roster sees the updated details the next time they open the class. Nothing recorded against it changes.'
+          : 'It joins your class list with an empty roster — you enrol students from the class page afterwards.',
+      confirmLabel: clashes.length ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create class',
     }))) return
     setSaving(true)
     setError(null)
@@ -570,6 +556,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                   <button
                     key={day.val}
                     type="button"
+                    aria-pressed={isActive}
                     onClick={() => toggleDay(day.val)}
                     className="w-10 h-10 rounded-full font-semibold text-sm transition-all focus:outline-none flex items-center justify-center cursor-pointer border"
                     style={{
