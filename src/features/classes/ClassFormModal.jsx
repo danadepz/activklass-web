@@ -207,6 +207,14 @@ function validate(form, selectedDays, originalMaxStudents = null) {
   return errors
 }
 
+/* The red asterisk every other teacher form already uses for a required
+   field (the roster's Add Student form, for one). Shown before the teacher
+   types anything -- the post-submit banner only says it after the fact.
+   Hidden from screen readers: the inputs already carry `required`. */
+function Req() {
+  return <span className="text-red-500" aria-hidden="true"> *</span>
+}
+
 function FieldError({ id, message }) {
   if (!message) return null
   return <p id={id} role="alert" className="mt-1 text-xs text-red-600">{message}</p>
@@ -478,6 +486,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           <h3 className="text-lg font-semibold text-slate-800">
             {mode === 'edit' ? 'Edit Class' : 'New Class'}
           </h3>
+          <p className="text-xs text-slate-500 -mt-2"><span className="text-red-500">*</span> required</p>
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
           )}
@@ -504,7 +513,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {/* Row 1: Subject Code and Section */}
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Subject Code / Identifier</span>
+              <span className="text-sm font-medium text-slate-700">Subject Code / Identifier<Req /></span>
               <input
                 required placeholder="e.g. MATH10, SCI-1" value={form.subject_code} onChange={set('subject_code')}
                 data-field="subject_code"
@@ -515,7 +524,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <FieldError id="err-subject_code" message={errors.subject_code} />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Section / Room</span>
+              <span className="text-sm font-medium text-slate-700">Section / Room<Req /></span>
               <input
                 required placeholder="e.g. Grade 10 - Rizal, Block A" value={form.section} onChange={set('section')}
                 data-field="section"
@@ -529,7 +538,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
           {/* Row 2: Subject Description */}
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Subject Description</span>
+            <span className="text-sm font-medium text-slate-700">Subject Description<Req /></span>
             <input
               required placeholder="e.g. Mathematics 10, Introduction to Computing" value={form.subject} onChange={set('subject')}
               data-field="subject"
@@ -545,7 +554,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             data-field="schedule"
             className={`space-y-2 border rounded-xl p-3 bg-slate-50/50 ${errors.schedule ? 'border-red-400' : 'border-slate-100'}`}
           >
-            <span className="text-sm font-medium text-slate-700 block">Schedule Days</span>
+            <span className="text-sm font-medium text-slate-700 block">Schedule Days<Req /></span>
             <div className="flex gap-2 flex-wrap">
               {[
                 { val: 'M', label: 'M' },
@@ -665,7 +674,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {/* Row 4: Grade/Year Level, Max Students, School Year */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label className="block col-span-1">
-              <span className="text-sm font-medium text-slate-700">Grade / Year Level</span>
+              <span className="text-sm font-medium text-slate-700">Grade / Year Level<Req /></span>
               <input
                 required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')}
                 data-field="grade_level"
@@ -676,7 +685,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <FieldError id="err-grade_level" message={errors.grade_level} />
             </label>
             <label className="block col-span-1">
-              <span className="text-sm font-medium text-slate-700">Max Students</span>
+              <span className="text-sm font-medium text-slate-700">Max Students<Req /></span>
               <input
                 required
                 type="number"
@@ -695,7 +704,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
             {/* School Year Selectors */}
             <div className="block col-span-2">
-              <span className="text-sm font-medium text-slate-700 block mb-1">School Year</span>
+              <span className="text-sm font-medium text-slate-700 block mb-1">School Year<Req /></span>
               <div className="flex items-center gap-1">
                 <select
                   value={fromYear}
@@ -725,7 +734,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {educationLevel === 'College' && (
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Course Units</span>
+              <span className="text-sm font-medium text-slate-700">Course Units<Req /></span>
               <input
                 required
                 type="number"
@@ -743,7 +752,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <FieldError id="err-units" message={errors.units} />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">Semester</span>
+              <span className="text-sm font-medium text-slate-700">Semester<Req /></span>
               <select
                 required
                 value={form.semester}
