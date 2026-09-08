@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
-import { Layers, Users, TrendingUp, AlertCircle, Check, Plus, CalendarCheck, FileText, BarChart, ChevronRight, ArrowRight } from '@/components/icons'
+import { Layers, Users, TrendingUp, AlertCircle, Check, Plus, CalendarCheck, FileText, BarChart, ChevronRight, ArrowRight, Clock } from '@/components/icons'
 import { navy, ink, gold, goldDeep, goldChart, muted, faint, blueText, blue, green, line, serifAlt as serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { formatSchedule } from '@/lib/schedule'
@@ -184,6 +184,39 @@ function EnrollmentDonut({ list, totalStudents }) {
   )
 }
 
+/**
+ * Someone who registered FOR a school (the Institution path on /register) is
+ * an ordinary teacher until the ActivKlass team approves their request and
+ * makes them the school's admin (POST /api/superadmin/requests/{id}/approve,
+ * which clears school_request_pending and sets school_id in the same batch).
+ * Nothing else inside read that flag, so a requester who signed in early saw
+ * a plain teacher dashboard and took the correct state for a wrong role.
+ * Read-only: there is nothing for them to do but wait.
+ */
+export function PendingSchoolRequestNotice({ profile }) {
+  if (profile?.school_request_pending !== true || profile.school_id) return null
+  const school = profile.teaching_school_name || 'your school'
+  return (
+    <div
+      role="status"
+      className="mb-4 flex items-start gap-3"
+      style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(245,197,24,0.16)', border: '1px solid rgba(245,197,24,0.45)' }}
+    >
+      <span style={{ display: 'inline-grid', placeItems: 'center', width: 30, height: 30, borderRadius: 9, background: 'rgba(245,197,24,0.28)', color: goldDeep, flexShrink: 0 }}>
+        <Clock className="h-4 w-4" />
+      </span>
+      <div style={{ lineHeight: 1.45 }}>
+        <p style={{ fontSize: 13.5, fontWeight: 700, color: ink, margin: 0 }}>
+          Your request to set up {school} is with the ActivKlass team.
+        </p>
+        <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
+          You'll be made its admin once it's approved; until then this is your teacher workspace.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function StatusChip({ empty }) {
   return (
     <span
@@ -224,6 +257,8 @@ export default function TeacherDashboard() {
 
   return (
     <div>
+      <PendingSchoolRequestNotice profile={profile} />
+
       {/* Header — welcome + date chip + primary action */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
