@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSchedule } from './schedule'
+import { formatSchedule, parseSchedule, scheduleOverlap } from './schedule'
 
 describe('formatSchedule', () => {
   it('passes a typed string through', () => {
@@ -43,5 +43,80 @@ describe('formatSchedule', () => {
   it('omits the room when none is recorded', () => {
     expect(formatSchedule({ monday: [{ start: '08:00', end: '09:00' }] }))
       .toBe('Mon 08:00–09:00')
+  })
+})
+
+/* T-26 (andecobs-42): two classes on "TTh 1:00 PM – 2:30 PM" were created
+   without a word. The check that now warns reads both stored shapes through
+   these. */
+describe('parseSchedule', () => {
+  it('reads the day chips and the pickers back out of a typed string', () => {
+    expect(parseSchedule('TTh 1:00 PM – 2:30 PM')).toEqual({
+      days: ['T', 'Th'],
+      startHour: '1', startMinute: '00', startPeriod: 'PM',
+      endHour: '2', endMinute: '30', endPeriod: 'PM',
+    })
+  })
+
+  it('does not read the M in "PM" as Monday, and keeps Tuesday beside Thursday', () => {
+    // The old includes() scan put Monday on every afternoon class and turned
+    // "TTh" into Thursday alone.
+    expect(parseSchedule('TTh 1:00 PM – 2:30 PM').days).toEqual(['T', 'Th'])
+    expect(parseSchedule('F 8:00 AM – 9:30 AM').days).toEqual(['F'])
+    expect(parseSchedule('MTWThFSaSu 7:00 AM – 8:00 AM').days).toEqual(['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su'])
+  })
+
+  it('falls back to the picker defaults on blank input', () => {
+    expect(parseSchedule('')).toEqual({
+      days: [], startHour: '8', startMinute: '00', startPeriod: 'AM', endHour: '9', endMinute: '30', endPeriod: 'AM',
+    })
+    expect(parseSchedule(undefined).days).toEqual([])
+  })
+})
+
+describe('scheduleOverlap', () => {
+  const derick = 'TTh 1:00 PM – 2:30 PM'
+
+  it('names the shared days and window when two classes meet at once', () => {
+    const hit = scheduleOverlap(derick, 'TTh 1:00 PM – 2:30 PM')
+    expect(hit).not.toBeNull()
+    expect(hit.days).toEqual(['tuesday', 'thursday'])
+    expect(hit.label).toBe('Tue/Thu 1:00–2:30 PM')
+  })
+
+  it('reports only the minutes that actually overlap', () => {
+    const hit = scheduleOverlap(derick, 'T 2:00 PM – 4:00 PM')
+    expect(hit.days).toEqual(['tuesday'])
+    expect(hit.label).toBe('Tue 2:00–2:30 PM')
+  })
+
+  it('treats back-to-back classes as no clash', () => {
+    expect(scheduleOverlap(derick, 'TTh 2:30 PM – 4:00 PM')).toBeNull()
+    expect(scheduleOverlap(derick, 'TTh 11:00 AM – 1:00 PM')).toBeNull()
+  })
+
+  it('treats the same hours on other days as no clash', () => {
+    expect(scheduleOverlap(derick, 'MWF 1:00 PM – 2:30 PM')).toBeNull()
+  })
+
+  it('reads the seeded object shape against a typed string', () => {
+    const seeded = {
+      thursday: [{ start: '13:30', end: '15:00', room: 'Sci Lab 2' }],
+      monday: [{ start: '08:00', end: '09:00', room: 'Sci Lab 2' }],
+    }
+    expect(scheduleOverlap(derick, seeded)?.label).toBe('Thu 1:30–2:30 PM')
+    expect(scheduleOverlap(seeded, derick)?.label).toBe('Thu 1:30–2:30 PM')
+    expect(scheduleOverlap(seeded, 'MWF 9:00 AM – 10:00 AM')).toBeNull()
+  })
+
+  it('spans the period boundary in the label when the clash does', () => {
+    expect(scheduleOverlap('M 11:00 AM – 1:00 PM', 'M 11:30 AM – 2:00 PM')?.label).toBe('Mon 11:30 AM–1:00 PM')
+  })
+
+  it('never throws on blank or free-text schedules', () => {
+    expect(scheduleOverlap('', derick)).toBeNull()
+    expect(scheduleOverlap(null, derick)).toBeNull()
+    expect(scheduleOverlap('after lunch, ask the registrar', derick)).toBeNull()
+    expect(scheduleOverlap({ monday: [{ start: 'tbd' }] }, derick)).toBeNull()
   })
 })

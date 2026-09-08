@@ -83,6 +83,7 @@ src/lib/gradebook.js     src/lib/quizToRecord.js  src/lib/questionBank.js
 src/lib/remediationRecovery.js
 src/lib/quizPool.js      src/lib/quizFeedback.js
 src/lib/quizAttempts.js  src/lib/schoolDirectory.js
+src/lib/schedule.js
 ```
 
 **`quizPool.js`, `quizFeedback.js` and `quizAttempts.js` exist twice.** Each has a TypeScript port
@@ -109,6 +110,14 @@ query written inline in 8 pages; invalidation still works through the
 `['fs-classes']` prefix that existing `invalidateQueries` calls use.
 
 New shared queries go in `src/hooks/`, not into a route file.
+
+**`lib/schedule.js`, added 2026-09-09 (T-26 debug pane).** It was in no lane —
+the fourth `lib/` module found that way. It renders a class schedule for five
+pages across four lanes, `classForm.js` (this lane) already imports it, and it
+now also holds `parseSchedule` (moved out of `ClassFormModal`) and
+`scheduleOverlap`, the pure check behind the "meets at the same time as"
+warning. A schedule is a domain rule, not a page, so it lands here rather than
+in Class setup, which only calls it.
 
 ---
 
