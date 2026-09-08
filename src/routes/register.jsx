@@ -60,6 +60,10 @@ const POSITIONS = [
   { value: 'dean', label: 'Dean' },
   { value: 'admin', label: 'Admin' },
 ]
+// The institution path exists to set the school up, and whoever walks it
+// becomes its admin. Anyone below these is probably a teacher who picked the
+// wrong card on step 1 (T-31, T-32) — the Position field says so, gently.
+const LEADERSHIP_POSITIONS = new Set(['program_chair', 'dean', 'admin'])
 
 // A school picks how many seats it needs on two sliders, and the
 // subscription follows from those numbers — there are no named plans. The
@@ -423,7 +427,7 @@ export default function Register() {
               tint={blue}
               tintText={blueText}
               heading="Individual"
-              body="A teacher on their own"
+              body="A teacher signing up alone — including at a school that isn’t on ActivKlass yet"
             />
             <ChoiceCard
               selected={kind === 'institution'}
@@ -432,7 +436,7 @@ export default function Register() {
               tint={gold}
               tintText={goldDeep}
               heading="Institution"
-              body="A school and its staff"
+              body="Set up your school’s subscription — you’ll be its admin and issue every teacher’s and student’s login"
             />
           </div>
           <SubmitButton type="button" disabled={!kind} onClick={() => setStep(2)}>
@@ -531,6 +535,11 @@ export default function Register() {
                     <option value="" disabled>Select</option>
                     {POSITIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
+                  {kind === 'institution' && form.position && !LEADERSHIP_POSITIONS.has(form.position) && (
+                    <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
+                      Just here to teach? Individual is the faster path — go back a step.
+                    </p>
+                  )}
                 </Field>
               </div>
             </>
