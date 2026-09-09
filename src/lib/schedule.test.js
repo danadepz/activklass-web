@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSchedule, parseSchedule, scheduleOverlap } from './schedule'
+import { formatSchedule, parseSchedule, scheduleMeetings, scheduleOverlap } from './schedule'
 
 describe('formatSchedule', () => {
   it('passes a typed string through', () => {
@@ -118,5 +118,58 @@ describe('scheduleOverlap', () => {
     expect(scheduleOverlap(null, derick)).toBeNull()
     expect(scheduleOverlap('after lunch, ask the registrar', derick)).toBeNull()
     expect(scheduleOverlap({ monday: [{ start: 'tbd' }] }, derick)).toBeNull()
+  })
+})
+
+/* `scheduleMeetings` is what decides which weekdays a class actually meets. It
+   arrived with T-26 untested, and T-41 then built the Whole-term grid's columns
+   on top of it: the term sheet lists every recorded day plus this function's
+   weekdays between the first record and today. So a wrong answer here either
+   invents columns for days the class never met, or drops the gap that shows a
+   teacher which session they forgot to take. Both edges are pinned. */
+describe('scheduleMeetings', () => {
+  it('reads the weekdays and times out of a typed schedule', () => {
+    expect(scheduleMeetings('MWF 8:00 AM – 9:00 AM')).toEqual([
+      { day: 'monday', start: 480, end: 540 },
+      { day: 'wednesday', start: 480, end: 540 },
+      { day: 'friday', start: 480, end: 540 },
+    ])
+  })
+
+  it('keeps Tuesday and Thursday apart, and does not read the M in PM', () => {
+    expect(scheduleMeetings('TTh 1:00 PM – 2:30 PM').map((m) => m.day))
+      .toEqual(['tuesday', 'thursday'])
+  })
+
+  it('reads the seeded object shape, one entry per slot', () => {
+    const stored = {
+      monday: [{ start: '08:00', end: '09:00', room: 'Sci Lab 2' }],
+      friday: [{ start: '10:00', end: '11:00' }],
+    }
+    expect(scheduleMeetings(stored)).toEqual([
+      { day: 'monday', start: 480, end: 540 },
+      { day: 'friday', start: 600, end: 660 },
+    ])
+  })
+
+  it('yields nothing for free text from before the pickers', () => {
+    // The term grid falls back to the recorded days on this, rather than
+    // inventing a calendar -- and an overlap check must never block a save.
+    expect(scheduleMeetings('every other Tuesday, room TBA')).toEqual([])
+    expect(scheduleMeetings('MWF')).toEqual([])
+  })
+
+  it('yields nothing rather than throwing on empty or missing input', () => {
+    for (const bad of ['', null, undefined, 42, {}]) {
+      expect(scheduleMeetings(bad)).toEqual([])
+    }
+  })
+
+  it('skips a slot with no usable times instead of dropping the whole schedule', () => {
+    const stored = {
+      monday: [{ start: '08:00', end: '09:00' }],
+      tuesday: [{ room: 'no times here' }],
+    }
+    expect(scheduleMeetings(stored).map((m) => m.day)).toEqual(['monday'])
   })
 })
