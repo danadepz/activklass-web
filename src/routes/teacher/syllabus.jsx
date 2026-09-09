@@ -22,11 +22,15 @@ const newKey = () => `k${++keyCounter}`
 const newId = () =>
   globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-function toDraftState(tree, source) {
+export function toDraftState(tree, source) {
   return {
     title: tree.title ?? '',
     description: tree.description ?? '',
     source,
+    // The assignment travels with the rest of the state, or the editor opens
+    // with every class unticked and save writes that emptiness back as fact
+    // (T-39). A generated tree has none; the draft path sets it explicitly.
+    class_ids: tree.class_ids ?? [],
     modules: (tree.modules ?? []).map((m) => ({
       _key: newKey(),
       id: m.id ?? null,
