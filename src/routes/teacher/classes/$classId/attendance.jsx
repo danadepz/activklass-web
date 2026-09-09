@@ -94,9 +94,6 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   const { profile } = useAuth()
   // dirty: {studentId: {status, remarks}} — status 'none' clears the record
   const [dirty, setDirty] = useState({})
-  // Teacher's own attendance for this date.
-  const [teacher, setTeacher] = useState(sheet.teacher ?? emptyEntry())
-  const [teacherDirty, setTeacherDirty] = useState(false)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -113,11 +110,6 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
     setEntry(sid, { ...entry, status: entry.status === status ? 'none' : status })
   }
 
-  const toggleTeacher = (status) => {
-    setTeacher((t) => ({ ...t, status: t.status === status ? 'none' : status }))
-    setTeacherDirty(true)
-  }
-
   // Set every student to `status` ('none' clears), preserving remarks.
   const markAll = (status) => {
     const next = {}
@@ -128,7 +120,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   }
 
   const dirtyCount = Object.keys(dirty).length
-  const hasChanges = dirtyCount > 0 || teacherDirty
+  const hasChanges = dirtyCount > 0
 
   // Live tallies for the stat cards (reflect unsaved edits).
   const statuses = sheet.students.map((s) => current(s.student_id).status)
@@ -151,15 +143,9 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           records[s.student_id] = { status: entry.status, remarks: entry.remarks || '' }
         }
       }
-      const teacherEntry =
-        teacher.status && teacher.status !== 'none'
-          ? { status: teacher.status, remarks: teacher.remarks || '' }
-          : null
-
       await setDoc(doc(db, 'classes', classId, 'attendance', day), {
         date: day,
         records,
-        teacher: teacherEntry,
         recorded_by: profile.id,
         updated_at: serverTimestamp(),
       })
@@ -174,7 +160,6 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
       }
 
       setDirty({})
-      setTeacherDirty(false)
       refetch()
     } catch (err) {
       setError(err.message)
@@ -239,30 +224,6 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           {error}
         </div>
       )}
-
-      {/* Teacher's own attendance for the session */}
-      <div className="flex flex-wrap items-center justify-between gap-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 18 }}>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>My attendance (teacher)</div>
-          <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>
-            {profile.first_name} {profile.last_name} · your status for this session
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <StatusButtons status={teacher.status} onToggle={toggleTeacher} />
-          <input
-            className="ak-input"
-            value={teacher.remarks ?? ''}
-            onChange={(e) => {
-              setTeacher((t) => ({ ...t, remarks: e.target.value }))
-              setTeacherDirty(true)
-            }}
-            placeholder="Remarks (optional)"
-            disabled={teacher.status === 'none'}
-            style={{ ...remarksStyle(teacher.status === 'none'), width: 224 }}
-          />
-        </div>
-      </div>
 
       <div className="mt-4 overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
@@ -574,7 +535,6 @@ export default function AttendancePage() {
       return {
         students,
         records: dayData.records ?? {},
-        teacher: dayData.teacher ?? null,
         summary,
       }
     },
@@ -609,7 +569,7 @@ export default function AttendancePage() {
         <p style={{ color: red }}>Class not found.</p>
       ) : (
         <AttendanceSheet
-          key={`${classId}-${day}-${JSON.stringify(sheet.records)}-${JSON.stringify(sheet.teacher)}`}
+          key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
           classId={classId}
           day={day}
           sheet={sheet}
