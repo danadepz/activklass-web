@@ -336,14 +336,18 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   )
 }
 
-/* Attendance disputes filed by students. The teacher approves (which marks that
-   date as excused on the attendance sheet) or rejects with a note. The decision
-   is written to Firestore the moment the button is clicked; the row then slides
-   out of the queue, so the panel only ever holds work still to be done. */
+/* Attendance disputes filed by students. The teacher approves — choosing what
+   the day actually was, since a dispute is as often a mis-click to undo as an
+   absence to excuse — or rejects with a note. The decision is written to
+   Firestore the moment the button is clicked; the row then slides out of the
+   queue, so the panel only ever holds work still to be done. */
 function ContestsPanel({ classId }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState(null)
+  // The status Approve will write, per contest id. Absent an explicit pick the
+  // row stays on 'excused', so approving an excused absence is still one click.
+  const [picked, setPicked] = useState({})
   // Resolved contests animating out. They stay 'pending' in the query cache
   // until the slide finishes, so the row survives long enough to animate.
   const [leavingIds, setLeavingIds] = useState([])
@@ -391,7 +395,8 @@ function ContestsPanel({ classId }) {
     queryClient.invalidateQueries({ queryKey: ['fs-contests', classId] })
   }
 
-  async function approve(c) {
+  async function approve(c, status) {
+    const label = STATUS_META[status].label
     setBusyId(c.id)
     setError(null)
     try {
@@ -400,11 +405,11 @@ function ContestsPanel({ classId }) {
         resolved_at: serverTimestamp(),
         resolved_by: profile.id,
       })
-      // Accepting the dispute marks that day excused for the student.
+      // Accepting the dispute rewrites that day to the status the teacher chose.
       await updateDoc(doc(db, 'classes', classId, 'attendance', c.date), {
         [`records.${c.student_id}`]: {
-          status: 'excused',
-          remarks: 'Excused — contest approved',
+          status,
+          remarks: `${label} — contest approved`,
           excuse_url: c.excuse_url ?? null,
         },
       })
@@ -419,7 +424,7 @@ function ContestsPanel({ classId }) {
         classId,
         createdBy: profile.id,
         type: 'attendance_contest',
-        message: `Your attendance contest for ${c.date} was approved — it's now marked Excused.`,
+        message: `Your attendance contest for ${c.date} was approved — it's now marked ${label}.`,
         link: `/student/classes/${classId}`,
       }).catch(() => {})
       refetchOthers()
@@ -490,6 +495,7 @@ function ContestsPanel({ classId }) {
       <div>
         {pending.map((c) => {
           const isLeaving = leavingIds.includes(c.id)
+          const choice = picked[c.id] ?? 'excused'
           return (
             <div
               key={c.id}
@@ -508,13 +514,21 @@ function ContestsPanel({ classId }) {
                   <a href={c.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: blueText }}>📎 View excuse document</a>
                 )}
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => approve(c)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-                  Approve
-                </button>
-                <button onClick={() => reject(c)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
-                  Reject
-                </button>
+              <div className="flex flex-wrap items-end gap-3 flex-shrink-0">
+                {/* What approving should write. A dispute is as often a mis-click
+                    to undo as an absence to excuse, so the teacher says which. */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: faint, marginBottom: 5 }}>Approve as</div>
+                  <StatusButtons status={choice} onToggle={(status) => setPicked((m) => ({ ...m, [c.id]: status }))} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => approve(c, choice)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 9, cursor: 'pointer' }}>
+                    Approve
+                  </button>
+                  <button onClick={() => reject(c)} disabled={busyId === c.id || isLeaving} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 9, cursor: 'pointer' }}>
+                    Reject
+                  </button>
+                </div>
               </div>
             </div>
           )
