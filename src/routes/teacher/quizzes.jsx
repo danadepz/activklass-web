@@ -474,7 +474,12 @@ function CreateQuizModal({ classes, onClose }) {
 
 function QuizCard({ quiz, classes, onDelete }) {
   const [removeQuiz, removing] = useAsyncAction(() => onDelete(quiz.id))
-  const count = quiz.question_count ?? 0
+  // Nothing in this client writes question_count / total_points -- only the Flask
+  // model does, and quizzes are Firestore-direct here. Derive both from the
+  // questions the list query already returned, and keep a stored value if one
+  // exists (a quiz that came through the backend).
+  const count = quiz.question_count ?? (quiz.questions?.length ?? 0)
+  const points = quiz.total_points ?? totalPoints(quiz.questions)
   const s = STATUS_PILL[quiz.status] ?? STATUS_PILL.draft
   const isAi = quiz.generated_by === 'ai_generated'
 
@@ -526,7 +531,7 @@ function QuizCard({ quiz, classes, onDelete }) {
         </div>
         <div>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Points</div>
-          <div style={{ ...mono, fontSize: 14, fontWeight: 700, color: ink, marginTop: 2 }}>{quiz.total_points ?? 0}</div>
+          <div style={{ ...mono, fontSize: 14, fontWeight: 700, color: ink, marginTop: 2 }}>{points}</div>
         </div>
         <Link to={`/teacher/quizzes/${quiz.id}`} style={{ ...mono, marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: navy, textDecoration: 'none' }} className="hover:underline">
           Open →
