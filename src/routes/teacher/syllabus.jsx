@@ -660,7 +660,8 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                   onChange={(e) => updateModule(mIdx, { title: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <input
+                <textarea
+                  rows={Math.max(2, (module.description || '').split('\n').length)}
                   placeholder="Module description (optional)"
                   value={module.description}
                   onChange={(e) => updateModule(mIdx, { description: e.target.value })}

@@ -121,7 +121,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
             <span style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'rgba(14,42,92,0.07)', padding: '4px 9px', borderRadius: 7 }}>M{mi + 1}</span>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: ink }}>{m.title || `Module ${mi + 1}`}</div>
-              {m.description && <div style={{ fontSize: 13.5, color: muted, marginTop: 2 }}>{m.description}</div>}
+              {m.description && <div style={{ fontSize: 13.5, color: muted, marginTop: 2, whiteSpace: 'pre-wrap' }}>{m.description}</div>}
             </div>
           </div>
           <div className="flex flex-col gap-6 pl-2">
