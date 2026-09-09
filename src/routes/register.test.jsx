@@ -13,10 +13,12 @@
  * Static markup, the house pattern (PendingSchoolRequestNotice.test.jsx is
  * the model). Step 1 is the initial state, so no interaction is needed.
  *
- * The Faculty nudge on the school step is deliberately not here: it is gated
- * on `step` and `form.position`, three steps in, and the predicate it reads
- * (LEADERSHIP_POSITIONS) is module-private in a Shared file this pane does
- * not own. It stays a browser check — recorded as such in the ledger.
+ * The Faculty nudge on the school step is the same complaint caught later in
+ * the walk, and it is covered below. It used to be unreachable from a test —
+ * gated on `step` and `form.position`, three steps in, on a predicate that
+ * was module-private — so it was lifted into `WrongPathNudge` and the rule is
+ * asserted directly, the way PendingSchoolRequestNotice was lifted out of the
+ * teacher dashboard for exactly this reason.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
@@ -51,7 +53,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
   fetchSchoolDirectory: vi.fn(),
 }))
 
-import Register from './register.jsx'
+import Register, { WrongPathNudge } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -77,5 +79,39 @@ describe('/register step 1 — choosing a path', () => {
      this is the assertion that should stop it. */
   it('no longer offers the Institution card as the place for a school’s staff', () => {
     expect(step1()).not.toContain('A school and its staff')
+  })
+})
+
+/* The second half of the same complaint: someone who picked Institution and
+   then tells the form they are Faculty is on the wrong path, and step 3 says
+   so before they reach the seats. The rule is "not leadership", not "is
+   faculty" — a position nobody has thought of yet has to nudge too. */
+describe('the Faculty nudge on the school step', () => {
+  const nudge = (props) => renderToStaticMarkup(<WrongPathNudge {...props} />)
+  const SENTENCE = 'Just here to teach? Individual is the faster path'
+
+  it('tells a faculty member on the institution path that Individual is faster', () => {
+    expect(nudge({ kind: 'institution', position: 'faculty' })).toContain(SENTENCE)
+  })
+
+  it('nudges any position that is not one of the three leadership ones', () => {
+    expect(nudge({ kind: 'institution', position: 'registrar' })).toContain(SENTENCE)
+  })
+
+  it('stays quiet for the positions the institution path is actually for', () => {
+    for (const position of ['program_chair', 'dean', 'admin']) {
+      expect(nudge({ kind: 'institution', position })).toBe('')
+    }
+  })
+
+  it('stays quiet before a position is chosen', () => {
+    expect(nudge({ kind: 'institution', position: '' })).toBe('')
+  })
+
+  /* Step 3 renders on both paths, so the kind has to be part of the rule:
+     a solo teacher is already where they should be. */
+  it('stays quiet on the individual path, faculty or not', () => {
+    expect(nudge({ kind: 'individual', position: 'faculty' })).toBe('')
+    expect(nudge({ kind: 'individual', position: 'dean' })).toBe('')
   })
 })

@@ -535,11 +535,7 @@ export default function Register() {
                     <option value="" disabled>Select</option>
                     {POSITIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
-                  {kind === 'institution' && form.position && !LEADERSHIP_POSITIONS.has(form.position) && (
-                    <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
-                      Just here to teach? Individual is the faster path — go back a step.
-                    </p>
-                  )}
+                  <WrongPathNudge kind={kind} position={form.position} />
                 </Field>
               </div>
             </>
@@ -771,6 +767,18 @@ export default function Register() {
         </form>
       )}
     </AuthLayout>
+  )
+}
+
+// Exported so the rule itself can be tested: the nudge renders three steps
+// into a flow no static render reaches, and the person who needs it (T-31,
+// T-32) is the one who never gets that far on purpose.
+export function WrongPathNudge({ kind, position }) {
+  if (kind !== 'institution' || !position || LEADERSHIP_POSITIONS.has(position)) return null
+  return (
+    <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
+      Just here to teach? Individual is the faster path — go back a step.
+    </p>
   )
 }
 
