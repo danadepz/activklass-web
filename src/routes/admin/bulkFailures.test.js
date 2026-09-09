@@ -12,7 +12,7 @@ describe('summarizeFailures', () => {
     const groups = summarizeFailures(ALL_TAKEN)
     expect(groups).toHaveLength(1)
     expect(groups[0]).toEqual({
-      reason: 'email already on another account', count: 100, rows: '2–101',
+      reason: 'email already on another account', count: 100, rows: '2–101', who: '',
     })
   })
 
@@ -22,8 +22,8 @@ describe('summarizeFailures', () => {
       { row: 1, reason: 'already exists' },
       { row: 2, reason: 'already exists' },
     ])).toEqual([
-      { reason: 'already exists', count: 2, rows: '3–4' },
-      { reason: 'missing employee_number', count: 1, rows: '2' },
+      { reason: 'already exists', count: 2, rows: '3–4', who: '' },
+      { reason: 'missing employee_number', count: 1, rows: '2', who: '' },
     ])
   })
 
@@ -44,7 +44,7 @@ describe('summarizeFailures', () => {
   it('names the reason alone when no one row failed', () => {
     // The request itself fell over: pointing at row 2 would be a lie.
     expect(summarizeFailures([{ reason: 'The server could not be reached.' }]))
-      .toEqual([{ reason: 'The server could not be reached.', count: 1, rows: '' }])
+      .toEqual([{ reason: 'The server could not be reached.', count: 1, rows: '', who: '' }])
   })
 
   it('has nothing to say about a clean upload', () => {
@@ -54,7 +54,32 @@ describe('summarizeFailures', () => {
 
   it('does not drop a failure that came back without a reason', () => {
     expect(summarizeFailures([{ row: 4 }]))
-      .toEqual([{ reason: 'could not be created', count: 1, rows: '6' }])
+      .toEqual([{ reason: 'could not be created', count: 1, rows: '6', who: '' }])
+  })
+
+  // andecobs-45: Audrey's row was refused as "already exists" and the panel
+  // said "row 5", so the admin searched for her and found nothing. The
+  // uploader knows the login and name it sent on each row; the panel says them.
+  it('names the login and person on each failed row when the uploader says who they are', () => {
+    const labels = [
+      'sccu-000012 Shyna Tantay', 'sccu-000034 Juan Cruz',
+      'sccu-000050 Shyna Tantay', 'sccu-000050 Audrey Cabunillas',
+    ]
+    expect(summarizeFailures([{ row: 3, reason: 'already exists' }], labels)[0].who)
+      .toBe('sccu-000050 Audrey Cabunillas (row 5)')
+  })
+
+  it('caps the names the way it caps the rows', () => {
+    const labels = Array.from({ length: 10 }, (_, i) => `snhs-00000${i} Student ${i}`)
+    const failed = labels.map((_, i) => ({ row: i, reason: 'already exists' }))
+    expect(summarizeFailures(failed, labels)[0].who).toBe(
+      'snhs-000000 Student 0 (row 2), snhs-000001 Student 1 (row 3), ' +
+      'snhs-000002 Student 2 (row 4), snhs-000003 Student 3 (row 5), and 6 more',
+    )
+  })
+
+  it('leaves who blank for a row it has no label for', () => {
+    expect(summarizeFailures([{ row: 7, reason: 'already exists' }], ['x'])[0].who).toBe('')
   })
 })
 

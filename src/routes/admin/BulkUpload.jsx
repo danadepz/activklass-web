@@ -8,7 +8,7 @@ import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
-import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
+import { accountsNamed, accountWithEmail, accountWithLogin, accountName, describeAccount } from './duplicates'
 import { summarizeFailures } from './bulkFailures'
 import Notice from './Notice'
 import CardHead from './CardHead'
@@ -121,21 +121,38 @@ function rowLogin(row, prefix) {
  * the directory *and* against the rows above it, since one sheet listing the
  * same person twice is the commoner mistake of the two.
  *
- * A parsed row carries the same `first_name` / `last_name` / `personal_email`
- * keys a profile does, so the earlier rows go through the same two calls the
- * directory does. `tone: 'error'` is a reused address, which belongs to one
- * person; `'warn'` is a shared name, which is allowed and merely worth seeing.
+ * `rows` is the file with each row given its `login_id` and spreadsheet
+ * `line` (see `withLogins`), so it carries the same `first_name` /
+ * `last_name` / `personal_email` / `login_id` keys a profile does and the
+ * earlier rows go through the same three calls the directory does.
+ *
+ * The login comes first: it is the prefix plus the last six digits of the
+ * number, so two different people whose LRNs end alike are issued the same
+ * login, and the server refuses the second as "already exists" — the one
+ * duplicate that actually blocks creation was the one this never mentioned
+ * (andecobs-45). `kind` says which check bit, for the counts under the
+ * table. `tone: 'error'` is a taken login or a reused address, each of which
+ * belongs to one person; `'warn'` is a shared name, which is allowed and
+ * merely worth seeing.
  */
 function rowDuplicate(row, index, rows, users) {
   const earlier = rows.slice(0, index)
+  const holder = accountWithLogin(users, row.login_id)
+  if (holder) {
+    return { tone: 'error', kind: 'login', note: `${row.login_id} already belongs to ${accountName(holder)}` }
+  }
+  const above = accountWithLogin(earlier, row.login_id)
+  if (above) {
+    return { tone: 'error', kind: 'login', note: `same login as ${accountName(above)} (row ${above.line}) — ${row.login_id}` }
+  }
   const email = row.personal_email || row.email
   const owner = accountWithEmail(users, email)
-  if (owner) return { tone: 'error', note: `${email} is already ${describeAccount(owner)}’s` }
-  if (accountWithEmail(earlier, email)) return { tone: 'error', note: `${email} is on an earlier row` }
+  if (owner) return { tone: 'error', kind: 'email', note: `${email} is already ${describeAccount(owner)}’s` }
+  if (accountWithEmail(earlier, email)) return { tone: 'error', kind: 'email', note: `${email} is on an earlier row` }
   const onFile = accountsNamed(users, row.first_name, row.last_name)
-  if (onFile.length) return { tone: 'warn', note: `same name as ${onFile.map(describeAccount).join(', ')}` }
+  if (onFile.length) return { tone: 'warn', kind: 'name', note: `same name as ${onFile.map(describeAccount).join(', ')}` }
   if (accountsNamed(earlier, row.first_name, row.last_name).length) {
-    return { tone: 'warn', note: 'same name as an earlier row' }
+    return { tone: 'warn', kind: 'name', note: 'same name as an earlier row' }
   }
   return null
 }
@@ -165,18 +182,35 @@ export default function BulkUpload({ onDone, settings, users }) {
   const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState(false)
 
+  // Each row with the login it will be issued and its spreadsheet line, so a
+  // row can be checked against the rows above it with the calls that check
+  // it against the directory, and a failure can be named after the click.
+  const withLogins = useMemo(
+    () => rows.map((r, i) => ({ ...r, login_id: rowLogin(r, prefix), line: i + 2 })),
+    [rows, prefix],
+  )
   // Every row, not the eight the preview shows — the line under the table is
   // the only place a repeat on row 40 ever gets mentioned.
-  const dupes = useMemo(() => rows.map((r, i) => rowDuplicate(r, i, rows, users)), [rows, users])
-  // What came back failed, grouped by reason — see bulkFailures.js.
-  const failures = useMemo(() => summarizeFailures(result?.failed), [result])
-  const reusedEmails = dupes.filter((d) => d?.tone === 'error').length
-  const sharedNames = dupes.filter((d) => d?.tone === 'warn').length
+  const dupes = useMemo(
+    () => withLogins.map((r, i) => rowDuplicate(r, i, withLogins, users)),
+    [withLogins, users],
+  )
+  // What came back failed, grouped by reason and naming the login and person
+  // on each failed row — see bulkFailures.js.
+  const failures = useMemo(
+    () => summarizeFailures(result?.failed, withLogins.map((r) => [r.login_id, accountName(r)].filter(Boolean).join(' '))),
+    [result, withLogins],
+  )
+  const takenLogins = dupes.filter((d) => d?.kind === 'login').length
+  const reusedEmails = dupes.filter((d) => d?.kind === 'email').length
+  const sharedNames = dupes.filter((d) => d?.kind === 'name').length
+  const blocking = takenLogins + reusedEmails
 
   /* One sentence for both places that say it: the red notice under the table,
      and the confirm the Create button now goes through. Written once so the
      dialog quotes what is already on screen rather than paraphrasing it. */
   const concerns = [
+    takenLogins && `${takenLogins} row${takenLogins === 1 ? '' : 's'} would get a login that is already taken`,
     reusedEmails && `${reusedEmails} row${reusedEmails === 1 ? '' : 's'} reuse${reusedEmails === 1 ? 's' : ''} an email that already belongs to someone`,
     sharedNames && `${sharedNames} row${sharedNames === 1 ? '' : 's'} repeat${sharedNames === 1 ? 's' : ''} a name already on file`,
   ].filter(Boolean).join(', and ')
@@ -227,7 +261,7 @@ export default function BulkUpload({ onDone, settings, users }) {
         ? `${concerns} — each becomes a separate account. Creating cannot be stopped once it starts.`
         : 'Each row becomes a separate account, able to sign in straight away. Creating cannot be stopped once it starts.',
       confirmLabel: 'Create accounts',
-      tone: reusedEmails ? 'danger' : 'primary',
+      tone: blocking ? 'danger' : 'primary',
     })
     if (!ok) return
 
@@ -399,7 +433,9 @@ export default function BulkUpload({ onDone, settings, users }) {
                   const number = r.role === 'student' ? r.student_number : r.employee_number
                   return (
                     <tr key={i} style={{ borderTop: `1px solid ${line}`, color: problem ? red : ink }}>
-                      <td style={{ padding: '8px 14px' }}>{login || <em>{problem || 'no login'}</em>}</td>
+                      <td style={{ padding: '8px 14px', color: dup?.kind === 'login' ? red : undefined }}>
+                        {login || <em>{problem || 'no login'}</em>}
+                      </td>
                       <td style={{ padding: '8px 14px' }}>
                         {[r.first_name, r.last_name].filter(Boolean).join(' ') || <em>missing</em>}
                         {dup && (
@@ -439,9 +475,9 @@ export default function BulkUpload({ onDone, settings, users }) {
               the repeat is as likely to be on row 40. Not a block — an
               address can be a typo and a shared name can be two real people,
               and only the person holding the list knows which. */}
-          {(reusedEmails > 0 || sharedNames > 0) && (
+          {(blocking > 0 || sharedNames > 0) && (
             <div style={{ marginBottom: 12 }}>
-              <Notice tone={reusedEmails ? 'error' : 'warn'}>
+              <Notice tone={blocking ? 'error' : 'warn'}>
                 {concerns} — check them before creating, or each becomes a separate account.
               </Notice>
             </div>
@@ -463,7 +499,9 @@ export default function BulkUpload({ onDone, settings, users }) {
           </Notice>
           {/* One line per reason, not per row. A hundred rows failing the
               same check used to print a hundred all-but-identical lines and
-              bury the one thing they said (andecobs-30). */}
+              bury the one thing they said (andecobs-30). Each line names the
+              login and person refused, not just the row: "row 5" sent an
+              admin to search for an account that was never made (andecobs-45). */}
           {failures.length > 0 && (
             <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 13, color: muted }}>
               {failures.map((f) => (
@@ -472,7 +510,7 @@ export default function BulkUpload({ onDone, settings, users }) {
                     ? <>
                         <strong>{f.count} row{f.count === 1 ? '' : 's'}</strong> — {f.reason}
                         <span style={{ ...mono, fontSize: 12, color: faint }}>
-                          {' '}· row{f.count === 1 ? '' : 's'} {f.rows}
+                          {' '}· {f.who || `row${f.count === 1 ? '' : 's'} ${f.rows}`}
                         </span>
                       </>
                     : f.reason}

@@ -35,23 +35,40 @@ export function rowRanges(lines, cap = 4) {
 /**
  * Group `result.failed` by reason, commonest first.
  *
- * Each group is `{ reason, count, rows }`, where `rows` is the spreadsheet
- * line numbers — the API counts data rows from 0, the person reading their
- * file counts the header as line 1, so the offset is +2. A failure carrying
- * no row (the whole request fell over, not one row of it) keeps an empty
- * `rows`, and the panel then says only the reason rather than pointing at a
- * line that never failed.
+ * Each group is `{ reason, count, rows, who }`, where `rows` is the
+ * spreadsheet line numbers — the API counts data rows from 0, the person
+ * reading their file counts the header as line 1, so the offset is +2 — and
+ * `who` names the people on those lines, from `labels`: what the uploader
+ * knows about each row it sent, by index, typically the issued login and the
+ * name ("sccu-000050 Audrey Cabunillas"). A row number alone sent an admin
+ * back to the sheet to work out whose account was refused (andecobs-45);
+ * the login is what they would search the users table for. Capped like
+ * `rows`. A failure carrying no row (the whole request fell over, not one
+ * row of it) keeps both empty, and the panel then says only the reason
+ * rather than pointing at a line that never failed.
  */
-export function summarizeFailures(failed) {
+export function summarizeFailures(failed, labels = []) {
   const groups = new Map()
   for (const f of failed ?? []) {
     const reason = (f?.reason || 'could not be created').trim()
-    const group = groups.get(reason) ?? { reason, count: 0, lines: [] }
+    const group = groups.get(reason) ?? { reason, count: 0, lines: [], who: [] }
     group.count += 1
-    if (Number.isInteger(f?.row)) group.lines.push(f.row + 2)
+    if (Number.isInteger(f?.row)) {
+      group.lines.push(f.row + 2)
+      if (labels[f.row]) group.who.push(`${labels[f.row]} (row ${f.row + 2})`)
+    }
     groups.set(reason, group)
   }
   return [...groups.values()]
     .sort((a, b) => b.count - a.count)
-    .map(({ reason, count, lines }) => ({ reason, count, rows: rowRanges(lines) }))
+    .map(({ reason, count, lines, who }) => ({
+      reason, count, rows: rowRanges(lines), who: capped(who),
+    }))
+}
+
+/** "a, b, c, d, and 96 more" — the same cap rowRanges applies to lines. */
+function capped(items, cap = 4) {
+  const shown = items.slice(0, cap)
+  if (items.length > cap) shown.push(`and ${items.length - cap} more`)
+  return shown.join(', ')
 }

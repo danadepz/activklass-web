@@ -25,9 +25,14 @@
 
 const fold = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
+/** "John Does" — the person, without the login. */
+export function accountName(user) {
+  return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
+}
+
 /** How a match is named back to the admin: "John Does (um-123553)". */
 export function describeAccount(user) {
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
+  const name = accountName(user)
   const login = user?.login_id || user?.email
   return login ? `${name} (${login})` : name
 }
@@ -51,4 +56,20 @@ export function accountWithEmail(users, email) {
   return (users ?? []).find(
     (u) => fold(u.personal_email) === wanted || fold(u.email) === wanted,
   ) ?? null
+}
+
+/**
+ * The account already holding this issued login, if any. A login is the
+ * prefix plus the LAST SIX digits of the LRN, student number or employee
+ * number (`issuedLoginId` in lib/logins.js), so two different people whose
+ * numbers end the same way are issued the same login — and the second one
+ * is refused as "already exists" with nothing in the preview to say why
+ * (tester ticket andecobs-45: Shyna and Audrey, both `sccu-000050`). The
+ * uploader gives its earlier rows a `login_id` so this one call checks a row
+ * against the sheet above it and against the directory alike.
+ */
+export function accountWithLogin(users, loginId) {
+  const wanted = fold(loginId)
+  if (!wanted) return null
+  return (users ?? []).find((u) => fold(u.login_id) === wanted) ?? null
 }

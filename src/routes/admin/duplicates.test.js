@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
+import { accountsNamed, accountWithEmail, accountWithLogin, accountName, describeAccount } from './duplicates'
 
 // The pilot ticket, as data: one person entered twice under two employee
 // numbers, which the console happily made into two accounts.
@@ -54,6 +54,50 @@ describe('accountWithEmail', () => {
   it('does not read a missing field as a blank match', () => {
     // um-012355 carries no personal_email; a blank lookup must not find it.
     expect(accountWithEmail(USERS, '   ')).toBeNull()
+  })
+})
+
+describe('accountWithLogin', () => {
+  // andecobs-45: Shyna Tantay is on file as sccu-000050; Audrey Cabunillas's
+  // LRN ends in the same six digits, so her row is issued the same login.
+  const SCCU = [
+    ...USERS,
+    { first_name: 'Shyna', last_name: 'Tantay', login_id: 'sccu-000050', role: 'student' },
+  ]
+
+  it('finds the account already holding an issued login', () => {
+    expect(accountWithLogin(SCCU, 'sccu-000050').last_name).toBe('Tantay')
+  })
+
+  it('matches however the login was cased or padded', () => {
+    expect(accountWithLogin(SCCU, ' SCCU-000050 ').last_name).toBe('Tantay')
+  })
+
+  it('is null for a free login, or none at all', () => {
+    expect(accountWithLogin(SCCU, 'sccu-000051')).toBeNull()
+    expect(accountWithLogin(SCCU, '')).toBeNull()
+    expect(accountWithLogin(SCCU, undefined)).toBeNull()
+    expect(accountWithLogin(undefined, 'sccu-000050')).toBeNull()
+  })
+
+  it('does not read an account without a login as holding a blank one', () => {
+    // The admin signs in by email and carries no login_id.
+    expect(accountWithLogin(SCCU, '   ')).toBeNull()
+  })
+
+  it('checks the rows above a row the same way it checks the directory', () => {
+    // What the uploader hands it: earlier rows, each given its derived login.
+    const earlier = [
+      { first_name: 'Shyna', last_name: 'Tantay', login_id: 'sccu-000050', line: 4 },
+    ]
+    expect(accountWithLogin(earlier, 'sccu-000050').line).toBe(4)
+  })
+})
+
+describe('accountName', () => {
+  it('is the person without the login', () => {
+    expect(accountName(USERS[0])).toBe('John Does')
+    expect(accountName({ first_name: 'Shyna' })).toBe('Shyna')
   })
 })
 
