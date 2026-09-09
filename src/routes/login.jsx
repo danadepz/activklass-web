@@ -96,7 +96,7 @@ export default function Login() {
     if (onTempPassword) {
       setStage(NEW_PASSWORD)
       setNotice(
-        'Your account was set up by your school, so the password you just used is not yours yet. ' +
+        'Your account was set up for you, so the password you just used is not yours yet. ' +
           'Choose a new one to continue to your dashboard.',
       )
       return
@@ -109,7 +109,7 @@ export default function Login() {
       passwordError(newPassword) ||
       (newPassword === confirmPassword ? '' : 'The two passwords do not match.') ||
       (newPassword === password
-        ? 'Your new password must be different from the one your school gave you.'
+        ? 'Your new password must be different from the one you were given.'
         : '')
     if (problem) throw Object.assign(new Error(problem), { friendly: true })
 
