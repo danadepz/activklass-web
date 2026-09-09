@@ -830,6 +830,30 @@ function attemptsProblem(settings) {
   return null
 }
 
+/**
+ * Who a quiz is assigned to, named rather than counted.
+ *
+ * The header used to read "assigned to 1 class" while holding the class
+ * objects it was counting -- the tester asked for the name and the subject
+ * instead, the way the LMS his school uses says it. One class gets both, in
+ * the ` · ` form this file already uses for a class. Several get the count
+ * first, so it is never lost, then as many sections as read cleanly: subjects
+ * differ across classes and repeating them turns the line into a paragraph.
+ */
+function describeAssignment(assignedClasses) {
+  const names = assignedClasses.map((c) => c.section).filter(Boolean)
+  if (names.length === 0) return { lead: 'not assigned', names: null }
+  if (names.length === 1) {
+    const one = assignedClasses[0]
+    return { lead: 'assigned to', names: one.subject ? `${one.section} · ${one.subject}` : one.section }
+  }
+  const lead = `assigned to ${names.length} classes:`
+  if (names.length <= 3) {
+    return { lead, names: `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` }
+  }
+  return { lead, names: `${names.slice(0, 2).join(', ')} and ${names.length - 2} more` }
+}
+
 function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
@@ -1714,6 +1738,7 @@ export default function QuizBuilderPage() {
   const editable = quiz.status === 'draft'
   const questionCount = quiz.questions?.length ?? 0
   const totalPoints = sumPoints(quiz.questions)
+  const assignment = describeAssignment(assignedClasses)
 
   return (
     // One centred column for the whole editor -- header, notice and body. There
@@ -1733,13 +1758,13 @@ export default function QuizBuilderPage() {
               </span>
             )}
           </h1>
+          {/* `capitalize` title-cases every word, which is right for the
+              status and the counts and wrong for a class or subject name a
+              teacher typed -- "bsit-c" is not "Bsit-C". The names opt out. */}
           <p className="capitalize" style={{ ...mono, fontSize: 13, color: muted, margin: 0 }}>
             {quiz.status} · {questionCount} questions · {totalPoints} pts ·{' '}
-            {assignedClasses.length === 0 ? (
-              'not assigned'
-            ) : (
-              `assigned to ${assignedClasses.length} class${assignedClasses.length === 1 ? '' : 'es'}`
-            )}
+            {assignment.lead}
+            {assignment.names && <span className="normal-case"> {assignment.names}</span>}
           </p>
         </div>
         {quiz.status === 'published' && (

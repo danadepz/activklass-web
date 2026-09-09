@@ -517,8 +517,10 @@ function QuizCard({ quiz, classes, onDelete }) {
           <span className="text-xs text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">Not assigned</span>
         ) : (
           assignedClasses.map((c) => (
+            /* Section alone ("Newton") does not say what the quiz is for.
+               Same ` · ` form the Assign modal above already uses. */
             <span key={c.id} className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-              {c.section}
+              {c.subject ? `${c.section} · ${c.subject}` : c.section}
             </span>
           ))
         )}
