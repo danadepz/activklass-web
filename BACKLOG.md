@@ -1775,3 +1775,195 @@ reaching the page once the Chrome window was in the background; the walk was com
 driving the same handlers from the page's own context.
 
 Card: `_dispatch/T-18-bulk-result-wall-of-errors.md`.
+
+## T-22 Add Student's Program and Year pickers — 2026-09-07 (build pane, ticket `triplecookiemonster-37`)
+
+**Suggestion · efficiency / data quality. Web, Class detail lane, plus two exports in
+`lib/validation.js`. `0329b40` + `3b4afe1`.** Kristine, relaying a colleague: Program and
+Year on Add Student → Create New Manually are typed by hand every time, while Remarks and
+Enrollment status right under them are already dropdowns.
+
+**Year was already a closed list.** `rosterFieldsError` sends it through `yearLevelError`,
+which accepts seventeen values and nothing else, so a free-text box there was a dropdown
+with extra typing and an error at the end. `GRADE_LEVELS` / `YEAR_LEVELS` now sit beside
+the two regexes in `validation.js`, and the roster forms render a `<select>` of the class's
+own half (`classEducationLevel`), pre-set to the class's level on create and to the
+student's stored level on edit and found-student. A stored value spelled the loose way the
+class form accepts ("3rd", "grade 7") is matched to its option; one that matches nothing
+is kept as an extra option instead of being dropped on the next save. `yearLevelError`
+itself is untouched — it still guards the CSV path — and `validation.test.js` passes every
+list entry through it for its own level so the two cannot drift.
+
+**Program stays typeable** — "BSIT / JHS / Grade School" is open-ended — with a native
+`<datalist>`: this roster's own programs first, then a starter list of common Philippine
+programs for the class's level (degree programs for College, SHS strands + JHS / Grade
+School for basic ed; the owner asked for the starter list when dispatching). A value a
+teacher types is on the roster from then on, so it is in the list from then on — the
+"add once, keep it" the ticket asked for, with no new collection, write path or rules
+change. The starter list is a constant in the route file, not persisted anywhere.
+
+All three roster forms (Edit Student, the found-student panel, Create New Manually) now
+render one `ProgramYearFields` component instead of two hand-copied pairs.
+
+**Verified:** `npm run test` 614/614, `npm run build` clean; browser walk as a school-
+issued teacher on a K-12 class and on a temporary College class (deleted after). The
+Create tab is solo-only and was not driven — it renders the same component; `/verify`
+should walk it as a solo teacher.
+
+Card: `_dispatch/T-22-add-student-program-year-pickers.md`.
+
+## T-23 The guardian screen wears the brand — 2026-09-07 (build pane, ticket `maykel_64440-38`)
+
+**Suggestion · design · web.** maykel signed in as a guardian on the web and got the one
+page that never had the ActivKlass look: a bare white card on grey, indigo heading, indigo
+Sign out. The words were deliberate — guardians are the mobile app by design, and that
+screen replaced a misleading "coming soon" — but the chrome was Tailwind's stock
+`indigo` / `slate`, never the theme. `components/ParentOnMobile.jsx` now renders the same
+message inside `AuthLayout variant="card"`, the shell `/register` uses: title "ActivKlass
+for guardians is the mobile app", the "Hi <name> — sign in there with this same email and
+password…" sentence as the subtitle, the existing `SignOutButton` dressed as the auth
+screens' primary button. No new token or component, `App.jsx` and `theme.js` untouched,
+docstring rationale kept.
+
+**Verified:** `npm run test` 614/614, `npm run build` clean; browser as the pilot
+guardian at 1920 and 390 wide (brand half hides, heading + button still read); Sign out
+confirms and lands on `/login`. Commit `8ba92d2`. Card:
+`_dispatch/T-23-guardian-web-screen-off-brand.md`.
+
+## Tester tickets — 2026-09-08/09, Derick's second sweep (ticket pane)
+
+Ten tickets (`andecobs-40` … `andecobs-49`) in one evening, all as Marites or as an
+admin. Nine became issues T-24 … T-32; every one of those is now fixed **and** verified,
+and the owner closed all nine tickets in Discord. Cards carry the detail; ids are the
+join key.
+
+1. **The 12-digit LRN rule is right, nothing says the College path exists** — suggestion ·
+   clarity · web · `andecobs-40` · T-24. He typed an 8-digit number into **LRN** and was
+   refused. The rule is correct (`lrnError`, `lib/validation.js`, is the DepEd LRN) and the
+   form already handles a learner without one — Level → College hides LRN and derives the
+   login from the student number (`routes/admin/UsersTab.jsx`) — but Level defaults to G12,
+   so he hit the wall before seeing the select. The message now names the College path and a
+   hint sits under the field. `ae9ff9a`. Card `_dispatch/T-24-admin-lrn-rule-and-college-path.md`.
+2. **New Class marks required fields only after you submit** — suggestion · clarity · web ·
+   `andecobs-41` · T-25. Every label in `features/classes/ClassFormModal.jsx` was bare, while
+   the Add Student form already used a red asterisk. Asterisks now match the validator's
+   required set, College-only fields included. `6d84022`. Card `_dispatch/T-25-new-class-required-markers.md`.
+3. **Two classes at the same days and hours, no warning** — suggestion · data quality · web ·
+   `andecobs-42` · T-26. Creating or editing a class now names the class it clashes with and
+   the overlapping days and hours, and warns rather than refuses — co-teaching and placeholder
+   schedules are real. `9374d73` with helper `e1c49e6` (`lib/schedule.js`). Card
+   `_dispatch/T-26-class-schedule-overlap-warning.md`.
+4. **Middle Name on the class's Bulk Upload Roster** — suggestion · not-a-bug as filed · web ·
+   `andecobs-43` · T-27. Filed as deferred: that upload only enrols students who already have
+   accounts, so a name column would have written nothing, and middle name is collected on every
+   path that creates an account. The owner clicked Build anyway, and the upload now carries a
+   middle name onto a matched student who has none. `f48a734`. Card `_dispatch/T-27-roster-upload-middle-name.md`.
+5. **The login page's navy panel scrolls away** — bug · wrong behaviour · web · `andecobs-44` ·
+   T-28. `html`/`body { overflow-x: hidden }` in `src/index.css` broke the `lg:sticky` aside in
+   `AuthLayout`, so the brand half slid up and left cream behind it once the page scrolled.
+   `1de070d`. Card `_dispatch/T-28-login-brand-panel-scrolls-away.md`.
+6. **Two students, one login** — bug · wrong data · web · `andecobs-45` · T-29. The issued login
+   is the school prefix plus the **last six digits** of the LRN, so two LRNs ending the same
+   collide; the bulk preview checked email and name but never the derived login. The preview now
+   flags a repeat in red with the name it clashes with, and a failed row names whose login it was.
+   `d0f9b62`. Card `_dispatch/T-29-bulk-upload-login-collision.md`.
+7. **Users list showed no ID number / LRN** — suggestion · feature gap · web · `andecobs-46` ·
+   T-30, a narrow slice of T-06. The data was already on every row. There is now a column, and
+   search and CSV export use it. `366cea4`. Card `_dispatch/T-30-users-list-id-column.md`.
+8. **An institution sign-up lands on the Teacher dashboard silently** — suggestion ·
+   not-a-bug as filed · web · `andecobs-47` · T-31. Working as designed — the requester is a
+   teacher until the team approves the school — but nothing said so. The dashboard now shows the
+   pending notice. `70f8178`. Card `_dispatch/T-31-institution-signup-lands-as-teacher.md`.
+9. **"Institution — A school and its staff" reads as the faculty choice** — suggestion · clarity ·
+   web · `andecobs-48` · T-32. Step 1 of `/register` invited any staff member to pick the path
+   that makes you a school's admin. Both cards now say what they are for, and a faculty member who
+   picks Institution is nudged back to Individual. `21efdf3`. Card `_dispatch/T-32-institution-card-invites-faculty.md`.
+
+**Still owed after the closes** (kept in `_ledger.md` under "Follow-ups the owner kept when
+closing"): Audrey's already-created colliding account needs a new student number or a manual
+fix — T-29 warns, it does not repair; and Carlyn was made an admin from the Users tab, which
+skips the school-request approval and leaves her with no school, so she needs setting back to
+teacher.
+
+## T-33 The syllabus module description will not grow — 2026-09-09 (ticket pane, `andecobs-49`)
+
+**Suggestion · clarity/usability · web · dispatched.** As Marites on the Syllabus page,
+Derick asked for a "resizable text box for module description". He is right and his own
+screenshot shows why: the syllabus **Description** above it is a `<textarea rows={2}>`
+(`routes/teacher/syllabus.jsx:636-642`) and the sub-module **Learning objectives** below it is
+a textarea that auto-grows with its content (`:717-723`) — both carry the browser's resize
+grip — while the module description between them is a single-line `<input>` (`:658-663`) that
+scrolls sideways instead. Nothing blocks the change: the value is a plain string in, on save
+and on load, with no length rule in the client or on the Flask route. One thing travels with
+it — a student reads that text in a plain div at `student/classes/$classId/index.jsx:124`, so a
+line break a teacher types would collapse there unless `whiteSpace: 'pre-wrap'` lands in the
+same commit. Card: `_dispatch/T-33-syllabus-module-description-resizable.md` (Build brief;
+Syllabus lane, also touches the Student lane).
+
+## Tester tickets — 2026-09-09 evening, Derick on Quizzes (ticket pane)
+
+Four tickets in ten minutes (`andecobs-50`, `-51`, `-53`, and `triplecookiemonster-52`
+which is still empty), all from the quiz screens. Three suggestions and one defect nobody
+reported.
+
+1. **Unlimited attempts until the quiz closes** — suggestion · feature gap · web **+ mobile** ·
+   `andecobs-50` · T-34. The date half already works: `lib/quizAttempts.js:173` refuses an
+   attempt once `closes_at` has passed. What blocks the ask is `quizzes.$quizId.jsx:341-343`,
+   which refuses any Attempts value below 1, and `attemptsAllowedFor` (`:77-78`) reading a
+   missing value as **one**. Needs a sentinel meaning "no ceiling" plus a required closing
+   date — and `quizAttempts` is one of the three modules with a mobile port held by
+   `portParity.test.js`, so it is cross-repo. Card
+   `_dispatch/T-34-quiz-unlimited-attempts-until-close.md`.
+2. **The quiz editor leaves half the screen empty** — suggestion · design · web ·
+   `andecobs-51` · T-35. Four `max-w-3xl` containers in `quizzes.$quizId.jsx` (`:1056`,
+   `:1647`, `:1676`, `:1686`) with no `mx-auto`, so the form hugs the left edge of a
+   full-width page; at 1920 that is about 900 px of nothing. Card
+   `_dispatch/T-35-quiz-editor-negative-space.md`.
+3. **Name the class, and show its subject** — suggestion · clarity · web · `andecobs-53` ·
+   T-36. The quiz header prints `assigned to ${assignedClasses.length} class`
+   (`quizzes.$quizId.jsx:1657-1664`) while holding the class objects, and the list card's
+   chip shows `{c.section}` alone (`quizzes.jsx:512-518`) with `subject` unused beside it.
+   Both formats already exist in those same files (`:676`, `:445`, `:270`). Card
+   `_dispatch/T-36-quiz-name-the-class-and-subject.md`.
+4. **Every quiz card reads Items 0 · Points 0** — **bug** · wrong data · web · surfaced by
+   `andecobs-53` · T-37. Not reported: his screenshot of a published five-question quiz shows
+   the card at zero, and his other screenshot shows the same quiz's page reading "5 Questions ·
+   7 Pts". `quizzes.jsx:477` and `:529` read the stored `question_count` / `total_points`,
+   which **only the Flask model writes** (`../activklass-backend/app/models/quizzes.py:110`)
+   — and quizzes are Firestore-direct from this client, so neither field is ever set and the
+   `?? 0` fallback is what every card shows. The helper that fixes it, `totalPoints`, is
+   already defined at `quizzes.jsx:81` and never called (eslint flags it as unused). Card
+   `_dispatch/T-37-quiz-card-items-points-always-zero.md`.
+
+**Tooling, same day: a new ticket now opens its own pane.** `watch_tickets.py` queues each
+new ticket and, once the burst has been quiet for two minutes, opens a Claude pane on
+`/tickets` through the same launcher the page's Debug button uses. A fifteen-minute cooldown
+stops a second pane; anything queued rides along with the next one. It is off for `--once`,
+which is the sync a ticket pane runs on itself. See the README section "A new ticket opens
+its own pane".
+
+## T-38 First-login wording assumes a school issued the account — 2026-09-09 (ticket pane, `triplecookiemonster-52`)
+
+**Suggestion · clarity · web · dispatched.** Signing in for the first time as the student
+`slcsflu-231525`, Kristine got "Your account was set up by your school, so the password you
+just used is not yours yet" (`routes/login.jsx:98-100`) and asked for wording that fits both
+subscription types — a solo teacher's student was not set up by a school. The same assumption
+fires again at `login.jsx:112`, "the password your school gave you", when a reused password is
+refused, so fixing one alone walks her into the other. The neutral sentence is already shipped
+on the sibling screen: `routes/change-password.jsx:49` says "Your account was set up for you…".
+No test pins either string. Card:
+`_dispatch/T-38-first-login-assumes-a-school-set-up-the-account.md` (Build brief; landing + auth
+lane, with `change-password.jsx` read-only from another lane).
+
+## T-39 Editing a syllabus unassigns it from every class — 2026-09-09 (ticket pane, `triplecookiemonster-54`)
+
+**Bug · wrong data · web · dispatched.** Kristine reported having to re-assign a syllabus to
+its classes every time she added a sub-module. It is not the sub-module: any save of an
+existing syllabus drops the assignment. `toDraftState` (`routes/teacher/syllabus.jsx:25-56`)
+rebuilds the editor's state without `class_ids`, and the restore at `:862-864` is wrapped in
+`if (draft)` — so the AI-draft path keeps the assignment and the plain edit path, the one that
+has an assignment to lose, does not. `useState(initial.class_ids ?? [])` (`:507`) therefore
+opens empty with every box unticked, and save writes `class_ids: []` (`:564`) plus a batch that
+clears each class's `syllabus_id` (`:579-581`). Since `classes.syllabus_id` is how a **student**
+reaches a syllabus, every save quietly removed it from them too. Fix is to carry `class_ids`
+on both paths. Card: `_dispatch/T-39-syllabus-edit-clears-class-assignment.md`.
