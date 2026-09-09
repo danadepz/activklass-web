@@ -16,7 +16,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
-const state = { quizzes: [] }
+const state = { quizzes: [], classes: [] }
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: undefined, isLoading: false, isError: false }),
@@ -35,7 +35,7 @@ vi.mock('@/hooks/useQuizzes', () => ({
   quizzesKey: () => ['fs-quizzes'],
   useQuizzes: () => ({ data: state.quizzes, isLoading: false, refetch: vi.fn() }),
 }))
-vi.mock('@/hooks/useTeacherClasses', () => ({ useTeacherClasses: () => ({ data: [] }) }))
+vi.mock('@/hooks/useTeacherClasses', () => ({ useTeacherClasses: () => ({ data: state.classes }) }))
 vi.mock('@/hooks/useSyllabi', () => ({ useSyllabi: () => ({ data: [] }) }))
 vi.mock('@/hooks/useMySubscription', () => ({ useMySubscription: () => ({ locks: {} }) }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true) }))
@@ -88,5 +88,62 @@ describe('Quizzes list card counts (T-37)', () => {
 
   it('treats a question with no points as zero rather than NaN', () => {
     expect(counts(q({ questions: [{ points: 3 }, {}] }))).toEqual({ items: '2', points: '3' })
+  })
+})
+
+/**
+ * The card names the class and its subject (T-36, andecobs-53).
+ *
+ * The second half of the same ticket that produced T-37, and visible in the
+ * same screenshot: the chip read "Newton" while `subject` sat unused on the
+ * class object beside `section`. He asked for both, "morag ma same same pud sa
+ * atong LMS sa UC". The Assign modal in this very file already wrote them
+ * together, so the wording was settled before the fix.
+ *
+ * The header half of the ticket is locked in `quizAssignmentLabel.test.js`.
+ */
+
+/** The assignment chips as the card renders them. */
+function chips(quiz, classes) {
+  state.quizzes = [quiz]
+  state.classes = classes
+  const html = renderToStaticMarkup(<QuizzesIndexPage />)
+  return [...html.matchAll(/<span class="text-xs[^"]*rounded border[^"]*">([^<]*)<\/span>/g)]
+    .map((m) => m[1].trim())
+}
+
+const klass = (id, section, subject) => ({ id, section, subject, teacher_id: 'T1' })
+
+describe('Quizzes list card names the class (T-36)', () => {
+  it('carries the section and the subject, not the section alone', () => {
+    // His screenshot: a chip reading just "Newton".
+    const got = chips(q({ class_ids: ['c1'] }), [klass('c1', 'Newton', 'Science 9')])
+    expect(got).toContain('Newton · Science 9')
+    expect(got).not.toContain('Newton')
+  })
+
+  it('uses the separator this product already uses, not a comma or brackets', () => {
+    const got = chips(q({ class_ids: ['c1'] }), [klass('c1', 'Newton', 'Science 9')])
+    expect(got.join(' ')).not.toMatch(/Newton,|Newton \(/)
+  })
+
+  it('keeps one chip per class when a quiz is assigned to several', () => {
+    const got = chips(q({ class_ids: ['c1', 'c2'] }), [
+      klass('c1', 'Newton', 'Science 9'),
+      klass('c2', 'Curie', 'Physics 11'),
+    ])
+    expect(got).toEqual(expect.arrayContaining(['Newton · Science 9', 'Curie · Physics 11']))
+  })
+
+  it('shows the section alone when the class has no subject on it', () => {
+    // Seeded and older classes can lack the field; "Newton · undefined" would
+    // be worse than what he complained about.
+    const got = chips(q({ class_ids: ['c1'] }), [klass('c1', 'Newton', undefined)])
+    expect(got).toContain('Newton')
+    expect(got.join(' ')).not.toMatch(/undefined/)
+  })
+
+  it('leaves "Not assigned" exactly as it was', () => {
+    expect(chips(q({ class_ids: [] }), [])).toContain('Not assigned')
   })
 })
