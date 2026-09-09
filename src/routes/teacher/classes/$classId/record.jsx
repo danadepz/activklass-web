@@ -7,6 +7,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -20,7 +21,10 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { ArrowRight, Plus } from '@/components/icons'
+import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
+import { questionsOfAttempt } from '@/lib/quizPool'
+import { finishedAttempts } from '@/lib/quizAttempts'
+import { ArrowRight, Check, Clock, Plus, X } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -760,14 +764,196 @@ const GC_STATUS = {
   rejected: { label: 'Rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
 }
 
+const GC_ITEM = {
+  correct: { fg: green, bg: 'rgba(31,138,91,0.12)', Icon: Check, label: 'Correct' },
+  pending: { fg: blueText, bg: 'rgba(63,169,245,0.12)', Icon: Clock, label: 'Awaiting your review' },
+  incorrect: { fg: red, bg: 'rgba(192,57,43,0.10)', Icon: X, label: 'Wrong' },
+}
+
+/* The student's own attempt behind a disputed quiz column — read-only.
+
+   A teacher ruling on a dispute sees every item, every answer and the key, so
+   `feedbackVisibility` is deliberately NOT consulted here: that setting says
+   when a *student* may see their breakdown, and withholding it from the person
+   who has to decide the dispute leaves them judging a total and one sentence,
+   which is the complaint this screen answers.
+
+   Read-only on purpose. Accepting still records a decision and nothing more —
+   the teacher edits the score in the grid below, as the panel footer says. */
+function ContestReviewModal({ classId, contest, quizId, error, busy, onResolve, onClose }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, {
+    label: `${contest.student_name} — answers for ${contest.assessment_title}`,
+  })
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['fs-contest-attempt', classId, quizId, contest.student_id],
+    queryFn: async () => {
+      const qSnap = await getDoc(doc(db, 'quizzes', quizId))
+      const quiz = qSnap.exists() ? { id: qSnap.id, ...qSnap.data() } : null
+      /* Both filters, always. A quiz_id-only read is refused even for the
+         teacher who owns the class — the rules cannot prove ownership from
+         that query alone (docs/DATA-MODEL.md §4). */
+      const aSnap = await getDocs(
+        query(
+          collection(db, 'quiz_attempts'),
+          where('quiz_id', '==', quizId),
+          where('class_id', '==', classId),
+        ),
+      )
+      const mine = aSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => a.student_id === contest.student_id)
+      /* Finished only, and the last of them: that is the attempt whose score
+         was posted to the record, and so the one being disputed. A sitting
+         still open has no score to argue about. */
+      const finished = finishedAttempts(mine)
+      return { quiz, attempt: finished[finished.length - 1] ?? null, attemptCount: finished.length }
+    },
+    retry: false,
+  })
+
+  const quiz = data?.quiz
+  const attempt = data?.attempt
+  const byId = Object.fromEntries((attempt?.per_question ?? []).map((p) => [p.id, p]))
+  const questions = attempt && quiz ? questionsOfAttempt(quiz, attempt) : []
+
+  return (
+    <div {...overlayProps} style={overlayStyle}>
+      <div {...panelProps} style={{ ...cardStyle, maxWidth: 760 }}>
+        <div style={headerStyle}>
+          <span style={{ ...iconSquare, fontSize: 15 }} aria-hidden="true">◆</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ ...serif, fontSize: 20, color: ink, lineHeight: 1.2 }}>{contest.student_name}</div>
+            <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>
+              {quiz?.title ?? contest.assessment_title}
+              {attempt && (
+                <span style={{ ...mono, color: faint }}>
+                  {' · '}{attempt.total_score ?? 0}/{attempt.total_possible ?? contest.total_points} pts
+                  {data.attemptCount > 1 ? ` · attempt ${data.attemptCount} of ${data.attemptCount}` : ''}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: faint, cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={bodyStyle} className="flex flex-col gap-4">
+          {error && <AlertBox>{error}</AlertBox>}
+
+          <div style={{ background: 'rgba(245,197,24,0.10)', border: '1px solid rgba(245,197,24,0.45)', borderRadius: 12, padding: '12px 14px' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: goldDeep, letterSpacing: '0.06em', textTransform: 'uppercase' }}>What the student says</div>
+            <div style={{ fontSize: 13.5, color: ink, lineHeight: 1.55, marginTop: 4 }}>{contest.reason}</div>
+            {contest.excuse_url && (
+              <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 600, color: blueText, marginTop: 6 }}>📎 View attached file</a>
+            )}
+          </div>
+
+          {isLoading && <p style={{ fontSize: 13.5, color: faint, margin: 0 }}>Loading this student&rsquo;s answers…</p>}
+
+          {isError && (
+            <AlertBox>Their answers could not be opened just now. Close this and try again in a moment — the dispute itself is unchanged.</AlertBox>
+          )}
+
+          {!isLoading && !isError && !attempt && (
+            <AlertBox tone="warn">
+              No finished attempt is on file for this student on that quiz. They may have started it without submitting, or the attempt was removed — decide this dispute from their reason, or ask them to sit the quiz again.
+            </AlertBox>
+          )}
+
+          {!isLoading && !isError && attempt && !quiz && (
+            <AlertBox tone="warn">
+              The quiz behind this column has been deleted, so its questions are no longer available. The score on file for this student is {attempt.total_score ?? 0} out of {attempt.total_possible ?? contest.total_points}.
+            </AlertBox>
+          )}
+
+          {questions.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {questions.map((q, i) => {
+                /* An essay is `pending: true, correct: null` until it is
+                   marked — reading that as wrong would misreport an answer
+                   nobody has scored yet. */
+                const pq = byId[q.id] ?? {}
+                const item = GC_ITEM[pq.pending ? 'pending' : pq.correct ? 'correct' : 'incorrect']
+                const Icon = item.Icon
+                return (
+                  <div key={q.id} style={{ border: `1px solid ${line}`, borderRadius: 14, padding: 16 }}>
+                    <div className="flex items-start gap-3">
+                      <span title={item.label} style={{ width: 26, height: 26, borderRadius: '50%', background: item.bg, color: item.fg, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <p style={{ fontSize: 14.5, fontWeight: 600, color: ink, margin: 0, lineHeight: 1.5 }}>
+                            <span style={{ ...mono, color: faint, fontWeight: 700, marginRight: 6 }}>Q{i + 1}</span>{q.text}
+                          </p>
+                          <span style={{ ...mono, fontSize: 12.5, fontWeight: 700, color: item.fg, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            {pq.earned ?? 0}/{pq.possible ?? q.points} pts
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 9, fontSize: 13.5 }}>
+                          <div style={{ color: muted }}>
+                            <span style={{ fontWeight: 700, color: ink }}>Their answer:</span>{' '}
+                            <span style={{ color: item.fg }}>{studentAnswerText(q, attempt.answers?.[q.id])}</span>
+                          </div>
+                          {q.qtype !== 'essay' && (
+                            <div style={{ color: muted, marginTop: 3 }}>
+                              <span style={{ fontWeight: 700, color: ink }}>Correct answer:</span>{' '}
+                              <span style={{ color: green }}>{correctAnswerText(q)}</span>
+                            </div>
+                          )}
+                          {q.qtype === 'essay' && q.rubric && (
+                            <div style={{ color: muted, marginTop: 3 }}>
+                              <span style={{ fontWeight: 700, color: ink }}>What to look for:</span> {q.rubric}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={footerStyle}>
+          {contest.status === 'pending' ? (
+            <>
+              <span style={{ marginRight: 'auto', fontSize: 11.5, color: faint, maxWidth: 320, lineHeight: 1.4 }}>
+                Accepting records your decision — adjust the score in the grid below if a change is warranted.
+              </span>
+              <button onClick={() => onResolve('rejected')} disabled={busy} className="transition hover:brightness-105 disabled:opacity-50" style={{ padding: '10px 16px', fontSize: 13.5, fontWeight: 700, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.35)', borderRadius: 10, cursor: 'pointer' }}>
+                Reject
+              </button>
+              <button onClick={() => onResolve('approved')} disabled={busy} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '10px 16px', fontSize: 13.5, fontWeight: 700, color: '#FAFAF6', background: green, border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+                Accept
+              </button>
+            </>
+          ) : (
+            <button onClick={onClose} className="transition hover:brightness-105" style={btnGhost}>Close</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* Score disputes filed by students. Resolving records the teacher's decision;
    accepting does NOT auto-change the grade — the teacher edits the cell in the
    grid (the student's reason tells them what to re-check). */
-function GradeContestsPanel({ classId }) {
+function GradeContestsPanel({ classId, assessments = [] }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState(null)
   const [error, setError] = useState(null)
+  const [reviewing, setReviewing] = useState(null) // the contest open in the review modal
+
+  /* Which disputed column came from a quiz, and which quiz. The contest
+     document the student files carries no quiz id — the link is the
+     assessment's `source_quiz_id`, stamped when the quiz's scores were posted
+     (lib/quizToRecord.js). A hand-entered column has no attempt behind it and
+     is left exactly as it was. */
+  const quizIdOf = (c) => assessments.find((a) => a.id === c.assessment_id)?.source_quiz_id ?? null
 
   const { data: contests } = useQuery({
     queryKey: ['fs-grade-contests', classId],
@@ -815,7 +1001,7 @@ function GradeContestsPanel({ classId }) {
         multiline: true,
         tone: 'danger',
       })
-      if (reason == null) return
+      if (reason == null) return false
       note = reason.trim() || null
     }
     setBusyId(c.id)
@@ -836,14 +1022,17 @@ function GradeContestsPanel({ classId }) {
         link: `/student/classes/${classId}`,
       }).catch(() => {})
       refetch()
+      return true
     } catch (err) {
       setError(err.message)
+      return false
     } finally {
       setBusyId(null)
     }
   }
 
   return (
+    <>
     <div className="mb-6" style={{ background: '#FFFFFF', border: `1px solid ${pendingCount ? 'rgba(245,197,24,0.55)' : line}`, borderRadius: 16, overflow: 'hidden' }}>
       <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}`, background: pendingCount ? 'rgba(245,197,24,0.08)' : 'rgba(14,42,92,0.02)' }}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>
@@ -864,15 +1053,31 @@ function GradeContestsPanel({ classId }) {
         {list.map((c) => {
           const tone = GC_STATUS[c.status] ?? GC_STATUS.pending
           const scoreText = c.current_score != null ? `${c.current_score}/${c.total_points}` : '—'
+          const quizId = quizIdOf(c)
+          const heading = (
+            <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 4 }}>
+              {/* Same ◆ the grid puts on a quiz column, so "this came from a
+                  quiz" and "this can be opened" read as the one idea. */}
+              {quizId && <span aria-hidden="true" style={{ color: blueText, flexShrink: 0 }}>◆</span>}
+              <span style={{ fontSize: 14, fontWeight: 700, color: quizId ? navy : ink }}>{c.student_name}</span>
+              <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.assessment_title}</span>
+              <span style={{ ...mono, fontSize: 12, color: faint }}>({scoreText})</span>
+              <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>{tone.label}</span>
+              {quizId && <span style={{ fontSize: 12, fontWeight: 700, color: blueText }}>Review answers →</span>}
+            </div>
+          )
           return (
             <div key={c.id} className="flex flex-wrap items-start justify-between gap-3" style={{ padding: '14px 18px', borderTop: '1px solid rgba(14,42,92,0.05)' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
-                <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 4 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>{c.student_name}</span>
-                  <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.assessment_title}</span>
-                  <span style={{ ...mono, fontSize: 12, color: faint }}>({scoreText})</span>
-                  <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}` }}>{tone.label}</span>
-                </div>
+                {quizId ? (
+                  <button
+                    onClick={() => setReviewing(c)}
+                    className="transition hover:brightness-110"
+                    style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                  >
+                    {heading}
+                  </button>
+                ) : heading}
                 <div style={{ fontSize: 13, color: muted, lineHeight: 1.5 }}>{c.reason}</div>
                 {c.excuse_url && (
                   <a href={c.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: blueText }}>📎 View attached file</a>
@@ -901,6 +1106,19 @@ function GradeContestsPanel({ classId }) {
         </div>
       )}
     </div>
+
+    {reviewing && (
+      <ContestReviewModal
+        classId={classId}
+        contest={reviewing}
+        quizId={quizIdOf(reviewing)}
+        error={error}
+        busy={busyId === reviewing.id}
+        onResolve={async (status) => { if (await resolve(reviewing, status)) setReviewing(null) }}
+        onClose={() => setReviewing(null)}
+      />
+    )}
+    </>
   )
 }
 
@@ -938,7 +1156,7 @@ export default function ClassRecordPage() {
       </h1>
       {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 22px' }}>{subline}</p>}
 
-      <GradeContestsPanel classId={classId} />
+      <GradeContestsPanel classId={classId} assessments={bundle.assessments} />
 
       {!bundle.configured ? (
         <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40, marginTop: 8 }}>
