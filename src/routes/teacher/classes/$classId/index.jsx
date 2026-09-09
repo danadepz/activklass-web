@@ -10,7 +10,7 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { classEducationLevel } from '@/lib/classForm'
-import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster } from '@/lib/roster'
+import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
 import { Users, Check, Clock, Layers } from '@/components/icons'
@@ -1019,6 +1019,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           lrn: cell('lrn'),
           email: cell('email').toLowerCase(),
           first_name: cell('first_name'),
+          middle_name: cell('middle_name'),
           last_name: cell('last_name'),
         }
         if (entry.student_number || entry.lrn || entry.email) entries.push(entry)
@@ -1063,7 +1064,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           already.push({ label, account })
         } else {
           seen.add(account.id)
-          matched.push({ label, account })
+          matched.push({ label, account, middle_name: entry.middle_name })
         }
       }
       setPreview({ matched, already, unmatched })
@@ -1088,6 +1089,24 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
       // teacher and on their own dashboards on the next load.
       await addToRoster(classId, uids)
       toast.success(`${uids.length} student${uids.length === 1 ? '' : 's'} added to the class.`)
+      // The one thing this upload writes to a profile (T-27): a middle name
+      // for a matched student whose account has none. It has to come after
+      // the roster add, because the server's teacher_ids write is what lets
+      // this teacher touch the student's profile at all. Never overwrites.
+      const middles = middleNamesToWrite(preview.matched)
+      if (middles.length) {
+        const results = await Promise.allSettled(
+          middles.map(({ uid, middle_name }) => updateDoc(doc(db, 'users', uid), { middle_name })),
+        )
+        const failed = results.filter((r) => r.status === 'rejected').length
+        if (failed) {
+          toast.info(
+            `The students were added, but ${failed === middles.length ? 'their' : `${failed} of their`} middle name${failed === 1 ? '' : 's'} could not be saved. ` +
+              'You can add it from the student\'s row in the roster.',
+            { duration: 0 },
+          )
+        }
+      }
       if (preview.unmatched.length) {
         toast.info(
           `${preview.unmatched.length} row${preview.unmatched.length === 1 ? ' was' : 's were'} not added — ` +
@@ -1112,6 +1131,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
             <li><code className="bg-slate-100 px-1 rounded text-xs">student_number</code> or <code className="bg-slate-100 px-1 rounded text-xs">lrn</code> — required, matches each row to the student's account</li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — so unmatched rows are readable in the preview</li>
+            <li><code className="bg-slate-100 px-1 rounded text-xs">middle_name</code> — optional; saved to a student's account only if it has none yet</li>
             <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — optional fallback for students who signed up themselves</li>
           </ul>
           <p className="text-xs text-slate-400">
@@ -1119,11 +1139,12 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
             Rows with no matching account are listed so you can ask your school admin to add them.
           </p>
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
-            <table className="w-full min-w-[520px] text-xs">
+            <table className="w-full min-w-[600px] text-xs">
               <thead>
                 <tr className="bg-slate-50 text-left text-slate-500">
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">student_number</th>
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">first_name</th>
+                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">middle_name</th>
                   <th className="px-3 py-2 font-medium border-b border-r border-slate-200">last_name</th>
                   <th className="px-3 py-2 font-medium border-b border-slate-200">lrn</th>
                 </tr>
@@ -1132,12 +1153,14 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
                 <tr className="text-slate-600">
                   <td className="px-3 py-1.5 border-r border-slate-200">2024-00187</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Juan</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200">Reyes</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Dela Cruz</td>
                   <td className="px-3 py-1.5">123456789012</td>
                 </tr>
                 <tr className="text-slate-600 bg-slate-50/60">
                   <td className="px-3 py-1.5 border-r border-slate-200">2024-00212</td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Maria</td>
+                  <td className="px-3 py-1.5 border-r border-slate-200"></td>
                   <td className="px-3 py-1.5 border-r border-slate-200">Santos</td>
                   <td className="px-3 py-1.5">987654321098</td>
                 </tr>
@@ -1161,15 +1184,21 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           {preview && (
             <>
               <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
-              {preview.matched.map((m, idx) => (
-                <div key={`m${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
-                  <span style={{ color: ink }}>
-                    {m.account.last_name}, {m.account.first_name}
-                    <span style={{ color: faint }}> · {m.account.login_id ?? m.account.email}</span>
-                  </span>
-                  <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
-                </div>
-              ))}
+              {preview.matched.map((m, idx) => {
+                const kept = String(m.account.middle_name ?? '').trim()
+                const saving = !kept && middleNamesToWrite([m]).length > 0
+                return (
+                  <div key={`m${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                    <span style={{ color: ink }}>
+                      {m.account.last_name}, {m.account.first_name}
+                      {kept ? ` ${kept}` : saving ? ` ${m.middle_name.trim()}` : ''}
+                      <span style={{ color: faint }}> · {m.account.login_id ?? m.account.email}</span>
+                      {saving && <span style={{ color: faint }}> · middle name will be saved</span>}
+                    </span>
+                    <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
+                  </div>
+                )
+              })}
               {preview.already.map((a, idx) => (
                 <div key={`a${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
                   <span style={{ color: muted }}>{a.label}</span>

@@ -1,6 +1,7 @@
 import { collection, documentId, getDocs, query, where } from 'firebase/firestore'
 import { db } from './firebase'
 import { api } from './api'
+import { nameError } from './validation'
 
 /**
  * Fetch users docs by uid list (chunked — Firestore 'in' caps at 30 ids).
@@ -136,6 +137,28 @@ export const REMARKS_OPTIONS = [
   'Cross-Enrollee',
   'Returnee',
 ]
+
+/**
+ * Which matched roster rows may hand their middle name to the account.
+ *
+ * The roster upload never creates accounts and never edits names -- except
+ * this one gap, filled by request (T-27): a student whose account carries no
+ * middle name yet gets the one the file gives them. Nothing else moves. A
+ * middle name that is already on the account stays as it is, even if the file
+ * spells it differently, and a value that fails the name rule is dropped
+ * rather than failing the upload. Returns [{ uid, middle_name }].
+ */
+export function middleNamesToWrite(matched) {
+  const out = []
+  for (const { account, middle_name } of matched ?? []) {
+    const text = String(middle_name ?? '').trim()
+    if (!text || !account?.id) continue
+    if (String(account.middle_name ?? '').trim()) continue
+    if (nameError(text, { label: 'Middle name', required: false })) continue
+    out.push({ uid: account.id, middle_name: text })
+  }
+  return out
+}
 
 /** Tiny CSV parser (handles quoted fields with commas). Returns array of rows. */
 export function parseCsv(text) {

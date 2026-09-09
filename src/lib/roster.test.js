@@ -24,7 +24,7 @@ vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: async () => 'test-token' } },
 }))
 
-const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage } = await import('./roster')
+const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage, middleNamesToWrite, parseCsv } = await import('./roster')
 
 const answers = (payload) =>
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -104,5 +104,52 @@ describe('what the teacher is told', () => {
     for (const needle of ['24231524', 'kristine@email.com']) {
       expect(teacherAccountMessage(needle)).not.toMatch(/kristine|namocatcat/i)
     }
+  })
+})
+
+/**
+ * The roster upload's one write to a profile (T-27, andecobs-43): a matched
+ * student with no middle name yet takes the one the file carries. It is the
+ * only name the upload ever writes, so the cases are about what it refuses.
+ */
+describe('a middle name from the roster file', () => {
+  const row = (account, middle_name) => ({ account, middle_name })
+
+  it('is written to a matched account that has none', () => {
+    expect(middleNamesToWrite([row({ id: 'u1', first_name: 'Juan' }, 'Santos')]))
+      .toEqual([{ uid: 'u1', middle_name: 'Santos' }])
+  })
+
+  it('never overwrites one the account already has', () => {
+    expect(middleNamesToWrite([row({ id: 'u1', middle_name: 'Reyes' }, 'Santos')])).toEqual([])
+  })
+
+  it('is skipped when the file has none, or only blanks', () => {
+    expect(middleNamesToWrite([row({ id: 'u1' }, ''), row({ id: 'u2' }, '   '), row({ id: 'u3' }, undefined)]))
+      .toEqual([])
+  })
+
+  it('is trimmed, and an account whose middle name is only whitespace counts as having none', () => {
+    expect(middleNamesToWrite([row({ id: 'u1', middle_name: '  ' }, '  De la Cruz ')]))
+      .toEqual([{ uid: 'u1', middle_name: 'De la Cruz' }])
+  })
+
+  it('is dropped, not fatal, when it breaks the name rule', () => {
+    expect(middleNamesToWrite([row({ id: 'u1' }, 'S4ntos'), row({ id: 'u2' }, 'Santos')]))
+      .toEqual([{ uid: 'u2', middle_name: 'Santos' }])
+  })
+
+  it('is never invented for a row with no account', () => {
+    expect(middleNamesToWrite([row(null, 'Santos'), row({}, 'Santos')])).toEqual([])
+    expect(middleNamesToWrite(undefined)).toEqual([])
+  })
+})
+
+describe('parseCsv with a middle_name column', () => {
+  it('keeps the column wherever it sits, and leaves it empty when a row omits it', () => {
+    const rows = parseCsv('student_number,first_name,middle_name,last_name\r\n2024-00187,Juan,Santos,"Dela Cruz"\n2024-00212,Maria,,Santos\n')
+    expect(rows[0]).toEqual(['student_number', 'first_name', 'middle_name', 'last_name'])
+    expect(rows[1]).toEqual(['2024-00187', 'Juan', 'Santos', 'Dela Cruz'])
+    expect(rows[2]).toEqual(['2024-00212', 'Maria', '', 'Santos'])
   })
 })
