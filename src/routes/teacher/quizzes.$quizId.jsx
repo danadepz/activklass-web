@@ -1053,7 +1053,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const assignedClassesList = classes.filter(c => assignedClassIds.includes(c.id))
 
   return (
-    <div className="max-w-3xl">
+    <div>
       {error && (
         <p className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
       )}
@@ -1640,11 +1640,14 @@ export default function QuizBuilderPage() {
   const totalPoints = sumPoints(quiz.questions)
 
   return (
-    <div>
+    // One centred column for the whole editor -- header, notice and body. There
+    // is no right-hand element on this route, so the page balances instead of
+    // leaving half of a wide screen empty. Undoing it is this one wrapper.
+    <div className="mx-auto max-w-3xl">
       <Link to="/teacher/quizzes" className="inline-flex items-center gap-1.5 transition hover:opacity-70" style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}>
         ← Back to quizzes
       </Link>
-      <div className="mt-2 flex max-w-3xl items-start justify-between gap-4">
+      <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-[clamp(24px,3.2vw,30px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
             {quiz.title}
@@ -1673,7 +1676,7 @@ export default function QuizBuilderPage() {
       {editable ? (
         <>
           {quiz.generated_by === 'ai_generated' && (
-            <div className="mt-4 flex max-w-3xl items-center gap-2.5" style={{ background: 'rgba(63,169,245,0.06)', border: '1px solid rgba(63,169,245,0.3)', borderRadius: 11, padding: '12px 14px', fontSize: 13, color: ink }}>
+            <div className="mt-4 flex items-center gap-2.5" style={{ background: 'rgba(63,169,245,0.06)', border: '1px solid rgba(63,169,245,0.3)', borderRadius: 11, padding: '12px 14px', fontSize: 13, color: ink }}>
               <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: 7, background: 'rgba(63,169,245,0.2)', color: blueText, flexShrink: 0 }}>
                 <Sparkles className="h-3 w-3" />
               </span>
@@ -1683,7 +1686,7 @@ export default function QuizBuilderPage() {
           <BuilderForm key={quiz.id} quiz={quiz} classes={classes ?? []} gradebooksMap={gradebooks} refetch={refetch} syllabi={syllabi ?? []} />
         </>
       ) : (
-        <div className="max-w-3xl mt-6">
+        <div className="mt-6">
           {quiz.status === 'published' && <LiveSettings quiz={quiz} refetch={refetch} />}
           {assignedClasses.length > 0 ? (
             <div>
