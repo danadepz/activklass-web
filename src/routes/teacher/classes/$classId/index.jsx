@@ -13,6 +13,7 @@ import { classEducationLevel } from '@/lib/classForm'
 import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
+import { issuedLoginId, isIssuedLoginId } from '@/lib/logins'
 import { Users, Check, Clock, Layers } from '@/components/icons'
 import { MetricCard } from '@/components/ui/Card'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -386,6 +387,47 @@ function isDeactivated(account) {
   return account?.status === 'inactive'
 }
 
+/* The shape of the digits a teacher reads off an issued login: `slcsflu-231525`
+   is `<school prefix>-<last 6 digits of the ID number>` (lib/logins.js), and
+   four to eight bare digits is the range those tails and the full numbers fall
+   in. Anything else -- an email, a login with its prefix, letters -- is not
+   this mistake. */
+const BARE_ID_DIGITS = /^\d{4,8}$/
+
+/**
+ * What to say when an ID search finds nobody.
+ *
+ * This box searches for one number, exactly, and the app shows a teacher two
+ * different numbers for the same student: the full ID printed under their name
+ * on the Students list (`24231525`), and the six digits their login is built
+ * from (`slcsflu-231525`) -- which is the half anyone actually reads and types.
+ * Typing those six answered "No student account matches that ID" and pointed at
+ * Create New Manually, which is false and is how a class ends up with a second
+ * copy of a student who already has an account (T-44). So a bare run of digits
+ * is told the search was exact, which number the box wants, and where to read
+ * it. Every other shape of input keeps the message it had.
+ *
+ * Both messages still end on who may create an account: a teacher a school
+ * issued has an admin whose job that is, a solo subscriber has nobody above
+ * them and does it themselves.
+ */
+function noMatchMessage(needle, { schoolIssued, school, loginExample }) {
+  if (!BARE_ID_DIGITS.test(needle)) {
+    return schoolIssued
+      ? `No student account matches that ID. Ask your school admin${adminSuffix(school)} to create the account, then add the student here.`
+      : 'No student account matches that ID. Use "Create New Manually" to add them yourself.'
+  }
+  const fromLogin = loginExample ? `a login like ${loginExample}` : 'a login ID'
+  const noAccountYet = schoolIssued
+    ? `ask your school admin${adminSuffix(school)} to create the account`
+    : 'use "Create New Manually" to add them yourself'
+  return (
+    `No student matches ${needle} exactly. If that came from ${fromLogin}, it is only the tail of their ` +
+    `ID number — search the full number instead, shown under their name on the Students list, or add ` +
+    `them by email. If they have no account here yet, ${noAccountYet}.`
+  )
+}
+
 /* Add a registered student by ID (or email), or create a new manual student record. */
 function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
@@ -446,11 +488,11 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       if (teacherMatch) {
         fail(teacherAccountMessage(needle))
       } else if (!found) {
-        fail(
-          schoolIssued
-            ? `No student account matches that ID. Ask your school admin${adminSuffix(school)} to create the account, then add the student here.`
-            : 'No student account matches that ID. Use "Create New Manually" to add them yourself.',
-        )
+        /* The example login is built from the teacher's own prefix so it is the
+           one they recognise; issuedLoginId returns '' under six digits, and a
+           prefix that could never have been issued is dropped rather than shown. */
+        const preview = issuedLoginId(String(school?.login_prefix || profile?.teaching_school_id || '').toLowerCase(), needle)
+        fail(noMatchMessage(needle, { schoolIssued, school, loginExample: isIssuedLoginId(preview) ? preview : '' }))
       } else if (enrolledIds.includes(found.id)) {
         fail('That student is already in this class.')
       } else if (isDeactivated(found)) {
