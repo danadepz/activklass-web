@@ -13,6 +13,7 @@ import {
   GRADED,
   IN_PROGRESS,
   attemptsAllowedFor,
+  attemptsLabel,
   canStart,
   deadlineOf,
   describeAttemptActivity,
@@ -30,6 +31,7 @@ import {
   secondsRemaining,
   startBriefing,
   summariseFocus,
+  unlimitedAttempts,
 } from './quizAttempts.js'
 
 const NOW = new Date('2026-04-10T09:00:00Z').getTime()
@@ -72,6 +74,48 @@ describe('attemptsAllowedFor', () => {
   it('survives the class-wide allowance being raised later', () => {
     // Additive, so raising 2→3 does not revoke s1's individual grant.
     expect(attemptsAllowedFor({ attempts_allowed: 3, extra_attempts: { s1: 1 } }, 's1')).toBe(4)
+  })
+})
+
+describe('unlimited attempts', () => {
+  it('reads null and 0 as no ceiling', () => {
+    expect(unlimitedAttempts({ attempts_allowed: null })).toBe(true)
+    expect(unlimitedAttempts({ attempts_allowed: 0 })).toBe(true)
+    expect(attemptsAllowedFor({ attempts_allowed: null }, 's1')).toBe(Infinity)
+    expect(attemptsAllowedFor({ attempts_allowed: 0 }, 's1')).toBe(Infinity)
+  })
+
+  it('does NOT read a quiz that never stored the field as unlimited', () => {
+    // Absent has meant one attempt since the field existed. Reading it as no
+    // limit would quietly widen every document written before this feature.
+    expect(unlimitedAttempts({})).toBe(false)
+    expect(unlimitedAttempts(undefined)).toBe(false)
+    expect(attemptsAllowedFor({}, 's1')).toBe(1)
+  })
+
+  it('leaves a numeric limit exactly as it was, grant included', () => {
+    expect(unlimitedAttempts({ attempts_allowed: 5 })).toBe(false)
+    expect(attemptsAllowedFor({ attempts_allowed: 5, extra_attempts: { s1: 1 } }, 's1')).toBe(6)
+  })
+
+  it('never runs out of attempts, but still closes on the closing date', () => {
+    const quiz = { status: 'published', attempts_allowed: null }
+    const used = [done(1), done(2), done(3), done(4), done(5), done(6)]
+    expect(canStart({ quiz, attempts: used, studentId: 's1', now: NOW })).toEqual({ ok: true, resuming: false })
+
+    const closed = { ...quiz, closes_at: '2026-04-09T09:00:00Z' }
+    expect(canStart({ quiz: closed, attempts: used, studentId: 's1', now: NOW }))
+      .toEqual({ ok: false, reason: 'closed' })
+  })
+
+  it('never puts the word Infinity in front of anyone', () => {
+    expect(attemptsLabel(3)).toBe('3')
+    expect(attemptsLabel(Infinity)).toBe('∞')
+
+    const rule = startBriefing({ quiz: { attempts_allowed: null }, attempts: [done(1)], studentId: 's1' })
+      .find((r) => r.key === 'attempts')
+    expect(rule.label).toBe('Attempt 2')
+    expect(`${rule.label} ${rule.detail}`).not.toMatch(/Infinity/)
   })
 })
 

@@ -15,6 +15,7 @@ import { SCORING_POLICIES, describeSyncResult } from '@/lib/quizToRecord'
 import {
   DETAIL_OPTIONS,
   DETAIL_RATIONALE,
+  RELEASE_AFTER_ATTEMPTS,
   RELEASE_IMMEDIATE,
   RELEASE_OPTIONS,
   describeFeedback,
@@ -23,6 +24,8 @@ import {
 import { drawTotalPoints, poolProblem } from '@/lib/quizPool'
 import {
   attemptsAllowedFor,
+  attemptsLabel,
+  unlimitedAttempts,
   describeAttemptActivity,
   describeFocus,
   finishedAttempts,
@@ -327,25 +330,36 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
  * student out of it.
  */
 function LiveSettings({ quiz, refetch }) {
-  const [attemptsAllowed, setAttemptsAllowed] = useState(String(quiz.attempts_allowed ?? 1))
+  const wasUnlimited = unlimitedAttempts(quiz)
+  const [unlimited, setUnlimited] = useState(wasUnlimited)
+  const [attemptsAllowed, setAttemptsAllowed] = useState(
+    String(wasUnlimited ? 1 : quiz.attempts_allowed ?? 1),
+  )
   const [closesAt, setClosesAt] = useState(quiz.closes_at?.slice(0, 16) ?? '')
   const [error, setError] = useState(null)
   const [saved, setSaved] = useState(false)
 
   const dirty =
-    String(quiz.attempts_allowed ?? 1) !== attemptsAllowed ||
+    wasUnlimited !== unlimited ||
+    (!unlimited && String(quiz.attempts_allowed ?? 1) !== attemptsAllowed) ||
     (quiz.closes_at?.slice(0, 16) ?? '') !== closesAt
 
   const [save, saving] = useAsyncAction(async () => {
     const parsed = Number(attemptsAllowed)
-    if (!Number.isFinite(parsed) || parsed < 1) {
+    if (!unlimited && (!Number.isFinite(parsed) || parsed < 1)) {
       setError('Attempts must be at least 1.')
+      return
+    }
+    // Unlimited is bounded by the closing date and nothing else, so without
+    // one the quiz never stops -- which is not what unlimited was asked for.
+    if (unlimited && !closesAt) {
+      setError('Unlimited attempts needs a closing date — that date is the only thing that ends the quiz.')
       return
     }
     setError(null)
     try {
       await updateDoc(doc(db, 'quizzes', quiz.id), {
-        attempts_allowed: parsed,
+        attempts_allowed: unlimited ? null : parsed,
         closes_at: closesAt || null,
         updated_at: serverTimestamp(),
       })
@@ -376,11 +390,22 @@ function LiveSettings({ quiz, refetch }) {
             type="number"
             min="1"
             max="10"
-            value={attemptsAllowed}
+            value={unlimited ? '' : attemptsAllowed}
+            placeholder={unlimited ? '∞' : undefined}
+            disabled={unlimited}
             onChange={(e) => setAttemptsAllowed(e.target.value)}
-            style={{ ...fieldStyle, ...mono }}
+            style={{ ...fieldStyle, ...mono, ...(unlimited ? { opacity: 0.45 } : null) }}
           />
         </div>
+        <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            checked={unlimited}
+            onChange={(e) => setUnlimited(e.target.checked)}
+            style={{ accentColor: navy, width: 16, height: 16 }}
+          />
+          Unlimited attempts until it closes
+        </label>
         <div style={{ minWidth: 230, flex: '0 1 260px' }}>
           <label style={labelStyle}>Closes</label>
           <input
@@ -595,7 +620,13 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
               <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <td style={{ padding: '12px 18px', fontWeight: 700, color: ink }}>{s.last_name}, {s.first_name}</td>
                 <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>
-                  {finished.length || '—'}<span style={{ color: faint }}> / {allowed}</span>
+                  {finished.length || '—'}
+                  <span
+                    style={{ color: faint }}
+                    title={Number.isFinite(allowed) ? undefined : 'Unlimited attempts until the quiz closes'}
+                  >
+                    {' '}/ {attemptsLabel(allowed)}
+                  </span>
                   {granted > 0 && (
                     <span title={`You granted ${granted} extra attempt(s)`} style={{ color: green, fontSize: 11 }}> +{granted}</span>
                   )}
@@ -777,6 +808,28 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
   )
 }
 
+/**
+ * Why an unlimited quiz cannot be published as configured, or null.
+ *
+ * Unlimited attempts is bounded by the closing date and nothing else, so
+ * without one the quiz never stops -- which is not what unlimited was asked
+ * for. And an unlimited quiz has no last attempt, so results set to open
+ * "after all attempts" would never open; `renderFeedback` would release them
+ * after the first sitting instead, silently. Both block publishing rather
+ * than saving, like the pool and feedback checks: a draft may be
+ * half-configured, a quiz students can sit may not.
+ */
+function attemptsProblem(settings) {
+  if (!settings?.attempts_unlimited) return null
+  if (!settings.closes_at) {
+    return 'Unlimited attempts needs a closing date — that date is the only thing that ends this quiz.'
+  }
+  if (settings.feedback_release === RELEASE_AFTER_ATTEMPTS) {
+    return 'Unlimited attempts has no last attempt, so results set to open after all attempts would never open. Release them as soon as they submit, or when the quiz closes.'
+  }
+  return null
+}
+
 function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
@@ -784,7 +837,10 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     title: quiz.title,
     instructions: quiz.instructions ?? '',
     time_limit_minutes: quiz.time_limit_minutes ?? '',
-    attempts_allowed: quiz.attempts_allowed ?? 1,
+    attempts_allowed: unlimitedAttempts(quiz) ? 1 : quiz.attempts_allowed ?? 1,
+    // Derived from attempts_allowed on load and folded back into it on save;
+    // never stored as a field of its own.
+    attempts_unlimited: unlimitedAttempts(quiz),
     shuffle_questions: quiz.shuffle_questions ?? false,
     shuffle_options: quiz.shuffle_options ?? false,
     prevent_backtracking: quiz.prevent_backtracking ?? false,
@@ -902,6 +958,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
      finding that out only when the Publish button refuses is a worse loop. */
   const poolWarning = poolProblem({ ...settings, questions: questions.map(toPayload) })
   const feedbackWarning = feedbackProblem(settings)
+  const attemptsWarning = attemptsProblem(settings)
 
   const toggleClass = (id) => {
     setAssignedClassIds(prev =>
@@ -914,7 +971,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       title: settings.title,
       instructions: settings.instructions,
       time_limit_minutes: settings.time_limit_minutes ? Number(settings.time_limit_minutes) : null,
-      attempts_allowed: Number(settings.attempts_allowed) || 1,
+      attempts_allowed: settings.attempts_unlimited ? null : Number(settings.attempts_allowed) || 1,
       shuffle_questions: !!settings.shuffle_questions,
       shuffle_options: !!settings.shuffle_options,
       prevent_backtracking: !!settings.prevent_backtracking,
@@ -988,6 +1045,10 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     }
     if (feedbackWarning) {
       refusePublish(feedbackWarning)
+      return
+    }
+    if (attemptsWarning) {
+      refusePublish(attemptsWarning)
       return
     }
     // Open publish mapping modal
@@ -1084,7 +1145,21 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
           <div>
             <label style={labelStyle}>Attempts</label>
-            <input className="ak-input" type="number" min="1" max="10" value={settings.attempts_allowed} onChange={set('attempts_allowed')} style={fieldStyle} />
+            <input
+              className="ak-input"
+              type="number"
+              min="1"
+              max="10"
+              value={settings.attempts_unlimited ? '' : settings.attempts_allowed}
+              placeholder={settings.attempts_unlimited ? '∞' : undefined}
+              disabled={settings.attempts_unlimited}
+              onChange={set('attempts_allowed')}
+              style={{ ...fieldStyle, ...(settings.attempts_unlimited ? { opacity: 0.45 } : null) }}
+            />
+            <label className="flex items-center gap-2" style={{ fontSize: 12, color: '#3A4A6B', cursor: 'pointer', marginTop: 6 }}>
+              <input type="checkbox" checked={settings.attempts_unlimited} onChange={set('attempts_unlimited')} style={{ accentColor: navy, width: 15, height: 15 }} />
+              Unlimited until it closes
+            </label>
           </div>
           <div>
             <label style={labelStyle}>Opens</label>
@@ -1156,6 +1231,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             {describeFeedback(settings)}
           </p>
           {feedbackWarning && <AlertBox tone="warn">{feedbackWarning}</AlertBox>}
+          {attemptsWarning && <AlertBox tone="warn">{attemptsWarning}</AlertBox>}
 
           <label className="flex items-start gap-2.5" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={settings.pool_enabled} onChange={set('pool_enabled')} style={{ accentColor: navy, width: 16, height: 16, marginTop: 2 }} />

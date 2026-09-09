@@ -8,7 +8,7 @@ import { fetchUsersByIds } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
-import { attemptsAllowedFor, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
+import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicMastery } from '../../scaffolding'
 import { formatGrade, gradeColor, isPointScale, passNote } from '../../gradeDisplay'
 import ClassStandingForecast from '@/components/ClassStandingForecast'
@@ -818,7 +818,7 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
                   <span>{(quiz.questions ?? []).length} items</span>
                   <span>{points} pts</span>
                   {quiz.time_limit_minutes && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock className="h-3 w-3" />{quiz.time_limit_minutes} min</span>}
-                  <span>Attempts {used}/{allowed}</span>
+                  <span>Attempts {used}/{attemptsLabel(allowed)}</span>
                 </div>
                 {best != null && (
                   <div style={{ fontSize: 13, color: muted, marginTop: 8 }}>

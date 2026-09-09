@@ -187,7 +187,9 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz, studentId }) {
                     ? 'In progress — carry on where you left off'
                     : best == null
                       ? `${total} point${total === 1 ? '' : 's'} · not taken`
-                      : `Best ${best}/${total} · ${used} of ${allowed} attempt${allowed === 1 ? '' : 's'} used`}
+                      : Number.isFinite(allowed)
+                        ? `Best ${best}/${total} · ${used} of ${allowed} attempt${allowed === 1 ? '' : 's'} used`
+                        : `Best ${best}/${total} · ${used} attempt${used === 1 ? '' : 's'} so far, unlimited until it closes`}
                 </div>
               </div>
 
