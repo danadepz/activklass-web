@@ -6,6 +6,8 @@ import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { syncAttendanceSummaries } from '@/lib/attendanceMirror'
+import { scheduleMeetings } from '@/lib/schedule'
+import { downloadCsv, stampedName } from '@/lib/csv'
 import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { promptDialog } from '@/components/ui/dialogs'
@@ -50,6 +52,48 @@ function remarksStyle(disabled) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
+}
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const WEEKDAY_INDEX = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
+
+/* '2026-09-06' -> 'Sep 6'. Split rather than parsed: a Date built from the
+   string and read back through toISOString shifts the day either side of UTC. */
+function shortDate(iso) {
+  const [, m, d] = iso.split('-')
+  return `${MONTH_SHORT[Number(m) - 1] ?? ''} ${Number(d)}`
+}
+
+/* Local calendar date of a Date, for the same reason. */
+function isoOf(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * The columns of the term grid: every day already recorded, plus the class's
+ * scheduled meeting days between the first recorded day and today -- so a day
+ * the teacher forgot to take shows as a gap instead of vanishing.
+ *
+ * A class whose `schedule` is free text from before the pickers yields no
+ * weekdays (`scheduleMeetings` returns nothing rather than throwing), and the
+ * grid degrades to the recorded days alone. The first recorded day is the only
+ * term start we have; no start is invented, and nothing past today is shown.
+ */
+function termColumns(recordedDates, schedule, today) {
+  const dates = new Set(recordedDates)
+  const weekdays = new Set(scheduleMeetings(schedule).map((m) => WEEKDAY_INDEX[m.day]))
+  const first = [...dates].sort()[0]
+  if (weekdays.size && first) {
+    // An unparseable `first` gives an Invalid Date, whose comparison is false,
+    // so the loop simply does not run.
+    const cursor = new Date(`${first}T00:00:00`)
+    const end = new Date(`${today}T00:00:00`)
+    while (cursor <= end) {
+      if (weekdays.has(cursor.getDay())) dates.add(isoOf(cursor))
+      cursor.setDate(cursor.getDate() + 1)
+    }
+  }
+  return [...dates].sort()
 }
 
 function emptyEntry() {
@@ -297,6 +341,127 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   )
 }
 
+/* The whole term on one sheet: students down the side, the days the class met
+   across the top -- the spreadsheet a teacher keeps beside the daily register,
+   and what they show a student at grading time. Read-only on purpose; marking
+   still happens on the day view. It re-uses the day view's query, which already
+   reads every recorded day to build the P/L/A/E totals, so nothing new is
+   fetched to render this. */
+function TermSheet({ sheet, columns, onPickDay }) {
+  const cellOf = (sid, date) => sheet.byDate[date]?.[sid] ?? null
+
+  function exportCsv() {
+    const header = ['Student', ...columns.map(shortDate), ...STATUS_KEYS.map((k) => STATUS_META[k].label)]
+    const rows = sheet.students.map((s) => {
+      const totals = sheet.summary[s.student_id] ?? {}
+      return [
+        `${s.last_name}, ${s.first_name}`,
+        ...columns.map((date) => {
+          const status = cellOf(s.student_id, date)
+          return status ? STATUS_META[status].short : ''
+        }),
+        ...STATUS_KEYS.map((k) => totals[k] ?? 0),
+      ]
+    })
+    downloadCsv(stampedName('attendance-term'), [header, ...rows])
+  }
+
+  // The pinned column needs an opaque background of its own -- the grid slides
+  // underneath it, not behind the page.
+  const pinned = { position: 'sticky', left: 0, zIndex: 1, background: '#FFFFFF' }
+  const pinnedHead = { ...pinned, zIndex: 2, background: '#F5F6F8' }
+
+  return (
+    <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}` }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>Whole term</div>
+          <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>
+            {columns.length} class {columns.length === 1 ? 'day' : 'days'} · pick a date at the top of a column to mark it
+          </div>
+        </div>
+        <button
+          onClick={exportCsv}
+          disabled={columns.length === 0}
+          className="transition hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ padding: '8px 15px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 9, cursor: 'pointer' }}
+        >
+          Export CSV
+        </button>
+      </div>
+
+      {columns.length === 0 || sheet.students.length === 0 ? (
+        <div style={{ padding: 32, textAlign: 'center', color: faint, fontSize: 13 }}>
+          {sheet.students.length === 0
+            ? 'No students enrolled yet.'
+            : 'No attendance recorded yet — take a day on the By day tab and it appears here.'}
+        </div>
+      ) : (
+        /* The term is far wider than the page, so it scrolls in here. The page
+           itself must never scroll sideways. */
+        <div className="overflow-x-auto">
+          <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#F5F6F8', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
+                <th style={{ ...thHead, ...pinnedHead, minWidth: 170 }}>Student</th>
+                {columns.map((date) => (
+                  <th key={date} style={{ ...thHead, padding: '10px 6px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => onPickDay(date)}
+                      title={`Open ${date} on the By day tab`}
+                      className="transition hover:brightness-110"
+                      style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      {shortDate(date)}
+                    </button>
+                  </th>
+                ))}
+                <th style={{ ...thHead, textAlign: 'center', borderLeft: '1px solid rgba(14,42,92,0.07)', whiteSpace: 'nowrap' }} title="Totals: Present / Late / Absent / Excused">
+                  P / L / A / E
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sheet.students.map((student) => {
+                const sid = student.student_id
+                const totals = sheet.summary[sid] ?? {}
+                return (
+                  <tr key={sid} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+                    <td style={{ ...pinned, padding: '11px 18px', fontWeight: 700, color: ink, whiteSpace: 'nowrap' }}>
+                      {student.last_name}, {student.first_name}
+                    </td>
+                    {columns.map((date) => {
+                      const status = cellOf(sid, date)
+                      const m = status ? STATUS_META[status] : null
+                      return (
+                        <td key={date} style={{ padding: '11px 6px', textAlign: 'center' }} title={m ? `${date} · ${m.label}` : `${date} · not recorded`}>
+                          {m ? (
+                            <span style={{ ...mono, fontSize: 12, fontWeight: 700, color: m.fg }}>{m.short}</span>
+                          ) : (
+                            <span style={{ color: '#CBD5E1' }}>·</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                    <td style={{ ...mono, padding: '11px 18px', textAlign: 'center', whiteSpace: 'nowrap', fontSize: 12, borderLeft: '1px solid rgba(14,42,92,0.05)' }}>
+                      {STATUS_KEYS.map((key, i) => (
+                        <span key={key}>
+                          {i > 0 && <span style={{ color: '#CBD5E1' }}> / </span>}
+                          <span style={{ color: STATUS_META[key].fg, fontWeight: 700 }}>{totals[key] ?? 0}</span>
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* Attendance disputes filed by students. The teacher approves — choosing what
    the day actually was, since a dispute is as often a mis-click to undo as an
    absence to excuse — or rejects with a note. The decision is written to
@@ -503,12 +668,14 @@ export default function AttendancePage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
   const [day, setDay] = useState(todayIso())
+  const [view, setView] = useState('day')
 
   const { data: sheet, isLoading, isError } = useQuery({
     queryKey: ['fs-attendance', classId, day],
     queryFn: async () => {
       const cls = await getDoc(doc(db, 'classes', classId))
       if (!cls.exists()) throw new Error('Class not found')
+      const schedule = cls.data().schedule ?? null
       const ids = cls.data().student_ids ?? []
       const users = ids.length ? await fetchUsersByIds(ids) : []
       const students = users
@@ -521,14 +688,18 @@ export default function AttendancePage() {
       const daySnap = await getDoc(doc(db, 'classes', classId, 'attendance', day))
       const dayData = daySnap.exists() ? daySnap.data() : {}
 
-      // All-time P/L/A/E tally per student, across every recorded day.
+      /* All-time P/L/A/E tally per student, across every recorded day -- and,
+         from the same walk, each day's statuses keyed by date, which is the
+         term grid. One read serves both; the term view adds no query. */
       const allSnap = await getDocs(collection(db, 'classes', classId, 'attendance'))
       const summary = {}
+      const byDate = {}
       allSnap.forEach((d) => {
         const recs = d.data().records ?? {}
         for (const [sid, rec] of Object.entries(recs)) {
           if (!rec?.status) continue
           ;(summary[sid] ??= {})[rec.status] = (summary[sid][rec.status] ?? 0) + 1
+          ;(byDate[d.id] ??= {})[sid] = rec.status
         }
       })
 
@@ -536,6 +707,8 @@ export default function AttendancePage() {
         students,
         records: dayData.records ?? {},
         summary,
+        byDate,
+        schedule,
       }
     },
   })
@@ -549,16 +722,47 @@ export default function AttendancePage() {
           <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
             Attendance
           </h1>
-          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>Track and record daily student attendance for the selected date.</p>
+          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
+            {view === 'day'
+              ? 'Track and record daily student attendance for the selected date.'
+              : 'Every day this class met, on one sheet. Marking is done on the By day tab.'}
+          </p>
         </div>
-        <input
-          type="date"
-          value={day}
-          max={todayIso()}
-          onChange={(e) => e.target.value && setDay(e.target.value)}
-          className="ak-input"
-          style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1" style={{ background: 'rgba(14,42,92,0.05)', borderRadius: 999, padding: 3 }}>
+            {[['day', 'By day'], ['term', 'Whole term']].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                className="transition"
+                style={{
+                  padding: '7px 15px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  fontFamily: sans,
+                  borderRadius: 999,
+                  border: 'none',
+                  cursor: 'pointer',
+                  ...(view === key
+                    ? { background: '#FFFFFF', color: navy, boxShadow: '0 1px 2px rgba(14,42,92,0.12)' }
+                    : { background: 'transparent', color: muted }),
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {view === 'day' && (
+            <input
+              type="date"
+              value={day}
+              max={todayIso()}
+              onChange={(e) => e.target.value && setDay(e.target.value)}
+              className="ak-input"
+              style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            />
+          )}
+        </div>
       </div>
 
       <ContestsPanel classId={classId} />
@@ -567,6 +771,15 @@ export default function AttendancePage() {
         <SkeletonTable rows={8} cols={5} label="Loading attendance" />
       ) : isError || !sheet ? (
         <p style={{ color: red }}>Class not found.</p>
+      ) : view === 'term' ? (
+        <TermSheet
+          sheet={sheet}
+          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso())}
+          onPickDay={(date) => {
+            setDay(date)
+            setView('day')
+          }}
+        />
       ) : (
         <AttendanceSheet
           key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
