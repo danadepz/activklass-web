@@ -54,7 +54,6 @@
   body {
     background-color: var(--color-slate-50);
     color: var(--color-slate-800);
-    overflow-x: hidden;
   }
 
   /* Headings are the same face as body copy, so weight and size are the only
