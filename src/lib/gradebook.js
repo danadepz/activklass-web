@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
-import { computeFinalGrade, finalAcrossPeriods } from '@/lib/grading'
+import { computeFinalGrade, finalAcrossPeriods, gradePolicy } from '@/lib/grading'
 
 export async function loadBundle(classId) {
   const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
@@ -51,6 +51,9 @@ export async function loadBundle(classId) {
     periods: gb.periods ?? [],
     components: gb.components ?? [],
     mode: gb.grading_mode ?? 'deped_k12',
+    /* Pass mark + point-scale direction, defaults filled (lib/grading.js):
+       a gradebook saved before the fields existed computes as it always did. */
+    policy: gradePolicy(gb),
     overrides: gb.overrides ?? {},
     students,
     assessments,
@@ -79,7 +82,7 @@ function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
     ...c,
     assessments: periodAssessments.filter((a) => a.component_id === c.id),
   }))
-  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode)
+  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode, bundle.policy)
   const override = bundle.overrides?.[periodId]?.[studentId]
   return {
     components: breakdown,
@@ -93,8 +96,10 @@ function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
    loaded periods/components/assessments/overrides and grading mode. Shared by
    the Class Record grid (via gradeForPeriod above) and any cross-class view
    (reports.jsx, the student directory) that needs one number per student
-   without loading the whole RecordGrid bundle shape. */
-export function computeStudentFinal(studentId, periods, components, assessments, overrides, mode) {
+   without loading the whole RecordGrid bundle shape. `policy` is the
+   gradebook's pass mark and scale direction (gradePolicy(gb)); omitted, the
+   defaults apply. */
+export function computeStudentFinal(studentId, periods, components, assessments, overrides, mode, policy) {
   const periodGrades = {}
   for (const p of periods) {
     const periodAssessments = assessments.filter((a) => a.period_id === p.id)
@@ -107,7 +112,7 @@ export function computeStudentFinal(studentId, periods, components, assessments,
       ...c,
       assessments: periodAssessments.filter((a) => a.component_id === c.id),
     }))
-    const { final } = computeFinalGrade(componentsWithA, studentScores, mode)
+    const { final } = computeFinalGrade(componentsWithA, studentScores, mode, policy)
     const override = overrides?.[p.id]?.[studentId]
     const hasScore = periodAssessments.some((a) => a.scores?.[studentId])
     const g = override != null ? override : hasScore ? final : null
@@ -134,6 +139,9 @@ export function buildPeriodRecord(bundle, periodId) {
     scores,
     students: bundle.students,
     grades,
+    // So the grid can count a pass the way the grades above were computed.
+    mode: bundle.mode,
+    policy: bundle.policy,
   }
 }
 
@@ -225,6 +233,11 @@ export async function syncEntries(classId) {
         components,
         assessments,
         mode: bundle.mode,
+        // With the mode, what the grade means: the student's screens read
+        // these to colour, label and pass-mark the grade the same way the
+        // teacher's record does. A student may read nothing else of the gradebook.
+        passing_percent: bundle.policy.passing_percent,
+        point_scale_direction: bundle.policy.point_scale_direction,
         updated_at: serverTimestamp(),
       },
       { merge: true },

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
+import { isPassingGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 import { useMySubscription } from '@/hooks/useMySubscription'
@@ -14,12 +15,15 @@ function fmt(v) {
   return v == null ? '—' : v.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
 
-function gradeColor(v, mode) {
+// The gradebook's own pass mark and point-scale direction decide what is
+// passing (lib/grading.js), the same test the class record uses.
+function gradeColor(v, mode, policy) {
   if (v == null) return muted
-  if (mode === 'ched_point') return v <= 3.0 ? green : red
+  const passing = isPassingGrade(v, mode, policy) === true
+  if (mode === 'ched_point') return passing ? green : red
   if (v >= 90) return green
   if (v >= 85) return blueText
-  if (v >= 75) return ink
+  if (passing) return ink
   if (v >= 70) return goldDeep
   return red
 }
@@ -286,7 +290,7 @@ export default function StudentsPage() {
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       {r.configured ? (
-                        <span style={{ ...serif, fontSize: 20, lineHeight: 1, color: gradeColor(r.grade, r.mode) }}>{fmt(r.grade)}</span>
+                        <span style={{ ...serif, fontSize: 20, lineHeight: 1, color: gradeColor(r.grade, r.mode, r.policy) }}>{fmt(r.grade)}</span>
                       ) : (
                         <Link to={`/teacher/classes/${r.classId}/grading`} style={{ fontSize: 12, fontWeight: 600, color: blueText, textDecoration: 'none' }}>
                           Set up grading →

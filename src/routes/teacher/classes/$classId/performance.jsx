@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
-import { computeFinalGrade } from '@/lib/grading'
+import { computeFinalGrade, gradePolicy, isPassingGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
 import { MetricCard, Panel } from '@/components/ui/Card'
@@ -58,6 +58,8 @@ async function loadPerf(classId) {
     periods: gb.periods ?? [],
     components: gb.components ?? [],
     mode: gb.grading_mode ?? 'deped_k12',
+    // Pass mark + point-scale direction, defaults filled (lib/grading.js).
+    policy: gradePolicy(gb),
     overrides: gb.overrides ?? {},
     students,
     assessments,
@@ -74,7 +76,7 @@ function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
     ...c,
     assessments: periodAssessments.filter((a) => a.component_id === c.id),
   }))
-  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode)
+  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode, bundle.policy)
   const override = bundle.overrides?.[periodId]?.[studentId]
   return { components: breakdown, grade: override != null ? override : final }
 }
@@ -168,8 +170,13 @@ export default function PerformancePage() {
   const vals = graded.map((r) => r.grade)
 
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
-  const passed = vals.filter((v) => v >= 75).length
+  // The gradebook's own pass mark and point-scale direction, not a fixed 75:
+  // on the point scale a 1.25 is a pass, and a class that passes at 60 passes at 60.
+  const passed = vals.filter((v) => isPassingGrade(v, bundle.mode, bundle.policy)).length
   const passingRate = vals.length ? `${Math.round((passed / vals.length) * 100)}%` : '—'
+  const passMark = bundle.mode === 'ched_point'
+    ? `${bundle.policy.point_scale_direction === 'inverted' ? '≥' : '≤'} 3.00`
+    : `≥ ${bundle.mode === 'deped_k12' ? 75 : bundle.policy.passing_percent}`
   /* Named for what it counts, not for a judgement. Three different rules were
      on screen labelled "At risk" at once -- this one (below 85), the one in
      reports.jsx (assessed but not passing), and PredictedRisk's model output.
@@ -249,7 +256,7 @@ export default function PerformancePage() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <MetricCard label="Class average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} Icon={BarChart} tint="rgba(14,42,92,0.07)" iconColor={navy} />
-        <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ≥ 75`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ${passMark}`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
         <MetricCard label="Below VS" value={belowVsCount} sub="grade below 85 this period" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={belowVsCount > 0} />
         <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} valueColor={green} Icon={TrendingUp} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
       </div>

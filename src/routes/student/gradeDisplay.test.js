@@ -49,3 +49,56 @@ describe('gradeDisplay — the student side of Grade Config', () => {
     expect(passNote('deped_k12')).toMatch(/75/)
   })
 })
+
+describe('gradeDisplay — a teacher-set pass mark and a 5.0-is-highest scale (T-45)', () => {
+  // The entry itself is the policy: syncEntries stamps both fields beside mode.
+  const inverted = { mode: 'ched_point', passing_percent: 75, point_scale_direction: 'inverted' }
+  const at60 = { mode: 'ched_percentage', passing_percent: 60, point_scale_direction: 'ched' }
+
+  it('reads the direction: 4.75 is excellent and green, 1.0 fails and is red', () => {
+    expect(passes(4.75, 'ched_point', inverted)).toBe(true)
+    expect(passes(3.0, 'ched_point', inverted)).toBe(true)
+    expect(passes(2.75, 'ched_point', inverted)).toBe(false)
+    expect(gradeColor(4.75, 'ched_point', inverted)).toBe(green)
+    expect(gradeColor(3.0, 'ched_point', inverted)).toBe(goldDeep)
+    expect(gradeColor(1.0, 'ched_point', inverted)).toBe(red)
+    expect(gradeTone(4.75, 'ched_point', inverted).label).toBe('Excellent')
+    expect(gradeTone(3.0, 'ched_point', inverted).label).toBe('Passed')
+    expect(gradeTone(1.0, 'ched_point', inverted).label).toBe('Failed')
+    expect(passNote('ched_point', inverted)).toBe('5.00 is highest · 3.00 passes')
+  })
+
+  it('reads the pass mark on percentages', () => {
+    expect(passes(60, 'ched_percentage', at60)).toBe(true)
+    expect(passes(59, 'ched_percentage', at60)).toBe(false)
+    expect(gradeColor(65, 'ched_percentage', at60)).toBe(goldDeep)
+    expect(gradeColor(59, 'ched_percentage', at60)).toBe(red)
+    expect(gradeTone(65, 'ched_percentage', at60).label).toBe('Satisfactory')
+    expect(passNote('ched_percentage', at60)).toBe('60 passes')
+  })
+
+  it('gauges an inverted point grade the same distance as its standard twin', () => {
+    expect(gradeAsPercent(4.75, 'ched_point', inverted)).toBe(gradeAsPercent(1.25, 'ched_point'))
+    expect(gradeAsPercent(5.0, 'ched_point', inverted)).toBe(96)
+    expect(gradeAsPercent(1.0, 'ched_point', inverted)).toBe(60)
+  })
+
+  it('agrees with the grading pipeline in both directions', () => {
+    for (const policy of [inverted, { point_scale_direction: 'ched' }]) {
+      for (const pct of [96, 91, 85, 79, 75, 74, 40]) {
+        const point = chedPointEquivalent(pct, policy)
+        expect(passes(point, 'ched_point', policy)).toBe(pct >= 75)
+        expect(chedPointEquivalent(gradeAsPercent(point, 'ched_point', policy), policy)).toBe(point)
+      }
+    }
+  })
+
+  it('without a policy everything reads as it always did', () => {
+    expect(passNote('ched_point')).toBe('1.00 is highest · 3.00 passes')
+    expect(passNote('deped_k12')).toBe('75 passes')
+    expect(gradeAsPercent(1.0, 'ched_point')).toBe(96)
+    expect(gradeAsPercent(3.0, 'ched_point')).toBe(75)
+    expect(gradeAsPercent(5.0, 'ched_point')).toBe(60)
+    expect(gradeTone(3.0, 'ched_point', {}).label).toBe('Passed')
+  })
+})

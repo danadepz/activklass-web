@@ -495,9 +495,9 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: muted }}>Current grade</div>
-          <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class · {passNote(entry.mode)}</div>
+          <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class · {passNote(entry.mode, entry)}</div>
         </div>
-        <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade, entry.mode) }}>
+        <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade, entry.mode, entry) }}>
           {formatGrade(entry.final_grade, entry.mode)}
         </div>
       </div>
@@ -506,7 +506,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
         ? periods.map((p) => (
             <div key={p.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 20px', display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: 700, color: ink }}>{p.name}</span>
-              <span style={{ fontWeight: 700, color: gradeColor(p.grade, entry.mode) }}>{formatGrade(p.grade, entry.mode)}</span>
+              <span style={{ fontWeight: 700, color: gradeColor(p.grade, entry.mode, entry) }}>{formatGrade(p.grade, entry.mode)}</span>
             </div>
           ))
         : periods.map((period) => {
@@ -517,7 +517,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
                 {/* Period header */}
                 <div className="flex items-center justify-between" style={{ padding: '14px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
                   <span style={{ ...serif, fontSize: 18, color: ink }}>{period.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade, entry.mode) }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade, entry.mode, entry) }}>
                     Grade {formatGrade(period.grade, entry.mode)}
                   </span>
                 </div>

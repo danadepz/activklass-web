@@ -46,7 +46,7 @@ function Gauge({ value, size = 132, stroke = 12, color = gold, label, sublabel }
 }
 
 function ClassCard({ c }) {
-  const tone = gradeTone(c.current_grade, c.grade_mode)
+  const tone = gradeTone(c.current_grade, c.grade_mode, c.grade_policy)
   return (
     <Link
       to={`/student/classes/${c.id}`}
@@ -78,7 +78,7 @@ function ClassCard({ c }) {
           )}
         </div>
         <div style={{ height: 7, borderRadius: 999, background: 'rgba(14,42,92,0.07)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, gradeAsPercent(c.current_grade, c.grade_mode) ?? 0)}%`, background: `linear-gradient(90deg, ${gold}, #3FA9F5)`, transition: 'width 0.8s' }} />
+          <div style={{ height: '100%', width: `${Math.min(100, gradeAsPercent(c.current_grade, c.grade_mode, c.grade_policy) ?? 0)}%`, background: `linear-gradient(90deg, ${gold}, #3FA9F5)`, transition: 'width 0.8s' }} />
         </div>
       </div>
     </Link>
@@ -131,6 +131,9 @@ async function loadDashboard(profile) {
         teacher_name: teacherName(c.teacher_id),
         current_grade: entry?.final_grade ?? null,
         grade_mode: entry?.mode ?? null,
+        // The entry carries the gradebook's pass mark and point-scale
+        // direction beside its mode; gradeDisplay reads them off it directly.
+        grade_policy: entry ?? null,
         attendance_rate: attendance.rate,
         module_count: syllabus?.modules?.length ?? 0,
       }
@@ -157,7 +160,7 @@ export default function StudentDashboard() {
 
   const classes = data?.classes ?? []
   // The gauge speaks percent; a 1.0–5.0 point grade goes in through its band.
-  const graded = classes.map((c) => gradeAsPercent(c.current_grade, c.grade_mode)).filter((v) => v != null)
+  const graded = classes.map((c) => gradeAsPercent(c.current_grade, c.grade_mode, c.grade_policy)).filter((v) => v != null)
   const mastery = graded.length ? Math.round(graded.reduce((s, v) => s + v, 0) / graded.length) : null
   const rates = classes.filter((c) => c.attendance_rate != null)
   const attendanceRate = rates.length

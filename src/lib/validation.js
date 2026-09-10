@@ -168,6 +168,21 @@ export function lrnError(value, { required = true, collegePath = '' } = {}) {
   return ''
 }
 
+/**
+ * The pass mark a CHED-mode gradebook uses (Grade Config → Passing score):
+ * a whole number from 1 to 99. 100 would leave no passing band, 0 would pass
+ * everyone; decimals are refused so the ranges table stays readable.
+ */
+export function passingPercentError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'A passing score is required.'
+  const n = Number(text)
+  if (!Number.isInteger(n) || n < 1 || n > 99) {
+    return 'The passing score must be a whole number from 1 to 99.'
+  }
+  return ''
+}
+
 /** The institution's login prefix: 2–12 letters or digits, stored lowercase. */
 export function loginPrefixError(value) {
   const text = String(value ?? '').trim().toLowerCase()

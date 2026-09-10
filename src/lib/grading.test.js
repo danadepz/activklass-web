@@ -12,8 +12,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEPED_COMPONENT_PRESET,
+  chedPointEquivalent,
   computeFinalGrade,
   finalAcrossPeriods,
+  gradePolicy,
+  isPassingGrade,
+  pointScaleBands,
   rebalanceWeights,
   redistributeWeights,
   weightsValid,
@@ -443,5 +447,186 @@ describe('redistributeWeights', () => {
   it('splits 100 equally across all-zero rows', () => {
     const next = redistributeWeights(rows(0, 0))
     expect(next.map((r) => r.weight_percent)).toEqual(['50', '50'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// T-45: a teacher-set pass mark and a point scale that can run either way.
+// The last block is the one that matters: a gradebook written before the
+// fields existed must compute exactly what it computed before.
+// ---------------------------------------------------------------------------
+
+describe('gradePolicy — the pass mark and scale direction, with defaults', () => {
+  it('fills 75 and 1.0-is-highest when the fields are absent or unusable', () => {
+    for (const source of [
+      undefined,
+      null,
+      {},
+      { passing_percent: 'x', point_scale_direction: 'sideways' },
+      { passing_percent: 0 },
+      { passing_percent: 100 },
+      { passing_percent: -5, point_scale_direction: null },
+    ]) {
+      expect(gradePolicy(source)).toEqual({ passing_percent: 75, point_scale_direction: 'ched' })
+    }
+  })
+
+  it('keeps a stored pass mark and direction, coercing a numeric string', () => {
+    expect(gradePolicy({ passing_percent: 60, point_scale_direction: 'inverted' })).toEqual({
+      passing_percent: 60,
+      point_scale_direction: 'inverted',
+    })
+    expect(gradePolicy({ passing_percent: '60' }).passing_percent).toBe(60)
+  })
+})
+
+describe('chedPointEquivalent — the ladder every existing gradebook has used', () => {
+  const LADDER = [
+    [100, 1.0], [96, 1.0], [95.99, 1.25], [94, 1.25], [91, 1.5], [88, 1.75], [85, 2.0],
+    [82, 2.25], [79, 2.5], [76, 2.75], [75, 3.0], [74.99, 5.0], [0, 5.0],
+  ]
+
+  it('is unchanged with no policy, an empty one, or the defaults spelled out', () => {
+    for (const [pct, point] of LADDER) {
+      expect(chedPointEquivalent(pct)).toBe(point)
+      expect(chedPointEquivalent(pct, {})).toBe(point)
+      expect(chedPointEquivalent(pct, { passing_percent: 75, point_scale_direction: 'ched' })).toBe(point)
+    }
+  })
+
+  it('returns null without a usable percent', () => {
+    expect(chedPointEquivalent(null)).toBeNull()
+    expect(chedPointEquivalent(NaN)).toBeNull()
+    expect(chedPointEquivalent('x', { point_scale_direction: 'inverted' })).toBeNull()
+  })
+
+  it('mirrors the scale around 3.0 when 5.0 is highest', () => {
+    const inverted = { point_scale_direction: 'inverted' }
+    expect(chedPointEquivalent(96, inverted)).toBe(5.0)
+    expect(chedPointEquivalent(94, inverted)).toBe(4.75)
+    expect(chedPointEquivalent(85, inverted)).toBe(4.0)
+    expect(chedPointEquivalent(76, inverted)).toBe(3.25)
+    expect(chedPointEquivalent(75, inverted)).toBe(3.0)
+    expect(chedPointEquivalent(74.99, inverted)).toBe(1.0)
+  })
+
+  it('stretches the passing band in proportion over a lower pass mark', () => {
+    // At 60 the bounds become 60 / 61.6 / 66.4 / 71.2 / 76 / 80.8 / 85.6 / 90.4 / 93.6.
+    const at60 = { passing_percent: 60 }
+    expect(chedPointEquivalent(60, at60)).toBe(3.0)
+    expect(chedPointEquivalent(59.99, at60)).toBe(5.0)
+    expect(chedPointEquivalent(66.4, at60)).toBe(2.5)
+    expect(chedPointEquivalent(76, at60)).toBe(2.0)
+    expect(chedPointEquivalent(93.59, at60)).toBe(1.25)
+    expect(chedPointEquivalent(93.6, at60)).toBe(1.0)
+  })
+})
+
+describe('pointScaleBands — the table Grade Config shows', () => {
+  it('is contiguous, best grade first, and ends with the failing band at the pass mark', () => {
+    for (const policy of [undefined, { passing_percent: 60 }, { passing_percent: 60, point_scale_direction: 'inverted' }]) {
+      const bands = pointScaleBands(policy)
+      expect(bands).toHaveLength(10)
+      expect(bands[0].to).toBeNull()
+      for (let i = 1; i < bands.length; i++) expect(bands[i].to).toBe(bands[i - 1].from)
+      expect(bands[bands.length - 1].from).toBe(0)
+      expect(bands[bands.length - 1].to).toBe(gradePolicy(policy).passing_percent)
+      // Every band's lower bound maps back to its own grade, so the table and
+      // the computation cannot disagree.
+      for (const b of bands) expect(chedPointEquivalent(b.from, policy)).toBe(b.point)
+    }
+  })
+
+  it('lists 1.0 first the standard way and 5.0 first inverted', () => {
+    expect(pointScaleBands().map((b) => b.point)).toEqual([1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 5.0])
+    expect(pointScaleBands({ point_scale_direction: 'inverted' }).map((b) => b.point)).toEqual([
+      5.0, 4.75, 4.5, 4.25, 4.0, 3.75, 3.5, 3.25, 3.0, 1.0,
+    ])
+  })
+})
+
+describe('isPassingGrade — the one Passed / Failed test', () => {
+  it('reads the direction on the point scale; 3.0 passes both ways', () => {
+    expect(isPassingGrade(3.0, 'ched_point')).toBe(true)
+    expect(isPassingGrade(3.25, 'ched_point')).toBe(false)
+    expect(isPassingGrade(1.0, 'ched_point')).toBe(true)
+    const inverted = { point_scale_direction: 'inverted' }
+    expect(isPassingGrade(3.0, 'ched_point', inverted)).toBe(true)
+    expect(isPassingGrade(2.75, 'ched_point', inverted)).toBe(false)
+    expect(isPassingGrade(5.0, 'ched_point', inverted)).toBe(true)
+    expect(isPassingGrade(1.0, 'ched_point', inverted)).toBe(false)
+  })
+
+  it('reads the pass mark on percentages, and DepEd stays at 75 whatever is stored', () => {
+    expect(isPassingGrade(75, 'ched_percentage')).toBe(true)
+    expect(isPassingGrade(74.99, 'ched_percentage')).toBe(false)
+    expect(isPassingGrade(60, 'ched_percentage', { passing_percent: 60 })).toBe(true)
+    expect(isPassingGrade(59.99, 'ched_percentage', { passing_percent: 60 })).toBe(false)
+    expect(isPassingGrade(74, 'deped_k12', { passing_percent: 60 })).toBe(false)
+    expect(isPassingGrade(75, 'deped_k12', { passing_percent: 60 })).toBe(true)
+  })
+
+  it('is null without a grade', () => {
+    expect(isPassingGrade(null, 'ched_point')).toBeNull()
+    expect(isPassingGrade('x', 'ched_percentage')).toBeNull()
+  })
+})
+
+describe('computeFinalGrade — a gradebook without the new fields computes exactly as before', () => {
+  // Five score sets across all three modes; the expected values are the
+  // hand-computed ones already pinned above, and the policy-less call must
+  // equal the empty-policy and the spelled-out-defaults calls, field for field.
+  const scoreSets = [
+    { w1: graded(24), p1: graded(45), q1: graded(40) }, // initial 85
+    { w1: graded(24), p1: graded(45) }, // initial 86.25
+    { w1: graded(20) }, // initial 66.67
+    { w1: missing }, // initial 0
+    {}, // nothing recorded
+  ]
+  const expectedFinal = {
+    deped_k12: [90, 91, 79, 60, null],
+    ched_percentage: [85, 86.25, 66.67, 0, null],
+    ched_point: [2.0, 2.0, 5.0, 5.0, null],
+  }
+  const expectedDescriptor = {
+    deped_k12: ['Outstanding', 'Outstanding', 'Fairly Satisfactory', 'Did Not Meet Expectations', null],
+    ched_percentage: ['Passed', 'Passed', 'Failed', 'Failed', null],
+    ched_point: ['Passed', 'Passed', 'Failed', 'Failed', null],
+  }
+
+  for (const mode of ['deped_k12', 'ched_percentage', 'ched_point']) {
+    it(`${mode}: no policy, an empty policy and the defaults all give the pre-T-45 result`, () => {
+      scoreSets.forEach((scores, i) => {
+        const bare = computeFinalGrade(depedCore(), scores, mode)
+        expect(bare.final).toBe(expectedFinal[mode][i])
+        expect(bare.descriptor).toBe(expectedDescriptor[mode][i])
+        expect(computeFinalGrade(depedCore(), scores, mode, {})).toEqual(bare)
+        expect(
+          computeFinalGrade(depedCore(), scores, mode, { passing_percent: 75, point_scale_direction: 'ched' }),
+        ).toEqual(bare)
+      })
+    })
+  }
+
+  it('honours the direction and the pass mark in the CHED modes', () => {
+    const scores = { w1: graded(24), p1: graded(45) } // initial 86.25
+    const low = { w1: graded(20) } // initial 66.67
+    const inverted = computeFinalGrade(depedCore(), scores, 'ched_point', { point_scale_direction: 'inverted' })
+    expect(inverted).toMatchObject({ initial: 86.25, final: 4.0, descriptor: 'Passed' })
+    const invertedLow = computeFinalGrade(depedCore(), low, 'ched_point', { point_scale_direction: 'inverted' })
+    expect(invertedLow).toMatchObject({ final: 1.0, descriptor: 'Failed' })
+    // At a 60 pass mark 66.67 sits in the 66.4 band: 2.5 standard, 3.5 inverted, a pass either way.
+    expect(computeFinalGrade(depedCore(), low, 'ched_point', { passing_percent: 60 })).toMatchObject({ final: 2.5, descriptor: 'Passed' })
+    expect(
+      computeFinalGrade(depedCore(), low, 'ched_point', { passing_percent: 60, point_scale_direction: 'inverted' }),
+    ).toMatchObject({ final: 3.5, descriptor: 'Passed' })
+    expect(computeFinalGrade(depedCore(), low, 'ched_percentage', { passing_percent: 60 })).toMatchObject({ final: 66.67, descriptor: 'Passed' })
+  })
+
+  it('DepEd K-12 ignores the policy entirely', () => {
+    const policy = { passing_percent: 60, point_scale_direction: 'inverted' }
+    expect(computeFinalGrade(depedCore(), { w1: graded(20) }, 'deped_k12', policy)).toEqual(
+      computeFinalGrade(depedCore(), { w1: graded(20) }, 'deped_k12'),
+    )
   })
 })

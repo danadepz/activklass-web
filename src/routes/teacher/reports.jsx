@@ -4,6 +4,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { computeStudentFinal } from '@/lib/gradebook'
+import { gradePolicy, isPassingGrade } from '@/lib/grading'
 import { BarChart, FileText, Users, Notebook, AlertCircle, ArrowRight } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -14,7 +15,9 @@ const MODE_LABEL = { deped_k12: 'DepEd K-12', ched_percentage: 'CHED %', ched_po
 const classLabel = (c) =>
   c.subject_code ? `${c.subject_code} · ${c.section ?? ''}`.trim() : c.section || c.subject || c.name || 'Class'
 
-const isPassing = (grade, mode) => (grade == null ? false : mode === 'ched_point' ? grade <= 3.0 : grade >= 75)
+// The pass test lives in lib/grading.js so the gradebook's own pass mark and
+// point-scale direction decide here exactly as they do on the class record.
+const isPassing = (grade, mode, policy) => isPassingGrade(grade, mode, policy) === true
 
 function fmtAvg(avg, mode) {
   if (avg == null) return '—'
@@ -22,12 +25,12 @@ function fmtAvg(avg, mode) {
   return avg.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
 }
 
-function gradeColor(avg, mode) {
+function gradeColor(avg, mode, policy) {
   if (avg == null) return muted
-  if (mode === 'ched_point') return avg <= 3.0 ? green : red
+  if (mode === 'ched_point') return isPassing(avg, mode, policy) ? green : red
   if (avg >= 90) return green
   if (avg >= 85) return blueText
-  if (avg >= 75) return ink
+  if (isPassing(avg, mode, policy)) return ink
   if (avg >= 70) return goldDeep
   return red
 }
@@ -45,6 +48,7 @@ async function loadClassReport(c) {
     label: classLabel(c),
     subject: c.subject ?? c.subject_title ?? '',
     mode: gb.grading_mode ?? 'deped_k12',
+    policy: gradePolicy(gb),
     studentCount: ids.length,
     configured,
     assessedCount: 0,
@@ -57,11 +61,11 @@ async function loadClassReport(c) {
   const assessments = aSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   const finals = ids
-    .map((sid) => computeStudentFinal(sid, gb.periods, gb.components, assessments, gb.overrides ?? {}, base.mode))
+    .map((sid) => computeStudentFinal(sid, gb.periods, gb.components, assessments, gb.overrides ?? {}, base.mode, base.policy))
     .filter((g) => g != null)
 
   base.assessedCount = finals.length
-  base.passingCount = finals.filter((g) => isPassing(g, base.mode)).length
+  base.passingCount = finals.filter((g) => isPassing(g, base.mode, base.policy)).length
   base.avg = finals.length ? finals.reduce((s, g) => s + g, 0) / finals.length : null
   return base
 }
@@ -230,7 +234,7 @@ export default function ReportsPage() {
                     <td style={{ ...td, ...mono, textAlign: 'right', color: ink }}>{r.studentCount}</td>
                     <td style={{ ...td, ...mono, textAlign: 'right', color: r.configured ? ink : faint }}>{r.configured ? r.assessedCount : '—'}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <span style={{ ...serif, fontSize: 22, lineHeight: 1, color: gradeColor(r.avg, r.mode) }}>{fmtAvg(r.avg, r.mode)}</span>
+                      <span style={{ ...serif, fontSize: 22, lineHeight: 1, color: gradeColor(r.avg, r.mode, r.policy) }}>{fmtAvg(r.avg, r.mode)}</span>
                     </td>
                     <td style={td}>
                       {rate == null ? (

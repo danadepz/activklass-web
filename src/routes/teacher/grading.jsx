@@ -5,7 +5,17 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { syncEntries } from '@/lib/gradebook'
-import { GRADING_MODES, GRADING_PRESETS, rebalanceWeights, redistributeWeights, weightsValid } from '@/lib/grading'
+import {
+  GRADING_MODES,
+  GRADING_PRESETS,
+  POINT_SCALE_DIRECTIONS,
+  gradePolicy,
+  pointScaleBands,
+  rebalanceWeights,
+  redistributeWeights,
+  weightsValid,
+} from '@/lib/grading'
+import { passingPercentError } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
@@ -215,6 +225,120 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
   )
 }
 
+/* The 1.00 / 4.75 the point scale prints. */
+const fmtPoint = (p) => Number(p).toFixed(2)
+
+/*
+ * What passes, per grading type (T-45). DepEd K-12 has nothing to set: DepEd
+ * Order No. 8, s. 2015 fixes 75 on the transmuted grade. The CHED modes take a
+ * passing score, and the point scale also takes its direction -- 1.0 highest
+ * (standard) or 5.0 highest (CIT-U) -- with the ranges the choice produces
+ * generated from lib/grading.js, the same function the record computes with,
+ * so the table can never show a band the gradebook would not apply.
+ */
+function PassRules({ mode, passingPercent, setPassingPercent, direction, setDirection, busy }) {
+  if (mode === 'deped_k12') {
+    return (
+      <p style={{ fontSize: 12.5, color: muted, margin: '14px 0 0' }}>
+        DepEd K-12 passes at <strong style={{ color: ink }}>75</strong> on the transmuted grade
+        (DepEd Order No. 8, s. 2015), so there is no passing score to set.
+      </p>
+    )
+  }
+  const error = passingPercentError(passingPercent)
+  const policy = gradePolicy({ passing_percent: passingPercent, point_scale_direction: direction })
+  const bands = pointScaleBands(policy)
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid rgba(14,42,92,0.06)', paddingTop: 14 }}>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+        <label style={{ display: 'block' }}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Passing score</span>
+          <span className="relative" style={{ display: 'inline-block' }}>
+            <input
+              className="ak-input"
+              type="number"
+              min="1"
+              max="99"
+              step="1"
+              value={passingPercent}
+              disabled={busy}
+              onChange={(e) => setPassingPercent(e.target.value)}
+              aria-invalid={Boolean(error)}
+              style={{ ...fieldStyle, width: 96, paddingRight: 26, textAlign: 'right', borderColor: error ? red : undefined }}
+            />
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
+          </span>
+          <span style={{ display: 'block', fontSize: 11.5, color: error ? red : faint, marginTop: 5 }}>
+            {error || 'The lowest weighted percent that passes.'}
+          </span>
+        </label>
+
+        {mode === 'ched_point' && (
+          <div>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Point scale</span>
+            <div className="flex flex-wrap gap-2">
+              {POINT_SCALE_DIRECTIONS.map((d) => {
+                const active = direction === d.value
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => setDirection(d.value)}
+                    disabled={busy}
+                    className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      padding: '9px 14px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
+                      ...(active
+                        ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
+                        : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+                    }}
+                  >
+                    <div>{d.label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: muted, marginTop: 2 }}>{d.hint}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {mode === 'ched_point' && (
+        <div className="overflow-x-auto" style={{ marginTop: 14 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 12.5, minWidth: 320 }} data-testid="point-scale-table">
+            <thead>
+              <tr style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <th style={{ textAlign: 'left', padding: '4px 12px 6px 0', fontWeight: 700 }}>Weighted percent</th>
+                <th style={{ textAlign: 'right', padding: '4px 12px 6px 0', fontWeight: 700 }}>Grade</th>
+                <th style={{ textAlign: 'left', padding: '4px 0 6px', fontWeight: 700 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {bands.map((b, i) => {
+                const failing = i === bands.length - 1
+                const lowestPass = i === bands.length - 2
+                return (
+                  <tr key={b.point} style={{ borderTop: '1px solid rgba(14,42,92,0.06)', color: failing ? red : ink }}>
+                    <td style={{ padding: '5px 12px 5px 0', whiteSpace: 'nowrap' }}>
+                      {failing ? `below ${b.to}` : `${b.from} and above`}
+                    </td>
+                    <td style={{ padding: '5px 12px 5px 0', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtPoint(b.point)}
+                    </td>
+                    <td style={{ padding: '5px 0', color: failing ? red : muted, fontSize: 11.5 }}>
+                      {failing ? 'Failed' : lowestPass ? 'lowest passing grade' : i === 0 ? 'highest' : ''}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function GlobalGradingForm({ setup, classes, focusClassId }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
@@ -227,6 +351,13 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   const [periods, setPeriods] = useState(setup.periods?.length ? setup.periods : [newRow()])
   const [components, setComponents] = useState(setup.components?.length ? setup.components : [newRow()])
   const [gradingMode, setGradingMode] = useState(setup.grading_mode ?? 'deped_k12')
+  /* Pass mark + point-scale direction, seeded from the preset with the
+     defaults filled (a preset saved before the fields existed reads 75 and
+     1.0-is-highest). The percent is kept as the input's string so a teacher
+     can clear the box and retype. */
+  const savedPolicy = gradePolicy(setup)
+  const [passingPercent, setPassingPercent] = useState(String(savedPolicy.passing_percent))
+  const [scaleDirection, setScaleDirection] = useState(savedPolicy.point_scale_direction)
   const [selectedClassIds, setSelectedClassIds] = useState(focusClass ? [focusClass.id] : [])
   const [error, setError] = useState(null)
   // The message itself, not a flag: what synced varies per save, and the fixed
@@ -253,6 +384,11 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     if (!balanced(nextPeriods) || !balanced(nextComponents)) {
       throw new Error('Every weight must be above 0%, and each group must total 100%.')
     }
+    /* The pass mark only matters in the CHED modes, and only those show the
+       box -- so under DepEd an unfinished value is dropped rather than
+       rejected, and the backend keeps whatever was stored. */
+    const passError = passingPercentError(passingPercent)
+    if (nextMode !== 'deped_k12' && passError) throw new Error(passError)
 
     const processedPeriods = withIds(nextPeriods)
     const processedComponents = withIds(nextComponents)
@@ -271,6 +407,11 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         grading_mode: nextMode,
         periods: processedPeriods,
         components: processedComponents,
+        // Stored beside the mode on the preset and on every applied
+        // gradebook; the record, the reports and the student's screens all
+        // read them back through gradePolicy (lib/grading.js).
+        passing_percent: passError ? undefined : Number(passingPercent),
+        point_scale_direction: scaleDirection,
       },
     })
 
@@ -490,6 +631,14 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
             )
           })}
         </div>
+        <PassRules
+          mode={gradingMode}
+          passingPercent={passingPercent}
+          setPassingPercent={setPassingPercent}
+          direction={scaleDirection}
+          setDirection={setScaleDirection}
+          busy={busy}
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">

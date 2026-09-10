@@ -31,7 +31,9 @@ async function loadClasses(profile) {
   return Promise.all(
     raw.map(async (c) => {
       const entry = await loadStudentEntry(c.id, profile.id)
-      return { ...c, teacher_name: teacherName(c.teacher_id), current_grade: entry?.final_grade ?? null, grade_mode: entry?.mode ?? null }
+      // grade_policy is the entry itself: it carries the gradebook's pass mark
+      // and point-scale direction beside its mode, and gradeDisplay reads them.
+      return { ...c, teacher_name: teacherName(c.teacher_id), current_grade: entry?.final_grade ?? null, grade_mode: entry?.mode ?? null, grade_policy: entry ?? null }
     }),
   )
 }
@@ -90,7 +92,7 @@ export default function StudentClassesIndex() {
               </div>
               <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(14,42,92,0.07)' }}>
                 <span style={{ ...mono, fontSize: 12.5, color: muted }}>{c.academic_year ?? c.school_year ?? ''}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(c.current_grade, c.grade_mode) }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(c.current_grade, c.grade_mode, c.grade_policy) }}>
                   {c.current_grade == null ? 'No grade yet' : `Grade ${formatGrade(c.current_grade, c.grade_mode)}`}
                 </span>
               </div>

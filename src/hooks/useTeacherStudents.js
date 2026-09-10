@@ -26,6 +26,7 @@ import { useAuth } from '@/context/useAuth'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { fetchUsersByIds } from '@/lib/roster'
 import { computeStudentFinal } from '@/lib/gradebook'
+import { gradePolicy } from '@/lib/grading'
 import { performanceDocId } from '@/lib/performance'
 
 const classLabel = (c) =>
@@ -86,10 +87,13 @@ async function loadClassRows(c) {
   }
 
   const risk = await loadRiskByStudent(c.id, ids)
+  const mode = gb.grading_mode ?? 'deped_k12'
+  // Pass mark + point-scale direction, defaults filled (lib/grading.js).
+  const policy = gradePolicy(gb)
 
   return users.map((u) => {
     const grade = configured
-      ? computeStudentFinal(u.id, gb.periods, gb.components, assessments, gb.overrides ?? {}, gb.grading_mode ?? 'deped_k12')
+      ? computeStudentFinal(u.id, gb.periods, gb.components, assessments, gb.overrides ?? {}, mode, policy)
       : null
     return {
       studentId: u.id,
@@ -99,7 +103,8 @@ async function loadClassRows(c) {
       classId: c.id,
       classLabel: classLabel(c),
       subject: c.subject ?? c.subject_title ?? '',
-      mode: gb.grading_mode ?? 'deped_k12',
+      mode,
+      policy,
       configured,
       grade,
       riskProbability: risk[u.id]?.probability ?? null,

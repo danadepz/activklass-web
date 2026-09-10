@@ -4,6 +4,7 @@ import {
   GRADE_LEVELS, YEAR_LEVELS,
   semesterError, semesterLabel,
   idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
+  passingPercentError,
 } from './validation'
 
 describe('nameError', () => {
@@ -233,5 +234,19 @@ describe('semesterError / semesterLabel', () => {
     expect(semesterLabel('1st')).toBe('1st Sem')
     expect(semesterLabel('summer')).toBe('Midyear')
     expect(semesterLabel(null)).toBe('')
+  })
+})
+
+describe('passingPercentError', () => {
+  it('accepts a whole number from 1 to 99', () => {
+    for (const ok of ['1', '60', '75', '99', 75, ' 60 ']) expect(passingPercentError(ok)).toBe('')
+  })
+
+  it('refuses blank, out-of-range, decimal and non-numeric values', () => {
+    expect(passingPercentError('')).toBe('A passing score is required.')
+    expect(passingPercentError(null)).toBe('A passing score is required.')
+    for (const bad of ['0', '100', '-5', '75.5', 'abc', '1e2']) {
+      expect(passingPercentError(bad)).toBe('The passing score must be a whole number from 1 to 99.')
+    }
   })
 })

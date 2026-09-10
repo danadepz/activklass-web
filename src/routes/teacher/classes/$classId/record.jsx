@@ -20,6 +20,7 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
+import { isPassingGrade } from '@/lib/grading'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { questionsOfAttempt } from '@/lib/quizPool'
@@ -310,7 +311,12 @@ function RecordGrid({ classId, record, refetch }) {
   // Class-level stats for the active period (computed from real grades).
   const gradeVals = record.students.map((s) => record.grades[s.student_id]?.grade).filter((v) => v != null)
   const avg = gradeVals.length ? gradeVals.reduce((a, b) => a + b, 0) / gradeVals.length : null
-  const passed = gradeVals.filter((v) => v >= 75).length
+  // The gradebook's own pass mark and point-scale direction, not a fixed 75:
+  // on the point scale a 1.25 is a pass, and a class that passes at 60 passes at 60.
+  const passed = gradeVals.filter((v) => isPassingGrade(v, record.mode, record.policy)).length
+  const passMark = record.mode === 'ched_point'
+    ? `${record.policy?.point_scale_direction === 'inverted' ? '≥' : '≤'} 3.00`
+    : `≥ ${record.mode === 'deped_k12' ? 75 : record.policy?.passing_percent ?? 75}`
   const atRisk = gradeVals.filter((v) => v < 85).length
   const hi = gradeVals.length ? Math.max(...gradeVals) : null
   const lo = gradeVals.length ? Math.min(...gradeVals) : null
@@ -481,7 +487,7 @@ function RecordGrid({ classId, record, refetch }) {
         <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
           {/* icon-less MetricCards: five across, so the chips would crowd */}
           <MetricCard label="Class average" value={fmt(avg)} sub={`across ${record.students.length} students`} tint="rgba(14,42,92,0.07)" />
-          <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ≥ 75`} valueColor={green} tint="rgba(31,138,91,0.1)" />
+          <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ${passMark}`} valueColor={green} tint="rgba(31,138,91,0.1)" />
           <MetricCard label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" highlight={atRisk > 0} />
           <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} valueColor={green} tint="rgba(63,169,245,0.13)" />
           <MetricCard label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} valueColor={red} tint="rgba(192,57,43,0.07)" />

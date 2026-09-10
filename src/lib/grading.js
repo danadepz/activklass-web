@@ -22,6 +22,36 @@ export const GRADING_MODES = [
   { value: 'ched_point', label: 'CHED Tertiary — point scale (1.0–5.0)' },
 ]
 
+/**
+ * What passes, and which way the point scale runs (T-45, from a tester's
+ * CIT-U CMRS). Two settings on the gradebook:
+ * - `passing_percent`: the lowest weighted percent that passes in the CHED
+ *   modes. Default 75. DepEd K-12 ignores it -- DepEd Order No. 8 s. 2015
+ *   fixes 75 on the transmuted grade.
+ * - `point_scale_direction`: 'ched' (1.0 is highest, 5.0 fails -- the default
+ *   and what every gradebook meant before the field existed) or 'inverted'
+ *   (5.0 is highest, 1.0 fails, as CIT-U reads it). 3.0 passes either way.
+ *
+ * Read them off any gradebook-shaped document -- a gradebook, a preset, a
+ * student's entry, a loaded bundle -- through gradePolicy(), which fills the
+ * defaults, so a document written before the fields existed computes exactly
+ * as it always has. grading.test.js proves that.
+ */
+export const DEFAULT_PASSING_PERCENT = 75
+export const PASSING_POINT = 3.0
+export const POINT_SCALE_DIRECTIONS = [
+  { value: 'ched', label: '1.0 is highest', hint: 'Standard CHED · 1.0 best, 3.0 passes, 5.0 fails' },
+  { value: 'inverted', label: '5.0 is highest', hint: 'CIT-U style · 5.0 best, 3.0 passes, 1.0 fails' },
+]
+
+export function gradePolicy(source) {
+  const pct = Number(source?.passing_percent)
+  return {
+    passing_percent: Number.isFinite(pct) && pct > 0 && pct < 100 ? pct : DEFAULT_PASSING_PERCENT,
+    point_scale_direction: source?.point_scale_direction === 'inverted' ? 'inverted' : 'ched',
+  }
+}
+
 // DepEd K-12 preset (DepEd Order No. 8, s. 2015 — core subjects).
 export const DEPED_COMPONENT_PRESET = [
   { name: 'Written Works', weight_percent: 30 },
@@ -150,26 +180,75 @@ export function depEdDescriptor(transmutedGrade) {
   return 'Did Not Meet Expectations'
 }
 
-/** Percentage → CHED collegiate point scale (1.0 highest … 5.0 failed). */
-export function chedPointEquivalent(percent) {
+/**
+ * The CHED point ladder at the default pass mark: [percent lower bound, point].
+ * The passing band runs 75–100. A different pass mark stretches these bounds
+ * in proportion over its own band (pointScaleBands), so at 75 the ladder is
+ * exactly the one every gradebook has always used -- integer arithmetic, no
+ * rounding drift.
+ */
+const POINT_LADDER = [
+  [96, 1.0], [94, 1.25], [91, 1.5], [88, 1.75], [85, 2.0], [82, 2.25], [79, 2.5], [76, 2.75], [75, 3.0],
+]
+const FAILING_POINT = 5.0
+
+/* 'inverted' mirrors the scale around 3.0: 1.0 ↔ 5.0, 1.25 ↔ 4.75, 3.0 stays. */
+const orientPoint = (point, direction) => (direction === 'inverted' ? round2(6 - point) : point)
+
+/**
+ * The score ranges behind the point scale under `policy`, best grade first:
+ * [{ point, from, to }] with `from` inclusive and `to` exclusive (null on the
+ * top band), ending with the failing band. What the Grade Config table shows
+ * and what chedPointEquivalent walks, so the two cannot disagree.
+ */
+export function pointScaleBands(policy) {
+  const { passing_percent, point_scale_direction } = gradePolicy(policy)
+  const stretch = (lower) =>
+    round2(
+      passing_percent
+        + ((lower - DEFAULT_PASSING_PERCENT) * (100 - passing_percent)) / (100 - DEFAULT_PASSING_PERCENT),
+    )
+  const bands = POINT_LADDER.map(([lower, point], i) => ({
+    point: orientPoint(point, point_scale_direction),
+    from: stretch(lower),
+    to: i === 0 ? null : stretch(POINT_LADDER[i - 1][0]),
+  }))
+  bands.push({ point: orientPoint(FAILING_POINT, point_scale_direction), from: 0, to: passing_percent })
+  return bands
+}
+
+/** Percentage → collegiate point scale under `policy` (default: 1.0 highest … 5.0 failed). */
+export function chedPointEquivalent(percent, policy) {
   if (percent == null || !Number.isFinite(Number(percent))) return null
-  if (percent >= 96) return 1.0
-  if (percent >= 94) return 1.25
-  if (percent >= 91) return 1.5
-  if (percent >= 88) return 1.75
-  if (percent >= 85) return 2.0
-  if (percent >= 82) return 2.25
-  if (percent >= 79) return 2.5
-  if (percent >= 76) return 2.75
-  if (percent >= 75) return 3.0
-  return 5.0
+  const value = Number(percent)
+  const bands = pointScaleBands(policy)
+  return (bands.find((b) => value >= b.from) ?? bands[bands.length - 1]).point
+}
+
+/**
+ * Whether a final grade in `mode` passes under `policy`; null without a grade.
+ * The one definition of Passed / Failed -- every screen that counts or colours
+ * a pass reads this, so a teacher-set pass mark cannot be honoured on the
+ * record and ignored on the report.
+ */
+export function isPassingGrade(final, mode, policy) {
+  const g = Number(final)
+  if (final == null || !Number.isFinite(g)) return null
+  const { passing_percent, point_scale_direction } = gradePolicy(policy)
+  if (mode === 'ched_point') {
+    return point_scale_direction === 'inverted' ? g >= PASSING_POINT : g <= PASSING_POINT
+  }
+  if (mode === 'deped_k12') return g >= DEFAULT_PASSING_PERCENT
+  return g >= passing_percent
 }
 
 /**
  * Full pipeline for one student: components + scores + mode → final grade.
- * Returns { initial, final, descriptor, breakdown }.
+ * Returns { initial, final, descriptor, breakdown }. `policy` is the
+ * gradebook's pass mark and scale direction (gradePolicy); omitted, the
+ * defaults reproduce every grade computed before the fields existed.
  */
-export function computeFinalGrade(components, studentScores, mode = 'deped_k12') {
+export function computeFinalGrade(components, studentScores, mode = 'deped_k12', policy) {
   const { grade: initial, breakdown } = periodGrade(components, studentScores)
   if (initial == null || !Number.isFinite(initial)) {
     return { initial: null, final: null, descriptor: null, breakdown }
@@ -179,12 +258,17 @@ export function computeFinalGrade(components, studentScores, mode = 'deped_k12')
     return { initial, final, descriptor: final == null ? null : depEdDescriptor(final), breakdown }
   }
   if (mode === 'ched_point') {
-    const final = chedPointEquivalent(initial)
+    const final = chedPointEquivalent(initial, policy)
     if (final == null) return { initial, final: null, descriptor: null, breakdown }
-    return { initial, final, descriptor: final <= 3.0 ? 'Passed' : 'Failed', breakdown }
+    return { initial, final, descriptor: isPassingGrade(final, mode, policy) ? 'Passed' : 'Failed', breakdown }
   }
   // ched_percentage: the weighted percent is the final grade.
-  return { initial, final: initial, descriptor: initial >= 75 ? 'Passed' : 'Failed', breakdown }
+  return {
+    initial,
+    final: initial,
+    descriptor: isPassingGrade(initial, 'ched_percentage', policy) ? 'Passed' : 'Failed',
+    breakdown,
+  }
 }
 
 /**
