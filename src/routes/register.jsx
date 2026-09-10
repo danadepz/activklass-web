@@ -111,6 +111,11 @@ export default function Register() {
   // Signed in with Firebase but no ActivKlass profile yet — e.g. a registration
   // that failed halfway. Only the profile fields are needed to finish.
   const completing = status === 'not_registered' && firebaseUser !== null
+  // A finished account is signed in on this browser. The form still works —
+  // a teacher may well register a colleague from their own machine — but it
+  // says so up front, and the submit refuses to hand that account back as if
+  // it were the new one (T-56, signedInAsSomeoneElse).
+  const signedIn = status === 'signed_in' && firebaseUser !== null
   // /register?type=institution -- the landing page's "registering a whole
   // school?" link -- skips the chooser and opens on the school path. Read
   // once, at mount: the chooser stays reachable with Back.
@@ -152,6 +157,12 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  // Signing out from this page ends the other session and nothing else: the
+  // form keeps every step, and the message that asked for it goes away.
+  function signOutHere() {
+    setError(null)
+    return logout()
+  }
 
   // The public directory behind "Select School" (see lib/schoolDirectory.js).
   // Readable signed-out, so it loads while the form is being filled in. On a
@@ -270,7 +281,17 @@ export default function Register() {
       const clash = await abbrConflictError(form.newSchoolAbbr, form.newSchoolName)
       if (clash) { setError(clash); return }
     }
-    // 1. Firebase identity — skipped when completing an existing session.
+    // 0. Someone else's session is not ours to finish. Stop here, before any
+    // account or directory write, and leave the form as it is: Sign out (the
+    // notice above the form, or the button beside this message) and the same
+    // click then creates the account for real.
+    const otherAccount = signedInAsSomeoneElse(auth.currentUser?.email, form.email)
+    if (otherAccount) {
+      setError(<>{otherAccount} <SignOutButton onClick={signOutHere} /></>)
+      return
+    }
+    // 1. Firebase identity — skipped when resuming this person's own
+    // half-made session (same email, no profile yet).
     let created = false
     if (!auth.currentUser) {
       try {
@@ -456,6 +477,12 @@ export default function Register() {
           {completing && (
             <AuthNotice>
               Signed in as <strong>{firebaseUser.email}</strong> — just complete your profile below.
+            </AuthNotice>
+          )}
+          {signedIn && (
+            <AuthNotice>
+              You’re signed in as <strong>{firebaseUser.email}</strong>. Sign out to create a
+              different account — what you fill in below stays. <SignOutButton onClick={signOutHere} />
             </AuthNotice>
           )}
           {error && <AuthError>{error}</AuthError>}
@@ -739,15 +766,7 @@ export default function Register() {
 
           {completing ? (
             <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: muted }}>
-              Wrong account?{' '}
-              <button
-                type="button"
-                onClick={logout}
-                className="transition hover:opacity-70"
-                style={{ fontWeight: 700, color: navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14 }}
-              >
-                Sign out
-              </button>
+              Wrong account? <SignOutButton onClick={signOutHere} />
             </div>
           ) : (
             <div className="flex flex-col gap-2" style={{ textAlign: 'center', marginTop: 4 }}>
@@ -770,6 +789,21 @@ export default function Register() {
   )
 }
 
+// Whether the session already on this browser belongs to someone other than
+// the person filling the form. A registration that finds a signed-in account
+// is meant to RESUME it — a run that died between creating the login and
+// writing the profile — and that is only ever the same email. A different
+// email is a different person: the tester registered "asdasdasd" on a browser
+// still signed in as Marites and was handed her dashboard, her name and her
+// school with no error (T-56). Exported so the decision is testable without
+// walking six steps; `''` means go ahead.
+export function signedInAsSomeoneElse(sessionEmail, formEmail) {
+  const session = String(sessionEmail ?? '').trim().toLowerCase()
+  const typed = String(formEmail ?? '').trim().toLowerCase()
+  if (!session || session === typed) return ''
+  return `You’re signed in as ${session}. Sign out to create a different account.`
+}
+
 // Exported so the rule itself can be tested: the nudge renders three steps
 // into a flow no static render reaches, and the person who needs it (T-31,
 // T-32) is the one who never gets that far on purpose.
@@ -779,6 +813,21 @@ export function WrongPathNudge({ kind, position }) {
     <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
       Just here to teach? Individual is the faster path — go back a step.
     </p>
+  )
+}
+
+// A link-shaped Sign out that sits inside a sentence. Signing out leaves the
+// page and the form where they are; only the session goes.
+function SignOutButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="transition hover:opacity-70"
+      style={{ fontWeight: 700, color: navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', textDecoration: 'underline' }}
+    >
+      Sign out
+    </button>
   )
 }
 

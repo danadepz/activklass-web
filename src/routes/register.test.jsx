@@ -26,13 +26,19 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('react-router-dom', () => ({
   Link: ({ children, ...p }) => <a {...p}>{children}</a>,
   useNavigate: () => vi.fn(),
-  useSearchParams: () => [new URLSearchParams(''), vi.fn()],
+  useSearchParams: () => [new URLSearchParams(searchState.current), vi.fn()],
 }))
+// `?type=institution` opens on step 2, which is the only way a static render
+// reaches the form itself (the notice under test sits above it).
+const searchState = vi.hoisted(() => ({ current: '' }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: [], isLoading: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
-vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: null, user: null }) }))
+// Mutable so one test can put a finished account on the session (T-56); the
+// default is what every other test here assumes — nobody signed in.
+const authState = vi.hoisted(() => ({ current: { status: 'signed_out', firebaseUser: null, profile: null, user: null } }))
+vi.mock('@/context/useAuth', () => ({ useAuth: () => authState.current }))
 vi.mock('@/lib/firebase', () => ({ auth: {}, db: {} }))
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(),
@@ -53,7 +59,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
   fetchSchoolDirectory: vi.fn(),
 }))
 
-import Register, { WrongPathNudge } from './register.jsx'
+import Register, { WrongPathNudge, signedInAsSomeoneElse } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -113,5 +119,59 @@ describe('the Faculty nudge on the school step', () => {
   it('stays quiet on the individual path, faculty or not', () => {
     expect(nudge({ kind: 'individual', position: 'faculty' })).toBe('')
     expect(nudge({ kind: 'individual', position: 'dean' })).toBe('')
+  })
+})
+
+/* T-56 (maykel_64440-73, -75, -76): registering on a browser still signed in
+   as Marites handed the tester HER dashboard — the submit saw a session, took
+   it for a registration to resume, found a finished profile and went to the
+   portal. Nothing was created, nothing said so. The rule now: a session is
+   only ours to finish when it is the same email. */
+describe('registering while another account is signed in', () => {
+  const MARITES = 'srnhs-260101@activklass.internal'
+
+  it('refuses to finish someone else’s session, naming the account that is signed in', () => {
+    const msg = signedInAsSomeoneElse(MARITES, 'new.teacher@school.edu.ph')
+    expect(msg).toContain(`signed in as ${MARITES}`)
+    expect(msg).toContain('Sign out')
+  })
+
+  /* The resume path this branch exists for: a run that died after the login
+     was created, retried with the same address — case and whitespace are not
+     a different person. */
+  it('lets the same email through, however it is typed', () => {
+    expect(signedInAsSomeoneElse(MARITES, MARITES)).toBe('')
+    expect(signedInAsSomeoneElse(MARITES, `  ${MARITES.toUpperCase()} `)).toBe('')
+  })
+
+  it('has nothing to say when nobody is signed in', () => {
+    expect(signedInAsSomeoneElse(null, 'new.teacher@school.edu.ph')).toBe('')
+    expect(signedInAsSomeoneElse(undefined, '')).toBe('')
+  })
+
+  /* Six steps is a long way to walk before hearing it, so the page says so
+     from step 2 on, with the way out beside it. Only for a FINISHED account —
+     the half-made one keeps its own "just complete your profile" notice. */
+  it('tells a signed-in teacher up front, with a Sign out beside it', () => {
+    authState.current = { status: 'signed_in', firebaseUser: { email: MARITES }, profile: { role: 'teacher' }, user: null }
+    searchState.current = 'type=institution'
+    try {
+      const html = renderToStaticMarkup(<Register />)
+      expect(html).toContain(`signed in as <strong>${MARITES}</strong>`)
+      expect(html).toContain('Sign out to create a')
+      expect(html).toMatch(/<button[^>]*>Sign out<\/button>/)
+    } finally {
+      authState.current = { status: 'signed_out', firebaseUser: null, profile: null, user: null }
+      searchState.current = ''
+    }
+  })
+
+  it('says nothing of the sort when nobody is signed in', () => {
+    searchState.current = 'type=institution'
+    try {
+      expect(renderToStaticMarkup(<Register />)).not.toContain('Sign out to create a')
+    } finally {
+      searchState.current = ''
+    }
   })
 })
