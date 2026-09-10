@@ -77,6 +77,34 @@ landing page, and a data subject's right to erasure is not satisfied by deactiva
 Nobody has decided what erasure means for a student whose grades are an institutional
 record. **(cross-repo)**
 
+### 9. How much of CIT-U's CMRS does Grade Config become? (T-45, post-defense)
+A tester (maykel, Discord ticket `maykel_64440-39`, 2026-09-07/10) described his school's
+CMRS grading module screen by screen and asked whether Grade Config should follow it. The
+dispatch card split it into four tiers; on 2026-09-11 the owner chose **Tiers 1 and 2**,
+which are built: a teacher-set passing score and a point scale that runs either way
+(`passing_percent`, `point_scale_direction` on the gradebook — `DATA-MODEL.md`), and a
+Preview card that simulates a setup before it is saved. The rest is recorded here so it is
+not started from a ticket:
+
+- **Tier 3 — many named templates per teacher** (his item 1: a searchable list with a
+  description, "last updated", "N classes using it", duplicate / delete). Today there is
+  exactly one preset per teacher, `grading_presets/{uid}`, written whole by
+  `POST /api/grading-setup`. Going to many means `grading_presets` keyed by a generated id
+  carrying `teacher_id`, `name`, `description`; the rule for that collection and the
+  endpoint change **(cross-repo)**; "N classes using it" is a count over `gradebooks`.
+  Medium. Not needed for the demo — one saved setup applied to ticked classes shows the
+  same idea.
+- **Tier 4 — grading structures, the lab pair, a classification hierarchy and different
+  weights per term** (his items 2–5). Items 2–4 are expressible today by flattening —
+  "class standing 60 split 40/30/30" is Quiz 24 / Assignment 18 / Seatwork 18 as top-level
+  components, same arithmetic — but the *hierarchy* and the fixed lab pair are not. Item 5,
+  **different weights per term** (midterm: class standing 40 / prelim exam 30 / midterm
+  exam 30; final: 30 / 30 / 40), is **not expressible at all**: a component has one weight
+  used in every period. Building it changes the gradebook document, `computeFinalGrade`,
+  `syncEntries`, and every screen that reads a component weight. Large, and a data-model
+  design pass first — never from a ticket. The one thing to collect before that pass is a
+  photo of a real record sheet with per-term weights and real numbers.
+
 ---
 
 ## DECIDED ✅

@@ -121,6 +121,10 @@ looks like six unrelated broken features; that has already happened in a walkthr
   password change shipped covering five of six account-creation paths; the missed one was
   `superadmin.py`, the account that matters most. A gate is only as good as its flag.
 - Document commands, routes or collections that don't exist yet as if they do.
+- Call a change "web only" before reading the endpoint that writes the document. The
+  T-45 card scoped the pass mark as web-only; `POST /api/grading-setup` whitelists the
+  fields it forwards (it copied `grading_mode` and nothing else), so the new fields would
+  have been dropped on every save. New gradebook or preset fields need that endpoint too.
 
 ## Owner Preferences & Key Decisions
 - **Stay on Opus for build work.** Don't downgrade to Sonnet/Haiku to save cost and don't

@@ -108,6 +108,21 @@ Still open at this altitude:
   signs in → suspend/reactivate); seat prices still unconfirmed; trial expiry and seat
   limits still unenforced. Plan: the "Tier 2 Build Plan" artifact; decisions in
   `OPEN-QUESTIONS.md`.
+- `[x]` **A college teacher sets the pass mark and which way the point scale runs, and
+  can try a setup before saving it** (2026-09-11, T-45 Tiers 1 + 2 of maykel's CIT-U CMRS
+  write-up; Tiers 3 and 4 are `OPEN-QUESTIONS.md` §9). Grade Config takes a passing score
+  (1–99, default 75) and, on the point scale, 1.0-is-highest or 5.0-is-highest, with the
+  generated ranges table; the record, performance, reports, students pages and the
+  student's own screens all read the same `gradePolicy`; a Preview card simulates sample
+  scores through the record's own function. `POST /api/grading-setup` forwards the two
+  fields **(cross-repo, backend `76b5c69`)**. *Verified:* `grading.test.js` proves a
+  gradebook without the fields computes exactly as before (five score sets × three modes);
+  `gradeDisplay.test.js`, `validation.test.js`, `PreviewPanel.test.jsx`; `npm run test`
+  800/800, build clean; `smoke_grading.py` asserts the fields land on the preset and the
+  gradebook. Browser, as the seeded teacher on BSIT-C: both directions saved and read
+  back, scores 90/55/62 read 4.50/1/3.25 inverted and 1.50/5/2.75 standard with the pass
+  count flipping between "≥ 3.00" and "≤ 3.00"; the preview recomputed live. **Owed:** the
+  click-through as one of BSIT-C's students (needs a student sign-in).
 - `[x]` **A teacher sees only the students they handle** (2026-08-31). The rules used to
   let *any* teacher read *any* student's profile, attempts, risk, remediations, grades,
   guardian links and consent — the screens were scoped, the database was not. Now
