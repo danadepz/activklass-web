@@ -151,6 +151,35 @@ export function idNumberError(value, { label = 'ID number', required = true } = 
   return ''
 }
 
+/* A PRC professional licence number is seven digits — what the card shows,
+   nothing else. Before this, the registration's ID type changed the label and
+   nothing about the check, so a 23-character string passed as a licence
+   (T-53). */
+const PRC_LICENSE_RE = /^\d{7}$/
+
+/**
+ * The number on a PRC licence card.
+ * @param {string} value
+ */
+export function prcLicenseError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'PRC license number is required.'
+  if (!PRC_LICENSE_RE.test(text)) return 'A PRC license number is exactly 7 digits, like 1234567.'
+  return ''
+}
+
+/**
+ * The ID number a self-registering teacher gives for the developer's check,
+ * judged by the type they picked beside it: a PRC licence has one shape, a
+ * school or employee ID has the school's own. One rule for both forms that
+ * collect it (registration and the resubmit after a rejection).
+ * @param {string} value
+ * @param {string} idType  'prc' | 'school_id' (ID_TYPES in routes/pending-verification)
+ */
+export function verificationIdError(value, idType) {
+  return idType === 'prc' ? prcLicenseError(value) : idNumberError(value)
+}
+
 /**
  * DepEd Learner Reference Number: exactly 12 digits. The message names the
  * other path on purpose — a college learner has no LRN, and an admin who types
@@ -223,10 +252,11 @@ export function schoolAbbrError(value) {
   return ''
 }
 
-/* Same shape as the browser's own type="email" check: one @, no spaces,
-   a dot somewhere in the domain. Anything stricter starts rejecting real
-   addresses. */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+/* One @, no spaces, and a domain that ends in a top-level domain of two or
+   more letters. The browser's own type="email" check is looser — it took
+   "asdsad@gma.c", which no mail server can deliver to (T-53). Two letters is
+   the shortest TLD there is (.ph, .co), so nothing real is refused. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
 
 /** @param {string} value */
 export function emailError(value) {

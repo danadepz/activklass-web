@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { idNumberError, linkError } from '@/lib/validation'
+import { linkError, verificationIdError } from '@/lib/validation'
 import AuthLayout, { SubmitButton, AuthError, AuthNotice } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import SignOutButton from '@/components/SignOutButton'
@@ -46,7 +46,7 @@ export default function PendingVerification() {
   async function resubmit(e) {
     e.preventDefault()
     setError(null)
-    const problem = idNumberError(idNumber) || linkError(idLink)
+    const problem = verificationIdError(idNumber, idType) || linkError(idLink)
     if (problem) { setError(problem); return }
     setBusy(true)
     try {

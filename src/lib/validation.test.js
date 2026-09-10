@@ -4,6 +4,7 @@ import {
   GRADE_LEVELS, YEAR_LEVELS,
   semesterError, semesterLabel,
   idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
+  prcLicenseError, verificationIdError,
   passingPercentError,
 } from './validation'
 
@@ -190,6 +191,47 @@ describe('emailError', () => {
     expect(emailError('')).not.toBe('')
     expect(emailError('ana@school')).not.toBe('')
     expect(emailError('not an email')).not.toBe('')
+  })
+  /* T-53 (maykel_64440-68): the domain has to END in something — a one-letter
+     top-level domain does not exist, and the rule only asked for a dot. Two
+     letters is the floor (.ph, .co), so real short addresses still pass. */
+  it('refuses a truncated top-level domain', () => {
+    expect(emailError('asdsad@gma.c')).not.toBe('')
+    expect(emailError('name@school.1')).not.toBe('')
+    expect(emailError('name@school.edu.')).not.toBe('')
+  })
+  it('still accepts real short and long domains', () => {
+    expect(emailError('x@y.co')).toBe('')
+    expect(emailError('name@school.edu.ph')).toBe('')
+    expect(emailError('juan.dela-cruz@deped.gov.ph')).toBe('')
+  })
+})
+
+/* T-53 (maykel_64440-70): the ID type used to change the label and nothing
+   else, so "asdasdasd12322121231231-…" went through as a PRC licence. */
+describe('prcLicenseError', () => {
+  it('accepts exactly seven digits', () => {
+    expect(prcLicenseError('1234567')).toBe('')
+    expect(prcLicenseError(' 0012345 ')).toBe('')
+  })
+  it('refuses letters, the wrong length and blanks, saying what a licence looks like', () => {
+    expect(prcLicenseError('asdasdasd12322121231231')).toMatch(/7 digits/)
+    expect(prcLicenseError('123456')).toMatch(/7 digits/)
+    expect(prcLicenseError('12345678')).toMatch(/7 digits/)
+    expect(prcLicenseError('123-4567')).toMatch(/7 digits/)
+    expect(prcLicenseError('')).toMatch(/required/)
+  })
+})
+
+describe('verificationIdError', () => {
+  it('judges a PRC licence by the licence rule', () => {
+    expect(verificationIdError('asdasdasd12322121231231', 'prc')).toMatch(/7 digits/)
+    expect(verificationIdError('1234567', 'prc')).toBe('')
+  })
+  it('keeps the school-issued rule for a school or employee ID', () => {
+    expect(verificationIdError('T-2024-018', 'school_id')).toBe('')
+    expect(verificationIdError('1234567', 'school_id')).toBe('')
+    expect(verificationIdError('20 24', 'school_id')).not.toBe('')
   })
 })
 

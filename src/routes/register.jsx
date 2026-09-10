@@ -6,13 +6,13 @@ import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } f
 import { auth, db } from '@/lib/firebase'
 import {
   emailError,
-  idNumberError,
   linkError,
   nameError,
   passwordError,
   phoneError,
   schoolAbbrError,
   schoolNameError,
+  verificationIdError,
 } from '@/lib/validation'
 import {
   abbrConflictError,
@@ -218,7 +218,7 @@ export default function Register() {
       )
     }
     if (n === 5 && kind === 'individual') {
-      return idNumberError(form.idNumber) || linkError(form.idLink, { label: 'The link to your ID' })
+      return verificationIdError(form.idNumber, form.idType) || linkError(form.idLink, { label: 'The link to your ID' })
     }
     return '' // seats: the sliders cannot hold an invalid value
   }

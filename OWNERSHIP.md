@@ -248,7 +248,7 @@ Announce before editing. Keep the change small.
 | `src/lib/firebase.js` | auth + Firestore client |
 | `src/context/**` | auth state for the whole app |
 | `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
-| `src/routes/index.jsx`, `login.jsx`, `register.jsx` | landing + auth |
+| `src/routes/index.jsx`, `login.jsx`, `register.jsx`, `pending-verification.jsx` | landing + auth — `pending-verification.jsx` added 2026-09-11 (T-53): it was in no lane; it is the hold screen the verification gate lets through and re-collects the same ID fields as `register.jsx`, through the same rule |
 | `src/routes/forgot-password.jsx`, `reset-password.jsx` | the two halves of a password reset — auth routing beside `login.jsx`, added 2026-09-11 (T-47) |
 | `src/components/ProtectedRoute.jsx`, `src/routes/change-password.jsx` | the temp-password gate and the one screen it lets through — auth routing, not presentation, so `src/components/**` in the UI/UX lane does not cover it |
 | `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
