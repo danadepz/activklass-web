@@ -11,8 +11,12 @@ import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/i
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
+import { ID_TYPES } from '@/routes/pending-verification'
 
 const GB = 1024 ** 3
+// The same list the registration form and the superadmin queue read, so the
+// label the teacher sees here is the one they picked there.
+const ID_LABEL = Object.fromEntries(ID_TYPES.map((t) => [t.value, t.label]))
 
 const card = { background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }
 const field = {
@@ -60,7 +64,13 @@ function Meter({ label, used, total, over }) {
 
 /* ── Update Profile ─────────────────────────────────────────────── */
 
-function ProfileCard() {
+/**
+ * Name, sign-in, and -- for a teacher who registered on their own -- the ID
+ * number they registered with (T-49). The number was checked by a person at
+ * approval and is display only: it sits beside the email, greyed, and never
+ * enters the form state or the save.
+ */
+export function ProfileCard() {
   const { profile, refreshProfile } = useAuth()
   const [form, setForm] = useState({
     first_name: profile.first_name ?? '',
@@ -95,6 +105,9 @@ function ProfileCard() {
       <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Your profile</h2>
       <p style={{ fontSize: 13, color: muted, margin: '0 0 16px' }}>
         Your name as students and parents see it. Your email is your sign-in and cannot be changed here.
+        {profile.verification_id_number
+          ? ' Your ID number is the one we checked when your account was approved.'
+          : ''}
       </p>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
@@ -112,6 +125,13 @@ function ProfileCard() {
           <input style={{ ...field, marginTop: 6, background: 'rgba(14,42,92,0.03)' }}
                  value={profile.login_id ?? profile.email ?? ''} disabled />
         </label>
+        {profile.verification_id_number && (
+          <label style={{ fontSize: 13, fontWeight: 600, color: muted }}>
+            {ID_LABEL[profile.verification_id_type] ?? 'ID'} no.
+            <input style={{ ...field, marginTop: 6, background: 'rgba(14,42,92,0.03)' }}
+                   value={profile.verification_id_number} disabled />
+          </label>
+        )}
       </div>
       <div style={{ marginTop: 16 }}>
         <Button type="submit" disabled={mut.isPending}>
