@@ -17,6 +17,10 @@ restructure that table here — it is maintained there.
 **Never `git add -A`, `git add .`, or `git commit -a`.** They sweep every other pane's
 in-flight edits into your commit. Stage explicit paths. Before pushing, read
 `git log --oneline origin/main..main` — a push publishes *other panes'* commits too.
+**Staging explicit paths is not enough either:** a plain `git commit` takes the whole
+index, and another pane may have staged its own files there since you last looked (T-47's
+commit swept in `register.jsx` from the registration pane and had to be redone). Commit
+with `git commit --only -- <your paths>`, and read `git status` first.
 
 ## Core Principles (Always Follow)
 - **Firestore is the system of record.** Clients read and write it directly;
