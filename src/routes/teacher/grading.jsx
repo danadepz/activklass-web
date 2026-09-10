@@ -16,6 +16,7 @@ import {
   weightsValid,
 } from '@/lib/grading'
 import { passingPercentError } from '@/lib/validation'
+import { describeFormula, fmtFinal, fmtPoint, namedRows, simulateGrade } from './gradePreview'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
@@ -82,13 +83,10 @@ function weightSum(rows) {
   return rows.reduce((sum, r) => sum + (Number(r.weight_percent) || 0), 0)
 }
 
-/* Rows that survive the save. withIds() drops anything without a name, so an
-   unnamed row must not count toward the 100% check either — otherwise you can
-   park 20% on a nameless row, pass validation, and save a config that really
-   only totals 80%. Every weight check below runs on these rows, not the raw ones. */
-function namedRows(rows) {
-  return rows.filter((r) => String(r.name ?? '').trim())
-}
+/* namedRows (./gradePreview.js): the rows that survive the save. withIds()
+   drops anything without a name, so an unnamed row must not count toward the
+   100% check either — every weight check below runs on those rows, not the
+   raw ones, and so does the preview. */
 
 /* The 100% rule has exactly one definition: weightsValid in lib/grading.js.
    It used to be restated here and again inside EditorCard, which is how the
@@ -225,9 +223,6 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
   )
 }
 
-/* The 1.00 / 4.75 the point scale prints. */
-const fmtPoint = (p) => Number(p).toFixed(2)
-
 /*
  * What passes, per grading type (T-45). DepEd K-12 has nothing to set: DepEd
  * Order No. 8, s. 2015 fixes 75 on the transmuted grade. The CHED modes take a
@@ -333,6 +328,101 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/*
+ * The Preview card (T-45 Tier 2): a read-only simulation of the setup above,
+ * computed by simulateGrade (./gradePreview.js) -- the record's own function
+ * on the typed numbers, so what it says is what the record will say.
+ */
+export function PreviewPanel({ components, mode, policy, initialSamples }) {
+  const rows = namedRows(components)
+  // Keyed by row position; a removed row shifts the ones after it, which a
+  // simulation can live with. `initialSamples` exists for the test, which
+  // renders static markup and cannot type.
+  const [samples, setSamples] = useState(initialSamples ?? {})
+  const sim = simulateGrade(components, samples, mode, policy)
+  const formula = describeFormula(sim, mode, policy)
+
+  return (
+    <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }} data-testid="preview-panel">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Preview</h3>
+          <p style={{ fontSize: 12, color: faint, margin: 0, maxWidth: 560 }}>
+            Type a sample percent per component to see the grade this setup gives for one grading period.
+            Components left blank are not counted and the rest are re-weighted, as in the record.
+          </p>
+        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', borderRadius: 999, color: muted, background: 'rgba(14,42,92,0.06)', border: `1px solid ${line}` }}>
+          Simulation · nothing is saved
+        </span>
+      </div>
+
+      <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
+
+      {rows.length === 0 ? (
+        <p style={{ fontSize: 13, color: faint, margin: 0 }}>Name at least one component above to preview a grade.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="flex flex-col gap-2.5">
+            {rows.map((row, i) => (
+              <label key={row.id ?? `sample-${i}`} className="flex items-center gap-3">
+                <span style={{ flex: '1 1 120px', minWidth: 0, fontSize: 13, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {String(row.name).trim()}
+                  <span style={{ color: faint }}> · {Number(row.weight_percent) || 0}%</span>
+                </span>
+                <span className="relative" style={{ flexShrink: 0 }}>
+                  <input
+                    className="ak-input"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="—"
+                    aria-label={`Sample score for ${String(row.name).trim()}`}
+                    value={samples[i] ?? ''}
+                    onChange={(e) => setSamples((s) => ({ ...s, [i]: e.target.value }))}
+                    style={{ ...fieldStyle, width: 88, paddingRight: 26, textAlign: 'right' }}
+                  />
+                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div style={{ background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px' }} aria-live="polite">
+            {sim.final == null ? (
+              <p style={{ fontSize: 13, color: faint, margin: 0 }}>Type a sample score to see the grade.</p>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span style={{ ...serif, fontSize: 36, lineHeight: 1, color: sim.passed ? green : red }} data-testid="preview-final">
+                    {fmtFinal(sim.final, mode)}
+                  </span>
+                  <WeightBadge ok={Boolean(sim.passed)}>{sim.passed ? 'Passed' : 'Failed'}</WeightBadge>
+                  {mode === 'deped_k12' && sim.descriptor && (
+                    <span style={{ fontSize: 12.5, color: muted }}>{sim.descriptor}</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: muted, marginTop: 6 }}>
+                  Weighted percent {sim.initial}
+                  {sim.weightUsed !== 100 && ` · ${sim.used.length} of ${rows.length} components counted`}
+                </div>
+                {formula && (
+                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12.5, color: ink, lineHeight: 1.5 }}>
+                    {formula.map((l) => (
+                      <li key={l}>{l}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -659,6 +749,14 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           busy={busy}
         />
       </div>
+
+      {/* Reads the unsaved form state on purpose: the point is to try a
+          setup before saving it. */}
+      <PreviewPanel
+        components={components}
+        mode={gradingMode}
+        policy={gradePolicy({ passing_percent: passingPercent, point_scale_direction: scaleDirection })}
+      />
     </div>
   )
 }
