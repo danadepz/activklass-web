@@ -21,7 +21,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: state.profile }) }))
 vi.mock('@/hooks/useMySubscription', () => ({ useMySubscription: () => state.sub }))
 vi.mock('@/hooks/useTeacherClasses', () => ({ useTeacherClasses: () => ({ data: state.classes, isLoading: false }) }))
-vi.mock('@/hooks/useTeacherStudents', () => ({ useTeacherStudents: () => ({ data: state.rows, isLoading: false, isError: false }) }))
+vi.mock('@/hooks/useTeacherStudents', () => ({ useTeacherStudents: () => ({ data: { rows: state.rows, failed: [] }, isLoading: false, isError: false }) }))
 vi.mock('@/lib/firebase', () => ({ db: {} }))
 vi.mock('@/lib/api', () => ({ api: vi.fn() }))
 vi.mock('@/lib/admin', () => ({ resetPassword: vi.fn(), setAccountDisabled: vi.fn() }))

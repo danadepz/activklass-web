@@ -125,6 +125,10 @@ looks like six unrelated broken features; that has already happened in a walkthr
   password change shipped covering five of six account-creation paths; the missed one was
   `superadmin.py`, the account that matters most. A gate is only as good as its flag.
 - Document commands, routes or collections that don't exist yet as if they do.
+- Chunk a `documentId() in` query at 30 because the SDK allows it. The rules engine
+  judges the query per document and refused a teacher's whole roster read at 19 ids
+  (T-57: a 21-student class blanked the Students page with the reason swallowed). Use
+  `IN_CHUNK` (10) from `lib/roster.js`, and never let one class's failure hide the rest.
 - Call a change "web only" before reading the endpoint that writes the document. The
   T-45 card scoped the pass mark as web-only; `POST /api/grading-setup` whitelists the
   fields it forwards (it copied `grading_mode` and nothing else), so the new fields would

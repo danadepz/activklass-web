@@ -24,7 +24,7 @@ import { collection, doc, documentId, getDoc, getDocs, query, where } from 'fire
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
-import { fetchUsersByIds } from '@/lib/roster'
+import { fetchUsersByIds, IN_CHUNK } from '@/lib/roster'
 import { computeStudentFinal } from '@/lib/gradebook'
 import { gradePolicy } from '@/lib/grading'
 import { performanceDocId } from '@/lib/performance'
@@ -48,8 +48,8 @@ const classLabel = (c) =>
 async function loadRiskByStudent(classId, studentIds) {
   const ids = studentIds.map((sid) => performanceDocId(classId, sid))
   const byStudent = {}
-  for (let i = 0; i < ids.length; i += 30) {
-    const chunk = ids.slice(i, i + 30)
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const chunk = ids.slice(i, i + IN_CHUNK)
     try {
       const snap = await getDocs(
         query(collection(db, 'student_performance'), where(documentId(), 'in', chunk), where('class_id', '==', classId)),
@@ -113,6 +113,25 @@ async function loadClassRows(c) {
   })
 }
 
+/**
+ * Fold the per-class results into one directory. A class that failed keeps
+ * its label and error beside the rows of the classes that loaded, so the page
+ * can show what it has and name what it could not get -- T-57 was one class
+ * refusing and the whole page reading "Could not load students." with the
+ * reason swallowed. Only when every class failed is there nothing to show,
+ * and then the first error is rethrown so the page's error branch still runs.
+ */
+export function settleClassRows(classes, settled) {
+  const rows = []
+  const failed = []
+  settled.forEach((r, i) => {
+    if (r.status === 'fulfilled') rows.push(...r.value)
+    else failed.push({ classId: classes[i].id, label: classLabel(classes[i]), error: r.reason })
+  })
+  if (classes.length > 0 && failed.length === classes.length) throw failed[0].error
+  return { rows, failed }
+}
+
 export function useTeacherStudents(options = {}) {
   const { profile } = useAuth()
   const { data: classes } = useTeacherClasses()
@@ -122,8 +141,14 @@ export function useTeacherStudents(options = {}) {
     queryKey: ['fs-student-directory', profile?.id],
     enabled: !!profile?.id && !!classes && (options.enabled ?? true),
     queryFn: async () => {
-      const rows = await Promise.all((classes ?? []).map(loadClassRows))
-      return rows.flat()
+      const list = classes ?? []
+      const settled = await Promise.allSettled(list.map(loadClassRows))
+      settled.forEach((r, i) => {
+        // The page never shows the reason (a teacher reads what to try, not
+        // an exception); the console keeps it for whoever debugs the report.
+        if (r.status === 'rejected') console.error(`Students: class ${list[i].id} did not load`, r.reason)
+      })
+      return settleClassRows(list, settled)
     },
   })
 }

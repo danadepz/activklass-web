@@ -101,7 +101,7 @@ function RiskBadge({ probability, training }) {
 
 export default function StudentsPage() {
   const { data: classes } = useTeacherClasses()
-  const { data: rows, isLoading, isError } = useTeacherStudents()
+  const { data, isLoading, isError } = useTeacherStudents()
   // A solo subscriber manages their own students' accounts here; a
   // school-issued teacher's admin does it in the admin console instead.
   const { isSolo } = useMySubscription()
@@ -111,7 +111,9 @@ export default function StudentsPage() {
   const [riskFilter, setRiskFilter] = useState('all')
   const [sortKey, setSortKey] = useState('name')
 
-  const list = rows ?? []
+  const list = data?.rows ?? []
+  // Classes whose reads failed while the others loaded (useTeacherStudents).
+  const failed = data?.failed ?? []
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -169,7 +171,16 @@ export default function StudentsPage() {
       </div>
     )
   }
-  if (isError) return <div>{header}<p style={{ color: red }}>Could not load students.</p></div>
+  // The cause is in the console (the hook logs it); the teacher gets what to
+  // try, and which class to name if it keeps happening.
+  const retryHint = 'Refresh the page. If it keeps happening, tell us which class.'
+  if (isError) return <div>{header}<p style={{ color: red }}>Could not load students. {retryHint}</p></div>
+
+  const partial = failed.length > 0 && (
+    <p role="alert" style={{ color: red, fontSize: 13.5, margin: '0 0 14px' }}>
+      {failed.map((f) => f.label).join(', ')} did not load, so {failed.length === 1 ? 'its' : 'their'} students are missing below. {retryHint}
+    </p>
+  )
 
   if ((classes ?? []).length === 0) {
     return (
@@ -193,6 +204,7 @@ export default function StudentsPage() {
     <div>
       {header}
       {tabs}
+      {partial}
 
       {tab === 'accounts' ? <StudentAccounts classes={classes ?? []} rows={list} /> : (
       <>

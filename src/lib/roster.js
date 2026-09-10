@@ -4,7 +4,22 @@ import { api } from './api'
 import { nameError } from './validation'
 
 /**
- * Fetch users docs by uid list (chunked — Firestore 'in' caps at 30 ids).
+ * How many ids one `documentId() in` query may carry.
+ *
+ * Firestore's own cap is 30, and this chunked at 30 until T-57. The rules
+ * engine judges such a query per document, and the `users` rule spends
+ * document lookups on each one, so a teacher's roster read was refused
+ * outright -- permission-denied on the whole query, not a partial result --
+ * at 19 ids and accepted at 18, measured against the live project as a solo
+ * teacher whose one class had 21 students. Ten is Firestore's original `in`
+ * limit and sits well inside that budget; a big section costs a couple more
+ * round trips, which nobody notices. Every `documentId() in` read a teacher
+ * makes should use this, not its own number.
+ */
+export const IN_CHUNK = 10
+
+/**
+ * Fetch users docs by uid list, IN_CHUNK ids per query.
  *
  * Ids are deduped and emptied first: a blank or non-string entry in a class's
  * student_ids makes the documentId() query throw outright, and most callers
@@ -13,8 +28,8 @@ import { nameError } from './validation'
 export async function fetchUsersByIds(ids) {
   const clean = [...new Set(ids ?? [])].filter((id) => typeof id === 'string' && id.trim() !== '')
   const users = []
-  for (let i = 0; i < clean.length; i += 30) {
-    const chunk = clean.slice(i, i + 30)
+  for (let i = 0; i < clean.length; i += IN_CHUNK) {
+    const chunk = clean.slice(i, i + IN_CHUNK)
     const snap = await getDocs(
       query(collection(db, 'users'), where(documentId(), 'in', chunk)),
     )

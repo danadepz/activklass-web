@@ -103,9 +103,14 @@ email; roster fields only). Verified in `lib/firestoreRules.test.js` under
   assessments, the `student_performance` risk snapshot) than the class list does.
 - **No query uses `orderBy`.** All sorting is client-side. Fine at pilot scale; the
   composite indexes exist in the backend repo for when reads move server-side.
-- **`in` queries cap at 30 ids.** `fetchUsersByIds` chunks and also strips blank entries —
-  one bad id in `student_ids` makes a `documentId()` query throw and takes the whole page
-  down, and most callers do not catch.
+- **`in` queries chunk at 10 ids (`IN_CHUNK` in `lib/roster.js`), not Firestore's 30.**
+  The rules engine judges a `documentId() in` query per document and the `users` rule
+  spends lookups on each one: at 19 ids a teacher's roster read is refused outright
+  (`permission-denied` on the whole query), at 18 it passes — measured live on
+  2026-09-11 (T-57, a 21-student class blanked the Students page). `fetchUsersByIds` and
+  the risk-snapshot read beside it chunk at 10 and also strip blank entries — one bad id
+  in `student_ids` makes a `documentId()` query throw and takes the whole page down, and
+  most callers do not catch.
 
 ## What is *not* in Firestore
 These go through Flask (`lib/api.js`) because they need the Admin SDK or a model:

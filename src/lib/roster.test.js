@@ -24,7 +24,20 @@ vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: async () => 'test-token' } },
 }))
 
-const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage, middleNamesToWrite, parseCsv } = await import('./roster')
+// The Firestore query builders are stubbed so fetchUsersByIds can be watched:
+// `where` keeps the id list it was given and `getDocs` hands one stub doc
+// back per id, which is enough to count the chunks.
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn(() => 'users'),
+  documentId: vi.fn(() => '__name__'),
+  where: vi.fn((field, op, value) => ({ field, op, value })),
+  query: vi.fn((_col, clause) => clause),
+  getDocs: vi.fn(async (clause) => ({
+    forEach: (fn) => clause.value.forEach((id) => fn({ id, data: () => ({}) })),
+  })),
+}))
+
+const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage, middleNamesToWrite, parseCsv, fetchUsersByIds, IN_CHUNK } = await import('./roster')
 
 const answers = (payload) =>
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -142,6 +155,24 @@ describe('a middle name from the roster file', () => {
   it('is never invented for a row with no account', () => {
     expect(middleNamesToWrite([row(null, 'Santos'), row({}, 'Santos')])).toEqual([])
     expect(middleNamesToWrite(undefined)).toEqual([])
+  })
+})
+
+/* T-57: a solo teacher's Students page read a 21-student roster in one
+   `documentId() in` query and the rules engine refused the whole read --
+   permission-denied at 19 ids, fine at 18. Ten per query is the guard. */
+describe('fetchUsersByIds reads at most ten ids per query', () => {
+  it('splits 21 ids into 10 / 10 / 1 and still returns every user once', async () => {
+    const { getDocs } = await import('firebase/firestore')
+    getDocs.mockClear()
+    const ids = Array.from({ length: 21 }, (_, i) => `s${i}`)
+
+    const users = await fetchUsersByIds([...ids, 's0', '', null])
+
+    expect(users.map((u) => u.id)).toEqual(ids)
+    const sizes = getDocs.mock.calls.map(([clause]) => clause.value.length)
+    expect(sizes).toEqual([10, 10, 1])
+    expect(IN_CHUNK).toBe(10)
   })
 })
 
