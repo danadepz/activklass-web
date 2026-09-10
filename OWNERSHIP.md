@@ -249,6 +249,7 @@ Announce before editing. Keep the change small.
 | `src/context/**` | auth state for the whole app |
 | `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
 | `src/routes/index.jsx`, `login.jsx`, `register.jsx` | landing + auth |
+| `src/routes/forgot-password.jsx`, `reset-password.jsx` | the two halves of a password reset — auth routing beside `login.jsx`, added 2026-09-11 (T-47) |
 | `src/components/ProtectedRoute.jsx`, `src/routes/change-password.jsx` | the temp-password gate and the one screen it lets through — auth routing, not presentation, so `src/components/**` in the UI/UX lane does not cover it |
 | `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
 
@@ -367,3 +368,10 @@ screens read it and none of them owns it. The sign-in copy for a rejected
 credential lives here beside `toAuthEmail` on purpose: the rule and the sentence
 that explains the rule drift apart the moment they sit in different files, and
 in `login.jsx` the sentence was unreachable from any test.
+
+**`routes/forgot-password.jsx` and `reset-password.jsx`, added to Shared 2026-09-11
+(T-47 build pane).** Both were in no lane. They are the request and the landing half of
+one password reset, they lean on `lib/logins.js` (Shared) for what an issued login *is*,
+and the sentence on the first page about where an issued login's reset really lives has
+to agree with the teacher's and admin's Reset password screens — so they sit beside
+`login.jsx` under Shared rather than in a page lane. Announce, keep it small.

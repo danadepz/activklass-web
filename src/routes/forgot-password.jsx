@@ -16,7 +16,55 @@ import { navy } from '@/theme'
  * the address. Note the success message does not confirm the account exists
  * -- Firebase answers the same either way, and so do we, so this page cannot
  * be used to probe which emails are registered.
+ *
+ * It can only ever help an account that signs in with an email. A school- or
+ * teacher-issued login (`snhs-123456`, see lib/logins.js) is stored behind an
+ * internal address with no inbox, so no link can reach it; the way back in
+ * for those is the teacher's or admin's Reset password. A student on one of
+ * those logins landed here with nowhere to type it and, had she typed the
+ * personal email her teacher entered, would have read "a reset link is on its
+ * way" for a link that never comes (T-47). So the page says so up front, says
+ * it again instead of "enter a valid email" when what was typed has no `@`,
+ * and the success screen no longer promises an inbox to an issued account.
  */
+
+/** The one sentence that tells an issued login where its reset really is. */
+export const ISSUED_LOGIN_NOTE =
+  'Signed in with a login ID like snhs-123456? Those accounts have no inbox, so no ' +
+  'link can be sent — ask your teacher or your school admin to reset your password.'
+
+/**
+ * What stops the submit, or '' to send. Text without an `@` is a login ID
+ * (or nothing an account could be), and "enter a valid email address" is the
+ * wrong answer to that: the person has no email to enter. Say where their
+ * reset actually is instead. Anything with an `@` is judged by the shared
+ * email rule as before.
+ */
+export function forgotPasswordProblem(value) {
+  const text = String(value ?? '').trim()
+  if (text && !text.includes('@')) return ISSUED_LOGIN_NOTE
+  return emailError(text)
+}
+
+/**
+ * The success screen. "If an account *signs in with* that email" is true for
+ * everyone -- an issued login signs in with its ID, so a personal email the
+ * teacher recorded is not what any account signs in with -- and it still
+ * confirms nothing about which emails are registered. The second sentence is
+ * for the student who typed that personal email anyway.
+ */
+export function ResetSentNotice({ email }) {
+  return (
+    <AuthNotice>
+      If an account signs in with {email}, a password reset link is on its way.
+      Check your inbox (and spam folder), then follow the link to choose a new password.
+      <br />
+      <br />
+      {ISSUED_LOGIN_NOTE}
+    </AuthNotice>
+  )
+}
+
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState(null)
@@ -26,7 +74,7 @@ export default function ForgotPassword() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
-    const problem = emailError(email)
+    const problem = forgotPasswordProblem(email)
     if (problem) { setError(problem); return }
     setSubmitting(true)
     try {
@@ -47,14 +95,11 @@ export default function ForgotPassword() {
   return (
     <AuthLayout
       title="Reset your password"
-      subtitle="Enter your account email and we'll send you a link to set a new password."
+      subtitle="Enter the email you sign in with and we'll send you a link to set a new password."
     >
       {sent ? (
         <div className="flex flex-col gap-5">
-          <AuthNotice>
-            If an account exists for {email.trim()}, a password reset link is on its way.
-            Check your inbox (and spam folder), then follow the link to choose a new password.
-          </AuthNotice>
+          <ResetSentNotice email={email.trim()} />
           <div style={{ textAlign: 'center', fontSize: 14, color: '#6A7A95' }}>
             <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
               Back to sign in
@@ -79,6 +124,12 @@ export default function ForgotPassword() {
               onChange={(e) => setEmail(e.target.value)}
               style={authInputStyle}
             />
+            {error !== ISSUED_LOGIN_NOTE && (
+              // Read before anything is typed; hidden while the banner above says the same thing.
+              <p style={{ fontSize: 13, color: '#6A7A95', margin: '8px 0 0', lineHeight: 1.5 }}>
+                {ISSUED_LOGIN_NOTE}
+              </p>
+            )}
           </div>
 
           <SubmitButton type="submit" disabled={submitting} aria-busy={submitting}>
