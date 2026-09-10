@@ -24,13 +24,13 @@ export const GRADING_MODES = [
 
 /**
  * What passes, and which way the point scale runs (T-45, from a tester's
- * CIT-U CMRS). Two settings on the gradebook:
+ * description of his school's grading module). Two settings on the gradebook:
  * - `passing_percent`: the lowest weighted percent that passes in the CHED
  *   modes. Default 75. DepEd K-12 ignores it -- DepEd Order No. 8 s. 2015
  *   fixes 75 on the transmuted grade.
  * - `point_scale_direction`: 'ched' (1.0 is highest, 5.0 fails -- the default
  *   and what every gradebook meant before the field existed) or 'inverted'
- *   (5.0 is highest, 1.0 fails, as CIT-U reads it). 3.0 passes either way.
+ *   (the reversed scale: 5.0 is highest, 1.0 fails). 3.0 passes either way.
  *
  * Read them off any gradebook-shaped document -- a gradebook, a preset, a
  * student's entry, a loaded bundle -- through gradePolicy(), which fills the
@@ -41,7 +41,7 @@ export const DEFAULT_PASSING_PERCENT = 75
 export const PASSING_POINT = 3.0
 export const POINT_SCALE_DIRECTIONS = [
   { value: 'ched', label: '1.0 is highest', hint: 'Standard CHED · 1.0 best, 3.0 passes, 5.0 fails' },
-  { value: 'inverted', label: '5.0 is highest', hint: 'CIT-U style · 5.0 best, 3.0 passes, 1.0 fails' },
+  { value: 'inverted', label: '5.0 is highest', hint: 'Reversed scale · 5.0 best, 3.0 passes, 1.0 fails' },
 ]
 
 export function gradePolicy(source) {

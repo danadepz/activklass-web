@@ -227,7 +227,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
  * What passes, per grading type (T-45). DepEd K-12 has nothing to set: DepEd
  * Order No. 8, s. 2015 fixes 75 on the transmuted grade. The CHED modes take a
  * passing score, and the point scale also takes its direction -- 1.0 highest
- * (standard) or 5.0 highest (CIT-U) -- with the ranges the choice produces
+ * (standard) or 5.0 highest (reversed) -- with the ranges the choice produces
  * generated from lib/grading.js, the same function the record computes with,
  * so the table can never show a band the gradebook would not apply.
  */
