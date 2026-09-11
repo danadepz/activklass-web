@@ -30,7 +30,7 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts, { AccountRow, signInConfirm, resetCopy } from './StudentAccounts.jsx'
+import StudentAccounts, { AccountRow, BulkCreate, signInConfirm, resetCopy } from './StudentAccounts.jsx'
 import StudentsPage from './students.jsx'
 import { SubscriptionChip, SubscriptionBox } from '@/components/SubscriptionBadge.jsx'
 
@@ -149,6 +149,20 @@ describe('Reset password copy', () => {
     expect(msg).toContain('Password set for slcsflu-231525')
     expect(msg).toContain('nothing is emailed')
     expect(msg).toMatch(/pick their own the next time they sign in/)
+  })
+})
+
+/* T-55: the file picker is a button bound to a hidden input, not the
+   browser's bare "Choose File  No file chosen" text. */
+describe('Create accounts from a file', () => {
+  it('shows a Choose a file… button whose label opens the (still real) file input', () => {
+    const html = render(<BulkCreate classes={[HS]} prefix="ucb" onDone={() => {}} />)
+    expect(html).toContain('Choose a file…')
+    expect(html).toContain('for="student-accounts-file"')
+    expect(html).toMatch(/<input[^>]*id="student-accounts-file"[^>]*type="file"[^>]*accept=".csv,.xlsx"/)
+    expect(html).toMatch(/<input[^>]*class="peer sr-only"/)
+    expect(html).toContain('No file chosen')
+    expect(html).toContain('Create accounts')
   })
 })
 

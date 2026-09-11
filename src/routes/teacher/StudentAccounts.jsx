@@ -308,7 +308,7 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
 
 /* ── Bulk upload ──────────────────────────────────────────────────────── */
 
-function BulkCreate({ classes, prefix, onDone }) {
+export function BulkCreate({ classes, prefix, onDone }) {
   const [classId, setClassId] = useState(classes[0]?.id ?? '')
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('')
@@ -390,10 +390,39 @@ function BulkCreate({ classes, prefix, onDone }) {
             ))}
           </select>
         </label>
-        <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: muted }}>
+        <div style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: muted }}>
           File (.csv or .xlsx)
-          <input type="file" accept=".csv,.xlsx" onChange={onFile} style={{ fontSize: 13 }} />
-        </label>
+          {/* The browser's own file control renders as "Choose File  No file
+              chosen" in plain text, which next to a real button reads as a
+              caption, and a tester could not find it (T-55). The input stays
+              -- accept, onChange and the parse path are untouched -- but it is
+              visually hidden behind a label styled as the page's ghost button;
+              the label's htmlFor opens the picker, and keyboard focus still
+              lands on the input (sr-only, not display:none), with the ring
+              drawn on the label through `peer`. Clearing the value on click
+              lets the same file be chosen twice, e.g. after "Upload another
+              file". */}
+          <div className="flex items-center gap-2" style={{ minHeight: 34 }}>
+            <input
+              id="student-accounts-file"
+              type="file"
+              accept=".csv,.xlsx"
+              onChange={onFile}
+              onClick={(e) => { e.currentTarget.value = '' }}
+              className="peer sr-only"
+            />
+            <label
+              htmlFor="student-accounts-file"
+              className="peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#0E2A5C]"
+              style={{ ...btnGhost, display: 'inline-block' }}
+            >
+              Choose a file…
+            </label>
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: fileName ? ink : faint, ...(fileName ? mono : {}) }}>
+              {fileName || 'No file chosen'}
+            </span>
+          </div>
+        </div>
         <button type="button" style={{ ...btnPrimary, opacity: !ready.length || busy ? 0.5 : 1 }} disabled={!ready.length || busy} onClick={upload}>
           {busy ? 'Creating…' : `Create ${ready.length || ''} account${ready.length === 1 ? '' : 's'}`.replace('  ', ' ')}
         </button>
