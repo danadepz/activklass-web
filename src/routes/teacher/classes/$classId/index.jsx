@@ -8,7 +8,7 @@ import { setAccountDisabled } from '@/lib/admin'
 import { deleteClassSection } from '@/lib/classes'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
-import { emailError, nameError, yearLevelError, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
+import { emailError, nameError, yearLevelError, birthdateError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { classEducationLevel } from '@/lib/classForm'
 import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
@@ -346,9 +346,23 @@ function StudentFields({ fields, setFields, clazz, programs }) {
         <div>
           <label style={labelStyle}>Birthdate</label>
           <input className="ak-input" type="date" max={TODAY_ISO} value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+          <BirthdateHint missing={!fields.birthdate} />
         </div>
       </div>
     </div>
+  )
+}
+
+/* Under every Birthdate field a teacher fills in (T-50). Creation requires
+   the date; on an edit of a record made before that rule the field can still
+   be empty, and then the line says so in amber rather than reading as
+   optional -- this modal is where the student's own profile sends them
+   ("Ask your teacher to add it to your record"). */
+function BirthdateHint({ missing = false }) {
+  return (
+    <p className="mt-1 text-xs" style={{ color: missing ? goldDeep : faint }}>
+      {missing ? 'Not on file. ' : ''}{BIRTHDATE_HINT}
+    </p>
   )
 }
 
@@ -524,7 +538,9 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
   async function enroll() {
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     if (!findFields.student_number?.trim()) { fail('ID Number is required.'); return }
-    const fieldProblem = rosterFieldsError(findFields)
+    // Required here too: the account exists, but this is the teacher's one
+    // pass over the record before the student is theirs (T-50).
+    const fieldProblem = rosterFieldsError(findFields) || birthdateError(findFields.birthdate)
     if (fieldProblem) { fail(fieldProblem); return }
     setBusy(true)
     fail(null)
@@ -558,6 +574,10 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       rosterFieldsError(createFields)
     if (problem) { fail(problem); return }
     if (!createFields.student_number?.trim()) { fail('ID Number is required.'); return }
+    // The provision endpoint refuses the row without it (roster_utils.py);
+    // checking here is so the teacher reads the reason beside the field.
+    const birthdateProblem = birthdateError(createFields.birthdate)
+    if (birthdateProblem) { fail(birthdateProblem); return }
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     setBusy(true)
     fail(null)
@@ -673,8 +693,9 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
             <input className="ak-input" placeholder="12-digit LRN" value={f.lrn} onChange={handleSet('lrn')} style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Birthdate</label>
+            <label style={labelStyle}>Birthdate <span className="text-red-500">*</span></label>
             <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+            <BirthdateHint />
           </div>
         </div>
       </>
@@ -912,7 +933,8 @@ function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }
     const problem =
       nameError(firstName, { label: 'First name' }) ||
       nameError(lastName, { label: 'Last name' }) ||
-      rosterFieldsError(fields)
+      rosterFieldsError(fields) ||
+      birthdateError(fields.birthdate, { required: false })
     if (problem) {
       fail(problem)
       return
@@ -1656,6 +1678,20 @@ export default function ClassDetailPage() {
                         {s.middle_name ? ` ${s.middle_name}` : ''}
                       </p>
                       <p className="text-xs text-slate-400">{s.email}</p>
+                      {/* T-50: a student without a birthdate cannot set up
+                          guardian access, and their profile tells them to ask
+                          their teacher. Opens Edit, where the field is. */}
+                      {!s.birthdate && (
+                        <button
+                          type="button"
+                          onClick={() => setModal(s)}
+                          title="Needed before the student can set up guardian access. Click to add it."
+                          className="mt-1 rounded-full px-2 py-0.5 text-[11px] font-semibold hover:brightness-95"
+                          style={{ color: goldDeep, background: 'rgba(245,197,24,0.16)', border: 'none', cursor: 'pointer' }}
+                        >
+                          no birthdate
+                        </button>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-slate-600">{courseYear || '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
