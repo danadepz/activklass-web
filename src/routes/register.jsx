@@ -45,10 +45,14 @@ const FRIENDLY_ERRORS = {
 // ids never look like this, so it cannot collide with a real directory entry.
 const NEW_SCHOOL = '__add_new_school__'
 
+// Gender, not pronouns: the list used to read He / She / Others, which is
+// the pronoun wearing the wrong label (T-51). Custom reveals a text box for
+// whatever the person wants to write, kept optional. Nothing in the product
+// reads the stored value yet, so the values changed with the labels.
 const GENDERS = [
-  { value: 'he', label: 'He' },
-  { value: 'she', label: 'She' },
-  { value: 'others', label: 'Others' },
+  { value: 'female', label: 'Female' },
+  { value: 'male', label: 'Male' },
+  { value: 'custom', label: 'Custom' },
 ]
 const SCHOOL_TYPES = [
   { value: 'private', label: 'Private school' },
@@ -132,8 +136,10 @@ export default function Register() {
 
   const [form, setForm] = useState({
     firstName: '',
+    middleName: '',
     lastName: '',
     gender: '',
+    genderCustom: '',
     phone: '',
     schoolId: '',
     newSchoolName: '',
@@ -193,6 +199,7 @@ export default function Register() {
     if (n === 2) {
       return (
         nameError(form.firstName, { label: 'First name' }) ||
+        nameError(form.middleName, { label: 'Middle name', required: false }) ||
         nameError(form.lastName, { label: 'Last name' }) ||
         (form.gender ? '' : 'Select your gender.') ||
         phoneError(form.phone)
@@ -262,8 +269,10 @@ export default function Register() {
       : (schools.find((s) => s.id === form.schoolId) ?? null)
     return {
       first_name: form.firstName.trim(),
+      ...(form.middleName.trim() && { middle_name: form.middleName.trim() }),
       last_name: form.lastName.trim(),
       gender: form.gender,
+      ...(form.gender === 'custom' && form.genderCustom.trim() && { gender_custom: form.genderCustom.trim() }),
       phone: form.phone.trim(),
       school_name: addingSchool ? form.newSchoolName.trim() : (school?.name ?? ''),
       school_type: form.schoolType,
@@ -493,8 +502,16 @@ export default function Register() {
                 <Field id="reg-first" label="First name">
                   <input id="reg-first" className="ak-input" required autoComplete="given-name" placeholder="Juan" value={form.firstName} onChange={set('firstName')} style={authInputStyle} />
                 </Field>
+                <Field id="reg-middle" label="Middle name" hint="optional">
+                  <input id="reg-middle" className="ak-input" autoComplete="additional-name" placeholder="Santos" value={form.middleName} onChange={set('middleName')} style={authInputStyle} />
+                </Field>
+              </div>
+              <div className="grid gap-3.5 md:grid-cols-2">
                 <Field id="reg-last" label="Last name">
                   <input id="reg-last" className="ak-input" required autoComplete="family-name" placeholder="Dela Cruz" value={form.lastName} onChange={set('lastName')} style={authInputStyle} />
+                </Field>
+                <Field id="reg-phone" label="Phone number">
+                  <input id="reg-phone" className="ak-input" type="tel" required autoComplete="tel" placeholder="0917 123 4567" value={form.phone} onChange={set('phone')} style={authInputStyle} />
                 </Field>
               </div>
               <div className="grid gap-3.5 md:grid-cols-2">
@@ -504,9 +521,11 @@ export default function Register() {
                     {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
                   </select>
                 </Field>
-                <Field id="reg-phone" label="Phone number">
-                  <input id="reg-phone" className="ak-input" type="tel" required autoComplete="tel" placeholder="0917 123 4567" value={form.phone} onChange={set('phone')} style={authInputStyle} />
-                </Field>
+                {form.gender === 'custom' && (
+                  <Field id="reg-gender-custom" label="Your gender" hint="optional">
+                    <input id="reg-gender-custom" className="ak-input" maxLength={40} placeholder="In your own words" value={form.genderCustom} onChange={set('genderCustom')} style={authInputStyle} />
+                  </Field>
+                )}
               </div>
             </>
           )}

@@ -175,3 +175,34 @@ describe('registering while another account is signed in', () => {
     }
   })
 })
+
+/* T-51 (maykel_64440-65): step 2 asks for a middle name (optional, like every
+   student form does) and lists genders, not pronouns. Rendered through the
+   institution preset because that is the one static route to step 2; the
+   fields are the same on both paths. */
+describe('/register step 2 — about you', () => {
+  const step2 = () => {
+    searchState.current = 'type=institution'
+    try { return renderToStaticMarkup(<Register />) } finally { searchState.current = '' }
+  }
+
+  it('asks for an optional middle name between first and last', () => {
+    const html = step2()
+    expect(html).toContain('Middle name')
+    expect(html).toMatch(/Middle name<span[^>]*> \(optional\)/)
+    expect(html.indexOf('reg-first')).toBeLessThan(html.indexOf('reg-middle'))
+    expect(html.indexOf('reg-middle')).toBeLessThan(html.indexOf('reg-last'))
+  })
+
+  it('offers Female / Male / Custom, not pronouns', () => {
+    const html = step2()
+    for (const label of ['Female', 'Male', 'Custom']) expect(html).toContain(`>${label}</option>`)
+    for (const label of ['He', 'She', 'Others']) expect(html).not.toContain(`>${label}</option>`)
+  })
+
+  /* The Custom text box is revealed on choosing Custom, which a static render
+     cannot do; what it can pin is that the box is not shown before then. */
+  it('keeps the custom gender box hidden until Custom is chosen', () => {
+    expect(step2()).not.toContain('reg-gender-custom')
+  })
+})
