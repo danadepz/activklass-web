@@ -465,7 +465,34 @@ function BulkCreate({ classes, prefix, onDone }) {
 
 /* ── Account rows ─────────────────────────────────────────────────────── */
 
-function AccountRow({ user, classes, onChanged }) {
+/**
+ * What Deactivate and Reactivate ask before they act (T-48).
+ *
+ * Deactivate is the account switch, not a class switch: it disables the
+ * student's sign-in everywhere (lib/admin.js → the staff endpoint, which
+ * only lets a teacher do it to a student on their own roster) and leaves
+ * them on every roster, marked. The old confirm said "hidden from your
+ * rosters", which is not what happens, and a tester read it the way it
+ * was written — she expected one class to drop off the student's dashboard
+ * and got a student who could not sign in at all. The thing she wanted
+ * exists on the class page as Remove from the roster, so the confirm now
+ * says which of the two this is and points at the other.
+ */
+export const signInConfirm = {
+  off: (name) => ({
+    title: `Turn off ${name}'s sign-in?`,
+    message: `This stops ${name} signing in to ActivKlass at all, until you reactivate them. They stay on your rosters. To take them out of one class only, remove them from that class's roster on the class page instead.`,
+    confirmLabel: 'Turn sign-in off',
+    tone: 'danger',
+  }),
+  on: (name) => ({
+    title: `Reactivate ${name}?`,
+    message: `${name} can sign in again, with the password they already have.`,
+    confirmLabel: 'Turn sign-in on',
+  }),
+}
+
+export function AccountRow({ user, classes, onChanged }) {
   // Membership is the class's student_ids array (DATA-MODEL: no join table).
   const enrolledIn = (classes ?? []).filter((c) => (c.student_ids ?? []).includes(user.id))
   const [busy, setBusy] = useState('')
@@ -478,13 +505,9 @@ function AccountRow({ user, classes, onChanged }) {
   }
 
   async function toggleActive() {
-    if (active && !(await confirmDialog({
-      title: `Deactivate ${user.first_name} ${user.last_name}?`,
-      message: 'They will be hidden from your rosters and unable to sign in. You can reactivate them at any time.',
-      confirmLabel: 'Deactivate',
-      tone: 'danger',
-    }))) return
-    // Both halves: status hides them from the app, disabling stops the login.
+    const name = `${user.first_name} ${user.last_name}`
+    if (!(await confirmDialog(active ? signInConfirm.off(name) : signInConfirm.on(name)))) return
+    // Both halves: status marks them on every roster, disabling stops the login.
     run('status', async () => {
       await updateDoc(doc(db, 'users', user.id), { status: active ? 'inactive' : 'active' })
       await setAccountDisabled(user.id, active)
@@ -531,7 +554,9 @@ function AccountRow({ user, classes, onChanged }) {
       </td>
       <td style={{ ...td, ...mono, fontSize: 12.5 }}>{user.login_id ?? user.email ?? '—'}</td>
       <td style={td}>
-        <Pill fg={active ? green : red} bg={active ? 'rgba(31,138,91,0.10)' : 'rgba(192,57,43,0.08)'}>{active ? 'active' : 'inactive'}</Pill>
+        {/* "sign-in off", not "inactive": the list has to say the same thing
+            the confirm said, and "inactive" reads as paused in a class. */}
+        <Pill fg={active ? green : red} bg={active ? 'rgba(31,138,91,0.10)' : 'rgba(192,57,43,0.08)'}>{active ? 'active' : 'sign-in off'}</Pill>
         {user.is_temp_password && (
           <div style={{ marginTop: 5 }}><Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">starting password</Pill></div>
         )}

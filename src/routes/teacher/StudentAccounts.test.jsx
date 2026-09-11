@@ -30,7 +30,7 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts from './StudentAccounts.jsx'
+import StudentAccounts, { AccountRow, signInConfirm } from './StudentAccounts.jsx'
 import StudentsPage from './students.jsx'
 import { SubscriptionChip, SubscriptionBox } from '@/components/SubscriptionBadge.jsx'
 
@@ -93,6 +93,43 @@ describe('Student accounts tab', () => {
     const html = render(<StudentAccounts classes={[HS, COLLEGE]} rows={rows} />)
     expect(html).toContain('2 accounts')
     expect(html).toContain('Loading accounts')
+  })
+})
+
+/* T-48: Deactivate is the whole-account switch, and the row has to say so.
+   A tester read the old confirm ("hidden from your rosters") as "this class
+   goes away" and was surprised the student could not sign in anywhere. */
+describe('Deactivate / Reactivate on an account row', () => {
+  const skittle = { id: 's9', first_name: 'Skittle', last_name: 'Reyes', login_id: 'slcsflu-231525' }
+  const renderRow = (user) => render(<table><tbody><AccountRow user={user} classes={[HS]} onChanged={() => {}} /></tbody></table>)
+
+  it('an active account shows "active" and offers Deactivate', () => {
+    const html = renderRow({ ...skittle, status: 'active' })
+    expect(html).toContain('>active<')
+    expect(html).toContain('Deactivate')
+    expect(html).not.toContain('inactive')
+  })
+
+  it('a deactivated account reads "sign-in off", never "inactive", and offers Reactivate', () => {
+    const html = renderRow({ ...skittle, status: 'inactive' })
+    expect(html).toContain('>sign-in off<')
+    expect(html).not.toContain('>inactive<')
+    expect(html).toContain('Reactivate')
+  })
+
+  it('the Deactivate confirm names the consequence and the per-class alternative', () => {
+    const spec = signInConfirm.off('Skittle Reyes')
+    expect(spec.message).toMatch(/stops Skittle Reyes signing in to ActivKlass at all/)
+    expect(spec.message).toMatch(/stay on your rosters/)
+    expect(spec.message).toMatch(/remove them from that class's roster/)
+    expect(spec.message).not.toMatch(/hidden from your rosters/)
+    expect(spec.tone).toBe('danger')
+  })
+
+  it('the Reactivate confirm says they can sign in again', () => {
+    const spec = signInConfirm.on('Skittle Reyes')
+    expect(spec.message).toMatch(/Skittle Reyes can sign in again/)
+    expect(spec.confirmLabel).toBe('Turn sign-in on')
   })
 })
 
