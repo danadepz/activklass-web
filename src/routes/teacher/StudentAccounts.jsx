@@ -492,6 +492,26 @@ export const signInConfirm = {
   }),
 }
 
+/**
+ * What Reset password says before and after (T-46).
+ *
+ * A password a teacher sets is a starting password again: the endpoint
+ * stamps is_temp_password on every reset, and the student is held on the
+ * new-password step at their next sign-in until they choose their own
+ * (the owner's 2026-08-25 rule -- no account is worked on a password staff
+ * issued). This dialog used to say "they should change it after signing
+ * in", which reads as optional, so a teacher handed over a "final"
+ * password and both sides read the forced change as a bug. The admin
+ * console's copy of this dialog already says "will be asked" (T-16); this
+ * is the same sentence.
+ */
+export const resetCopy = {
+  prompt: (login) =>
+    `This replaces the password for ${login} immediately. At least ${MIN_PASSWORD} characters — they will be asked to choose a new password the next time they sign in.`,
+  done: (login) =>
+    `Password set for ${login}. Pass it on in person — nothing is emailed. They'll pick their own the next time they sign in.`,
+}
+
 export function AccountRow({ user, classes, onChanged }) {
   // Membership is the class's student_ids array (DATA-MODEL: no join table).
   const enrolledIn = (classes ?? []).filter((c) => (c.student_ids ?? []).includes(user.id))
@@ -517,7 +537,7 @@ export function AccountRow({ user, classes, onChanged }) {
   async function doReset() {
     const pw = await promptDialog({
       title: 'Set a new password',
-      message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they should change it after signing in.`,
+      message: resetCopy.prompt(user.login_id ?? user.email),
       label: 'New password',
       placeholder: `e.g. ${DEFAULT_PASSWORD}`,
       confirmLabel: 'Set password',
@@ -528,7 +548,7 @@ export function AccountRow({ user, classes, onChanged }) {
     if (pw == null) return
     run('password', async () => {
       await resetPassword(user.id, pw)
-      toast.success(`Password set for ${user.login_id ?? user.email}. Pass it on in person — nothing is emailed.`)
+      toast.success(resetCopy.done(user.login_id ?? user.email))
     })
   }
 

@@ -30,7 +30,7 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts, { AccountRow, signInConfirm } from './StudentAccounts.jsx'
+import StudentAccounts, { AccountRow, signInConfirm, resetCopy } from './StudentAccounts.jsx'
 import StudentsPage from './students.jsx'
 import { SubscriptionChip, SubscriptionBox } from '@/components/SubscriptionBadge.jsx'
 
@@ -130,6 +130,25 @@ describe('Deactivate / Reactivate on an account row', () => {
     const spec = signInConfirm.on('Skittle Reyes')
     expect(spec.message).toMatch(/Skittle Reyes can sign in again/)
     expect(spec.confirmLabel).toBe('Turn sign-in on')
+  })
+})
+
+/* T-46: a teacher-set password is a starting password again (the endpoint
+   stamps is_temp_password on every reset), and the teacher has to hear that
+   before handing it over -- "should change it" read as optional. */
+describe('Reset password copy', () => {
+  it('the dialog says the student will be asked to choose a new password, not that they should', () => {
+    const msg = resetCopy.prompt('slcsflu-231525')
+    expect(msg).toContain('replaces the password for slcsflu-231525 immediately')
+    expect(msg).toMatch(/will be asked to choose a new password the next time they sign in/)
+    expect(msg).not.toMatch(/should change/)
+  })
+
+  it('the toast repeats it after the reset', () => {
+    const msg = resetCopy.done('slcsflu-231525')
+    expect(msg).toContain('Password set for slcsflu-231525')
+    expect(msg).toContain('nothing is emailed')
+    expect(msg).toMatch(/pick their own the next time they sign in/)
   })
 })
 
