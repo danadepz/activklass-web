@@ -12,7 +12,7 @@ import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/the
 import { ROLES, CREATABLE_ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
 import {
   emailError, nameError, tempPasswordError,
-  idNumberError, lrnError, schoolNameError, schoolAbbrError,
+  idNumberError, lrnError, schoolNameError, schoolAbbrError, birthdateError, BIRTHDATE_HINT,
 } from '@/lib/validation'
 import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
@@ -217,8 +217,8 @@ function CreateUserForm({ onCreated, settings, users }) {
                 ? 'The student number needs at least 6 digits — the last six become their login.'
                 : '')) ||
           // Parental-access linking age-gates on the birthdate, so a student
-          // without one breaks guardian invites later.
-          (!form.birthdate ? 'Birthdate is required — parental access checks depend on it.' : '')
+          // without one breaks guardian invites later (rule in lib/validation).
+          birthdateError(form.birthdate)
         : '') ||
       (role === 'teacher'
         ? idNumberError(form.employeeNumber, { label: 'Employee number' }) ||
@@ -404,6 +404,7 @@ function CreateUserForm({ onCreated, settings, users }) {
             <label style={labelStyle}>
               Birthdate
               <input style={{ ...field, marginTop: 6 }} type="date" value={form.birthdate} onChange={set('birthdate')} />
+              <span style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 400, color: faint }}>{BIRTHDATE_HINT}</span>
             </label>
           </>
         )}

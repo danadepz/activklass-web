@@ -30,7 +30,7 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts, { AccountRow, BulkCreate, signInConfirm, resetCopy } from './StudentAccounts.jsx'
+import StudentAccounts, { AccountRow, BulkCreate, signInConfirm, resetCopy, rowProblem, REQUIRED } from './StudentAccounts.jsx'
 import StudentsPage from './students.jsx'
 import { SubscriptionChip, SubscriptionBox } from '@/components/SubscriptionBadge.jsx'
 
@@ -163,6 +163,40 @@ describe('Create accounts from a file', () => {
     expect(html).toMatch(/<input[^>]*class="peer sr-only"/)
     expect(html).toContain('No file chosen')
     expect(html).toContain('Create accounts')
+  })
+})
+
+describe('Birthdate is required to create a student (T-50)', () => {
+  /* The guardian-access gate on the student's profile reads the birthdate
+     and the student cannot set it themselves, so every creation path asks
+     for it and says why. The endpoint refuses the row too (smoke_classes.py). */
+  const row = { first_name: 'Ana', last_name: 'Cruz', student_number: '24231525', birthdate: '2008-03-14' }
+
+  it('the Add-one form says under Birthdate what it is needed for', () => {
+    state.classes = [HS]
+    const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
+    expect(html).toContain('Needed before the student can set up guardian access.')
+  })
+  it('a file must carry the birthdate column, and the Columns line says so', () => {
+    expect(REQUIRED).toContain('birthdate')
+    const html = render(<BulkCreate classes={[HS]} prefix="ucb" onDone={() => {}} />)
+    expect(html).toMatch(/first_name, last_name, student_number, birthdate/)
+    expect(html).toContain('needed for guardian access')
+  })
+  it('a row without a birthdate is not ready; one with a bad or future date is told why', () => {
+    expect(rowProblem(row, 'ucb')).toBe('')
+    expect(rowProblem({ ...row, birthdate: '' }, 'ucb')).toMatch(/missing birthdate/)
+    expect(rowProblem({ ...row, birthdate: undefined }, 'ucb')).toMatch(/missing birthdate/)
+    expect(rowProblem({ ...row, birthdate: '14/03/2008' }, 'ucb')).toMatch(/YYYY-MM-DD/)
+    expect(rowProblem({ ...row, birthdate: '2999-01-01' }, 'ucb')).toMatch(/future/)
+  })
+  it('an account made before the rule shows a "no birthdate" pill that points at its class', () => {
+    const user = { id: 's1', first_name: 'Ana', last_name: 'Cruz', login_id: 'ucb-231525', status: 'active' }
+    const without = render(<table><tbody><AccountRow user={user} classes={[HS]} onChanged={() => {}} /></tbody></table>)
+    expect(without).toContain('no birthdate')
+    expect(without).toContain('/teacher/classes/c-hs')
+    const withOne = render(<table><tbody><AccountRow user={{ ...user, birthdate: '2008-03-14' }} classes={[HS]} onChanged={() => {}} /></tbody></table>)
+    expect(withOne).not.toContain('no birthdate')
   })
 })
 

@@ -26,13 +26,17 @@ import { fetchUsersByIds, parseCsv } from '@/lib/roster'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
-import { tempPasswordError, MIN_PASSWORD, nameError, lrnError, idNumberError, emailError } from '@/lib/validation'
+import { tempPasswordError, MIN_PASSWORD, nameError, lrnError, idNumberError, emailError, birthdateError, BIRTHDATE_HINT } from '@/lib/validation'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { navy, navyDeep, ink, muted, faint, green, red, goldDeep, line, serif, mono, sansFamily as sans } from '@/theme'
 
-const REQUIRED = ['first_name', 'last_name', 'student_number']
-const OPTIONAL = ['lrn', 'email', 'birthdate', 'grade_level', 'section', 'middle_name', 'course', 'year_level']
+/* birthdate moved from OPTIONAL to REQUIRED on 2026-09-11 (T-50): the
+   guardian-access gate on the student's profile reads it and the student
+   cannot enter it themselves, so the provision endpoint now refuses a row
+   without one -- a file missing the column is refused before any row is. */
+export const REQUIRED = ['first_name', 'last_name', 'student_number', 'birthdate']
+const OPTIONAL = ['lrn', 'email', 'grade_level', 'section', 'middle_name', 'course', 'year_level']
 /* The template a solo teacher downloads: the columns the provision endpoint
    reads, in the order a person fills them. Headers only -- a sample row
    uploaded unedited would create that person (see admin/BulkUpload.jsx). */
@@ -61,11 +65,15 @@ function Pill({ fg, bg, children }) {
   )
 }
 
-function rowProblem(row, prefix) {
+export function rowProblem(row, prefix) {
   if (!row.first_name || !row.last_name) return 'missing name'
   if (!row.student_number) return 'missing student_number'
   if (row.lrn && !/^\d{12}$/.test(row.lrn)) return 'LRN must be 12 digits'
-  if (row.birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(row.birthdate)) return 'birthdate must be YYYY-MM-DD'
+  // Required: the endpoint refuses the row without it (T-50), so it fails
+  // here in the preview rather than in the upload's result list.
+  if (!row.birthdate) return 'missing birthdate — needed for guardian access'
+  const birthdateProblem = birthdateError(row.birthdate)
+  if (birthdateProblem) return birthdateProblem
   if (prefix && !issuedLoginId(prefix, row.lrn || row.student_number)) {
     return row.email ? '' : 'needs an LRN or student number with 6+ digits, or an email'
   }
@@ -177,8 +185,8 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
       (!prefix && !form.personalEmail.trim()
         ? 'No school abbreviation is on your account, so this student needs an email to sign in with.'
         : '') ||
-      // Parental-access linking age-gates on the birthdate.
-      (!form.birthdate ? 'Birthdate is required — parental access checks depend on it.' : '')
+      // Parental-access linking age-gates on the birthdate (lib/validation).
+      birthdateError(form.birthdate)
     if (problem) return setError(problem)
     setError('')
 
@@ -259,7 +267,11 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
         {isG12 && (
           <label style={labelStyle}>LRN<input style={fieldStyle} value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" inputMode="numeric" /></label>
         )}
-        <label style={labelStyle}>Birthdate<input style={fieldStyle} type="date" value={form.birthdate} onChange={set('birthdate')} /></label>
+        <label style={labelStyle}>
+          Birthdate
+          <input style={fieldStyle} type="date" value={form.birthdate} onChange={set('birthdate')} />
+          <span style={{ fontSize: 12, fontWeight: 400, color: faint }}>{BIRTHDATE_HINT}</span>
+        </label>
         <label style={labelStyle}>
           Personal email <span style={{ color: faint, fontWeight: 400 }}>({prefix ? 'optional — their password recovery' : 'becomes their login'})</span>
           <input style={fieldStyle} type="email" value={form.personalEmail} onChange={set('personalEmail')} />
@@ -428,8 +440,8 @@ export function BulkCreate({ classes, prefix, onDone }) {
         </button>
       </div>
       <p style={{ fontSize: 12, color: faint, margin: '10px 0 0', maxWidth: 760 }}>
-        Columns: <span style={mono}>first_name, last_name, student_number</span> — optional{' '}
-        <span style={mono}>lrn, email, birthdate, grade_level, section</span>.{' '}
+        Columns: <span style={mono}>first_name, last_name, student_number, birthdate</span> (as YYYY-MM-DD — needed for guardian access) — optional{' '}
+        <span style={mono}>lrn, email, grade_level, section</span>.{' '}
         {prefix
           ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); everyone starts on <span style={mono}>{DEFAULT_PASSWORD}</span> and is asked to change it.</>
           : <>No school abbreviation is on your account, so each row needs an <span style={mono}>email</span>, which becomes the login.</>}
@@ -608,6 +620,20 @@ export function AccountRow({ user, classes, onChanged }) {
         <Pill fg={active ? green : red} bg={active ? 'rgba(31,138,91,0.10)' : 'rgba(192,57,43,0.08)'}>{active ? 'active' : 'sign-in off'}</Pill>
         {user.is_temp_password && (
           <div style={{ marginTop: 5 }}><Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">starting password</Pill></div>
+        )}
+        {/* T-50: made before birthdate was required, so guardian access is
+            locked for them until it is added. The field lives on the class
+            roster's Edit, so the pill goes to the first class they are in. */}
+        {!user.birthdate && (
+          <div style={{ marginTop: 5 }}>
+            {enrolledIn[0] ? (
+              <Link to={`/teacher/classes/${enrolledIn[0].id}`} title="Needed before the student can set up guardian access. Add it from the class roster's Edit." style={{ textDecoration: 'none' }}>
+                <Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">no birthdate</Pill>
+              </Link>
+            ) : (
+              <Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">no birthdate</Pill>
+            )}
+          </div>
         )}
       </td>
       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
