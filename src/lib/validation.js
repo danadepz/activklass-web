@@ -266,6 +266,42 @@ export function emailError(value) {
   return ''
 }
 
+/**
+ * A student's birthdate: the field the guardian-access age gate reads.
+ *
+ * Required on every path that creates a student (T-50, owner's call
+ * 2026-09-11): student/profile.jsx derives "of legal age" from it and a
+ * student cannot enter it themselves, so an account made without one is
+ * locked out of guardian access until a teacher edits the record. The same
+ * sentence is shown under the field on every creation form (BIRTHDATE_HINT)
+ * so the requirement is explained before it bites. The provision endpoint
+ * (app/services/roster_utils.py) and the admin one (api/admin.py) refuse the
+ * row too -- the client rule alone would be shaping, not enforcement.
+ *
+ * `required: false` is for an edit screen showing an older record that
+ * predates the rule: the value is still checked when there is one.
+ */
+export const BIRTHDATE_HINT = 'Needed before the student can set up guardian access.'
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * @param {string} value as the date input gives it, YYYY-MM-DD
+ * @param {object} [opts]
+ * @param {boolean} [opts.required=true]
+ */
+export function birthdateError(value, { required = true } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return required ? 'Birthdate is required — the student cannot set up guardian access without it.' : ''
+  // Round-trip, not just parse: the engine rolls "2010-02-30" over to March.
+  const parsed = new Date(`${text}T00:00:00Z`)
+  if (!ISO_DATE_RE.test(text) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) {
+    return 'Enter the birthdate as YYYY-MM-DD.'
+  }
+  if (text > new Date().toISOString().slice(0, 10)) return 'Birthdate cannot be in the future.'
+  return ''
+}
+
 /* A Philippine mobile or landline number, as people actually type it:
    09171234567, +63 917 123 4567, (032) 255-1234. Digits, spaces, dashes,
    parentheses and a leading + are accepted; what is left after stripping

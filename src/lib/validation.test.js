@@ -6,7 +6,34 @@ import {
   idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
   prcLicenseError, verificationIdError,
   passingPercentError,
+  birthdateError, BIRTHDATE_HINT,
 } from './validation'
+
+describe('birthdateError', () => {
+  /* T-50: every student-creation form and both endpoints require it, because
+     the guardian-access gate on the student's profile reads it and the
+     student cannot set it themselves. */
+  it('required by default, and the message says what it is for', () => {
+    expect(birthdateError('')).toMatch(/guardian access/)
+    expect(birthdateError(undefined)).toMatch(/required/)
+  })
+  it('optional on request, for an edit of an older record', () => {
+    expect(birthdateError('', { required: false })).toBe('')
+    expect(birthdateError('nope', { required: false })).not.toBe('')
+  })
+  it('accepts a real ISO date and refuses a malformed or impossible one', () => {
+    expect(birthdateError('2010-06-15')).toBe('')
+    expect(birthdateError('15/06/2010')).not.toBe('')
+    expect(birthdateError('2010-02-30')).not.toBe('')
+  })
+  it('refuses a date in the future', () => {
+    const next = new Date(); next.setFullYear(next.getFullYear() + 1)
+    expect(birthdateError(next.toISOString().slice(0, 10))).toMatch(/future/)
+  })
+  it('the hint is one sentence that names guardian access', () => {
+    expect(BIRTHDATE_HINT).toMatch(/guardian access/)
+  })
+})
 
 describe('nameError', () => {
   it('accepts ordinary and Filipino names', () => {

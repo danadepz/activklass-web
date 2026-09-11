@@ -83,7 +83,7 @@ src/lib/gradebook.js     src/lib/quizToRecord.js  src/lib/questionBank.js
 src/lib/remediationRecovery.js
 src/lib/quizPool.js      src/lib/quizFeedback.js
 src/lib/quizAttempts.js  src/lib/schoolDirectory.js
-src/lib/schedule.js
+src/lib/schedule.js       src/lib/validation.js
 ```
 
 **`quizPool.js`, `quizFeedback.js` and `quizAttempts.js` exist twice.** Each has a TypeScript port
@@ -118,6 +118,12 @@ now also holds `parseSchedule` (moved out of `ClassFormModal`) and
 `scheduleOverlap`, the pure check behind the "meets at the same time as"
 warning. A schedule is a domain rule, not a page, so it lands here rather than
 in Class setup, which only calls it.
+
+**`lib/validation.js`, added 2026-09-11 (T-50 build pane).** It was in no lane, though
+`CLAUDE.md` has called it the one home for every form's rules since 2026-08-25 and four
+panes have edited it since. A rule module every form imports is a concern, not a page, so
+it lands here beside `classForm.js`. A new rule is lane-local; changing what an existing
+rule accepts edits every form that imports it, so announce that the way Shared is announced.
 
 ---
 
