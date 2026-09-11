@@ -69,6 +69,16 @@ const POSITIONS = [
 // wrong card on step 1 (T-31, T-32) — the Position field says so, gently.
 const LEADERSHIP_POSITIONS = new Set(['program_chair', 'dean', 'admin'])
 
+// Which positions a path offers. A school admin is only ever made by the
+// ActivKlass team when a school request is approved — a self-registered
+// account is always a teacher, and the rules refuse 'admin' — so on the
+// individual path "Admin" would record a position nothing reads and
+// contradict what the account is (T-52). The institution path keeps all
+// four: that is where the nudge above needs them. Exported for the test.
+export function positionsFor(kind) {
+  return kind === 'institution' ? POSITIONS : POSITIONS.filter((p) => p.value !== 'admin')
+}
+
 // A school picks how many seats it needs on two sliders, and the
 // subscription follows from those numbers — there are no named plans. The
 // floors are the smallest school we sell to; the student floor is also the
@@ -131,6 +141,12 @@ export default function Register() {
   // subscription is arranged with the ActivKlass team, so that path ends in
   // a request for the team rather than an account.
   const [kind, setKind] = useState(completing ? 'individual' : preset)
+  // Switching cards drops a position the new path does not offer, so Back
+  // to the chooser and over to Individual cannot carry "Admin" through.
+  function chooseKind(next) {
+    setKind(next)
+    setForm((f) => (positionsFor(next).some((p) => p.value === f.position) ? f : { ...f, position: '' }))
+  }
   // 1 = chooser, 2…N = the steps in STEPS[kind], 'sent' = request confirmed.
   const [step, setStep] = useState(completing || preset ? 2 : 1)
 
@@ -452,7 +468,7 @@ export default function Register() {
           <div className="flex flex-col gap-3" role="group" aria-label="Subscription type">
             <ChoiceCard
               selected={kind === 'individual'}
-              onClick={() => setKind('individual')}
+              onClick={() => chooseKind('individual')}
               icon={BookOpen}
               tint={blue}
               tintText={blueText}
@@ -461,7 +477,7 @@ export default function Register() {
             />
             <ChoiceCard
               selected={kind === 'institution'}
-              onClick={() => setKind('institution')}
+              onClick={() => chooseKind('institution')}
               icon={Users}
               tint={gold}
               tintText={goldDeep}
@@ -579,7 +595,7 @@ export default function Register() {
                 <Field id="reg-position" label="Position">
                   <select id="reg-position" className="ak-input" required value={form.position} onChange={set('position')} style={selectStyle(form.position)}>
                     <option value="" disabled>Select</option>
-                    {POSITIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    {positionsFor(kind).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                   <WrongPathNudge kind={kind} position={form.position} />
                 </Field>

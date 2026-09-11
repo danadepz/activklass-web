@@ -59,7 +59,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
   fetchSchoolDirectory: vi.fn(),
 }))
 
-import Register, { WrongPathNudge, signedInAsSomeoneElse } from './register.jsx'
+import Register, { WrongPathNudge, positionsFor, signedInAsSomeoneElse } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -204,5 +204,31 @@ describe('/register step 2 — about you', () => {
      cannot do; what it can pin is that the box is not shown before then. */
   it('keeps the custom gender box hidden until Custom is chosen', () => {
     expect(step2()).not.toContain('reg-gender-custom')
+  })
+})
+
+/* T-52 (maykel_64440-66): "Admin" was offered as a Position on the individual
+   path, where a self-registered account can only ever be a teacher. The list
+   is now per path; the institution path keeps all four because the Faculty
+   nudge above is decided against them. */
+describe('the Position list, per path', () => {
+  const labels = (kind) => positionsFor(kind).map((p) => p.label)
+
+  it('offers Faculty, Program chair / head and Dean on the individual path — no Admin', () => {
+    expect(labels('individual')).toEqual(['Faculty', 'Program chair / head', 'Dean'])
+  })
+
+  it('keeps all four on the institution path', () => {
+    expect(labels('institution')).toEqual(['Faculty', 'Program chair / head', 'Dean', 'Admin'])
+  })
+
+  /* The chooser is the first state, before a kind exists; whatever renders
+     there must not offer Admin either. */
+  it('treats no path yet like the individual one', () => {
+    expect(labels(null)).not.toContain('Admin')
+  })
+
+  it('leaves the stored values alone', () => {
+    expect(positionsFor('institution').map((p) => p.value)).toEqual(['faculty', 'program_chair', 'dean', 'admin'])
   })
 })
