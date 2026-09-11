@@ -10,6 +10,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const state = vi.hoisted(() => ({
   profile: { id: 'T1', role: 'teacher', teaching_school_id: 'ucb', first_name: 'Maria' },
@@ -149,6 +151,23 @@ describe('Reset password copy', () => {
     expect(msg).toContain('Password set for slcsflu-231525')
     expect(msg).toContain('nothing is emailed')
     expect(msg).toMatch(/pick their own the next time they sign in/)
+  })
+})
+
+/* Verification pass 15 (T-46): the two sentences above are what the dialog and
+   the toast actually show only while the screen reaches for resetCopy. An old
+   string inlined back into promptDialog would pass the two tests above and
+   put "should change" in front of a teacher again. */
+describe('Reset password copy is what the screen shows (T-46)', () => {
+  const src = readFileSync(fileURLToPath(new URL('./StudentAccounts.jsx', import.meta.url)), 'utf8')
+
+  it('the dialog message and the success toast both come from resetCopy', () => {
+    expect(src).toMatch(/message:\s*resetCopy\.prompt\(/)
+    expect(src).toMatch(/toast\.success\(resetCopy\.done\(/)
+  })
+
+  it('the old optional-sounding sentence is nowhere in the screen', () => {
+    expect(src).not.toMatch(/should change it after signing in/)
   })
 })
 
