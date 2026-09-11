@@ -1,4 +1,5 @@
-// SessionStart hook: is anything on the ticket board marked `fixed` but not yet
+// SessionStart hook: is anything on the ticket board awaiting verification (or on the
+// older `fixed` spelling) but not yet
 // `verified`? If so, say so at the top of the session, so the verification pane
 // never has to be told a fixed ticket arrived.
 //
@@ -34,7 +35,9 @@ for (const line of text.split(/\r?\n/)) {
   const cells = line.split('|').map((c) => c.trim())
   const [, id, title, , , , , state, , commit] = cells
   const s = (state ?? '').toLowerCase()
-  if (s.includes('fixed') && !s.includes('verified')) {
+  // `awaiting verification` is what a pane's commit writes since 2026-09-11;
+  // `fixed` is the older spelling of the same claim, still on rows from before.
+  if ((s.includes('awaiting verification') || s.includes('fixed')) && !s.includes('verified')) {
     outstanding.push({ id, title, state, commit: commit || '(no commit cited)' })
   }
 }
@@ -47,7 +50,7 @@ const rows = outstanding
 const ids = outstanding.map((r) => r.id).join(', ')
 
 const context = [
-  `Ticket board: ${outstanding.length} issue(s) marked fixed and NOT yet verified.`,
+  `Ticket board: ${outstanding.length} issue(s) awaiting verification.`,
   rows,
   '',
   'If this session is the verification pane (the /verify + /loop double-checker):',
@@ -61,7 +64,7 @@ const context = [
 
 process.stdout.write(
   JSON.stringify({
-    systemMessage: `Ticket board: ${outstanding.length} fixed, unverified — ${ids}`,
+    systemMessage: `Ticket board: ${outstanding.length} awaiting verification — ${ids}`,
     hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context },
   }),
 )
