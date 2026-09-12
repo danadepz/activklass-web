@@ -7,7 +7,9 @@ import {
   prcLicenseError, verificationIdError,
   passingPercentError,
   birthdateError, BIRTHDATE_HINT,
+  taskTitleError, taskKindError, taskWindowError, taskAttachmentError, taskAttachmentsError, TASK_TITLE_MAX,
 } from './validation'
+import { TASK_KINDS } from './deliverables'
 
 describe('birthdateError', () => {
   /* T-50: every student-creation form and both endpoints require it, because
@@ -317,5 +319,71 @@ describe('passingPercentError', () => {
     for (const bad of ['0', '100', '-5', '75.5', 'abc', '1e2']) {
       expect(passingPercentError(bad)).toBe('The passing score must be a whole number from 1 to 99.')
     }
+  })
+})
+
+describe('class tasks', () => {
+  it('taskTitleError: required, at most 120 characters', () => {
+    expect(taskTitleError('')).toBe('A title is required.')
+    expect(taskTitleError('   ')).not.toBe('')
+    expect(taskTitleError('Activity 2 - Pendulum Measurement Lab')).toBe('')
+    expect(taskTitleError('x'.repeat(TASK_TITLE_MAX))).toBe('')
+    expect(taskTitleError('x'.repeat(TASK_TITLE_MAX + 1))).toMatch(/120/)
+  })
+
+  it('taskKindError: the four kinds the rules expect, and the same four deliverables.js offers', () => {
+    for (const k of ['activity', 'assignment', 'exam', 'other']) expect(taskKindError(k)).toBe('')
+    expect(TASK_KINDS).toEqual(['activity', 'assignment', 'exam', 'other'])
+    expect(taskKindError('quiz')).not.toBe('')
+    expect(taskKindError('')).not.toBe('')
+    expect(taskKindError(undefined)).not.toBe('')
+  })
+
+  it('taskWindowError: both ends optional; a deadline before the opening is refused', () => {
+    expect(taskWindowError('', '')).toBe('')
+    expect(taskWindowError(null, undefined)).toBe('')
+    expect(taskWindowError('2026-09-15T08:00', '')).toBe('')
+    expect(taskWindowError('', '2026-09-19T23:59')).toBe('')
+    expect(taskWindowError('2026-09-15T08:00', '2026-09-19T23:59')).toBe('')
+    expect(taskWindowError('2026-09-15T08:00', '2026-09-15T08:00')).toBe('')
+    expect(taskWindowError('2026-09-19T23:59', '2026-09-15T08:00')).toBe('The deadline cannot be before the opening time.')
+  })
+
+  it('taskWindowError: a malformed date names which field', () => {
+    expect(taskWindowError('soon', '')).toMatch(/opening/)
+    expect(taskWindowError('', '19/09/2026')).toMatch(/deadline/)
+    expect(taskWindowError('2026-09-15T08:00:00', '2026-09-16T08:00:00')).toBe('')
+  })
+
+  it('taskAttachmentError: a link needs a web address, a file needs a Storage URL', () => {
+    expect(taskAttachmentError({ title: 'T', resource_type: 'link', url: 'https://drive.google.com/x' })).toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'link', url: 'http://phet.colorado.edu/x' })).toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'link', url: 'javascript:alert(1)' })).not.toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'link', url: '' })).toBe('Paste the link.')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'link', url: 'drive' })).not.toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'file', url: 'https://firebasestorage.googleapis.com/v0/b/activklass1.firebasestorage.app/o/task_files%2Fc%2Fk%2Fx.pdf?alt=media&token=abc' })).toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'file', url: 'https://activklass1.firebasestorage.app/o/x.pdf' })).toBe('')
+    expect(taskAttachmentError({ title: 'T', resource_type: 'file', url: 'https://drive.google.com/x' })).toMatch(/upload/)
+    expect(taskAttachmentError({ title: 'T', resource_type: 'file', url: '' })).toMatch(/uploading/)
+    expect(taskAttachmentError({ title: 'T', resource_type: 'rich_text', url: 'https://x.ph' })).not.toBe('')
+    expect(taskAttachmentError(null)).not.toBe('')
+    expect(taskAttachmentsError([])).toBe('')
+    expect(taskAttachmentsError(undefined)).toBe('')
+    expect(taskAttachmentsError('nope')).not.toBe('')
+    expect(taskAttachmentsError([
+      { resource_type: 'link', url: 'https://x.ph' },
+      { resource_type: 'link', url: 'nope' },
+    ])).not.toBe('')
+  })
+
+  it('no message names a vendor', () => {
+    const all = [
+      taskTitleError(''), taskKindError(''), taskWindowError('x', ''), taskWindowError('', 'x'),
+      taskWindowError('2026-09-19T23:59', '2026-09-15T08:00'),
+      taskAttachmentError({ resource_type: 'file', url: 'https://drive.google.com/x' }),
+      taskAttachmentError({ resource_type: 'file', url: '' }),
+      taskAttachmentError({ resource_type: 'link', url: 'nope' }),
+    ]
+    for (const s of all) expect(s).not.toMatch(/firebase|storage|firestore/i)
   })
 })

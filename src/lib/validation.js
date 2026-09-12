@@ -339,3 +339,105 @@ export function linkError(value, { label = 'Link' } = {}) {
   }
   return ''
 }
+
+/* ------------------------------------------------------------ class tasks
+
+   Activities, assignments and paper exams a teacher publishes under a
+   syllabus sub-module for one class (class_tasks, docs/DATA-MODEL.md). The
+   dialog on the teacher's Modules tab is the only form that collects these;
+   the rules here are the client's half of the shape the rule block expects. */
+
+export const TASK_TITLE_MAX = 120
+
+/* Mirrors TASK_KINDS in lib/deliverables.js -- restated here rather than
+   imported so this file stays free of imports, as every form that pulls it
+   in relies on. validation.test.js holds the two lists equal. */
+const TASK_KIND_VALUES = ['activity', 'assignment', 'exam', 'other']
+
+/** A task's title: required, at most TASK_TITLE_MAX characters. */
+export function taskTitleError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'A title is required.'
+  if (text.length > TASK_TITLE_MAX) return `The title is too long (${TASK_TITLE_MAX} characters at most).`
+  return ''
+}
+
+/** A task's kind: one of activity, assignment, exam, other. */
+export function taskKindError(value) {
+  return TASK_KIND_VALUES.includes(value) ? '' : 'Pick what kind of task this is.'
+}
+
+/* The zone-less 'YYYY-MM-DDTHH:mm' a datetime-local input gives -- the same
+   format the quiz builder stores for opens_at / closes_at (plan D3). Seconds
+   are tolerated because some browsers append them. */
+const WINDOW_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
+
+/**
+ * A task's window. Both ends are optional -- an undated task is a fine
+ * thing to publish -- but a deadline before the opening time is a mistake
+ * the student would otherwise discover as "overdue before it opened".
+ * @param {string} opensAt
+ * @param {string} dueAt
+ */
+export function taskWindowError(opensAt, dueAt) {
+  const opens = String(opensAt ?? '').trim()
+  const due = String(dueAt ?? '').trim()
+  if (opens && (!WINDOW_RE.test(opens) || Number.isNaN(new Date(opens).getTime()))) {
+    return 'Enter the opening date and time.'
+  }
+  if (due && (!WINDOW_RE.test(due) || Number.isNaN(new Date(due).getTime()))) {
+    return 'Enter the deadline date and time.'
+  }
+  if (opens && due && new Date(due).getTime() < new Date(opens).getTime()) {
+    return 'The deadline cannot be before the opening time.'
+  }
+  return ''
+}
+
+/* The hosts a Storage download URL comes from: the classic
+   firebasestorage.googleapis.com and the newer *.firebasestorage.app bucket
+   domains. A file attachment must point at one of these, because the app
+   wrote it there. */
+const STORAGE_HOST_RE = /^([a-z0-9-]+\.)*(firebasestorage\.googleapis\.com|firebasestorage\.app|storage\.googleapis\.com)$/i
+
+/* The same test isSafeLink in lib/attachments.js applies: an http(s) URL,
+   nothing else, because these links are rendered as anchors. Restated so
+   this file keeps no imports. */
+function isHttpUrl(text) {
+  try {
+    const u = new URL(text)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * One attachment on a task: `{ title, resource_type: 'file' | 'link', url }`,
+ * the same shape as a syllabus material. A link needs a web address the
+ * anchor can open; a file needs the download URL the upload returned.
+ */
+export function taskAttachmentError(attachment) {
+  const type = attachment?.resource_type
+  const url = String(attachment?.url ?? '').trim()
+  if (type !== 'file' && type !== 'link') return 'An attachment is either an uploaded file or a link.'
+  if (!url) return type === 'file' ? 'The file did not finish uploading. Try again.' : 'Paste the link.'
+  if (!isHttpUrl(url)) return 'A link must be a full web address starting with https://.'
+  if (type === 'file') {
+    let host = ''
+    try { host = new URL(url).hostname } catch { /* refused below */ }
+    if (!STORAGE_HOST_RE.test(host)) return 'A file attachment must come from an upload. To use a link, add it as a link instead.'
+  }
+  return ''
+}
+
+/** Every attachment on a task; the first problem found, or ''. */
+export function taskAttachmentsError(attachments) {
+  if (attachments == null) return ''
+  if (!Array.isArray(attachments)) return 'Attachments must be a list.'
+  for (const a of attachments) {
+    const err = taskAttachmentError(a)
+    if (err) return err
+  }
+  return ''
+}
