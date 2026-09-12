@@ -217,6 +217,27 @@ Still open at this altitude:
   (open a review guide → Read more in Modules → the highlighted sub-module → Review guide
   chip) as Hana Lorenzo, who holds the seeded Atomic Structure guide — needs a student
   sign-in in the browser.
+- `[x]` **Generating a syllabus asks for what the model actually needs** (2026-09-12).
+  The curriculum was decided by a regex on the subject code's shape and never shown:
+  `MATH10` aligned to DepEd, `Math 10` with a space fell to "general" and lost every MELC
+  code, and the dialog said "aligns to DepEd MELCs" either way. Nothing asked which quarter
+  a K-12 syllabus was for, so a 10-week request compressed Quarters 1–3 into it; nothing
+  carried an SHS strand or a college program. Now the Generate dialog has a **Curriculum**
+  select (DepEd K-12 / CHED GE / CHED Professional / No official standard, each with a
+  one-line hint — the last one amber, "codes are left blank"), defaulted from a **For
+  class** picker that also fills code, name and level, or from a typed "Grade N" / "Nth
+  Year"; a **Coverage** quarter for K-12 (college is already a semester, so none there);
+  **Strand** on Grades 11–12; **Program** on college. All four go to
+  `POST /api/syllabus/generate` as real fields **(cross-repo, backend `cb75168`)**, where an
+  explicit curriculum wins and an absent one still falls back to the guess. *Verified:*
+  backend `tests/test_syllabus_prompt.py` (18), `npm run test` 899/899, `npm run build`
+  clean; browser, as the seeded teacher: picking Newton filled SCI9 / Science 9 / Grade 9 /
+  DepEd with Coverage shown, picking BSIT-C filled CHED Professional with Program shown and
+  Coverage hidden; then `Math 10` (with the space), Grade 10, Quarter 2 returned 11 topics
+  with every code in Quarter II (`M10AL-IIa-1` … `M10GE-IIi-j-1`) and the model titled
+  the draft "Quarter 2: Polynomial Functions, Circles, and Coordinate Geometry". The draft
+  was not saved. **Not covered:** a live SHS or college generation with strand/program set
+  — the prompt lines are proven by the test, not by a model run.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 

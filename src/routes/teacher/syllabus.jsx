@@ -7,6 +7,8 @@ import { useAuth } from '@/context/useAuth'
 import { Plus, Trash, Edit, Sparkles } from '@/components/icons'
 import { ink, heading } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { classEducationLevel } from '@/lib/classForm'
+import { yearLevelError } from '@/lib/validation'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
 import { uploadAttachment, isSafeLink } from '@/lib/attachments'
@@ -357,32 +359,107 @@ function move(list, index, delta) {
   return next
 }
 
-function GenerateModal({ onClose, onDraft }) {
+/**
+ * The standard a generated syllabus is aligned to. This used to be guessed on
+ * the server from the shape of the subject code alone -- "MATH10" was DepEd,
+ * "Math 10" with a space was "general", every code blank, and nothing told the
+ * teacher which had happened. Now it is a visible choice, defaulted from the
+ * class or the level she typed, sent as-is. The values are the backend's.
+ */
+const CURRICULA = [
+  { value: 'deped_k12', label: 'DepEd K-12 (MELCs)', hint: 'Topics follow the DepEd MELCs and each gets a competency code.' },
+  { value: 'ched_ge', label: 'CHED General Education', hint: 'Topics follow the CHED General Education outcomes.' },
+  { value: 'ched_professional', label: 'CHED Professional / Program', hint: 'Topics follow the CHED program standards for this course.' },
+  { value: 'general', label: 'No official standard', hint: 'No curriculum alignment — competency codes are left blank.' },
+]
+const QUARTERS = [
+  { value: '', label: 'Whole school year' },
+  { value: '1', label: 'Quarter 1' },
+  { value: '2', label: 'Quarter 2' },
+  { value: '3', label: 'Quarter 3' },
+  { value: '4', label: 'Quarter 4' },
+]
+
+/** "Grade 11" / "G12" → 11 / 12; anything else → null. */
+function gradeNumber(gradeLevel) {
+  const m = /(?:grade|g)\s*(\d{1,2})\b/i.exec(gradeLevel ?? '')
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * The best default for the curriculum select. A class says what it is; a typed
+ * level says "Grade N" or "Nth Year"; a code starting with GE is CHED GE. Only a
+ * default -- the select is the decision, and it stays visible.
+ */
+function suggestCurriculum({ clazz, gradeLevel, subjectCode }) {
+  const isGE = /^GE[-_\s]/i.test(subjectCode ?? '')
+  if (clazz) {
+    if (classEducationLevel(clazz) === 'College') return isGE ? 'ched_ge' : 'ched_professional'
+    return 'deped_k12'
+  }
+  if (gradeNumber(gradeLevel) != null) return 'deped_k12'
+  if (gradeLevel && !yearLevelError(gradeLevel, { level: 'college' })) return isGE ? 'ched_ge' : 'ched_professional'
+  return isGE ? 'ched_ge' : ''
+}
+
+function GenerateModal({ classes = [], onClose, onDraft }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a syllabus with AI', closeOnBackdrop: false })
+  const [classId, setClassId] = useState('')
   const [subjectCode, setSubjectCode] = useState('')
   const [subjectDesc, setSubjectDesc] = useState('')
   const [gradeLevel, setGradeLevel] = useState('')
+  const [curriculum, setCurriculum] = useState('')
+  const [quarter, setQuarter] = useState('')
+  const [strand, setStrand] = useState('')
+  const [program, setProgram] = useState('')
   const [durationWeeks, setDurationWeeks] = useState(10)
   const [notes, setNotes] = useState('')
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
 
+  const clazz = classes.find((c) => c.id === classId) ?? null
+  const isCollege = clazz ? classEducationLevel(clazz) === 'College' : curriculum.startsWith('ched')
+  const grade = gradeNumber(gradeLevel)
+  const isSeniorHigh = !isCollege && (grade === 11 || grade === 12)
+  const curriculumHint = CURRICULA.find((c) => c.value === curriculum)?.hint
+
   const inputCls =
     'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white w-full'
 
+  /* A class already knows its code, name and level -- the teacher was retyping
+     all three. Picking one fills them and the curriculum; every field stays
+     editable after, and "none" leaves whatever is typed alone. */
+  function pickClass(id) {
+    setClassId(id)
+    const c = classes.find((x) => x.id === id)
+    if (!c) return
+    setSubjectCode(c.subject_code ?? '')
+    setSubjectDesc(c.subject ?? '')
+    setGradeLevel(c.grade_level ?? '')
+    setCurriculum(suggestCurriculum({ clazz: c, gradeLevel: c.grade_level, subjectCode: c.subject_code }))
+    if (classEducationLevel(c) === 'College') setQuarter('')
+  }
+
+  function typeGradeLevel(value) {
+    setGradeLevel(value)
+    // Re-suggest only when the level now clearly says what it is; a manual
+    // pick survives a half-typed "Gra".
+    const s = suggestCurriculum({ clazz: null, gradeLevel: value, subjectCode })
+    if (s) setCurriculum(s)
+  }
+
   /**
-   * Report a failure where the teacher is looking, not only where the markup
-   * puts it.
+   * Both the banner and the toast, on purpose.
    *
    * This panel is `max-h-[90vh] overflow-y-auto` and the banner renders above
-   * five fields and a notes textarea, with "✨ Generate" below all of them. The
+   * the fields and a notes textarea, with "✨ Generate" below all of them. The
    * banner alone is therefore only reliable while the panel fits the viewport
    * -- and the fields are `grid-cols-1 sm:grid-cols-2`, so below 640px they
-   * stack into four rows and the panel is at its tallest exactly when the
-   * viewport is at its shortest. On a narrow or short screen the teacher
-   * scrolls down to press Generate, the button drops back to its idle label,
-   * and the reason is off-screen above: the failure reads as nothing having
-   * happened. Same shape as the quiz-builder publish bug (BACKLOG 25).
+   * stack and the panel is at its tallest exactly when the viewport is at its
+   * shortest. On a narrow or short screen the teacher scrolls down to press
+   * Generate, the button drops back to its idle label, and the reason is
+   * off-screen above: the failure reads as nothing having happened. Same shape
+   * as the quiz-builder publish bug (BACKLOG 25).
    *
    * The toast is what makes it viewport-independent; the banner stays for the
    * detail and for anyone who never scrolled.
@@ -397,6 +474,10 @@ function GenerateModal({ onClose, onDraft }) {
       fail('Please provide a subject code or description')
       return
     }
+    if (!curriculum) {
+      fail('Choose which curriculum to align to')
+      return
+    }
     setGenerating(true)
     setError(null)
     try {
@@ -406,6 +487,10 @@ function GenerateModal({ onClose, onDraft }) {
         gradeLevel,
         durationWeeks,
         notes,
+        curriculum,
+        quarter: !isCollege && quarter ? Number(quarter) : undefined,
+        strand: isSeniorHigh ? strand : undefined,
+        program: isCollege ? program : undefined,
       })
       onDraft(draft)
     } catch (err) {
@@ -419,11 +504,27 @@ function GenerateModal({ onClose, onDraft }) {
       <div {...panelProps} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
-          Specify your subject details below. The AI will dynamically align the topics to DepEd MELCs (for K-12) or CHED CMO (for college) standards.
+          Pick a class or type the subject details. The draft follows the curriculum you choose below — check it before you save.
         </p>
 
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        {classes.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              For class <span className="font-normal text-slate-400">(optional — fills in the details)</span>
+            </label>
+            <select value={classId} onChange={(e) => pickClass(e.target.value)} className={inputCls}>
+              <option value="">— none —</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {[c.subject_code, c.subject, c.section].filter(Boolean).join(' · ')}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -451,9 +552,9 @@ function GenerateModal({ onClose, onDraft }) {
             <label className="block text-sm font-medium text-slate-700">Grade / Year Level</label>
             <input
               type="text"
-              placeholder="e.g. Grade 10"
+              placeholder="e.g. Grade 10 or 2nd Year"
               value={gradeLevel}
-              onChange={(e) => setGradeLevel(e.target.value)}
+              onChange={(e) => typeGradeLevel(e.target.value)}
               className={inputCls}
             />
           </div>
@@ -469,6 +570,60 @@ function GenerateModal({ onClose, onDraft }) {
             />
           </div>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Curriculum</label>
+          <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} className={inputCls}>
+            <option value="">Choose a curriculum…</option>
+            {CURRICULA.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <p className={`mt-1 text-xs ${curriculum === 'general' ? 'text-amber-700' : 'text-slate-500'}`}>
+            {curriculumHint ?? 'Pick a class or type a level and this fills in.'}
+          </p>
+        </div>
+
+        {!isCollege && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Coverage</label>
+              <select value={quarter} onChange={(e) => setQuarter(e.target.value)} className={inputCls}>
+                {QUARTERS.map((q) => (
+                  <option key={q.value} value={q.value}>{q.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">A quarter keeps the draft to that quarter's competencies.</p>
+            </div>
+            {isSeniorHigh && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Strand / Track</label>
+                <input
+                  type="text"
+                  placeholder="e.g. STEM, HUMSS, ABM, TVL-ICT"
+                  value={strand}
+                  onChange={(e) => setStrand(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {isCollege && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              Program <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. BSIT, BSCS, BSEd"
+              value={program}
+              onChange={(e) => setProgram(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-700">Additional Instructions (Notes)</label>
@@ -1006,6 +1161,7 @@ export default function SyllabusIndexPage() {
 
       {showGenerate && (
         <GenerateModal
+          classes={classes ?? []}
           onClose={() => setShowGenerate(false)}
           onDraft={(d) => {
             setShowGenerate(false)

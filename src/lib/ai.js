@@ -567,6 +567,12 @@ function validateModuleDraft(draft, gradeLevel) {
  *
  * Every topic comes back with a `melc_status`, and the draft with
  * `melcWarnings`. Nothing here confirms a code exists -- see MELC_STATUS.
+ *
+ * `curriculum` names the standard outright ('deped_k12' | 'ched_ge' |
+ * 'ched_professional' | 'general'). Without it the backend guesses from the
+ * shape of the subject code, and "Math 10" with a space guessed wrong -- to
+ * "general", every code blank, nobody told. `quarter` (1-4) scopes a DepEd
+ * year; `strand` and `program` are the SHS track and the college degree.
  */
 export async function generateSyllabus({
   subjectCode = '',
@@ -574,6 +580,10 @@ export async function generateSyllabus({
   gradeLevel,
   durationWeeks,
   notes,
+  curriculum,
+  quarter,
+  strand,
+  program,
 }) {
   const { draft } = await withAIErrors('generating the syllabus', () =>
     api('/api/syllabus/generate', {
@@ -584,6 +594,10 @@ export async function generateSyllabus({
         grade_level: gradeLevel?.trim() || undefined,
         duration_weeks: durationWeeks,
         notes: notes?.trim() || undefined,
+        curriculum: curriculum || undefined,
+        quarter: quarter || undefined,
+        strand: strand?.trim() || undefined,
+        program: program?.trim() || undefined,
       },
     }),
   )
