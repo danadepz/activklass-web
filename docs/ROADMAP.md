@@ -152,6 +152,28 @@ Still open at this altitude:
   2026-09-12). The upload runs on the Firebase project,
   which is billed to the AI Gmail's billing account (the Firebase Gmail's own payment
   profile was closed by Google five times).
+- `[~]` **A scaffold points back to the module it came from** (2026-09-12). Each review
+  guide on the student's Scaffolded Learning page now carries a **Where this fits in your
+  modules** card — Module *n* · title › Sub-module *n* · title, in the numbering the class
+  page's Modules tab uses — and a **Read more in Modules** link that opens that tab with the
+  sub-module scrolled into view and highlighted (`?tab=topics&topic=`); the Modules tab in
+  turn marks a scaffolded sub-module with a **Review guide →** chip back to the guide. (A
+  syllabus has modules and sub-modules; there is no separate lecture level — the sub-module
+  is the unit a scaffold and its materials hang off.) Two things had to be true first, and
+  were not: the teacher's Scaffold Topics page read only the seed's
+  `classes/{id}/syllabus/current` and the student's pages only `syllabi/{syllabus_id}`, so on
+  any class whose syllabus came from the syllabus page (BSIT-C) the teacher was told to
+  "build a syllabus first", and on any seeded class (SCI9 Newton) the student's card could
+  never find its module. Both readers now resolve `syllabus_id` first and fall back to the
+  per-class document. A `file` material also opens now that Storage is live, instead of
+  saying downloads are off. *Verified:* `scaffolding.test.js` (8) and `remediation.test.jsx`
+  (4, the card and the class page rendered against a mocked read), `npm run test` 890/890,
+  `npm run build` clean; browser, as the seeded teacher: BSIT-C's Scaffold Topics moved from
+  "build a syllabus first" to "generate quizzes from syllabus topics", and SCI9 Newton's
+  still lists its two tracked topics and published plan. **Owed:** the student click-through
+  (open a review guide → Read more in Modules → the highlighted sub-module → Review guide
+  chip) as Hana Lorenzo, who holds the seeded Atomic Structure guide — needs a student
+  sign-in in the browser.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 

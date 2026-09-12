@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase'
 import { loadSyllabus } from '@/lib/studentData'
 import { useAuth } from '@/context/useAuth'
 import Markdown from '@/components/Markdown'
-import { TrendingUp, ArrowRight, Check, X } from '@/components/icons'
+import { TrendingUp, ArrowRight, BookOpen, Check, X } from '@/components/icons'
 import { navy, ink, goldDeep, muted, faint, green, line, serif, mono } from '@/theme'
 import { attemptsAllowedFor, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import {
@@ -18,6 +18,8 @@ import {
   quizTotalPoints,
   remediationQuizzes,
   resourceState,
+  topicHref,
+  topicLocation,
 } from './scaffolding'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -330,6 +332,65 @@ function ReviewMaterials({ syllabus, topicId, onOpenNote }) {
   )
 }
 
+/* ─────────────────────── Where this fits ─────────────────────── */
+
+/**
+ * The scaffold's place in the teacher's modules, and a way back to it.
+ *
+ * A remediation is one weak topic lifted out of the syllabus. On its own the
+ * card shows the topic's materials, but not what it is part of — a student who
+ * wants to read around the topic had nowhere to go. This names the module and
+ * the sub-module the topic belongs to, in the numbering the Modules tab uses,
+ * and links to that sub-module on the class page.
+ */
+function WhereThisFits({ r, syllabus }) {
+  const loc = topicLocation(syllabus, r.topic_id)
+
+  if (!loc) {
+    return (
+      <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '12px 16px', margin: 0 }}>
+        {!r.topic_id
+          ? 'This review guide is not linked to a module in your class.'
+          : syllabus
+            ? 'The module this topic came from is not in the published modules right now.'
+            : 'The modules for this class have not been published yet.'}
+      </p>
+    )
+  }
+
+  const crumb = { fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block' }
+  const name = { fontSize: 14, fontWeight: 700, color: ink, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3"
+      style={{ background: 'rgba(63,169,245,0.07)', border: '1px solid rgba(63,169,245,0.35)', borderRadius: 12, padding: '13px 15px' }}
+    >
+      <span style={{ width: 36, height: 36, borderRadius: 9, background: '#FFFFFF', border: `1px solid ${line}`, display: 'grid', placeItems: 'center', flexShrink: 0, color: navy }}>
+        <BookOpen className="h-4 w-4" />
+      </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={{ flex: '1 1 260px', minWidth: 0 }}>
+        <div style={{ minWidth: 0, maxWidth: '100%' }}>
+          <span style={crumb}>{loc.moduleLabel}</span>
+          <span style={name} title={loc.moduleTitle}>{loc.moduleTitle}</span>
+        </div>
+        <span aria-hidden="true" style={{ color: faint, fontSize: 16, lineHeight: 1 }}>›</span>
+        <div style={{ minWidth: 0, maxWidth: '100%' }}>
+          <span style={crumb}>{loc.topicLabel}</span>
+          <span style={name} title={loc.topicTitle}>{loc.topicTitle}</span>
+        </div>
+      </div>
+      <Link
+        to={topicHref(r.class_id, r.topic_id)}
+        className="transition hover:brightness-105"
+        style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 10, textDecoration: 'none' }}
+      >
+        Read more in Modules <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  )
+}
+
 /* ─────────────────────────── card ─────────────────────────── */
 
 function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOpenNote }) {
@@ -347,6 +408,13 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOp
       <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '0 0 8px', lineHeight: 1.15 }}>
         {r.topic || r.topic_id || 'Review Guide'}
       </h2>
+
+      {/* Where the topic sits in the teacher's modules, with a way back to it
+          for a student who wants more than the scaffold. */}
+      <section style={{ marginBottom: 20 }}>
+        <SectionLabel>Where this fits in your modules</SectionLabel>
+        <WhereThisFits r={r} syllabus={syllabus} />
+      </section>
 
       {/* What the teacher wrote when they published this — the one field on
           the assignment that is theirs, and the reason the card exists. */}

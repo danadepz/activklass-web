@@ -108,33 +108,81 @@ export function isRemediationQuiz(quiz) {
   return typeof quiz?.title === 'string' && quiz.title.startsWith('Remediation ·')
 }
 
-/** Walk a syllabus for one topic, and hand back its module for context. */
+/**
+ * Walk a syllabus for one topic, and hand back its module for context.
+ *
+ * The positions are 1-based and count only what the student can see: the
+ * syllabus reaching this code has already had unpublished modules filtered
+ * out (`loadSyllabus`), so "Module 2" here is the second module on the
+ * student's Modules tab, not the second one the teacher typed.
+ */
 export function findTopic(syllabus, topicId) {
   if (!syllabus || !topicId) return null
-  for (const m of syllabus.modules ?? []) {
-    for (const t of m.topics ?? []) {
-      if (t.id === topicId) return { topic: t, module: m }
+  const modules = syllabus.modules ?? []
+  for (let mi = 0; mi < modules.length; mi++) {
+    const m = modules[mi]
+    const topics = m.topics ?? []
+    for (let ti = 0; ti < topics.length; ti++) {
+      const t = topics[ti]
+      if (t.id === topicId) return { topic: t, module: m, moduleNo: mi + 1, topicNo: ti + 1 }
     }
   }
   return null
 }
 
 /**
+ * Where a scaffolded topic sits in the teacher's modules, in the words the
+ * Modules tab uses: a module, and a sub-module inside it (the tab calls a
+ * `topic` a sub-module; there is no separate lecture level in a syllabus).
+ *
+ * Returns null when the topic is not in the published modules — the caller
+ * decides what to say, because "not linked" and "no longer published" are
+ * different situations and both already have wording on the card.
+ */
+export function topicLocation(syllabus, topicId) {
+  const found = findTopic(syllabus, topicId)
+  if (!found) return null
+  return {
+    ...found,
+    moduleLabel: `Module ${found.moduleNo}`,
+    moduleTitle: found.module.title || `Module ${found.moduleNo}`,
+    topicLabel: `Sub-module ${found.topicNo}`,
+    topicTitle: found.topic.title || `Sub-module ${found.topicNo}`,
+    resourceCount: (found.topic.resources ?? []).length,
+  }
+}
+
+/** The DOM id the Modules tab gives one sub-module, so a link can land on it. */
+export function topicAnchorId(topicId) {
+  return `topic-${topicId}`
+}
+
+/**
+ * A link that opens the class page on the Modules tab with one sub-module in
+ * view. The class page reads both query parameters (`tab`, `topic`); the
+ * anchor alone would not do, because the tab is not mounted until chosen.
+ */
+export function topicHref(classId, topicId) {
+  const q = new URLSearchParams({ tab: 'topics' })
+  if (topicId) q.set('topic', topicId)
+  return `/student/classes/${classId}?${q.toString()}`
+}
+
+/**
  * Whether a learning resource can actually be opened.
  *
- * Firebase Storage is NOT enabled on this project, so a `file` resource has no
- * object behind it — the upload that would have produced a download URL never
- * succeeded. Any href we render for one is dead. Saying why is more use to a
- * student than a link that fails, and it stops them assuming the material is
- * missing from the course rather than merely unhosted.
+ * A `file` resource carries the download URL the syllabus page got back from
+ * Storage (live since 2026-09-12, on Blaze). One saved before that date, or
+ * whose upload failed, has no URL and no object behind it, so the href would
+ * be dead. Saying why is more use to a student than a link that fails, and it
+ * stops them assuming the material is missing from the course.
  */
 export function resourceState(res) {
   switch (res?.resource_type) {
     case 'file':
-      return {
-        available: false,
-        reason: 'File downloads are switched off for this school, so this one cannot be opened here. Ask your teacher for a copy.',
-      }
+      return res.url
+        ? { available: true }
+        : { available: false, reason: 'This file was never uploaded, so it cannot be opened here. Ask your teacher for a copy.' }
     case 'link':
       return res.url
         ? { available: true }

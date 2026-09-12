@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -9,7 +9,7 @@ import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentConte
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
-import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicMastery } from '../../scaffolding'
+import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicAnchorId, topicMastery } from '../../scaffolding'
 import { formatGrade, gradeColor, isPointScale, passNote } from '../../gradeDisplay'
 import ClassStandingForecast from '@/components/ClassStandingForecast'
 import AttachmentField from '@/components/AttachmentField'
@@ -47,7 +47,7 @@ async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
-  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap] =
+  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap] =
     await Promise.all([
       loadStudentEntry(classId, profile.id),
       loadStudentAttendance(classId, profile.id),
@@ -58,6 +58,10 @@ async function loadClassDetail(classId, profile) {
       clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
       getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', profile.id))),
+      // Same query the Remediation page runs, filtered to this class below. It
+      // only marks which sub-modules have a review guide; if it fails, the
+      // Modules tab loses the markers and nothing else.
+      getDocs(query(collection(db, 'remediations'), where('student_id', '==', profile.id))).catch(() => null),
     ])
 
   const teacher = teachers[0] ?? null
@@ -80,6 +84,14 @@ async function loadClassDetail(classId, profile) {
     list.sort((a, b) => (b.submitted_at?.seconds ?? 0) - (a.submitted_at?.seconds ?? 0))
   }
 
+  // Topic ids this student has a review guide for in this class.
+  const scaffoldedTopicIds = new Set(
+    (remSnap?.docs ?? [])
+      .map((d) => d.data())
+      .filter((r) => r.class_id === classId && r.topic_id)
+      .map((r) => r.topic_id),
+  )
+
   return {
     clazz,
     teacher,
@@ -91,6 +103,7 @@ async function loadClassDetail(classId, profile) {
     announcements,
     quizzes,
     attemptsByQuiz,
+    scaffoldedTopicIds,
   }
 }
 
@@ -102,12 +115,26 @@ function Pill({ meta }) {
   )
 }
 
-function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
+function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaffoldedTopicIds, focusTopicId = null }) {
   // Needed for the per-student attempt grant below.
   const { profile } = useAuth()
   const [activeNote, setActiveNote] = useState(null)
   const { overlayProps: noteOverlay, panelProps: notePanel } =
     useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Lesson note' })
+
+  // A link from a review guide lands on one sub-module: scroll to it and hold
+  // a highlight on it for a moment, so the student sees which one they were
+  // sent to rather than a page of modules that all look the same.
+  const [highlighted, setHighlighted] = useState(null)
+  useEffect(() => {
+    if (!focusTopicId) return undefined
+    const el = document.getElementById(topicAnchorId(focusTopicId))
+    if (!el) return undefined
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlighted(focusTopicId)
+    const timer = setTimeout(() => setHighlighted(null), 3500)
+    return () => clearTimeout(timer)
+  }, [focusTopicId])
 
   if (!syllabus || !(syllabus.modules?.length)) {
     return <Empty icon={<BookOpen className="h-6 w-6" />} title="No modules yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
@@ -132,12 +159,44 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {} }) {
               // moment they finish a quiz linked to this topic.
               const mastery = topicMastery(t.id, quizzes, attemptsByQuiz)
               const bucket = BUCKETS[mastery.bucket]
+              const scaffolded = !!t.id && scaffoldedTopicIds?.has(t.id)
+              const isFocus = !!t.id && highlighted === t.id
 
               return (
-                <div key={t.id ?? ti} className="border-l-2 border-slate-200 pl-4 relative">
-                  <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300" />
+                <div
+                  key={t.id ?? ti}
+                  id={t.id ? topicAnchorId(t.id) : undefined}
+                  className="border-l-2 pl-4 relative transition-colors duration-700"
+                  style={{
+                    borderColor: isFocus ? gold : 'rgb(226 232 240)',
+                    background: isFocus ? 'rgba(245,197,24,0.10)' : 'transparent',
+                    borderRadius: isFocus ? '0 12px 12px 0' : 0,
+                    marginRight: isFocus ? -8 : 0,
+                    paddingRight: isFocus ? 8 : 0,
+                    paddingTop: isFocus ? 6 : 0,
+                    paddingBottom: isFocus ? 6 : 0,
+                    scrollMarginTop: 96,
+                  }}
+                >
+                  <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full" style={{ background: isFocus ? gold : 'rgb(203 213 225)' }} />
                   <div className="flex flex-wrap items-center gap-2">
                     <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>{t.title || `Sub-module ${ti + 1}`}</div>
+                    {scaffolded && (
+                      /* The other direction of the same link: a student reading
+                         the modules sees which sub-module has a review guide
+                         waiting for them, and can go straight to it. */
+                      <Link
+                        to="/student/remediation"
+                        title="Your teacher published a review guide for this sub-module."
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                          fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 10px', textDecoration: 'none',
+                          color: goldDeep, background: 'rgba(245,197,24,0.18)', border: '1px solid rgba(245,197,24,0.5)',
+                        }}
+                      >
+                        Review guide →
+                      </Link>
+                    )}
                     {linkedQuizzes.length > 0 && (
                       <span
                         title={mastery.pct == null
@@ -1274,7 +1333,12 @@ export default function StudentClassDetail() {
   const { classId } = useParams()
   const { profile } = useAuth()
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState('topics')
+  // `?tab=` picks the opening tab and `?topic=` a sub-module to land on — the
+  // link a review guide uses to bring a student back to the modules.
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const [tab, setTab] = useState(TABS.some((t) => t.key === requestedTab) ? requestedTab : 'topics')
+  const focusTopicId = searchParams.get('topic')
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['student-class-detail', classId, profile.id],
@@ -1298,7 +1362,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1377,7 +1441,16 @@ export default function StudentClassDetail() {
         })}
       </div>
 
-      {tab === 'topics' && <TopicsTab syllabus={syllabus} classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} />}
+      {tab === 'topics' && (
+        <TopicsTab
+          syllabus={syllabus}
+          classId={classId}
+          quizzes={quizzes}
+          attemptsByQuiz={attemptsByQuiz}
+          scaffoldedTopicIds={scaffoldedTopicIds}
+          focusTopicId={focusTopicId}
+        />
+      )}
       {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={profile.id} />}
       {tab === 'grades' && (
         <GradesTab
