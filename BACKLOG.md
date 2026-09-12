@@ -1978,3 +1978,56 @@ opens empty with every box unticked, and save writes `class_ids: []` (`:564`) pl
 clears each class's `syllabus_id` (`:579-581`). Since `classes.syllabus_id` is how a **student**
 reaches a syllabus, every save quietly removed it from them too. Fix is to carry `class_ids`
 on both paths. Card: `_dispatch/T-39-syllabus-edit-clears-class-assignment.md`.
+
+## Class tasks, Step 2 — the shared logic every deliverables screen reads — 2026-09-13 (Data/logic lane)
+
+**Built (`c364352`, `ded328a`, `72982f0`, `0063710`).** Step 2 of
+`docs/plans/modules-content-and-deliverables.md`: `lib/deliverables.js` (pure — `parseWindowDate`,
+`fromQuiz`, `fromTask`, `stateOf`, `bucket`, `describeWindow`, `KIND_LABEL`, `taskHref`),
+`lib/classTasks.js` (`createTask`, `updateTask`, `publishTask`, `deleteTask`, `uploadTaskFile`,
+`newTaskId`), `hooks/useClassTasks.js`, `hooks/useStudentDeliverables.js`, four task rules in
+`lib/validation.js`, ten `class_tasks` cases in `lib/firestoreRules.test.js`, and the
+`DATA-MODEL.md` row. *Verified:* `npm run test` 960/960, `npm run test:rules` 56/56 against the
+emulator, `npm run build` clean, lint at the 51 baseline. **Not driven in a browser** — there is
+no screen to drive until Steps 3–5 land; Step 6 (Verify pane) owns that walk. The MODULES and
+QUIZZES sessions were sent the signatures directly; the Student pane was not identifiable among
+the running sessions and gets them from the owner.
+
+Decisions the page panes should know about, none of them in the plan's wording:
+
+- **A closed quiz the student never took buckets under `overdue`**, with the chip still reading
+  "Closed Fri 11 Sep", not "Overdue". The plan's six buckets have no closed section; hiding a
+  missed quiz, or filing it under Finished, would both be worse than a section name that is
+  slightly off. If the Student pane wants a separate "Missed" heading, that is one line in
+  `bucket()` — say so rather than filtering client-side.
+- **`useStudentDeliverables` returns `{ items, failed }`, not a bare array.** `items` is every
+  deliverable in deadline order; `failed` names the classes whose reads were refused
+  (`{ classId, label }`), so the dashboard can say some classes did not load instead of quietly
+  showing less. The reason goes to the console, never the screen. `useClassTasks` returns the raw
+  documents so a row can be handed straight to `updateTask` / `publishTask`.
+- **"This week" is the next seven days** from local midnight, not the calendar week. A Sunday
+  deadline seen on Saturday is this week; a school week boundary was not asked for.
+- **`newTaskId()` exists because the dialog uploads before the first save.** `uploadTaskFile`
+  needs a task id for the Storage path; allocating one client-side costs no write. For a brand-new
+  task published straight from the dialog: `createTask` (draft) then `publishTask` — two writes,
+  one notification.
+- **`assignedToStudent` is restated in `lib/deliverables.js`.** The same three lines live in
+  `routes/student/scaffolding.js`; a hook may not import a route, and the route is another lane's.
+  Worth collapsing onto the lib copy when the Student pane next touches that file.
+- **`taskAttachmentError` re-implements the http(s) test from `isSafeLink`** rather than importing
+  `lib/attachments.js`, which pulls in `firebase/storage`. `validation.js` has no imports and every
+  form relies on that. A file attachment must sit on a `firebasestorage.googleapis.com` or
+  `*.firebasestorage.app` host; a Drive link stored as a "file" is refused with a message that says
+  to add it as a link.
+- **`describeWindow` formats dates by hand**, not through `Intl`, so the sentence is identical on
+  every machine and in every test run — ICU has changed "Sep" to "Sept" between versions. The year
+  is shown only when it is not the current one.
+
+Open, and not this lane's to close:
+
+- **The rules are written and tested, not deployed.** The owner runs
+  `firebase deploy --only firestore:rules,firestore:indexes,storage` from the backend repo; the
+  predeploy gate re-runs the 56 rules tests. Until then a live student query for `class_tasks` is
+  refused, and the `(class_id, status)` composite index does not exist on the project.
+- **A mobile port of `lib/deliverables.js`** is possible (it is pure) and is not in this plan.
+- **Zone-less dates** (plan D3) — fine on one demo machine, recorded, not fixed.
