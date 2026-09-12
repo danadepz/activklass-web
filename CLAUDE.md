@@ -20,7 +20,12 @@ in-flight edits into your commit. Stage explicit paths. Before pushing, read
 **Staging explicit paths is not enough either:** a plain `git commit` takes the whole
 index, and another pane may have staged its own files there since you last looked (T-47's
 commit swept in `register.jsx` from the registration pane and had to be redone). Commit
-with `git commit --only -- <your paths>`, and read `git status` first.
+with `git commit --only -- <your paths>`, and read `git status` first. **And `--only` sweeps
+too, at the file level:** it commits the whole working-tree file, so if another pane has
+uncommitted hunks in a file you both touched, your commit publishes theirs (9bd0d7b took the
+recovery pane's half-finished dialog change into a syllabus fix, leaving HEAD calling a
+function whose new return shape was still uncommitted). Before `--only` on a shared file,
+`git diff` it and make sure every hunk is yours.
 
 ## Core Principles (Always Follow)
 - **Firestore is the system of record.** Clients read and write it directly;
