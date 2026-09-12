@@ -172,6 +172,8 @@ function builderSnapshot(settings, classIds, questions) {
       text: q.text,
       points: q.points,
       ai_generated: q.ai_generated,
+      // Clearing the objective flag is a decision worth saving on its own.
+      off_objective: q.off_objective,
       options: (q.options ?? []).map((o) => ({ text: o.text, is_correct: o.is_correct })),
       tfValue: q.tfValue,
       answersText: q.answersText,
@@ -193,6 +195,8 @@ function toEditable(question) {
     text: question.text ?? '',
     points: String(question.points ?? 1),
     ai_generated: question.ai_generated ?? false,
+    objective: question.objective ?? '',
+    off_objective: question.off_objective === true,
     options: (question.options ?? []).map((o) => ({
       _key: newKey(), id: o.id ?? null, text: o.text ?? '', is_correct: !!o.is_correct,
     })),
@@ -218,6 +222,10 @@ function blankQuestion() {
 
 function toPayload(q) {
   const base = { id: q.id || newId(), qtype: q.qtype, text: q.text, points: Number(q.points), ai_generated: q.ai_generated }
+  // Kept on the saved question so the flag survives a reload and a re-open;
+  // only AI drafts ever carry them.
+  if (q.objective) base.objective = q.objective
+  if (q.off_objective) base.off_objective = true
   if (q.qtype === 'mcq') {
     base.options = q.options.map((o) => ({ id: o.id || newId(), text: o.text, is_correct: o.is_correct }))
   } else if (q.qtype === 'true_false') {
@@ -255,6 +263,28 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
         <button onClick={moveDown} title="Move down" style={iconBtn} className="transition hover:text-[#0A1733]">↓</button>
         <button onClick={remove} title="Remove question" style={{ ...iconBtn, fontSize: 18 }} className="transition hover:text-[#C0392B]">×</button>
       </div>
+
+      {/* Which objective an AI draft says this assesses. A question that names
+          none of the topic's objectives is the one most likely to test what
+          was never taught, so it is flagged for a look -- not removed. The
+          teacher clears it by deciding: keep, edit, or delete. */}
+      {q.ai_generated && q.off_objective && (
+        <div role="status" className="flex items-start gap-2" style={{ marginTop: 10, padding: '8px 11px', fontSize: 12, lineHeight: 1.5, color: goldDeep, background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.45)', borderRadius: 9 }}>
+          <span aria-hidden="true">⚠</span>
+          <span>
+            <strong>Not tied to a listed objective</strong> — check this was taught before keeping it.
+            {q.objective ? <> The AI says it assesses: <em>{q.objective}</em></> : null}
+          </span>
+          <button type="button" onClick={() => update({ off_objective: false })} title="I checked — this was taught" className="ml-auto transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12, whiteSpace: 'nowrap' }}>
+            It was taught
+          </button>
+        </div>
+      )}
+      {q.ai_generated && !q.off_objective && q.objective && (
+        <p style={{ margin: '8px 0 0', fontSize: 11.5, color: faint, lineHeight: 1.5 }}>
+          Assesses: {q.objective}
+        </p>
+      )}
 
       <textarea rows={2} placeholder="Question text" value={q.text} onChange={(e) => update({ text: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 10, resize: 'vertical' }} />
 

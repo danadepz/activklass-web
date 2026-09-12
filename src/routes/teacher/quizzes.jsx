@@ -168,7 +168,13 @@ function GenerateQuizModal({ classes, onClose }) {
     syllabus.modules.forEach((m) => {
       if (m.topics) {
         m.topics.forEach((t) => {
-          topics.push({ id: t.id, label: `${m.title} · ${t.title}`, title: t.title, module_id: m.id })
+          // Objectives travel with the request: they are the fence the model is
+          // told to stay inside, and the reference the review screen flags
+          // drifted questions against. The syllabus page writes
+          // learning_objectives; older documents carry objectives.
+          const objectives = (t.learning_objectives ?? t.objectives ?? [])
+            .filter((o) => typeof o === 'string' && o.trim())
+          topics.push({ id: t.id, label: `${m.title} · ${t.title}`, title: t.title, module_id: m.id, objectives })
         })
       }
     })
@@ -188,6 +194,7 @@ function GenerateQuizModal({ classes, onClose }) {
       const quiz = await generateQuiz({
         topic: topicText,
         topicId: form.topic_id || null,
+        objectives: picked?.objectives ?? [],
         numQuestions: form.count,
         types: form.types,
         hints: {
@@ -281,6 +288,17 @@ function GenerateQuizModal({ classes, onClose }) {
                   <option key={t.id} value={t.id}>{t.label}</option>
                 ))}
               </select>
+              {/* The highest-drift case: with no objectives the model has only a
+                  title to go on, and fills the gap with its own idea of the
+                  subject -- which may not be what was taught. Said before
+                  generating, because after it the flag has nothing to check. */}
+              {form.topic_id && topics.find((t) => t.id === form.topic_id)?.objectives.length === 0 && (
+                <p role="status" style={{ fontSize: 12, color: goldDeep, margin: '8px 0 0', lineHeight: 1.5 }}>
+                  This topic has no learning objectives written, so the AI only has its title to go on
+                  and may test things you did not teach. Add objectives on the Syllabus page first, or
+                  review the draft closely.
+                </p>
+              )}
             </div>
           ) : (
             <p style={{ fontSize: 12, color: faint, margin: 0 }}>Tip: build a syllabus first and you can target its topics here.</p>
