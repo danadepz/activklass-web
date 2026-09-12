@@ -54,9 +54,9 @@ export default function StudentProfile() {
 
   // --- Profile photo ---
   /* The camera badge opens the device file picker. It used to open a
-     paste-a-link field, because Cloud Storage is not provisioned on this
-     project (Spark plan, no bucket) — so a student was asked for a Google
-     Drive or Photos share link rather than their own photo.
+     paste-a-link field, because Cloud Storage was not provisioned on this
+     project until 2026-09-12 (Spark plan, no bucket) — so a student was asked
+     for a Google Drive or Photos share link rather than their own photo.
      The photo is cropped and resized to ~256px in the browser and stored
      inline on the profile; see lib/avatar.js for why that is safe here and
      not for the other attachment features. */

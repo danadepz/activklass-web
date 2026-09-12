@@ -2,10 +2,12 @@
  * File attachments that work whether or not Cloud Storage is provisioned.
  *
  * Owned by the logic lane (see OWNERSHIP.md). Firebase Storage requires the
- * Blaze plan, and this project is on Spark, so `uploadBytes` throws with a 404
- * on the bucket. Three features were written against it -- syllabus materials,
- * attendance-contest evidence and score-contest evidence -- and all three
- * crashed rather than explaining themselves.
+ * Blaze plan, and until 2026-09-12 this project was on Spark, so `uploadBytes`
+ * threw a 404 on the bucket. Three features were written against it -- syllabus
+ * materials, attendance-contest evidence and score-contest evidence -- and all
+ * three crashed rather than explaining themselves. The project is on Blaze now
+ * and the bucket exists, so uploads go through; the 404 branch below stays for
+ * a fresh project that has not been provisioned.
  *
  * The point of this module is that a link is a first-class attachment, not a
  * downgrade. A teacher pasting a Google Drive URL and a teacher uploading a PDF

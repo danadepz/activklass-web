@@ -324,8 +324,9 @@ export function phoneError(value, { required = true } = {}) {
 }
 
 /**
- * A shareable https link — the attachment path everywhere in this app, since
- * uploads are unavailable on the Spark plan. Must parse as a URL and be https;
+ * A shareable https link — the attachment path beside every upload in this
+ * app (and the only one before Storage was provisioned on 2026-09-12). Must
+ * parse as a URL and be https;
  * "1", "drive" and a bare domain all fail.
  */
 export function linkError(value, { label = 'Link' } = {}) {

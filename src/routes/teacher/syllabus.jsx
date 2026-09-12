@@ -234,7 +234,7 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
           </div>
           <div className="border-t border-slate-200/70 pt-2">
             <p className="text-[11px] text-slate-500 mb-1.5">
-              No file uploads on this project yet — attach it by link instead.
+              Or attach it by link instead.
             </p>
             <AttachmentField
               compact

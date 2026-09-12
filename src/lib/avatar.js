@@ -5,11 +5,13 @@
  *
  * Why not Cloud Storage
  * ---------------------
- * There is no bucket. Firebase Storage needs the Blaze plan and this project
- * is on Spark, so `uploadBytes` 404s — which is why the photo control used to
- * ask a student to paste a Google Drive or Photos link instead of opening
- * their own files. That is a poor thing to ask of a student and it makes the
- * photo depend on a share link staying public.
+ * When this was written there was no bucket: Firebase Storage needs the Blaze
+ * plan and the project was on Spark, so `uploadBytes` 404'd — which is why the
+ * photo control used to ask a student to paste a Google Drive or Photos link
+ * instead of opening their own files. That is a poor thing to ask of a student
+ * and it makes the photo depend on a share link staying public. The project
+ * moved to Blaze on 2026-09-12, but the inline approach stays: it needs no
+ * Storage rule, no download URL, and no second read.
  *
  * A profile photo is small enough not to need a bucket. Cropped to a square
  * and resized to 256px, a JPEG lands around 15-40 KB, and a Firestore document

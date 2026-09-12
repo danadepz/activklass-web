@@ -28,8 +28,9 @@ import {
  * rejected. There is no plan catalogue or seat arithmetic for Flask to own.
  *
  * Links open in a new tab; we never fetch the image ourselves. The file is
- * whatever the teacher shared from their own Drive — uploads are off the
- * table on the Spark plan, so a link is the attachment path everywhere here.
+ * whatever the teacher shared from their own Drive — the ID check was built
+ * before Storage was provisioned (2026-09-12), so a link is still the
+ * attachment path here.
  */
 
 const LABEL = Object.fromEntries(ID_TYPES.map((t) => [t.value, t.label]))
@@ -79,7 +80,7 @@ export default function SuperAdminVerificationsPage() {
       toast.success(status === 'approved' ? `${name} approved — their account is open and the free month has started.` : `${name} sent back with your note.`)
       /* Approving opens the account silently: nothing reaches the teacher,
          who is still watching /pending-verification. No mail provider exists
-         (Spark, no Cloud Functions), so the notice is written here and sent
+         (no Cloud Functions), so the notice is written here and sent
          by hand, exactly as the school requests queue does it. */
       if (status === 'approved') {
         setMessage({
