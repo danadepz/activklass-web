@@ -199,7 +199,7 @@ function questionProblem(q, allowedTypes) {
  * `draftToQuestions` below now maps all five faithfully -- a page only needs to
  * ask for them via `types`.
  */
-function validateQuizDraft(draft, allowedTypes, requestedCount) {
+function validateQuizDraft(draft, allowedTypes, requestedCount, objectives = []) {
   if (!Array.isArray(draft?.questions)) {
     throw new Error('The AI returned a draft with no questions. Try generating again.')
   }
@@ -219,6 +219,8 @@ function validateQuizDraft(draft, allowedTypes, requestedCount) {
     )
   }
 
+  const tagged = tagObjectives(kept, objectives)
+
   const warnings = []
   if (dropped.length) {
     warnings.push(`Dropped ${dropped.length} malformed question(s): ${dropped.join(', ')}`)
@@ -226,11 +228,50 @@ function validateQuizDraft(draft, allowedTypes, requestedCount) {
   if (requestedCount && kept.length < requestedCount) {
     warnings.push(`Asked for ${requestedCount} questions, kept ${kept.length}.`)
   }
+  const off = tagged.map((q, i) => (q.off_objective ? `Q${i + 1}` : null)).filter(Boolean)
+  if (off.length) {
+    warnings.push(`${off.length} question(s) not tied to a listed objective: ${off.join(', ')}.`)
+  }
   // The pages have no warning surface yet, so this is the only place a teacher
   // or dev can currently see that a draft was trimmed.
   if (warnings.length) console.warn('[ai] quiz draft:', warnings.join(' '))
 
-  return { ...draft, questions: kept, warnings }
+  return { ...draft, questions: tagged, warnings }
+}
+
+/** Case, spacing and trailing punctuation are not differences in an objective. */
+const normaliseObjective = (s) =>
+  String(s ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[\s.;:!]+$/, '')
+    .trim()
+
+/**
+ * Mark every drafted question with the objective it claims to assess, and flag
+ * the ones that name none of the objectives the model was given.
+ *
+ * This is the review screen's only evidence that a question stayed inside
+ * what the module taught. The prompt tells the model to assess only the listed
+ * objectives and to copy the one each question assesses word for word; a
+ * question that copies none of them is the one most likely to be testing
+ * something the students never studied, and the editor shows it as such.
+ *
+ * Nothing is dropped here. A flagged question may be perfectly fair -- the
+ * teacher taught it under a different wording -- so the flag asks for a look,
+ * and the teacher decides. When no objectives were supplied there is nothing to
+ * check against, so nothing is flagged: the warning for that case belongs
+ * before generation, on the topic picker, not after.
+ */
+export function tagObjectives(questions, objectives = []) {
+  const listed = objectives.map(normaliseObjective).filter(Boolean)
+  return (questions ?? []).map((q) => {
+    const objective = String(q?.objective ?? '').trim()
+    if (!listed.length) return { ...q, objective, off_objective: false }
+    const key = normaliseObjective(objective)
+    const matched = !!key && listed.some((o) => o === key || o.includes(key) || key.includes(o))
+    return { ...q, objective, off_objective: !matched }
+  })
 }
 
 /**
@@ -278,13 +319,18 @@ export async function generateQuiz({
   const { min, max } = QUIZ_QUESTION_LIMITS
   const count = Math.min(Math.max(Math.round(Number(numQuestions)) || min, min), max)
 
+  const cleanObjectives = objectives
+    .filter((o) => typeof o === 'string')
+    .map((o) => o.trim())
+    .filter(Boolean)
+
   const { draft } = await withAIErrors('generating the quiz', () =>
     api('/api/quizzes/generate', {
       method: 'POST',
       body: {
         topic,
         topic_id: topicId,
-        objectives: objectives.filter((o) => typeof o === 'string').map((o) => o.trim()).filter(Boolean),
+        objectives: cleanObjectives,
         num_questions: count,
         types,
         difficulty,
@@ -292,7 +338,7 @@ export async function generateQuiz({
       },
     }),
   )
-  return validateQuizDraft(draft, types, count)
+  return validateQuizDraft(draft, types, count, cleanObjectives)
 }
 
 const newQuestionId = () =>
@@ -322,6 +368,11 @@ export function draftToQuestions(draft) {
       // missing or unparseable value from making the question worthless.
       points: Number(q.points) > 0 ? Number(q.points) : 1,
       ai_generated: true,
+      // The objective the model says this assesses, and whether that was one
+      // of the objectives it was given (tagObjectives). The editor shows a
+      // flagged question so the teacher checks it was actually taught.
+      objective: String(q.objective ?? '').trim(),
+      off_objective: q.off_objective === true,
     }
     switch (q.type) {
       case 'mcq':
