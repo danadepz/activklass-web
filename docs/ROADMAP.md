@@ -141,6 +141,31 @@ Still open at this altitude:
   so the T-45 walkthrough record is unchanged. **Owed:** the same dialog opened on a
   DepEd class in the browser (SCI9 Newton's plan was being reseeded by another pane at
   the time).
+- `[x]` **A generated quiz stays inside what the module taught** (2026-09-12). The owner's
+  concern: the AI could test something the syllabus never covered, and a student who studied
+  the module would be right to be frustrated. Before this, neither the Quizzes page nor the
+  remediation practice quiz sent the topic's learning objectives at all — the model had a
+  title to go on and nothing else, and nothing told it to stop there. Now: both call sites
+  send the objectives; the backend prompt fences generation to them, read narrowly, and asks
+  each question to name the objective it assesses, word for word (`SCOPE_WITH_OBJECTIVES`
+  in `services/ai/quiz_gen.py`, `objective` required on every drafted question,
+  **cross-repo**); `tagObjectives()` in `lib/ai.js` flags a question whose objective is not
+  one the model was given and `draftToQuestions` carries `objective` / `off_objective` onto
+  the saved question; the quiz editor shows **Not tied to a listed objective — check this
+  was taught** on a flagged AI question, with an **It was taught** button that clears it (a
+  saveable change), and "Assesses: …" under every other; and the Generate dialog warns
+  before generating when the picked topic has no objectives written, since that is the case
+  with nothing to fence against. Nothing is dropped — the teacher decides, as before.
+  *Verified:* `ai.objectives.test.js` (9), `npm run test` 899/899, `npm run build` clean;
+  backend `tests/test_quiz_prompt.py` (10 checks). Browser, as the seeded teacher: a live
+  10-question generation on BSIT-C's Sub-module 1.1 (four objectives) came back with every
+  question naming one of the four, shown as "Assesses: …" in the editor and stored on the
+  quiz document; a flag forced onto Q1 through the Admin SDK rendered the amber notice and
+  **It was taught** cleared it and marked the draft unsaved; with the topic's objectives
+  temporarily blanked, the dialog showed the no-objectives warning the moment the topic was
+  picked. The walkthrough quiz, its banked questions and the blanked objectives were all
+  restored or deleted afterwards. **Not covered:** a question the model genuinely drifted on
+  — the fence held on the one live run, so the flag path was proven with a forced value.
 - `[x]` **A teacher sees only the students they handle** (2026-08-31). The rules used to
   let *any* teacher read *any* student's profile, attempts, risk, remediations, grades,
   guardian links and consent — the screens were scoped, the database was not. Now
