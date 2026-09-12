@@ -363,20 +363,6 @@ export default function PerformancePage() {
           </div>
         </>
       )}
-
-      {/* Bloom's mastery — honest "not available" until quiz items are tagged */}
-      <div className="mt-4">
-        <Card
-          title="Bloom's taxonomy mastery"
-          sub="Class-average performance per cognitive level"
-          right={<span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 10px', fontSize: 11, fontWeight: 700, color: blueText, background: 'rgba(63,169,245,0.12)', border: '1px solid rgba(63,169,245,0.4)', borderRadius: 999 }}>Needs tagging</span>}
-        >
-          <EmptyBox>
-            Quiz items aren't tagged by cognitive level yet, so per-Bloom mastery can't be computed. Once questions
-            carry a Bloom's level, this breaks down mastery across Remember → Create.
-          </EmptyBox>
-        </Card>
-      </div>
     </div>
   )
 }

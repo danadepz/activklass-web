@@ -199,3 +199,17 @@ not started from a ticket:
   exception is `GET /api/students/lookup`: an exact-key search (student number, LRN or
   email) that returns roster fields only, because to put an existing account on a class a
   teacher has to be able to find it.
+- **Mastery is tracked per topic, not per Bloom's level** (owner's, 2026-09-12). The
+  concern was that teachers would not tag questions by cognitive level, and nothing that
+  exists needs them to: the scaffolds page, the student's class screen and remediation all
+  compute mastery from attempts on syllabus-linked quizzes, keyed by topic, and no code
+  reads a Bloom's level off a question. The one place that promised otherwise — a
+  "Bloom's taxonomy mastery" card on the class Performance page that permanently said
+  "Needs tagging" with nowhere to tag — was removed. What stays: the Bloom's dropdown on
+  the AI quiz generator, which is a prompt hint (it steers the questions Gemini writes,
+  is never stored, and defaults to "apply"), and the Bloom's verbs the syllabus generator
+  uses for objectives, which is how DepEd and CHED phrase them anyway. Per-question
+  tagging and a per-level breakdown are not planned; if a panelist asks, the answer is
+  that the generator targets a level and mastery is tracked by the unit teachers actually
+  remediate. The proposal's row 8 ("topic, Bloom's level, count presets") is still met by
+  the generator.
