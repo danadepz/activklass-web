@@ -28,35 +28,29 @@ function gradeColor(v, mode, policy) {
   return red
 }
 
-/* A missing risk score (no student_performance snapshot yet) sorts last
-   either direction -- "unknown" is not the same claim as "safe". */
-function byRisk(dir) {
-  return (a, b) => {
-    if (a.riskProbability == null && b.riskProbability == null) return 0
-    if (a.riskProbability == null) return 1
-    if (b.riskProbability == null) return -1
-    return dir === 'high' ? b.riskProbability - a.riskProbability : a.riskProbability - b.riskProbability
-  }
+/* One comparator per column. A missing grade or risk score sorts last in
+   either direction -- "unknown" is not the same claim as "safe" or "failing". */
+const missingLast = (get) => (a, b, dir) => {
+  const av = get(a), bv = get(b)
+  if (av == null && bv == null) return 0
+  if (av == null) return 1
+  if (bv == null) return -1
+  return dir === 'asc' ? av - bv : bv - av
 }
-
-const SORTS = {
-  name: { label: 'Name (A–Z)', fn: (a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`) },
-  worst: { label: 'Lowest grades', fn: (a, b) => (a.grade ?? Infinity) - (b.grade ?? Infinity) },
-  best: { label: 'Highest grades', fn: (a, b) => (b.grade ?? -Infinity) - (a.grade ?? -Infinity) },
-  riskHigh: { label: 'Highest risk', fn: byRisk('high') },
-  riskLow: { label: 'Lowest risk', fn: byRisk('low') },
+const COLUMNS = {
+  name: {
+    label: 'Student',
+    fn: (a, b, dir) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`) * (dir === 'asc' ? 1 : -1),
+  },
+  class: {
+    label: 'Class',
+    fn: (a, b, dir) => a.classLabel.localeCompare(b.classLabel) * (dir === 'asc' ? 1 : -1),
+  },
+  grade: { label: 'Grade', fn: missingLast((r) => r.grade) },
+  risk: { label: 'Risk', fn: missingLast((r) => r.riskProbability) },
 }
-
-const fieldLabel = { fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }
-
-function Field({ label, children }) {
-  return (
-    <div className="flex flex-col" style={{ gap: 0 }}>
-      <span style={fieldLabel}>{label}</span>
-      {children}
-    </div>
-  )
-}
+// First click on a column gives the order a teacher most likely wants.
+const FIRST_DIR = { name: 'asc', class: 'asc', grade: 'asc', risk: 'desc' }
 
 const th = { padding: '11px 16px', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
 const td = { padding: '14px 16px', fontSize: 14, color: ink, verticalAlign: 'middle' }
@@ -109,24 +103,53 @@ export default function StudentsPage() {
   const [search, setSearch] = useState('')
   const [classFilter, setClassFilter] = useState('all')
   const [riskFilter, setRiskFilter] = useState('all')
-  const [sortKey, setSortKey] = useState('name')
+  // Highest risk first by default: the page exists to show who needs attention.
+  const [sort, setSort] = useState({ key: 'risk', dir: 'desc' })
 
   const list = data?.rows ?? []
   // Classes whose reads failed while the others loaded (useTeacherStudents).
   const failed = data?.failed ?? []
 
-  const filtered = useMemo(() => {
+  // Everything but the risk chip: the chips count over this, so a teacher
+  // sees what a click will show before clicking it.
+  const scoped = useMemo(() => {
     const needle = search.trim().toLowerCase()
     return list
       .filter((r) => classFilter === 'all' || r.classId === classFilter)
-      .filter((r) => riskFilter === 'all' || riskLevel(r.riskProbability) === riskFilter)
       .filter((r) => {
         if (!needle) return true
         const hay = `${r.firstName} ${r.lastName} ${r.lrn ?? ''}`.toLowerCase()
         return hay.includes(needle)
       })
-      .sort(SORTS[sortKey].fn)
-  }, [list, search, classFilter, riskFilter, sortKey])
+  }, [list, search, classFilter])
+
+  const riskCounts = useMemo(() => {
+    const n = { all: scoped.length, high: 0, medium: 0, low: 0, none: 0 }
+    for (const r of scoped) n[riskLevel(r.riskProbability) ?? 'none'] += 1
+    return n
+  }, [scoped])
+
+  // Classes in view with no risk score at all, so the chips can say why a
+  // count is short instead of leaving an empty table to explain itself.
+  const unscored = useMemo(() => {
+    const seen = new Map()
+    for (const r of scoped) {
+      const cur = seen.get(r.classId) ?? { label: r.classLabel, scored: false }
+      if (r.riskProbability != null) cur.scored = true
+      seen.set(r.classId, cur)
+    }
+    return [...seen.values()].filter((c) => !c.scored).map((c) => c.label)
+  }, [scoped])
+
+  const filtered = useMemo(() => {
+    const { key, dir } = sort
+    return scoped
+      .filter((r) => riskFilter === 'all' || riskLevel(r.riskProbability) === riskFilter)
+      .sort((a, b) => COLUMNS[key].fn(a, b, dir))
+  }, [scoped, riskFilter, sort])
+
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: FIRST_DIR[key] }))
 
   const header = (
     <div className="mb-[26px] flex flex-wrap items-start justify-between gap-4">
@@ -137,7 +160,7 @@ export default function StudentsPage() {
         <p style={{ fontSize: 15, color: muted, margin: 0 }}>
           {tab === 'accounts'
             ? 'Issue your students’ logins, reset a password, or deactivate anyone who leaves.'
-            : 'Every student across your classes, in one place — search by name, or sort to see who needs attention.'}
+            : 'Every student across your classes, in one place. Highest risk is listed first; click a column heading to sort another way.'}
         </p>
       </div>
     </div>
@@ -208,21 +231,21 @@ export default function StudentsPage() {
 
       {tab === 'accounts' ? <StudentAccounts classes={classes ?? []} rows={list} /> : (
       <>
-      {/* Controls */}
-      <div className="flex flex-wrap items-end gap-3" style={{ marginBottom: 18 }}>
-        <Field label="Search">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name or LRN…"
-            className="ak-input"
-            style={{ width: '100%', minWidth: 220, maxWidth: 320, padding: '11px 14px', fontSize: 14, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11 }}
-          />
-        </Field>
-        <Field label="Class">
+      {/* Controls: what to look at (search, class), then which risk band */}
+      <div className="flex flex-wrap items-center gap-3" style={{ marginBottom: 14 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name or LRN"
+          aria-label="Search students"
+          className="ak-input"
+          style={{ width: '100%', minWidth: 220, maxWidth: 320, padding: '11px 14px', fontSize: 14, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11 }}
+        />
+        {(classes ?? []).length > 1 && (
           <select
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
+            aria-label="Class"
             className="ak-input"
             style={{ padding: '11px 14px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
           >
@@ -231,32 +254,47 @@ export default function StudentsPage() {
               <option key={c.id} value={c.id}>{classLabel(c)}</option>
             ))}
           </select>
-        </Field>
-        <Field label="Sort by">
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value)}
-            className="ak-input"
-            style={{ padding: '11px 14px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
-          >
-            {Object.entries(SORTS).map(([key, { label }]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Filter by:">
-          <select
-            value={riskFilter}
-            onChange={(e) => setRiskFilter(e.target.value)}
-            className="ak-input"
-            style={{ padding: '11px 14px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
-          >
-            <option value="all">Any risk level</option>
-            <option value="high">High risk</option>
-            <option value="medium">Medium risk</option>
-            <option value="low">Low risk</option>
-          </select>
-        </Field>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: muted, marginRight: 4 }}>Risk</span>
+        {[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']].map(([id, label]) => {
+          const on = riskFilter === id
+          const tone = RISK_LEVEL_STYLE[id]
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setRiskFilter(id)}
+              aria-pressed={on}
+              className="inline-flex items-center gap-1.5 transition"
+              style={{
+                padding: '6px 12px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, borderRadius: 999, cursor: 'pointer',
+                color: on ? '#FAFAF6' : (tone?.color ?? ink),
+                background: on ? (tone?.color ?? navy) : (tone?.bg ?? '#FFFFFF'),
+                border: `1.5px solid ${on ? (tone?.color ?? navy) : (tone?.border ?? 'rgba(14,42,92,0.14)')}`,
+              }}
+            >
+              {label}
+              <span style={{ ...mono, fontWeight: 700, opacity: 0.8 }}>{riskCounts[id]}</span>
+            </button>
+          )
+        })}
+        {riskCounts.none > 0 && (
+          <span style={{ fontSize: 12.5, color: faint, marginLeft: 6 }}>
+            {riskCounts.none} without a score
+            {unscored.length > 0 && (
+              <>
+                {' '}·{' '}
+                <Link to="/teacher/classes" style={{ color: navy, fontWeight: 600 }}>open the Performance tab</Link>
+                {' '}of {unscored.slice(0, 2).join(unscored.length > 2 ? ', ' : ' and ')}
+                {unscored.length > 2 && ` and ${unscored.length - 2} more ${unscored.length === 3 ? 'class' : 'classes'}`}
+                {' '}to compute {riskCounts.none === 1 ? 'it' : 'them'}
+              </>
+            )}
+          </span>
+        )}
       </div>
 
       {/* Table */}
@@ -267,25 +305,39 @@ export default function StudentsPage() {
         </div>
         {filtered.length === 0 ? (
           <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13.5, color: muted }}>
-            {riskFilter !== 'all' && !list.some((r) => r.riskProbability != null) ? (
-              <>
-                No risk scores have been computed yet, so nothing can match a risk level.{' '}
-                <Link to="/teacher/classes" style={{ color: navy, fontWeight: 600 }}>Open a class's Performance tab</Link>
-                {' '}first — that's what runs the model and saves each student's score.
-              </>
-            ) : (
-              'No students match your search or filter.'
-            )}
+            {riskFilter !== 'all' && riskCounts.none === riskCounts.all
+              ? 'No risk scores yet for these students, so no risk level can match.'
+              : 'No students match your search or filter.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
-                  <th style={{ ...th, textAlign: 'left' }}>Student</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Class</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Grade</th>
-                  <th style={{ ...th, textAlign: 'left' }}>Risk</th>
+                  {[['name', 'left'], ['class', 'left'], ['grade', 'right'], ['risk', 'left']].map(([key, align]) => {
+                    const active = sort.key === key
+                    return (
+                      <th
+                        key={key}
+                        scope="col"
+                        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        style={{ ...th, textAlign: align, padding: 0 }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(key)}
+                          title={`Sort by ${COLUMNS[key].label.toLowerCase()}`}
+                          className="transition hover:brightness-75"
+                          style={{ ...th, display: 'inline-flex', alignItems: 'center', gap: 5, width: '100%', justifyContent: align === 'right' ? 'flex-end' : 'flex-start', background: 'none', border: 0, cursor: 'pointer', fontFamily: sans, color: active ? navy : muted }}
+                        >
+                          {COLUMNS[key].label}
+                          <span aria-hidden="true" style={{ fontSize: 9, opacity: active ? 1 : 0.35 }}>
+                            {active ? (sort.dir === 'asc' ? '▲' : '▼') : '▲▼'}
+                          </span>
+                        </button>
+                      </th>
+                    )
+                  })}
                   <th style={{ ...th, textAlign: 'right' }} aria-label="Open" />
                 </tr>
               </thead>
@@ -333,10 +385,9 @@ export default function StudentsPage() {
       <p style={{ fontSize: 12.5, color: faint, margin: '16px 2px 0', maxWidth: 720 }}>
         A student in more than one of your classes appears once per class, since grades and risk are
         each computed within a class, not blended across them. Risk is the model's own likelihood
-        score — attendance, quiz trend and missing work alongside the grade — not just a grade cutoff,
-        so it reads "—" until you've opened that class's Performance tab at least once. High / Medium /
-        Low are our own bands on that score (50%+ / 35–49% / under 35%) — the model itself only flags
-        high risk at 50%, so "High" here always agrees with it; "Medium" is an earlier heads-up.
+        score — attendance, quiz trend and missing work alongside the grade — banded as High (50%+),
+        Medium (35–49%) and Low (under 35%); the model itself flags high risk at 50%, so "High" here
+        always agrees with it.
       </p>
 
       {list.some((r) => r.riskTraining?.real_data === false) && (
