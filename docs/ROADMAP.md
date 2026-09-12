@@ -139,11 +139,18 @@ Still open at this altitude:
   second seeded teacher: 16/16 — own students readable, the other teacher's refused in
   both directions, every forgery (teacher_ids, student_ids, class delete, editing a
   foreign student) 403, an ordinary own-class edit still 200.
-- `[ ]` **Syllabus file upload, for real** (decided 2026-09-04): upgrade the Firebase
-  project to Blaze, create the default bucket, deploy `storage.rules` from the backend repo
-  **(cross-repo)**, then prove a PDF upload from the syllabus page in the browser. Until
-  then Upload File fails with the paste-a-link message — the docs no longer call that a
-  plan limit we are keeping.
+- `[x]` **Syllabus file upload, for real** (decided 2026-09-04, done 2026-09-12). The
+  Firebase project is on Blaze, the default bucket `activklass1.firebasestorage.app`
+  exists, and `firebase deploy --only storage` from the backend repo released
+  `storage.rules` **(cross-repo)**. *Verified 2026-09-12:* in the browser as the seeded
+  teacher, Upload File on the BSIT-C syllabus's sub-module took a test PDF with no error
+  and Save Syllabus kept it; the Admin SDK then listed the object under
+  `learning_materials/{syllabusId}/` (402 bytes, `application/pdf`) and the saved
+  `syllabi/{id}` document carries its `firebasestorage.googleapis.com` download URL.
+  The Blaze upgrade wizard's budget-alert step errored and was skipped; the $10 alert
+  is still to be set in the Cloud console. The upload runs on the Firebase project,
+  which is billed to the AI Gmail's billing account (the Firebase Gmail's own payment
+  profile was closed by Google five times).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 

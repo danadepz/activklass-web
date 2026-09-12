@@ -7,10 +7,10 @@ because the reasoning is what stops a decision being re-litigated.
 with one decided exception: Firebase moves to **Blaze** (owner decision 2026-09-04) because
 the syllabus page's Upload File writes learning materials to Cloud Storage, and Storage is
 Blaze-only on every project. Demo-scale PDFs stay inside Storage's free allowance; a small
-budget alert is the safeguard. Until the upgrade, the bucket and the `storage.rules` deploy
-have all happened, `uploadBytes` still 404s and `lib/attachments.js` turns that into a
-"paste a link instead" message — a link remains a first-class attachment either way.
-Blaze is not being used for Cloud Functions; see below.
+budget alert is the safeguard. The upgrade, the bucket and the `storage.rules` deploy all
+happened on 2026-09-12 and a PDF upload was proven; `lib/attachments.js` still turns a
+missing bucket into a "paste a link instead" message, and a link remains a first-class
+attachment either way. Blaze is not being used for Cloud Functions; see below.
 
 | Layer | Choice | Why |
 |---|---|---|

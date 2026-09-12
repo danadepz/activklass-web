@@ -122,6 +122,11 @@ not started from a ticket:
   `firebase deploy --only storage` from the backend repo, then one upload proven in the
   browser — at which point the Spark comments in `lib/attachments.js`, `lib/avatar.js` and
   the syllabus page's hint text come out. Cloud Functions stay unused regardless.
+  **Done 2026-09-12:** all three steps happened and the upload was proven (see
+  `ROADMAP.md`). One wrinkle worth knowing: the Firebase Gmail's payment profile was
+  closed by Google on every attempt, so `activklass1` is billed to the *other* Google
+  account — the one that holds the Gemini API key and the redeemed Developer Program
+  credits. Both services now sit on one working billing account.
 - **Superadmin is a Firebase custom claim, not a role string.** An admin can write any
   `users/{uid}` document including `role`, so a role string would be self-grantable.
 - **Native `alert`/`confirm` are gone,** replaced by `components/ui/`. Irreversible deletes

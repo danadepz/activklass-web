@@ -48,10 +48,11 @@ with `git commit --only -- <your paths>`, and read `git status` first.
   approval. The one approved spend is Firebase **Blaze** (owner decision 2026-09-04): the
   syllabus page's **Upload File** for learning materials writes to Cloud Storage, and
   Storage needs Blaze on every project — the demo needs a real PDF upload, and the link
-  paste is the fallback, not the plan. **Until the upgrade lands** (plus the default bucket
-  in the console and `firebase deploy --only storage` from the backend repo) uploads still
-  fail with the "paste a link instead" message, so do not describe them as working yet.
-  Blaze still does not mean Cloud Functions — anything server-side stays a Flask route.
+  paste is the fallback, not the plan. **Done 2026-09-12:** `activklass1` is on Blaze
+  (billed to the AI Gmail's account, the Firebase Gmail's payment profile kept closing),
+  the default bucket exists, `storage.rules` is deployed, and a PDF upload from the
+  syllabus page was proven in the browser and in the bucket. Blaze still does not mean
+  Cloud Functions — anything server-side stays a Flask route.
 
 ## Tech Stack
 - **React 19 + Vite 8** — SPA, no SSR. `@` aliases `src/`.
