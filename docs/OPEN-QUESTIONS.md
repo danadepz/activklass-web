@@ -127,12 +127,10 @@ not started from a ticket:
   closed by Google on every attempt, so `activklass1` is billed to the *other* Google
   account — the one that holds the Gemini API key. Both services now sit on one
   working billing account.
-  **What money actually moved (2026-09-12):** one real payment — **$10 for the Gemini
-  API**, a prepaid balance bought on the "Buy credits" screen (non-refundable, spent
-  down per generation, funded by the team). **Firebase Storage cost nothing:** Blaze is
-  pay-as-you-go with a free allowance (5 GB stored, 1 GB/day downloaded) a demo stays
-  inside, so the expected charge is $0.00. **Firebase billing budget: $10/month** on
-  `activklass1`.
+  **What money moved (2026-09-12):** **$10 for the Gemini API**, a prepaid balance
+  bought on the "Buy credits" screen (non-refundable, spent down per generation, funded
+  by the team). **Firebase:** Blaze is pay-as-you-go with a free allowance (5 GB stored,
+  1 GB/day downloaded); **billing budget $10/month** on `activklass1`.
 - **Superadmin is a Firebase custom claim, not a role string.** An admin can write any
   `users/{uid}` document including `role`, so a role string would be self-grantable.
 - **Native `alert`/`confirm` are gone,** replaced by `components/ui/`. Irreversible deletes
