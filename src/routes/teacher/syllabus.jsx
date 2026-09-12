@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { deleteDoc, doc, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocs, query, where, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { generateSyllabus, MELC_STATUS_LABEL } from '@/lib/ai'
 import { useAuth } from '@/context/useAuth'
@@ -658,6 +658,29 @@ function GenerateModal({ classes = [], onClose, onDraft }) {
   )
 }
 
+/**
+ * Quizzes still pointing at these syllabus topics. `topic_id` is the only
+ * link between a quiz and a sub-module, and it is what Scaffold Topics and the
+ * student's review guide use to find a quiz's mastery -- so a sub-module going
+ * away is something the teacher should hear about before, not discover as a
+ * blank on that page. Only a saved topic can have any; a draft's ids are null.
+ */
+async function quizzesLinkedTo(topicIds) {
+  const ids = topicIds.filter(Boolean)
+  const snaps = await Promise.all(
+    ids.map((id) => getDocs(query(collection(db, 'quizzes'), where('topic_id', '==', id)))),
+  )
+  return snaps.flatMap((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+}
+
+/** What a warning says about n linked quizzes. Grades are untouched, and it says so. */
+function linkedQuizNote(n) {
+  if (!n) return ''
+  const they = n === 1 ? 'It keeps' : 'They keep'
+  const it = n === 1 ? 'it' : 'they'
+  return `${n} quiz${n === 1 ? ' is' : 'zes are'} linked to it. ${they} every question and every score already in the class record — ${it} just won't show under a topic on Scaffold Topics any more.`
+}
+
 function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, onSaved, onCancel }) {
   const [tree, setTree] = useState(initial)
   const [genModule, setGenModule] = useState(false)
@@ -732,6 +755,21 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
 
       // Update Firestore class documents to set or clear syllabus_id
       const batch = writeBatch(db)
+      // A sub-module removed in this edit takes its quizzes' link with it: the
+      // quiz stays, its scores stay, its topic_id becomes null -- the state the
+      // quiz bank already shows as Uncategorized. Left pointing at a topic that
+      // no longer exists, it vanished from Scaffold Topics with no trace while
+      // the page's linked-quiz count still included it. Only quizzes this
+      // teacher owns: the rules refuse an update on anyone else's and a single
+      // refusal would fail the whole batch, syllabus included.
+      const kept = new Set(tree.modules.flatMap((m) => m.topics.map((t) => t.id)).filter(Boolean))
+      const removedTopicIds = (initial.modules ?? [])
+        .flatMap((m) => (m.topics ?? []).map((t) => t.id))
+        .filter((id) => id && !kept.has(id))
+      if (removedTopicIds.length) {
+        const orphaned = (await quizzesLinkedTo(removedTopicIds)).filter((q) => q.teacher_id === initial.teacher_id)
+        for (const q of orphaned) batch.update(doc(db, 'quizzes', q.id), { topic_id: null })
+      }
       for (const clazz of classes) {
         const classRef = doc(db, 'classes', clazz.id)
         if (assignedClassIds.includes(clazz.id)) {
@@ -836,9 +874,14 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                 <button onClick={() => setModules(move(tree.modules, mIdx, 1))} title="Move down" className="text-slate-400 hover:text-slate-600 px-1">↓</button>
                 <button
                   onClick={async () => {
+                    const linked = await quizzesLinkedTo(module.topics.map((t) => t.id)).catch(() => [])
                     if (await confirmDialog({
                       title: `Remove module "${module.title || mIdx + 1}"?`,
-                      message: 'Its sub-modules go with it. Nothing is written until you save the syllabus, so leaving without saving still undoes this.',
+                      message: [
+                        'Its sub-modules go with it.',
+                        linkedQuizNote(linked.length).replace('linked to it', 'linked to its sub-modules'),
+                        'Nothing is written until you save the syllabus, so leaving without saving still undoes this.',
+                      ].filter(Boolean).join(' '),
                       confirmLabel: 'Remove module',
                       tone: 'danger',
                     })) {
@@ -866,7 +909,18 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
                     <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, -1) })} title="Move up" className="text-slate-400 hover:text-slate-600">↑</button>
                     <button onClick={() => updateModule(mIdx, { topics: move(module.topics, tIdx, 1) })} title="Move down" className="text-slate-400 hover:text-slate-600">↓</button>
                     <button
-                      onClick={() => updateModule(mIdx, { topics: module.topics.filter((_, i) => i !== tIdx) })}
+                      onClick={async () => {
+                        const remove = () => updateModule(mIdx, { topics: module.topics.filter((_, i) => i !== tIdx) })
+                        if (!topic.id) return remove()
+                        const linked = await quizzesLinkedTo([topic.id]).catch(() => [])
+                        if (!linked.length) return remove()
+                        if (await confirmDialog({
+                          title: `Remove "${topic.title || `Sub-module ${tIdx + 1}`}"?`,
+                          message: `${linkedQuizNote(linked.length)} Nothing is written until you save the syllabus.`,
+                          confirmLabel: 'Remove sub-module',
+                          tone: 'danger',
+                        })) remove()
+                      }}
                       title="Remove sub-module"
                       className="text-slate-400 hover:text-red-600"
                     >

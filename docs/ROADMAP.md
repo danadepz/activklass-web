@@ -238,6 +238,29 @@ Still open at this altitude:
   the draft "Quarter 2: Polynomial Functions, Circles, and Coordinate Geometry". The draft
   was not saved. **Not covered:** a live SHS or college generation with strand/program set
   — the prompt lines are proven by the test, not by a model run.
+- `[x]` **A quiz stays connected to its syllabus topic, and losing that link is a choice**
+  (2026-09-12). Two gaps in the topic link that Scaffold Topics and the student's review
+  guide run on. (1) The Generate Quiz dialog read only `syllabi/{syllabus_id}`, so on a
+  seeded class (SCI9 Newton) the topic dropdown was empty and every quiz made there carried
+  no `topic_id` — Scaffold Topics showed the topic with no quizzes and no mastery. It now
+  reads the per-class document as a fallback, the same order Scaffold Topics reads
+  (`7a05df1`, Quizzes pane's file at the owner's direction). (2) Removing a sub-module from
+  the syllabus left its quizzes pointing at a topic that no longer existed — they vanished
+  from Scaffold Topics with no warning while the page's linked-quiz count still included
+  them. Now × on a sub-module (or a module) that has quizzes linked asks first — "N quizzes
+  are linked to it. They keep every question and every score already in the class record —
+  they just won't show under a topic on Scaffold Topics any more" — and Save sets those
+  quizzes' `topic_id` to `null`, the state the quiz bank already shows as Uncategorized.
+  **Grades are never touched**; the record is by assessment, not by topic. Decided against
+  showing a removed topic as zero mastery: the quiz has real scores, so zero would be a
+  false number. *Verified:* `npm run test` 899/899, `npm run build` clean; browser, as the
+  seeded teacher: Newton's dropdown lists its five seeded topics, BSIT-C's still lists its
+  sub-module; on a throwaway syllabus with a throwaway quiz linked to its one sub-module, ×
+  raised the dialog with the exact wording, the quiz's `topic_id` was unchanged until Save
+  and `null` after it with the quiz still present; the module-level dialog counted the same
+  quiz re-pointed at BSIT-C's sub-module and was cancelled, leaving BSIT-C untouched; both
+  throwaway documents were deleted after. **Not built:** a draft-level summary of
+  `melcWarnings` (a code claimed by two topics) — still console-only.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
