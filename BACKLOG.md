@@ -1563,6 +1563,17 @@ a clean run as the checker having proved anything.
   Mathematics Syllabus", `source: ai_generated`, assigned to no class) under Grace Abad,
   from run 2. Test data — delete when convenient.
 
+### 2026-09-12 — the quota this section keeps mentioning is gone
+Everything above about "a fresh day's quota" and "2 of 20 calls" describes the free tier
+as it stood on 2026-08-31. Since 2026-09-12 the Gemini key runs on a **paid prepay
+balance** ($10, non-refundable, spent per generation — `docs/OPEN-QUESTIONS.md`, commit
+`a473217`) and the backend's `AI_DAILY_LIMIT` is **200** per teacher per day, up from 20.
+So a syllabus-generation run is no longer something to ration or to schedule for a fresh
+day; the constraint on repeating the runs above is the prepay balance, not a calendar.
+Two things this does **not** change: `unverified` is still the honest ceiling (paying
+for the model does not make its codes true), and the grade-mismatch case is still
+unreproduced — more calls are now affordable if someone wants to hunt for it.
+
 ## Export downloads — T-03 (admin pane) — 2026-08-31
 
 Tester ticket `andecobs-12` (Derickk): "Export CSV not functioning." Fixed; the cause was
