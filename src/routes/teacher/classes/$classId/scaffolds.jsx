@@ -56,7 +56,14 @@ async function loadScaffolds(classId) {
     syl = cur.exists() ? cur.data() : null
   }
   const topics = (syl?.modules ?? []).flatMap((m) =>
-    (m.topics ?? []).map((t) => ({ id: t.id, title: t.title, moduleTitle: m.title })),
+    (m.topics ?? []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      moduleTitle: m.title,
+      // The practice quiz is fenced to these, the same as a quiz from the
+      // Quizzes page: a remediation must not drill what the module never taught.
+      objectives: (t.learning_objectives ?? t.objectives ?? []).filter((o) => typeof o === 'string' && o.trim()),
+    })),
   )
 
   // class_ids (array) is the canonical link -- a quiz can belong to several
@@ -124,6 +131,9 @@ async function loadScaffolds(classId) {
   const remediation = await loadClassRemediations(classId).catch(() => ({ plans: [], legacy: [] }))
   return {
     rows,
+    // The syllabus topics themselves, for the practice-quiz fence: a plan
+    // remembers only its topic's id and title, not the objectives.
+    topics,
     topicCount: topics.length,
     linkedQuizzes,
     clazz,
@@ -724,8 +734,13 @@ export default function ScaffoldTopicsPage() {
     setBusy(plan ? `quiz:${plan.id}` : topic.id)
     setError(null)
     try {
+      // A plan carries only the topic's id and title; the objectives live on
+      // the syllabus topic this page already loaded.
+      const objectives = topic.objectives ?? data?.topics?.find((t) => t.id === topic.id)?.objectives ?? []
       const quiz = await generateQuiz({
         topic: topic.title,
+        topicId: topic.id ?? null,
+        objectives,
         numQuestions: 10,
         difficulty: 'medium',
         hints: { subject: data?.clazz?.subject, targetLevel: 'apply' },
