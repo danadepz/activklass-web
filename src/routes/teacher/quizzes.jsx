@@ -152,15 +152,23 @@ function GenerateQuizModal({ classes, onClose }) {
     enabled: !!selectedClassId,
   })
 
-  // Load syllabus for the selected class to list topics
+  // Load syllabus for the selected class to list topics. A syllabus lives in
+  // two places (DATA-MODEL.md, rule 3): `syllabi/{syllabus_id}` first, then
+  // the seed's `classes/{id}/syllabus/current` -- the same order the Scaffold
+  // Topics page reads, so a quiz made here lands under a topic that page
+  // shows. Reading only the first left a seeded class with an empty dropdown
+  // and every quiz it generated unlinked from any topic.
   const { data: syllabus } = useQuery({
     queryKey: ['fs-syllabus-gen', selectedClassId, selectedClassMeta?.syllabus_id],
     queryFn: async () => {
-      if (!selectedClassMeta?.syllabus_id) return null
-      const snap = await getDoc(doc(db, 'syllabi', selectedClassMeta.syllabus_id))
-      return snap.exists() ? snap.data() : null
+      if (selectedClassMeta?.syllabus_id) {
+        const snap = await getDoc(doc(db, 'syllabi', selectedClassMeta.syllabus_id))
+        if (snap.exists()) return snap.data()
+      }
+      const cur = await getDoc(doc(db, 'classes', selectedClassId, 'syllabus', 'current'))
+      return cur.exists() ? cur.data() : null
     },
-    enabled: !!selectedClassId && !!selectedClassMeta?.syllabus_id,
+    enabled: !!selectedClassId && !!selectedClassMeta,
   })
 
   const topics = []
