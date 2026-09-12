@@ -147,8 +147,10 @@ Still open at this altitude:
   and Save Syllabus kept it; the Admin SDK then listed the object under
   `learning_materials/{syllabusId}/` (402 bytes, `application/pdf`) and the saved
   `syllabi/{id}` document carries its `firebasestorage.googleapis.com` download URL.
-  The Blaze upgrade wizard's budget-alert step errored and was skipped; the $10 alert
-  is still to be set in the Cloud console. The upload runs on the Firebase project,
+  The Blaze upgrade wizard's budget-alert step showed an error but saved anyway: the
+  billing account carries a monthly $10 budget scoped to `activklass1`, alerting at 50,
+  90 and 100% (owner confirmed in the Cloud console, 2026-09-12). The upload runs on
+  the Firebase project,
   which is billed to the AI Gmail's billing account (the Firebase Gmail's own payment
   profile was closed by Google five times).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
