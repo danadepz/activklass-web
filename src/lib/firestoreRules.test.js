@@ -651,3 +651,104 @@ describe('a teacher reads only the students they handle', () => {
     await assertSucceeds(getDocs(query(collection(ctx(STUDENT), 'quiz_attempts'), where('student_id', '==', STUDENT))))
   })
 })
+
+/* ────────────────────────────────────────────────────────────────────────
+ * class_tasks (2026-09-13): activities, assignments and paper exams a
+ * teacher publishes under a sub-module for ONE class.
+ *
+ * The rule reads class_id for everything: the owner of that class creates,
+ * updates and deletes; an enrolled student reads only what is published;
+ * a teacher who does not own the class is refused on all of it -- there is
+ * deliberately no bare isTeacher() branch. The student's list query has to
+ * carry BOTH filters the rule reads (class_id in [...], status ==
+ * 'published'), which is what useStudentDeliverables sends; the last test
+ * proves the same query without the status filter is refused, so nobody
+ * "simplifies" it later.
+ * ──────────────────────────────────────────────────────────────────────── */
+const NON_ENROLLED = 'student-9'
+
+async function seedClassTasks() {
+  await testEnv.withSecurityRulesDisabled(async (admin) => {
+    const db = admin.firestore()
+    await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T' })
+    await setDoc(doc(db, 'users', NON_ENROLLED), { role: 'student', first_name: 'N', last_name: 'E', teacher_ids: [] })
+    await setDoc(doc(db, 'classes', 'class-1'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT, OTHER_STUDENT] })
+    await setDoc(doc(db, 'classes', 'class-2'), { teacher_id: FOREIGN_TEACHER, student_ids: [NON_ENROLLED] })
+    await setDoc(doc(db, 'class_tasks', 'task-pub'), {
+      class_id: 'class-1', teacher_id: OWN_TEACHER, kind: 'assignment', title: 'Assignment 1',
+      topic_id: 't1', status: 'published', opens_at: '2026-09-14T08:00', due_at: '2026-09-19T23:59', attachments: [],
+    })
+    await setDoc(doc(db, 'class_tasks', 'task-draft'), {
+      class_id: 'class-1', teacher_id: OWN_TEACHER, kind: 'activity', title: 'Draft activity',
+      topic_id: 't1', status: 'draft', opens_at: null, due_at: null, attachments: [],
+    })
+  })
+}
+
+const newTask = (over = {}) => ({
+  class_id: 'class-1', teacher_id: OWN_TEACHER, kind: 'activity', title: 'Lab 1',
+  topic_id: 't1', status: 'draft', opens_at: null, due_at: null, attachments: [], ...over,
+})
+
+describe('class_tasks · the class owner writes, the class reads', () => {
+  beforeEach(seedClassTasks)
+
+  it('the owner creates a task on their class under their own teacher_id', async () => {
+    await assertSucceeds(setDoc(doc(ctx(OWN_TEACHER), 'class_tasks', 'new-1'), newTask()))
+  })
+
+  it('a foreign teacher cannot create one on that class, nor forge the owner’s id', async () => {
+    await assertFails(setDoc(doc(ctx(FOREIGN_TEACHER), 'class_tasks', 'new-2'), newTask({ teacher_id: FOREIGN_TEACHER })))
+    await assertFails(setDoc(doc(ctx(FOREIGN_TEACHER), 'class_tasks', 'new-3'), newTask()))
+    // and the owner cannot stamp someone else as the author
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'class_tasks', 'new-4'), newTask({ teacher_id: FOREIGN_TEACHER })))
+  })
+
+  it('the owner reads a task, and lists them with the class_id filter useClassTasks sends', async () => {
+    await assertSucceeds(getDoc(doc(ctx(OWN_TEACHER), 'class_tasks', 'task-draft')))
+    await assertSucceeds(getDocs(query(collection(ctx(OWN_TEACHER), 'class_tasks'), where('class_id', '==', 'class-1'))))
+  })
+
+  it('a foreign teacher is refused the read, the list, the update and the delete', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'class_tasks', 'task-pub')))
+    await assertFails(getDocs(query(collection(ctx(FOREIGN_TEACHER), 'class_tasks'), where('class_id', '==', 'class-1'))))
+    await assertFails(updateDoc(doc(ctx(FOREIGN_TEACHER), 'class_tasks', 'task-pub'), { title: 'Hijacked' }))
+    await assertFails(deleteDoc(doc(ctx(FOREIGN_TEACHER), 'class_tasks', 'task-pub')))
+  })
+
+  it('the owner updates (including publishing) and deletes', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(OWN_TEACHER), 'class_tasks', 'task-draft'), { status: 'published', due_at: '2026-09-20T23:59' }))
+    await assertSucceeds(deleteDoc(doc(ctx(OWN_TEACHER), 'class_tasks', 'task-draft')))
+  })
+
+  it('an enrolled student reads a published task and is refused a draft', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'class_tasks', 'task-pub')))
+    await assertFails(getDoc(doc(ctx(STUDENT), 'class_tasks', 'task-draft')))
+  })
+
+  it('a student who is not on the class is refused even the published one', async () => {
+    await assertFails(getDoc(doc(ctx(NON_ENROLLED), 'class_tasks', 'task-pub')))
+  })
+
+  it('a student never writes a task', async () => {
+    await assertFails(setDoc(doc(ctx(STUDENT), 'class_tasks', 'new-5'), newTask({ teacher_id: STUDENT, status: 'published' })))
+    await assertFails(updateDoc(doc(ctx(STUDENT), 'class_tasks', 'task-pub'), { due_at: '2027-01-01T00:00' }))
+    await assertFails(deleteDoc(doc(ctx(STUDENT), 'class_tasks', 'task-pub')))
+  })
+
+  it('the exact list query useStudentDeliverables sends passes for an enrolled student', async () => {
+    const q = (uid) => getDocs(query(
+      collection(ctx(uid), 'class_tasks'),
+      where('class_id', 'in', ['class-1']),
+      where('status', '==', 'published'),
+    ))
+    await assertSucceeds(q(STUDENT))
+    // and a student the class does not list is refused the same query
+    await assertFails(q(NON_ENROLLED))
+  })
+
+  it('the same query without the status filter is refused — the rule cannot prove the draft branch', async () => {
+    await assertFails(getDocs(query(collection(ctx(STUDENT), 'class_tasks'), where('class_id', 'in', ['class-1']))))
+    await assertFails(getDocs(query(collection(ctx(STUDENT), 'class_tasks'), where('class_id', '==', 'class-1'))))
+  })
+})

@@ -32,6 +32,7 @@ sites in `src/`, not from memory.
 | `grading_presets/{uid}` | yes | A teacher's saved grading setup. |
 | `subscription_requests/{id}` | yes (create only, signed with own `uid`) | The "Institution" path on `/register`. The person creates a normal teacher account (`school_request_pending: true`) and leaves a request for the ActivKlass team — their details plus the seats they chose (`teacher_seats` 20–500, `students_per_teacher` 30–300, `student_seats` = the product, `academic_calendar` school_year/semestral/trimestral; the page shows a per-school-year estimate from `lib/pricing.js`; the calendar is recorded, not billed by); the rules pin the shape and only the superadmin tier can read it. The superadmin console's **School requests** tab lists pending ones; Decline is a client update (`status: 'declined'`, `decision_note`), Approve goes through Flask (`POST /api/superadmin/requests/{id}/approve`), which creates the school and subscription and promotes the requester to admin in one batch. |
 | `student_performance/{classId_studentId}`, `attendance_summaries/{classId_studentId}` | yes | Composite ids built by helper functions — never hand-assemble them. |
+| `class_tasks/{taskId}` | yes (teacher: create, update, delete via `lib/classTasks.js`) | Since 2026-09-13. An activity, assignment or paper exam a teacher publishes under a syllabus sub-module for **one** class, with an open time and a deadline: `class_id` (the field every rule reads), `teacher_id` (must equal the caller on create), `syllabus_id` / `module_id` / `topic_id` (nullable; the sub-module it hangs off), `kind` (`activity` / `assignment` / `exam` / `other`), `title` (≤ 120), `instructions_markdown`, `attachments[]` (`{ title, resource_type: 'file' \| 'link', url }`, the same shape as a syllabus material; files go to Storage under `task_files/{classId}/{taskId}/`), `opens_at` / `due_at` (nullable, the zone-less `YYYY-MM-DDTHH:mm` strings quizzes use — `parseWindowDate` in `lib/deliverables.js` reads both the same way `canStart` does), `points` (informational only — grading stays in the class record), `status` (`draft` / `published`), `created_at` / `updated_at`. Quizzes are **not** copied here; `fromQuiz` / `fromTask` in `lib/deliverables.js` normalise both into the one shape the screens render. Nothing is submitted through the app, so a task past `due_at` is overdue, never closed. The teacher reads their own with `where('class_id', '==', classId)` (`useClassTasks`); the student's read is the two-field shape in rule 4 below (`useStudentDeliverables`). Publishing writes one `notifications` doc per student (`type: 'task_published'`, link to the class's Modules tab at the sub-module), best-effort. |
 
 ## Subcollections
 
@@ -95,6 +96,17 @@ does not yet handle — goes through `GET /api/students/lookup` (exact number, L
 email; roster fields only). Verified in `lib/firestoreRules.test.js` under
 `npm run test:rules`.
 
+**`class_tasks` reads the same way, from the class side** (2026-09-13). The rule
+proves a student's read from `classes/{class_id}.student_ids` and
+`status == 'published'`, so the student's list query must carry **both** fields:
+`where('class_id', 'in', chunk)` (chunked at `IN_CHUNK`) **and**
+`where('status', '==', 'published')` — drop the status filter and the whole query is
+refused, enrolled or not, because the engine cannot rule out a draft. The teacher's
+`where('class_id', '==', classId)` is proved through `classes.teacher_id`; a foreign
+teacher is refused every read and write. The `(class_id, status)` composite index is in
+the backend's `firestore.indexes.json`. Both shapes and both refusals are in
+`lib/firestoreRules.test.js`.
+
 ---
 
 ## Query conventions
@@ -107,6 +119,9 @@ email; roster fields only). Verified in `lib/firestoreRules.test.js` under
   `useTeacherStudents`) are the other shared keys — the latter is deliberately its own
   prefix, not `['fs-classes']`, since it reads far more per class (roster, gradebook,
   assessments, the `student_performance` risk snapshot) than the class list does.
+  `['fs-class-tasks', classId]` (`useClassTasks`) and `['fs-student-deliverables', uid]`
+  (`useStudentDeliverables`) are their own prefixes too; a screen that saves a task
+  invalidates `classTasksKey(classId)` itself.
 - **No query uses `orderBy`.** All sorting is client-side. Fine at pilot scale; the
   composite indexes exist in the backend repo for when reads move server-side.
 - **`in` queries chunk at 10 ids (`IN_CHUNK` in `lib/roster.js`), not Firestore's 30.**
