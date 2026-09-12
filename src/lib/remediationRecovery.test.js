@@ -16,6 +16,7 @@ import {
   computeRecovery,
   describeRecoveryResult,
   planRecovery,
+  recoveryCap,
 } from './remediationRecovery.js'
 
 const graded = (raw) => ({ status: 'graded', raw_score: raw })
@@ -159,5 +160,29 @@ describe('describeRecoveryResult', () => {
 
   it('reads plainly when everything worked', () => {
     expect(describeRecoveryResult({ applied: 1 })).toBe('1 mark recovered.')
+  })
+})
+
+describe('recoveryCap · the ceiling follows the class pass mark', () => {
+  it("uses a CHED gradebook's own passing percent", () => {
+    expect(recoveryCap({ grading_mode: 'ched_percentage', passing_percent: 80 })).toBe(80)
+    expect(recoveryCap({ grading_mode: 'ched_point', passing_percent: 60 })).toBe(60)
+  })
+
+  it('stays at 75 for DepEd K-12, whatever the document carries', () => {
+    expect(recoveryCap({ grading_mode: 'deped_k12', passing_percent: 80 })).toBe(75)
+  })
+
+  it('falls back to 75 for a gradebook written before the field existed', () => {
+    expect(recoveryCap({ grading_mode: 'ched_percentage' })).toBe(75)
+    expect(recoveryCap({})).toBe(75)
+    expect(recoveryCap(undefined)).toBe(75)
+  })
+
+  it('carries the class cap through a recovery', () => {
+    const cap = recoveryCap({ grading_mode: 'ched_percentage', passing_percent: 80 })
+    const result = computeRecovery({ originalRaw: 40, totalPoints: 100, remediationPct: 100, cap })
+    expect(result.applied_pct).toBe(80)
+    expect(result.cap).toBe(80)
   })
 })

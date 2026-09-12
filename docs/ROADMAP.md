@@ -123,6 +123,24 @@ Still open at this altitude:
   back, scores 90/55/62 read 4.50/1/3.25 inverted and 1.50/5/2.75 standard with the pass
   count flipping between "≥ 3.00" and "≤ 3.00"; the preview recomputed live. **Owed:** the
   click-through as one of BSIT-C's students (needs a student sign-in).
+- `[x]` **Recovering a mark now recovers it to the class's own pass mark** (2026-09-12).
+  Recover Marks on the Scaffold Topics page lifted a failing score to a hard-coded 75 in
+  every class, so a college class with a different pass mark either recovered students to a
+  mark that still failed, or past the mark that passes. `recoveryCap()` in
+  `lib/remediationRecovery.js` reads the gradebook's `passing_percent` through the same
+  `gradePolicy()` the record uses (DepEd K-12 stays at 75, as the record does), the
+  Firestore half fills it in when no ceiling is given, and the dialog's Ceiling field
+  starts at the class's pass mark and says so; a typed ceiling still overrides it.
+  *Verified:* `remediationRecovery.test.js` (+4: CHED 80 and 60, DepEd pinned at 75,
+  pre-T-45 gradebook falls back to 75), `npm run test` 886/886, `npm run build` clean.
+  Browser, as the seeded teacher on BSIT-C (pass mark 60, point scale) against a
+  temporary published plan and practice quiz that were deleted after: the dialog opened at
+  60 with "60% is this class's pass mark from Grade Config", the preview read
+  55/100 → 60/100 at practice 100% (it would have read 75 before), typing 80 moved the
+  preview to 80 and the hint to "This class's pass mark is 60%". Apply was not pressed,
+  so the T-45 walkthrough record is unchanged. **Owed:** the same dialog opened on a
+  DepEd class in the browser (SCI9 Newton's plan was being reseeded by another pane at
+  the time).
 - `[x]` **A teacher sees only the students they handle** (2026-08-31). The rules used to
   let *any* teacher read *any* student's profile, attempts, risk, remediations, grades,
   guardian links and consent — the screens were scoped, the database was not. Now

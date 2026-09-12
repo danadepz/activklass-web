@@ -31,7 +31,7 @@ import {
 import { db } from '@/lib/firebase'
 import { syncEntries } from '@/lib/gradebook'
 import { attemptForScoring, quizTotalPoints } from '@/lib/quizToRecord'
-import { CAPPED_REPLACE, PASSING, planRecovery } from '@/lib/remediationRecovery'
+import { CAPPED_REPLACE, planRecovery, recoveryCap } from '@/lib/remediationRecovery'
 import { REMEDIATION_PUBLISHED } from '@/features/classes/remediation'
 
 /**
@@ -67,7 +67,8 @@ async function remediationPercents(quizId, classId) {
 }
 
 /**
- * The assessments in a class record a recovery could be applied to.
+ * The assessments in a class record a recovery could be applied to, and the
+ * ceiling this class recovers to.
  *
  * Every assessment is offered, not only the quiz-sourced ones: the failing
  * mark a remediation was prescribed for is often a hand-entered long test, and
@@ -75,6 +76,10 @@ async function remediationPercents(quizId, classId) {
  * feature useless in exactly those cases. Locked periods are returned and
  * marked rather than hidden, so the teacher can see why the row they wanted is
  * not selectable.
+ *
+ * `cap` rides along because it comes off the same gradebook document: the
+ * class's own pass mark (recoveryCap), which is what the dialog's Ceiling
+ * field starts at. Before this the dialog started at 75 for every class.
  */
 export async function loadRecoveryTargets(classId) {
   const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
@@ -83,7 +88,7 @@ export async function loadRecoveryTargets(classId) {
   const components = gb.components ?? []
 
   const snap = await getDocs(collection(db, 'gradebooks', classId, 'assessments'))
-  return snap.docs
+  const targets = snap.docs
     .map((d) => {
       const a = d.data()
       const period = periods.find((p) => p.id === a.period_id)
@@ -100,6 +105,7 @@ export async function loadRecoveryTargets(classId) {
       }
     })
     .sort((a, b) => a.period_name.localeCompare(b.period_name) || a.title.localeCompare(b.title))
+  return { targets, cap: recoveryCap(gb) }
 }
 
 /**
@@ -113,13 +119,16 @@ export async function loadRecoveryTargets(classId) {
  *   rule that a locked period is final;
  * - the student must be **targeted by the plan**, so a recovery cannot reach
  *   someone who was never told to remediate.
+ *
+ * `cap` is the teacher's chosen ceiling; left out, it is the class's own pass
+ * mark, read off the gradebook this function loads anyway.
  */
 export async function previewRecovery({
   plan,
   classId,
   assessmentId,
   policy = CAPPED_REPLACE,
-  cap = PASSING,
+  cap,
 }) {
   if (plan?.status !== REMEDIATION_PUBLISHED) {
     throw new Error('Publish the remediation before recovering marks with it.')
@@ -133,7 +142,8 @@ export async function previewRecovery({
   const assessment = snap.data()
 
   const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
-  const period = (gbSnap.data()?.periods ?? []).find((p) => p.id === assessment.period_id)
+  const gb = gbSnap.data() ?? {}
+  const period = (gb.periods ?? []).find((p) => p.id === assessment.period_id)
   if (period?.locked) {
     throw new Error(`${period.name} is locked — unlock it before recovering marks.`)
   }
@@ -146,7 +156,7 @@ export async function previewRecovery({
       totalPoints: Number(assessment.total_points),
       remediationPctByStudent: await remediationPercents(plan.recommended_quiz_id, classId),
       policy,
-      cap,
+      cap: Number.isFinite(cap) ? cap : recoveryCap(gb),
     }),
   }
 }
@@ -157,7 +167,7 @@ export async function applyRecoveryToAssessment({
   classId,
   assessmentId,
   policy = CAPPED_REPLACE,
-  cap = PASSING,
+  cap,
   teacherId,
 }) {
   const { recoveries, notAttempted, noOriginal, noImprovement } = await previewRecovery({

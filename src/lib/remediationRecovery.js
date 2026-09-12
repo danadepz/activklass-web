@@ -16,8 +16,32 @@
  * fail. Recovery has to act on the original score.
  */
 
-/** Passing mark. The DepEd cut-off the rest of the app already uses. */
-export const PASSING = 75
+import { DEFAULT_PASSING_PERCENT, gradePolicy } from './grading.js'
+
+/**
+ * The ceiling a recovery is capped at when nothing better is known: 75, the
+ * DepEd cut-off and the default pass mark everywhere else in the app. Callers
+ * that have the class gradebook in hand should use recoveryCap() instead.
+ */
+export const PASSING = DEFAULT_PASSING_PERCENT
+
+/**
+ * The recovery ceiling a class actually uses: its own pass mark.
+ *
+ * A recovery lifts a failing mark to "passing", so the ceiling has to be
+ * whatever passes in that class. Since T-45 a CHED gradebook can set that
+ * (`passing_percent`, read through gradePolicy()); before this, recovery was
+ * pinned at 75 regardless, so a college class with a pass mark of 80 recovered
+ * students to a mark that still failed. DepEd K-12 ignores the field the same
+ * way the record page does (DepEd Order No. 8 s. 2015 fixes 75), and a
+ * gradebook without the field or without a mode falls back to 75 -- the
+ * default mode is deped_k12 (DATA-MODEL.md).
+ */
+export function recoveryCap(gradebook) {
+  const mode = gradebook?.grading_mode ?? 'deped_k12'
+  if (mode === 'deped_k12') return DEFAULT_PASSING_PERCENT
+  return gradePolicy(gradebook).passing_percent
+}
 
 export const CAPPED_REPLACE = 'capped_replace'
 export const AVERAGE = 'average'
