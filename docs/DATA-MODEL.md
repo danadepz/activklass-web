@@ -70,7 +70,13 @@ Saving from the syllabus page writes `syllabi/{id}` **and** the class resolves t
 `classes/{classId}.syllabus_id`; the seed script instead writes
 `classes/{classId}/syllabus/current`. Both paths exist in the client. When you change how
 a syllabus is resolved, check both, and check `classes.syllabus_id` — that is the field a
-student actually reads a syllabus through.
+student actually reads a syllabus through. Since 2026-09-12 the two readers that matter
+for scaffolding agree: `loadSyllabus` (`lib/studentData.js`, every student-side read) and
+the teacher's Scaffold Topics page both take `syllabus_id` first and fall back to the
+per-class document. Before that each read only one of the two, so a remediation's
+`topic_id` could come from a document the student never opened, and on the other kind of
+class the teacher was told there was no syllabus at all. The rules let an enrolled
+student read either document.
 
 ### 4. A teacher reads only the students they handle — and the rules prove it from the query
 Since 2026-08-31 `isTeacher()` no longer opens student data. A teacher may read a

@@ -38,8 +38,23 @@ import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 const PASS = 75 // an attempt at/above this % counts as mastered for that student
 
 async function loadScaffolds(classId) {
-  const sylSnap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
-  const syl = sylSnap.exists() ? sylSnap.data() : null
+  const classSnap = await getDoc(doc(db, 'classes', classId))
+  const clazz = classSnap.exists() ? classSnap.data() : null
+
+  // A syllabus lives in two places (DATA-MODEL.md, rule 3). One saved from the
+  // syllabus page is `syllabi/{classes.syllabus_id}` -- and that is the only
+  // one a student reads, so a remediation must carry topic ids from it or the
+  // student's card can never find the module it came from. The seed script
+  // writes `classes/{id}/syllabus/current` instead; kept as the fallback.
+  let syl = null
+  if (clazz?.syllabus_id) {
+    const s = await getDoc(doc(db, 'syllabi', clazz.syllabus_id))
+    if (s.exists()) syl = s.data()
+  }
+  if (!syl) {
+    const cur = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
+    syl = cur.exists() ? cur.data() : null
+  }
   const topics = (syl?.modules ?? []).flatMap((m) =>
     (m.topics ?? []).map((t) => ({ id: t.id, title: t.title, moduleTitle: m.title })),
   )
@@ -64,8 +79,6 @@ async function loadScaffolds(classId) {
     }),
   )
 
-  const classSnap = await getDoc(doc(db, 'classes', classId))
-  const clazz = classSnap.exists() ? classSnap.data() : null
   const ids = clazz ? clazz.student_ids ?? [] : []
   const users = ids.length ? await fetchUsersByIds(ids) : []
   const nameById = {}
@@ -334,14 +347,19 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Recover marks from a remediation', closeOnBackdrop: false })
   const [assessmentId, setAssessmentId] = useState('')
   const [policy, setPolicy] = useState(CAPPED_REPLACE)
-  const [cap, setCap] = useState(PASSING)
+  // null = "the class's own pass mark", which arrives with the targets below.
+  // A teacher who types a ceiling overrides it for this dialog only.
+  const [capOverride, setCapOverride] = useState(null)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState(null)
 
-  const { data: targets = [], isLoading: loadingTargets } = useQuery({
+  const { data: recovery, isLoading: loadingTargets } = useQuery({
     queryKey: ['fs-recovery-targets', classId],
     queryFn: () => loadRecoveryTargets(classId),
   })
+  const targets = recovery?.targets ?? []
+  const classCap = recovery?.cap ?? PASSING
+  const cap = capOverride ?? classCap
 
   // Re-runs on every policy or ceiling change, so the table below is always
   // the arithmetic that Apply would perform -- never a stale earlier one.
@@ -421,17 +439,20 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
               <label style={fieldLabel}>Ceiling %</label>
               <input
                 type="number"
-                min="60"
+                min="1"
                 max="100"
                 className="ak-input"
                 value={cap}
-                onChange={(e) => setCap(Number(e.target.value) || PASSING)}
+                onChange={(e) => setCapOverride(Number(e.target.value) || null)}
                 style={{ ...selectStyle, ...mono, cursor: 'text' }}
               />
             </div>
           </div>
           <p style={{ fontSize: 12, color: muted, margin: 0, lineHeight: 1.5 }}>
             {policyMeta?.describe(cap)} A recovery can only raise a mark, never lower one.
+            {' '}{cap === classCap
+              ? `${classCap}% is this class's pass mark from Grade Config.`
+              : `This class's pass mark is ${classCap}%.`}
           </p>
 
           {assessmentId && (

@@ -112,9 +112,16 @@ export async function loadSyllabus(classId) {
   try {
     const classSnap = await getDoc(doc(db, 'classes', classId))
     if (!classSnap.exists()) return null
+    // A syllabus lives in two places (DATA-MODEL.md, rule 3): one saved from
+    // the syllabus page is `syllabi/{classes.syllabus_id}`; the seed script
+    // writes `classes/{id}/syllabus/current` and leaves syllabus_id empty. The
+    // teacher's scaffolds page reads both, so a remediation can carry topic
+    // ids from either -- and this read has to find the same document, or the
+    // student's card cannot name the module it came from. The rules let an
+    // enrolled student read the per-class document.
     const syllabusId = classSnap.data().syllabus_id
-    if (!syllabusId) return null
-    const snap = await getDoc(doc(db, 'syllabi', syllabusId))
+    let snap = syllabusId ? await getDoc(doc(db, 'syllabi', syllabusId)) : null
+    if (!snap?.exists()) snap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
     if (!snap.exists()) return null
     const data = snap.data()
     // Unpublished modules are held back from students. Filtered here rather than
