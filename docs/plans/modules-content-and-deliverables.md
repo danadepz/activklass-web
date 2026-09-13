@@ -7,10 +7,10 @@ convoy was mostly through. Where each step stands (the Modules pane keeps this l
 |---|---|---|
 | 1 Rules, storage, schema, seed | Backend | **done, not deployed** — backend `9b99c5f` `5f69451` `ff33ed2` `b75736f`. A live student read of `class_tasks` is refused until the owner runs `firebase deploy --only firestore:rules,firestore:indexes,storage` from the backend repo. |
 | 2 Shared logic + rules test | Data/logic | done — `c364352` `ded328a` `72982f0` `0063710`; `npm run test:rules` 56/56. |
-| 3 Teacher Modules tab | Class detail | in progress — `modules.jsx`, its test, the `_layout` tab and the one `App.jsx` route are in the pane's working tree, announced, not yet committed. |
+| 3 Teacher Modules tab | Class detail | done — `74ce9e0` `58d3b64` `662c115` (Keel's work; committed from the Modules pane after that session closed). `modules.test.jsx` (11); **browser walk owed** to Step 6. |
 | 4 Student Modules chips + Up next | Student | done — `70de02c` `393cfac` `5061576`; verified headless as Carlo; live task rows blocked on the Step 1 deploy. |
 | 5 Quiz card chip + `?topic=` | Quizzes | done — `describeWindow` on every card, `?topic=` preselect, landed with the Generate-dialog work (`9c800db` and before). |
-| 6 Verify + ROADMAP entry | Verify | not started — needs Step 3 committed and Step 1 deployed. |
+| 6 Verify + ROADMAP entry | Verify | dispatched 2026-09-13 — teacher half can run now; the student half waits on the Step 1 deploy. |
 
 Every prompt in section 6 is paste-ready and self-contained; a pane that receives one
 should still read `CLAUDE.md`, `OWNERSHIP.md` and `docs/DATA-MODEL.md` before its first
