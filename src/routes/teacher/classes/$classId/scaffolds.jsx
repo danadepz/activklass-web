@@ -34,6 +34,7 @@ import { toast } from '@/components/ui/toast'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { resolveSyllabus } from './classSyllabus'
 
 const PASS = 75 // an attempt at/above this % counts as mastered for that student
 
@@ -41,20 +42,10 @@ async function loadScaffolds(classId) {
   const classSnap = await getDoc(doc(db, 'classes', classId))
   const clazz = classSnap.exists() ? classSnap.data() : null
 
-  // A syllabus lives in two places (DATA-MODEL.md, rule 3). One saved from the
-  // syllabus page is `syllabi/{classes.syllabus_id}` -- and that is the only
-  // one a student reads, so a remediation must carry topic ids from it or the
-  // student's card can never find the module it came from. The seed script
-  // writes `classes/{id}/syllabus/current` instead; kept as the fallback.
-  let syl = null
-  if (clazz?.syllabus_id) {
-    const s = await getDoc(doc(db, 'syllabi', clazz.syllabus_id))
-    if (s.exists()) syl = s.data()
-  }
-  if (!syl) {
-    const cur = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
-    syl = cur.exists() ? cur.data() : null
-  }
+  // syllabus_id first, per-class document second (classSyllabus.js): a
+  // remediation must carry topic ids from the document the student reads, or
+  // the student's card can never find the module it came from.
+  const { data: syl } = await resolveSyllabus(classId, clazz)
   const topics = (syl?.modules ?? []).flatMap((m) =>
     (m.topics ?? []).map((t) => ({
       id: t.id,
