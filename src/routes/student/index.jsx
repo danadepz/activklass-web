@@ -8,6 +8,7 @@ import { loadStudentEntry, loadStudentAttendance, loadSyllabus } from '@/lib/stu
 import { TrendingUp, CalendarCheck, BookOpen, AlertCircle, ShieldCheck, ChevronRight } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serif, mono } from '@/theme'
 import { formatGrade, gradeAsPercent, gradeTone } from './gradeDisplay'
+import UpNextPanel from './deliverables/UpNextPanel'
 
 
 /* Animated circular gauge (SVG). `value` is 0–100; `null` shows a dash. */
@@ -254,6 +255,10 @@ export default function StudentDashboard() {
           )}
         </div>
       )}
+
+      {/* What is due, across every class -- its own read (useStudentDeliverables),
+          so a slow or refused deliverables query never holds up the class cards. */}
+      <UpNextPanel />
 
       {/* Classes */}
       <div className="mt-8 mb-4 flex items-center justify-between">
