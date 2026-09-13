@@ -261,6 +261,44 @@ Still open at this altitude:
   quiz re-pointed at BSIT-C's sub-module and was cancelled, leaving BSIT-C untouched; both
   throwaway documents were deleted after. **Not built:** a draft-level summary of
   `melcWarnings` (a code claimed by two topics) — still console-only.
+- `[x]` **A teacher publishes activities, assignments and paper exams under a sub-module,
+  with a file and a window, and the student sees what is due** (2026-09-13, the class-tasks
+  convoy in `docs/plans/modules-content-and-deliverables.md`, Steps 1–5; verified by the
+  Verify pane as Step 6). `class_tasks/{id}` is keyed by class (a syllabus is shared across
+  sections, so a date cannot live on it); the teacher's new **Modules** tab on a class adds
+  one under any sub-module with instructions, PDF/link attachments under
+  `task_files/{classId}/{taskId}/`, `opens_at` / `due_at`, points, draft → publish; the
+  student's dashboard gets **Up next** (Overdue · Due today · This week · Later · Finished,
+  list or month calendar) over quizzes and tasks together, the class Modules tab shows each
+  task under its sub-module with the same window chip, and publishing notifies the roster
+  with a deep link that scrolls to and highlights the sub-module. *Verified 2026-09-13,
+  all headless through `_tools/verify/drive.mjs` on the live project after the owner's
+  deploy:* **teacher**, as Marites on SCI9 Newton — an assignment with a PDF saved as a
+  draft (Firestore document `status: 'draft'`, attachment URL on `firebasestorage`, the
+  303-byte `application/pdf` object listed under the task's path), edited, published
+  (`status: 'published'`; 8 `task_published` notifications, one per student, each linking
+  `?tab=topics&topic=t1`), two more published to land overdue and due-today, one left as a
+  draft; a draft's delete is one click, a published task's asks for DELETE typed; **student**,
+  as Carlo — Up next read *Overdue · 3 / Due today · 1 / This week · 1* with the right items
+  and the draft nowhere; the calendar put a dot on each due day in five states; every row
+  deep-linked to its sub-module; the Modules tab showed the three chips and the 📄 button
+  opened the Storage URL in a new tab (`noopener`; the URL serves the PDF); the deep link
+  highlighted `topic-t1` in gold for the 3.5 s the code promises; the bell listed the three;
+  **rules**, `npm run test:rules` 56/56 including the `class_tasks` block, and with the
+  draft condition removed from the rule two of its tests go red. Locks: the convoy's own
+  (`classTasks.test.js`, `deliverables.test.js`, `UpNextPanel.test.jsx`,
+  `deliverables.test.jsx`, `modules.test.jsx`, `useStudentDeliverables.test.js`), each
+  broken and seen red; plus `lib/classTasksGuards.test.js` for the two things none of them
+  read — the student query carrying `status == 'published'` in the suite that runs on
+  every change, and DELETE-to-confirm only on a published task. `npm run test` 1035/1035,
+  build clean. Everything created for the pass was deleted afterwards (the four tasks
+  through the app's own Delete, the 24 notifications and the Storage object through the
+  Admin SDK). **Not covered:** editing a task *after* publishing (the save-without-
+  re-notifying path — unit-tested, not driven); a non-PDF attachment; BSIT-C (the plan's
+  class — it has no student quick-login, so Newton was used and Carlo stood in for Hana);
+  clicking the bell entry itself rather than its URL. **Noted, not fixed:** deleting a task
+  leaves its file in Storage; `seed_demo.py`'s three demo tasks are committed but were never
+  run, so the live project has no seeded tasks.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
