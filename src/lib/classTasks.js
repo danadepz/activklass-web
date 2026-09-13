@@ -18,6 +18,8 @@ import {
 import { db } from './firebase'
 import { uploadAttachment } from './attachments'
 import { notifyStudents } from './notifications'
+import { syncEntries } from './gradebook'
+import { assessmentFromTask, assessmentIdForTask, taskCountsTowardRecord } from './recordMapping'
 import { KIND_LABEL, TASK_KINDS, taskHref } from './deliverables'
 
 /** Key the teacher's task list is cached under (hooks/useClassTasks.js). */
@@ -43,6 +45,11 @@ function taskFields(input = {}) {
   if ('syllabus_id' in input) out.syllabus_id = input.syllabus_id || null
   if ('module_id' in input) out.module_id = input.module_id || null
   if ('topic_id' in input) out.topic_id = input.topic_id || null
+  // Where the task counts in the class record (owner decision 2026-09-13):
+  // a component and a period, both nullable -- a task with neither is for
+  // the student's information only, as every task was before.
+  if ('component_id' in input) out.component_id = input.component_id || null
+  if ('grading_period_id' in input) out.grading_period_id = input.grading_period_id || null
   if ('status' in input) out.status = input.status === 'published' ? 'published' : 'draft'
   return out
 }
@@ -150,6 +157,37 @@ export async function publishTask({ taskId, task, teacherId, studentIds = [], ch
     // is asked why a student did not get the notice.
     console.error('class task published but the roster was not notified', err)
   }
+}
+
+/**
+ * Put a published task's column in the class record.
+ *
+ * The same shape a quiz's publish creates (hooks/useQuizRecordSync.js): a
+ * `gradebooks/{classId}/assessments/task-{id}` row with the task's title,
+ * points, component and period, merged so a re-publish or a later edit
+ * updates the row it made rather than adding a twin, and so marks a teacher
+ * has already typed into it survive (`scores` is never in the merge). Scores
+ * are typed on the record page as before -- a task has no answer key.
+ *
+ * Returns false when the task does not count toward the record (no
+ * component, no period, or no points), which is not an error: the dialog
+ * already said so. `syncEntries` is what makes the student's own screen
+ * list the new column; a failure there is swallowed, as the quiz sync does,
+ * because the column did land and the next record save re-syncs.
+ */
+export async function syncTaskToRecord({ classId, task }) {
+  if (!taskCountsTowardRecord(task)) return false
+  await setDoc(
+    doc(db, 'gradebooks', classId, 'assessments', assessmentIdForTask(task.id)),
+    { ...assessmentFromTask(task), created_at: serverTimestamp(), synced_at: serverTimestamp() },
+    { merge: true },
+  )
+  try {
+    await syncEntries(classId)
+  } catch {
+    /* derived; the next record save re-syncs */
+  }
+  return true
 }
 
 /** Remove a task. Irreversible; the screen confirms first, as deletes do elsewhere. */

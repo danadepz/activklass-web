@@ -441,7 +441,9 @@ function RecordGrid({ classId, record, refetch }) {
       // them it will reappear if they post from the quiz again.
       message: assessment.source_quiz_id
         ? 'Every score recorded against it goes too, and the class average is recomputed without it. This column came from a quiz — posting its scores again recreates it.'
-        : 'Every score recorded against it goes too, and the class average is recomputed without it. This cannot be undone.',
+        : assessment.source_task_id
+          ? 'Every score recorded against it goes too, and the class average is recomputed without it. This column came from a task on the Modules tab — saving that task again recreates it, empty.'
+          : 'Every score recorded against it goes too, and the class average is recomputed without it. This cannot be undone.',
       confirmLabel: 'Delete assessment',
       tone: 'danger',
       typeToConfirm: 'DELETE',
@@ -573,6 +575,12 @@ function RecordGrid({ classId, record, refetch }) {
                           quiz's results tab, not edited to stay correct. */}
                       {a.source_quiz_id && (
                         <span title={`Posted from the quiz "${a.title}"`} style={{ color: blueText, flexShrink: 0 }} aria-label="From a quiz">◆</span>
+                      )}
+                      {/* A column a published task created (Modules tab).
+                          Scores are still typed here; the marker says where
+                          the column came from and that it is reproducible. */}
+                      {a.source_task_id && (
+                        <span title={`Created by the task "${a.title}" on the Modules tab`} style={{ color: goldDeep, flexShrink: 0 }} aria-label="From a task">◇</span>
                       )}
                       <span title={a.title} style={{ ...mono, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
                       {!locked && (

@@ -15,7 +15,7 @@
  * (`classSyllabus.js`): `classes.syllabus_id` first, the seeded per-class
  * document second, so Newton and BSIT-C both show their modules.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
@@ -24,7 +24,8 @@ import { useAuth } from '@/context/useAuth'
 import { useQuizzes } from '@/hooks/useQuizzes'
 import { useClassTasks, classTasksKey } from '@/hooks/useClassTasks'
 import { KIND_LABEL, describeWindow, fromQuiz, fromTask, stateOf } from '@/lib/deliverables'
-import { createTask, deleteTask, newTaskId, publishTask, updateTask, uploadTaskFile } from '@/lib/classTasks'
+import { createTask, deleteTask, newTaskId, publishTask, syncTaskToRecord, updateTask, uploadTaskFile } from '@/lib/classTasks'
+import { suggestMapping, taskCountsTowardRecord } from '@/lib/recordMapping'
 import { LINK_HINT, isSafeLink, uploadsPossible } from '@/lib/attachments'
 import {
   TASK_TITLE_MAX,
@@ -197,8 +198,42 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
     opens_at: task?.opens_at ?? '',
     due_at: task?.due_at ?? '',
     points: task?.points ?? '',
+    // Where it counts in the class record (owner decision 2026-09-13). Both
+    // blank means "for information only", which is what every task was.
+    component_id: task?.component_id ?? '',
+    grading_period_id: task?.grading_period_id ?? '',
   })
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  /* The class's gradebook, for the Counts toward selects. Read here rather
+     than through the record page's bundle because the dialog needs only the
+     components and periods, and a class with no Grade Config gets a link
+     instead of the selects. */
+  const { data: gradebook } = useQuery({
+    queryKey: ['fs-gradebook-lite', classId],
+    queryFn: async () => {
+      const snap = await getDoc(doc(db, 'gradebooks', classId))
+      return snap.exists() ? snap.data() : null
+    },
+  })
+  const gradable = !!suggestMapping(gradebook, form.kind)
+  // The component is guessed from the kind and the component's name (a quiz
+  // to Written Works, an activity to Performance Tasks, an exam to Quarterly
+  // Assessment...) until the teacher picks one themselves; then the pick
+  // stands through later kind changes. A task being edited opens on what it
+  // has.
+  const [mappingTouched, setMappingTouched] = useState(!!task?.component_id)
+  useEffect(() => {
+    if (mappingTouched || !gradebook) return
+    const guess = suggestMapping(gradebook, form.kind)
+    if (!guess) return
+    setForm((f) => ({ ...f, component_id: guess.component_id, grading_period_id: guess.grading_period_id }))
+  }, [gradebook, form.kind, mappingTouched])
+  const setMapping = (key) => (e) => {
+    setMappingTouched(true)
+    setForm((f) => ({ ...f, [key]: e.target.value }))
+  }
+  const countsToward = taskCountsTowardRecord(form)
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(null) // 'draft' | 'publish' | 'save'
@@ -283,6 +318,19 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
         })
       } else if (editing) {
         await updateTask(taskId, mode === 'save' ? f : { ...f, status: 'draft' })
+      }
+      // A published task with a component and points owns a column in the
+      // class record, created on publish and kept in step by later saves
+      // (a retitled task retitles its column). A draft creates nothing.
+      if (mode === 'publish' || mode === 'save') {
+        try {
+          await syncTaskToRecord({ classId, task: { ...f, id: taskId } })
+        } catch (err) {
+          // The task is published; the column can be recreated by saving it
+          // again. Said in the toast rather than failing the publish.
+          console.error('class task published but its record column was not written', err)
+          toast.error('Published, but the Class Record column could not be added. Open the task and save it again.')
+        }
       }
       onSaved(mode)
     } catch (err) {
@@ -436,13 +484,55 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
             <input id="task-due" className="ak-input" type="datetime-local" value={form.due_at} onChange={set('due_at')} style={field} />
           </div>
           <div>
-            <label style={label} htmlFor="task-points">Points (optional)</label>
+            <label style={label} htmlFor="task-points">Points{gradable ? '' : ' (optional)'}</label>
             <input id="task-points" className="ak-input" type="number" min="0" step="1" value={form.points} onChange={set('points')} placeholder="—" style={field} />
           </div>
         </div>
         <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0', lineHeight: 1.45 }}>
-          Leave a date blank if it does not apply. Points are for the student's information — grading stays in the Class Record.
+          Leave a date blank if it does not apply.
         </p>
+
+        {/* Counts toward: the record column this task creates on publish.
+            Pre-filled from the kind; "Not graded" leaves the record alone. */}
+        <div className="mt-4" style={{ background: 'rgba(14,42,92,0.03)', border: `1px solid ${line}`, borderRadius: 11, padding: '12px 14px' }}>
+          <span style={{ ...label, marginBottom: 0 }}>Counts toward</span>
+          {gradable ? (
+            <>
+              <div className="mt-2 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <div>
+                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-component">Grade component</label>
+                  <select id="task-component" className="ak-input" value={form.component_id} onChange={setMapping('component_id')} style={{ ...field, cursor: 'pointer' }}>
+                    <option value="">— Not graded —</option>
+                    {gradebook.components.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.weight_percent != null ? ` (${c.weight_percent}%)` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-period">Grading period</label>
+                  <select id="task-period" className="ak-input" value={form.grading_period_id} onChange={setMapping('grading_period_id')} disabled={!form.component_id} style={{ ...field, cursor: form.component_id ? 'pointer' : 'not-allowed', opacity: form.component_id ? 1 : 0.55 }}>
+                    <option value="">—</option>
+                    {gradebook.periods.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}{p.locked ? ' (locked)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p role="status" style={{ fontSize: 11.5, color: form.component_id && !countsToward ? goldDeep : faint, margin: '8px 0 0', lineHeight: 1.45 }}>
+                {!form.component_id
+                  ? 'Not graded: the points are for the student’s information and nothing is added to the Class Record.'
+                  : countsToward
+                    ? `Publishing adds a "${form.title.trim() || 'Untitled'}" column out of ${Number(form.points)} under this component and period in the Class Record. Scores are typed there.`
+                    : 'Enter the points it is out of, or the column has nothing to score against.'}
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 12, color: muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              This class has no Grade Config yet, so the task cannot count toward a grade — the points are for the student’s information.{' '}
+              <Link to={`/teacher/classes/${classId}/grading`} style={{ color: blueText, fontWeight: 600 }}>Open Grade Config →</Link>
+            </p>
+          )}
+        </div>
 
         {error && (
           <p role="alert" className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', margin: '16px 0 0' }}>{error}</p>
@@ -576,7 +666,7 @@ export default function ModulesPage() {
     const ok = await confirmDialog({
       title: `Delete "${task.title}"?`,
       message: published
-        ? 'It is removed from every student\'s Modules tab and dashboard. This cannot be undone.'
+        ? `It is removed from every student's Modules tab and dashboard. This cannot be undone.${task.component_id ? ' Its column in the Class Record stays, with any scores typed into it — delete that from the record if it should go too.' : ''}`
         : 'It was never published, so no student has seen it. This cannot be undone.',
       confirmLabel: `Delete ${KIND_LABEL[task.kind]?.toLowerCase() ?? 'task'}`,
       tone: 'danger',

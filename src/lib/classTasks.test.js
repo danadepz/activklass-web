@@ -19,12 +19,14 @@ const uploadAttachment = vi.fn(async (path) => `https://firebasestorage.googleap
 vi.mock('./attachments', () => ({ uploadAttachment: (...a) => uploadAttachment(...a) }))
 const notifyStudents = vi.fn(async () => {})
 vi.mock('./notifications', () => ({ notifyStudents: (...a) => notifyStudents(...a) }))
+const syncEntries = vi.fn(async () => {})
+vi.mock('./gradebook', () => ({ syncEntries: (...a) => syncEntries(...a) }))
 
-const { createTask, updateTask, publishTask, deleteTask, uploadTaskFile, newTaskId, classTasksKey } = await import('./classTasks')
+const { createTask, updateTask, publishTask, deleteTask, uploadTaskFile, newTaskId, classTasksKey, syncTaskToRecord } = await import('./classTasks')
 
 beforeEach(() => {
   writes.set = []; writes.update = []; writes.del = []; fail.update = false
-  notifyStudents.mockClear(); uploadAttachment.mockClear()
+  notifyStudents.mockClear(); uploadAttachment.mockClear(); syncEntries.mockClear()
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -103,5 +105,35 @@ describe('uploadTaskFile', () => {
 describe('classTasksKey', () => {
   it('is its own prefix, per class', () => {
     expect(classTasksKey('c1')).toEqual(['fs-class-tasks', 'c1'])
+  })
+})
+
+/**
+ * A published task's record column (owner decision 2026-09-13). The same
+ * merge-on-a-derived-id a quiz's publish does, so a re-publish updates the
+ * row instead of adding a twin and never touches typed scores.
+ */
+describe('syncTaskToRecord', () => {
+  const task = { id: 't-7', title: 'Lab report 1', kind: 'assignment', points: 20, due_at: '2026-09-20T17:00', component_id: 'pt', grading_period_id: 'q1' }
+
+  it('writes the column under a derived id, merged, with no scores, then re-syncs entries', async () => {
+    expect(await syncTaskToRecord({ classId: 'c1', task })).toBe(true)
+    const [path, data] = writes.set[0]
+    expect(path).toBe('gradebooks/c1/assessments/task-t-7')
+    expect(data).toMatchObject({ title: 'Lab report 1', component_id: 'pt', period_id: 'q1', kind: 'assignment', total_points: 20, date_given: '2026-09-20', source_task_id: 't-7', created_at: 'TS', synced_at: 'TS' })
+    expect(data).not.toHaveProperty('scores')
+    expect(syncEntries).toHaveBeenCalledWith('c1')
+  })
+
+  it('writes nothing for a task that does not count -- no component, or no points', async () => {
+    expect(await syncTaskToRecord({ classId: 'c1', task: { ...task, component_id: null } })).toBe(false)
+    expect(await syncTaskToRecord({ classId: 'c1', task: { ...task, points: null } })).toBe(false)
+    expect(writes.set).toEqual([])
+    expect(syncEntries).not.toHaveBeenCalled()
+  })
+
+  it('keeps the two record fields through the whitelist, and drops a blank one to null', async () => {
+    await createTask({ classId: 'c1', teacherId: 't1', task: { title: 'X', component_id: 'pt', grading_period_id: '' } })
+    expect(writes.set[0][1]).toMatchObject({ component_id: 'pt', grading_period_id: null })
   })
 })

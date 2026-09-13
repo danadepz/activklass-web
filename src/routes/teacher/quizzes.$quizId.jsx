@@ -14,6 +14,7 @@ import { describeBankResult } from '@/lib/questionBank'
 import { SCORING_POLICIES, describeSyncResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { topicOptions, topicPatch } from '@/lib/quizTopics'
+import { suggestMapping } from '@/lib/recordMapping'
 import {
   DETAIL_OPTIONS,
   DETAIL_RATIONALE,
@@ -756,10 +757,11 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
         blocked = blocked ?? c
         continue
       }
-      initial[c.id] = {
-        component_id: gb.components[0].id,
-        grading_period_id: gb.periods[0].id,
-      }
+      // Pre-filled from the component's name -- Quizzes or Written Works
+      // when one is called that, the first unlocked period -- rather than
+      // whatever component happens to be listed first (lib/recordMapping.js,
+      // owner decision 2026-09-13). Still a select the teacher can change.
+      initial[c.id] = suggestMapping(gb, 'quiz')
     }
     setMappings(initial)
     setError(err)

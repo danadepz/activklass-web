@@ -317,6 +317,29 @@ Still open at this altitude:
   re-stamped, and Aquino's `entries` document carrying Prelim 69 one second later; the
   quiz's results view showed the same line. **Not built:** posting at the moment of
   submit, which needs a Flask route (the student cannot write the record).
+- `[x]` **A task counts toward a grade component, and the component is guessed from the
+  kind** (2026-09-13, owner decision). A published activity, assignment or exam with points
+  used to be typed a second time under **+ Add assessment** on the record; now the task
+  dialog has **Counts toward** (grade component · grading period, or **Not graded**) and
+  publishing creates the record column itself — `task-{id}`, title, points, component,
+  period, the deadline's date, `source_task_id`, shown with a ◇ on the record — and later
+  saves keep it in step. The pick is pre-filled by name from the kind (`lib/recordMapping.js`:
+  a quiz → Quizzes / Written Works, an activity or assignment → Performance Tasks, an exam
+  → Quarterly Assessment / Major Exam; the first unlocked period) and the quiz publish
+  modal now opens on the same guess instead of whichever component is listed first. A
+  stored per-kind default was deliberately not added — it would be a new gradebook field
+  through `POST /api/grading-setup` (cross-repo, the T-45 trap) for a pre-fill a name
+  match already gets. Scores are still typed on the record; deleting a task leaves its
+  column and the confirm says so. *Verified:* `recordMapping.test.js` (11),
+  `classTasks.test.js` (+3), `npm run test` 1051/1051, build clean; browser, as the seeded
+  teacher on Newton (Quarter 1 locked): + Add → Assignment opened on Performance Tasks
+  (50%) · Quarter 2, switching the kind to Exam moved it to Quarterly Assessments (20%)
+  and back; a throwaway activity out of 20 due 20 Sep published, and the Admin SDK showed
+  `task-{id}` under `pt` / `q2`, `total_points` 20, `date_given` 2026-09-20, no `scores`;
+  the record's Quarter 2 tab showed the ◇ column under Performance Tasks with typeable
+  cells. The task, its column and its 8 notifications were deleted after, and one
+  record save re-synced the students' `entries`. **Not driven:** the quiz publish modal's
+  pre-fill (the same tested function; the modal opens only on Publish).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
