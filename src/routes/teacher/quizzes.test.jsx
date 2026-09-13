@@ -168,8 +168,8 @@ describe('Quizzes list card names the class (T-36)', () => {
  * modal is exported for this -- it opens on a click, which a static render
  * cannot do (the same reason register.jsx lifted WrongPathNudge).
  */
-const openGenerate = (classes = [klass('c1', 'Curie', 'Special Science Program')]) =>
-  renderToStaticMarkup(<GenerateQuizModal classes={classes} onClose={() => {}} />)
+const openGenerate = (classes = [klass('c1', 'Curie', 'Special Science Program')], initialClassId = '') =>
+  renderToStaticMarkup(<GenerateQuizModal classes={classes} onClose={() => {}} initialClassId={initialClassId} />)
 
 const guideOf = (html) => html.match(/<details[^>]*>[\s\S]*?<\/details>/)?.[0] ?? ''
 
@@ -214,9 +214,40 @@ describe('Generate Quiz with AI — the guide a first-time teacher opens on to (
   /* The other two pieces of help were to stay as they were: the no-syllabus
      Tip when the class has no topics to offer. Both classes here have none
      (useSyllabi is stubbed empty), so the Tip must still show under the
-     guide, not be replaced by it. */
+     guide, not be replaced by it. Since 2026-09-13 a class has to be picked
+     before the Tip means anything, so this opens with one picked. */
   it('keeps the "build a syllabus first" tip for a class with no topics', () => {
-    expect(openGenerate()).toContain('build a syllabus first')
+    expect(openGenerate(undefined, 'c1')).toContain('build a syllabus first')
+  })
+})
+
+/**
+ * The class comes first (2026-09-13, owner request). The dialog used to open
+ * with the first class already picked, so a quiz landed on it by default and
+ * the topic list was that class's before the teacher had chosen anything.
+ * Now it opens on "Choose a class", and everything below the class select
+ * sits in a disabled <fieldset> -- greyed, inert -- with Generate draft
+ * disabled too, until a class is picked. A class the URL carried (the class
+ * page's "+ Add -> Quiz") still arrives picked, and then nothing is gated.
+ */
+describe('Generate Quiz with AI — the class is picked first', () => {
+  it('opens on "Choose a class" with the rest of the form disabled', () => {
+    const html = openGenerate()
+    expect(html).toContain('— Choose a class —')
+    expect(html).toMatch(/<select[^>]*required[^>]*>/)
+    expect(html).toMatch(/<fieldset disabled/)
+    expect(html).toContain('unlock the rest of the form')
+    expect(html).not.toContain('build a syllabus first')
+    const generate = html.match(/<button[^>]*>Generate draft/)?.[0]
+    expect(generate).toContain(' disabled=""')
+  })
+
+  it('opens ungated when the class arrived on the URL', () => {
+    const html = openGenerate(undefined, 'c1')
+    expect(html).not.toMatch(/<fieldset disabled/)
+    expect(html).not.toContain('unlock the rest of the form')
+    const generate = html.match(/<button[^>]*>Generate draft/)?.[0]
+    expect(generate).not.toContain(' disabled=""')
   })
 })
 
@@ -231,7 +262,7 @@ describe('Generate Quiz with AI — Clear form', () => {
     const clear = html.match(/<button[^>]*>Clear form<\/button>/)?.[0]
     expect(clear).toBeTruthy()
     expect(clear).toContain('type="button"')
-    expect(clear).toContain('disabled')
+    expect(clear).toContain(' disabled=""')
     expect(html.indexOf('Clear form')).toBeLessThan(html.indexOf('>Cancel<'))
   })
 })

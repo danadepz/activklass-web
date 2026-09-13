@@ -124,7 +124,7 @@ describe('Generate Syllabus with AI — Clear form', () => {
     const clear = html.match(/<button[^>]*>Clear form<\/button>/)?.[0]
     expect(clear).toBeTruthy()
     expect(clear).toContain('type="button"')
-    expect(clear).toContain('disabled')
+    expect(clear).toContain(' disabled=""')
     expect(html.indexOf('Clear form')).toBeLessThan(html.indexOf('>Cancel<'))
   })
 })

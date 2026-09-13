@@ -110,7 +110,12 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { locks } = useMySubscription()
-  const openedWithClassId = initialClassId || classes[0]?.id || ''
+  // No class is picked for the teacher (owner, 2026-09-13): the first class in
+  // the list used to be, and a quiz landed on it by default. Only a class the
+  // URL carried (the class page's "+ Add -> Quiz") arrives picked. Until one
+  // is, every other field is greyed and inert -- the topics come from the
+  // class, so nothing below it means anything before it.
+  const openedWithClassId = initialClassId || ''
   const openedWithForm = {
     topic_id: initialTopicId,
     topic: '',
@@ -130,6 +135,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   // Clear puts the dialog back to how it opened -- including a class or topic
   // Scaffold Topics pre-picked, which the teacher did not enter. Same control
   // as the Generate Syllabus dialog; disabled until something has changed.
+  const needsClass = !selectedClassId
   const isUntouched =
     selectedClassId === openedWithClassId &&
     Object.keys(openedWithForm).every((k) => String(form[k]) === String(openedWithForm[k]))
@@ -212,6 +218,10 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
 
   async function generate(e) {
     e.preventDefault()
+    if (needsClass) {
+      setError('Pick a class first')
+      return
+    }
     const picked = pickedTopic
     const topicText = (picked?.title || form.topic).trim()
     if (!topicText) {
@@ -317,14 +327,24 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
 
           <div>
             <label style={labelStyle}>Target Class Context</label>
-            <select className="ak-input" value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setForm(f => ({ ...f, topic_id: f.topic_id === initialTopicId ? f.topic_id : '' })) }} style={selectStyle}>
+            <select className="ak-input" required value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setForm(f => ({ ...f, topic_id: f.topic_id === initialTopicId ? f.topic_id : '' })) }} style={selectStyle}>
+              <option value="">— Choose a class —</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>{c.section} ({c.subject})</option>
               ))}
             </select>
+            {needsClass && (
+              <p style={{ fontSize: 12, color: faint, margin: '8px 0 0', lineHeight: 1.5 }}>
+                Choose a class to unlock the rest of the form — its syllabus topics fill the list below.
+              </p>
+            )}
           </div>
 
-          {topics.length > 0 ? (
+          {/* A native <fieldset disabled> greys and freezes every control
+              inside it at once -- selects, inputs, the type chips and the
+              bank checkbox -- with no per-field wiring to keep in step. */}
+          <fieldset disabled={needsClass} className="flex flex-col gap-4" style={{ margin: 0, padding: 0, border: 0, minWidth: 0, opacity: needsClass ? 0.45 : 1, pointerEvents: needsClass ? 'none' : 'auto', transition: 'opacity 150ms' }}>
+          {needsClass ? null : topics.length > 0 ? (
             <div>
               <label style={labelStyle}>Syllabus topic</label>
               <select className="ak-input" value={form.topic_id} onChange={(e) => setForm((f) => ({ ...f, topic_id: e.target.value }))} style={selectStyle}>
@@ -435,6 +455,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             </span>
           </label>
           {locks.quizBank && <PaidPlanHint style={{ marginTop: 8 }} />}
+          </fieldset>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
           <button
@@ -448,7 +469,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
             Cancel
           </button>
-          <button type="submit" disabled={generating} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+          <button type="submit" disabled={generating || needsClass} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
             {generating ? 'Generating…' : 'Generate draft'}
             <GoldArrow />
           </button>

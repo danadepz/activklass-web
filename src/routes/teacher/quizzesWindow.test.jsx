@@ -123,7 +123,11 @@ describe('/teacher/quizzes?topic= preselects the topic in the Generate dialog', 
     state.syllabi = []
     state.classMeta = { syllabus_id: null }
     state.syllabus = { modules: [{ id: 'm9', title: 'Forces', topics: [{ id: 't-99', title: 'Newton\'s laws' }] }] }
-    state.search = 'topic=t-from-elsewhere'
+    // The class comes on the URL too: since 2026-09-13 the dialog no longer
+    // picks the first class for the teacher, and the warning belongs to a
+    // picked class -- with none picked the form below the class select is
+    // gated and says to choose one instead.
+    state.search = 'topic=t-from-elsewhere&class=c-other'
     const html = render()
     expect(html).toContain('Generate Quiz with AI')
     expect(html).toContain('not in this class')
