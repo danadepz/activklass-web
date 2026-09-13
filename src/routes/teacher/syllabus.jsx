@@ -419,6 +419,27 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
 
   const clazz = classes.find((c) => c.id === classId) ?? null
   const isCollege = clazz ? classEducationLevel(clazz) === 'College' : curriculum.startsWith('ched')
+
+  // Picking a class fills five fields at once, so a wrong pick used to mean
+  // emptying each by hand (or Cancel and reopen, which nobody guesses). Clear
+  // puts the form back to how it opened; no confirm, it is a reset, not a
+  // delete. Disabled while nothing has been entered so it never looks broken.
+  const isBlank =
+    !classId && !subjectCode && !subjectDesc && !gradeLevel && !curriculum &&
+    !quarter && !strand && !program && durationWeeks === 10 && !notes
+  function clearForm() {
+    setClassId('')
+    setSubjectCode('')
+    setSubjectDesc('')
+    setGradeLevel('')
+    setCurriculum('')
+    setQuarter('')
+    setStrand('')
+    setProgram('')
+    setDurationWeeks(10)
+    setNotes('')
+    setError(null)
+  }
   const grade = gradeNumber(gradeLevel)
   const isSeniorHigh = !isCollege && (grade === 11 || grade === 12)
   const curriculumHint = CURRICULA.find((c) => c.value === curriculum)?.hint
@@ -662,7 +683,15 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
           </p>
         </div>
 
-        <div className="flex gap-3 justify-end pt-2">
+        <div className="flex items-center gap-3 justify-end pt-2">
+          <button
+            type="button"
+            onClick={clearForm}
+            disabled={generating || isBlank}
+            className="mr-auto text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            Clear form
+          </button>
           <button
             onClick={onClose}
             disabled={generating}

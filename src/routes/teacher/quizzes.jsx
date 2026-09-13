@@ -110,8 +110,8 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { locks } = useMySubscription()
-  const [selectedClassId, setSelectedClassId] = useState(initialClassId || classes[0]?.id || '')
-  const [form, setForm] = useState({
+  const openedWithClassId = initialClassId || classes[0]?.id || ''
+  const openedWithForm = {
     topic_id: initialTopicId,
     topic: '',
     count: 10,
@@ -122,9 +122,22 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
     // still a checkbox rather than automatic, because banking writes to a
     // list the teacher owns and a silent write is the wrong surprise.
     save_to_bank: true,
-  })
+  }
+  const [selectedClassId, setSelectedClassId] = useState(openedWithClassId)
+  const [form, setForm] = useState(openedWithForm)
   const [error, setError] = useState(null)
   const [generating, setGenerating] = useState(false)
+  // Clear puts the dialog back to how it opened -- including a class or topic
+  // Scaffold Topics pre-picked, which the teacher did not enter. Same control
+  // as the Generate Syllabus dialog; disabled until something has changed.
+  const isUntouched =
+    selectedClassId === openedWithClassId &&
+    Object.keys(openedWithForm).every((k) => String(form[k]) === String(openedWithForm[k]))
+  function clearForm() {
+    setSelectedClassId(openedWithClassId)
+    setForm(openedWithForm)
+    setError(null)
+  }
   const selectStyle = { ...fieldStyle, cursor: 'pointer' }
   const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
   const COUNT_OPTIONS = [5, 10, 15, 20]
@@ -423,7 +436,15 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           </label>
           {locks.quizBank && <PaidPlanHint style={{ marginTop: 8 }} />}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={clearForm}
+            disabled={generating || isUntouched}
+            className="mr-auto text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            Clear form
+          </button>
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
             Cancel
           </button>

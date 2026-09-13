@@ -106,3 +106,22 @@ describe('Generate Syllabus with AI — the guide a first-time teacher opens on 
     expect(open()).not.toMatch(/gemini|llama|openai|anthropic|claude|firebase/i)
   })
 })
+
+/**
+ * Clear form (2026-09-13, owner request). Picking a class fills five fields
+ * at once, so a wrong pick used to mean emptying each by hand. A static
+ * render cannot click it; what it can pin is that the control is there, is
+ * disabled until something is entered (so an empty form never shows a button
+ * that does nothing), is type="button" (so it can never submit), and sits
+ * apart from Cancel / Generate rather than as a third primary.
+ */
+describe('Generate Syllabus with AI — Clear form', () => {
+  it('opens with a disabled "Clear form" button ahead of Cancel', () => {
+    const html = open()
+    const clear = html.match(/<button[^>]*>Clear form<\/button>/)?.[0]
+    expect(clear).toBeTruthy()
+    expect(clear).toContain('type="button"')
+    expect(clear).toContain('disabled')
+    expect(html.indexOf('Clear form')).toBeLessThan(html.indexOf('>Cancel<'))
+  })
+})
