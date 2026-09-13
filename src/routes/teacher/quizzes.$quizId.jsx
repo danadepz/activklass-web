@@ -12,6 +12,7 @@ import { useSyllabi } from '@/hooks/useSyllabi'
 import { bankQuestions, filterBankedQuestions, useBankedQuestions } from '@/hooks/useBankedQuestions'
 import { describeBankResult } from '@/lib/questionBank'
 import { SCORING_POLICIES, describeSyncResult } from '@/lib/quizToRecord'
+import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import {
   DETAIL_OPTIONS,
   DETAIL_RATIONALE,
@@ -1223,6 +1224,18 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             <label style={labelStyle}>Closes</label>
             <input className="ak-input" type="datetime-local" value={settings.closes_at} onChange={set('closes_at')} style={fieldStyle} />
           </div>
+          {/* The sentence the Quizzes page's cards and the student's screens
+              print for this window (lib/deliverables.js), read off the
+              unsaved fields so the teacher sees what a date will say before
+              saving it. The quiz's status still counts: one closed by hand
+              reads Closed whatever the dates are. */}
+          <p className="col-span-2 sm:col-span-4" style={{ fontSize: 12, color: muted, margin: '-4px 0 0', lineHeight: 1.5 }}>
+            Students will read this as{' '}
+            <strong style={{ color: ink }}>
+              {describeWindow(fromQuiz({ ...quiz, opens_at: settings.opens_at || null, closes_at: settings.closes_at || null }, { classId: assignedClassIds[0] ?? '' }))}
+            </strong>
+            {' '}— the same line the Quizzes page shows.
+          </p>
           <div className="flex flex-col gap-2 pb-2">
             <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
               <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
