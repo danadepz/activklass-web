@@ -13,6 +13,7 @@ import { bankQuestions, filterBankedQuestions, useBankedQuestions } from '@/hook
 import { describeBankResult } from '@/lib/questionBank'
 import { SCORING_POLICIES, describeSyncResult } from '@/lib/quizToRecord'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
+import { topicOptions, topicPatch } from '@/lib/quizTopics'
 import {
   DETAIL_OPTIONS,
   DETAIL_RATIONALE,
@@ -890,6 +891,10 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const navigate = useNavigate()
   const initialSettings = {
     title: quiz.title,
+    // The sub-module the quiz is filed under. Kept in settings so a change
+    // counts as unsaved like any other; module_id and syllabus_id are derived
+    // from it at save time (lib/quizTopics.js), never edited on their own.
+    topic_id: quiz.topic_id ?? '',
     instructions: quiz.instructions ?? '',
     time_limit_minutes: quiz.time_limit_minutes ?? '',
     attempts_allowed: unlimitedAttempts(quiz) ? 1 : quiz.attempts_allowed ?? 1,
@@ -933,6 +938,46 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   const dirty = builderSnapshot(settings, assignedClassIds, questions) !== savedSnapshot
+
+  /* The Syllabus topic options come from the assigned classes' syllabi, read
+     the same way every other teacher-side screen reads them (DATA-MODEL.md
+     rule 3): `syllabi/{class.syllabus_id}` when the class has one -- already
+     in the `syllabi` list, so resolved synchronously here, no read -- else
+     the seed's `classes/{id}/syllabus/current`, one read per such class
+     through a query keyed on exactly those ids. The split matters: a query
+     that closed over `syllabi` cached its first, empty run and BSIT-C's
+     topics never appeared. */
+  const sortedClassIds = [...assignedClassIds].sort()
+  const ownSyllabusByClass = {}
+  const fallbackIds = []
+  for (const cid of sortedClassIds) {
+    const clazz = classes.find((c) => c.id === cid)
+    const own = clazz?.syllabus_id ? syllabi.find((sy) => sy.id === clazz.syllabus_id) : null
+    if (own) ownSyllabusByClass[cid] = { id: own.id, data: own }
+    else fallbackIds.push(cid)
+  }
+  const { data: fallbackByClass = {} } = useQuery({
+    queryKey: ['fs-quiz-editor-class-syllabus', fallbackIds],
+    queryFn: async () => {
+      const out = {}
+      await Promise.all(fallbackIds.map(async (cid) => {
+        try {
+          const cur = await getDoc(doc(db, 'classes', cid, 'syllabus', 'current'))
+          out[cid] = { id: null, data: cur.exists() ? cur.data() : null }
+        } catch {
+          out[cid] = { id: null, data: null }
+        }
+      }))
+      return out
+    },
+    enabled: fallbackIds.length > 0,
+  })
+  const syllabusByClass = { ...fallbackByClass, ...ownSyllabusByClass }
+  const topicChoices = topicOptions(assignedClassIds, classes, syllabusByClass)
+  // A topic the quiz carries that is not among the options: the class it came
+  // from is not ticked. Shown as its own row, kept on save, so unticking a
+  // class does not silently unfile the quiz.
+  const topicOrphaned = !!settings.topic_id && !topicChoices.some((t) => t.id === settings.topic_id)
 
   /* Everything below exists because the most expensive thing this screen can
      do is lose questions a teacher typed by hand. Authoring a quiz is twenty
@@ -1039,6 +1084,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       pool_draw_count: settings.pool_enabled ? Number(settings.pool_draw_count) || null : null,
       class_ids: assignedClassIds,
       questions: questions.map(toPayload),
+      ...topicPatch(settings.topic_id, topicChoices, quiz),
       ...extra,
     }
 
@@ -1192,6 +1238,31 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
               ))}
             </select>
           </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Syllabus topic</label>
+          <select
+            className="ak-input"
+            value={settings.topic_id}
+            onChange={set('topic_id')}
+            disabled={assignedClassIds.length === 0}
+            style={{ ...fieldStyle, cursor: assignedClassIds.length ? 'pointer' : 'not-allowed', opacity: assignedClassIds.length ? 1 : 0.55 }}
+          >
+            <option value="">— Not filed under a sub-module —</option>
+            {topicOrphaned && (
+              <option value={settings.topic_id}>Current topic (its class is not assigned below)</option>
+            )}
+            {topicChoices.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: 12, color: muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+            {assignedClassIds.length === 0
+              ? 'Assign a class below first — the sub-modules come from its syllabus.'
+              : topicChoices.length === 0
+                ? 'The assigned class has no syllabus yet, so there is nothing to file this under.'
+                : 'Files the quiz under this sub-module on the Modules tab and Scaffold Topics, and in the student’s review guide. Any quiz — generated or written by hand — can be moved here.'}
+          </p>
         </div>
         <div>
           <label style={labelStyle}>Instructions (optional)</label>
