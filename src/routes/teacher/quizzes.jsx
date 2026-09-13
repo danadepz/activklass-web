@@ -282,9 +282,24 @@ function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopic
         </div>
         <div style={{ padding: '24px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
           <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
-            Builds a draft in the question types you pick (local Llama 3, with a math fallback). Review every
-            question and answer key before publishing.
+            Builds a draft quiz from a topic. You review every question and answer key in the
+            editor before anything reaches students.
           </p>
+          {/* The guide a teacher asked for (T-59): what each field changes, in the
+              order the form asks for it. A native <details>, open, so a first
+              generation sees it and a repeat user can fold it; no component --
+              the Generate Syllabus dialog carries its own copy of the block. */}
+          <details open style={{ background: 'rgba(14,42,92,0.04)', border: '1px solid rgba(14,42,92,0.08)', borderRadius: 10, padding: '10px 14px' }}>
+            <summary style={{ fontSize: 13, fontWeight: 600, color: navy, cursor: 'pointer', userSelect: 'none' }}>
+              How to get a good draft
+            </summary>
+            <ol style={{ listStyle: 'decimal', margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, color: muted, lineHeight: 1.55, display: 'grid', gap: 4 }}>
+              <li>Pick the class first — its syllabus topics fill the list below.</li>
+              <li>Pick a syllabus topic rather than typing one: the questions stay inside that topic's learning objectives, and the editor flags any that stray.</li>
+              <li>Choose how many questions, the thinking level, and the question types. Essays are marked by you.</li>
+              <li>Generate draft opens the quiz in the editor. Check each question and its key, then publish.</li>
+            </ol>
+          </details>
           {error && <AlertBox>{error}</AlertBox>}
 
           <div>
@@ -342,7 +357,7 @@ function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopic
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Bloom's level</label>
+              <label style={labelStyle}>Thinking level (Bloom's)</label>
               <select className="ak-input capitalize" value={form.blooms_level} onChange={(e) => setForm((f) => ({ ...f, blooms_level: e.target.value }))} style={selectStyle}>
                 {BLOOMS_LEVELS.map((b) => (
                   <option key={b} value={b}>{b}</option>
@@ -350,6 +365,9 @@ function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopic
               </select>
             </div>
           </div>
+          <p style={{ fontSize: 11.5, color: faint, margin: '-6px 0 0', lineHeight: 1.45 }}>
+            Thinking level is how hard students must think: Remember recalls facts, Apply uses them, Create makes something new.
+          </p>
 
           <div>
             <label style={labelStyle}>Question types</label>
