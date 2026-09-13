@@ -432,6 +432,14 @@ export function taskAttachmentError(attachment) {
 }
 
 /** Every attachment on a task; the first problem found, or ''. */
+/** A submission's note (the submission bin, plan section 9): optional, at most SUBMISSION_NOTE_MAX characters. */
+export const SUBMISSION_NOTE_MAX = 500
+export function submissionNoteError(value) {
+  const text = String(value ?? '').trim()
+  if (text.length > SUBMISSION_NOTE_MAX) return `The note is too long (${SUBMISSION_NOTE_MAX} characters at most).`
+  return ''
+}
+
 export function taskAttachmentsError(attachments) {
   if (attachments == null) return ''
   if (!Array.isArray(attachments)) return 'Attachments must be a list.'

@@ -8,6 +8,7 @@ import {
   passingPercentError,
   birthdateError, BIRTHDATE_HINT,
   taskTitleError, taskKindError, taskWindowError, taskAttachmentError, taskAttachmentsError, TASK_TITLE_MAX,
+  submissionNoteError, SUBMISSION_NOTE_MAX,
 } from './validation'
 import { TASK_KINDS } from './deliverables'
 
@@ -385,5 +386,15 @@ describe('class tasks', () => {
       taskAttachmentError({ resource_type: 'link', url: 'nope' }),
     ]
     for (const s of all) expect(s).not.toMatch(/firebase|storage|firestore/i)
+  })
+})
+
+describe('submission note (the submission bin)', () => {
+  it('is optional, trimmed, and capped at SUBMISSION_NOTE_MAX', () => {
+    expect(submissionNoteError('')).toBe('')
+    expect(submissionNoteError(undefined)).toBe('')
+    expect(submissionNoteError('x'.repeat(SUBMISSION_NOTE_MAX))).toBe('')
+    expect(submissionNoteError(' ' + 'x'.repeat(SUBMISSION_NOTE_MAX) + ' ')).toBe('')
+    expect(submissionNoteError('x'.repeat(SUBMISSION_NOTE_MAX + 1))).toMatch(/too long/)
   })
 })

@@ -106,6 +106,27 @@ describe('fromTask', () => {
     })
     expect(d.attachments).toHaveLength(1)
   })
+  /* The submission bin (plan section 9): a task the student handed work in
+     on is done, keeps its deadline, and says when -- and late -- in the
+     same words taskSubmissions.describeSubmission uses. Without a row it
+     reads exactly as before, so every existing task is unchanged. */
+  it('a submission makes the task done, keeps dueAt, and the chip says when it was handed in', () => {
+    const sub = { submitted_at: new Date(2026, 8, 19, 15, 12), attachment: { title: 'Doc', resource_type: 'link', url: 'https://x.ph/d' } }
+    const d = fromTask(task({ due_at: '2026-09-19T23:59', accepts_submissions: true }), { now: NOW, submission: sub })
+    expect(d).toMatchObject({ done: true, state: 'done', acceptsSubmissions: true, submission: sub })
+    expect(d.dueAt).toEqual(new Date(2026, 8, 19, 23, 59))
+    expect(describeWindow(d, NOW)).toBe('Submitted · Sat 19 Sep, 3:12 PM')
+    // late: after the deadline, even though the state is done
+    const lateD = fromTask(task({ due_at: '2026-09-19T23:59' }), { now: NOW, submission: { submitted_at: new Date(2026, 8, 20, 8, 5) } })
+    expect(describeWindow(lateD, NOW)).toBe('Submitted · Sun 20 Sep, 8:05 AM · late')
+    // a done task sorts with the done bucket, not out of the list
+    expect(bucket([d], NOW).done).toHaveLength(1)
+  })
+  it('without a submission a task is never done, and does not accept submissions unless the task says so', () => {
+    const d = fromTask(task({ due_at: '2026-09-19T23:59' }), { now: NOW })
+    expect(d).toMatchObject({ done: false, state: 'open', acceptsSubmissions: false, submission: null })
+    expect(describeWindow(d, NOW)).toBe('Due Sat 19 Sep, 11:59 PM')
+  })
   it('an unknown kind reads as other, and missing fields have safe defaults', () => {
     const d = fromTask({ id: 'k2', class_id: 'c1', kind: 'homework' }, { now: NOW })
     expect(d.kind).toBe('other')

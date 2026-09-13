@@ -117,17 +117,23 @@ export function fromQuiz(quiz, { classId, className = '', attempts = [], now = D
 /**
  * A class task (activity, assignment, paper exam) as a deliverable.
  *
- * Nothing is submitted through the app (plan D7), so a task is never done
- * and never closed -- past its deadline it is overdue, which is a fact about
- * the date, not a lock. The attachments and instructions ride along so a
- * screen listing tasks under a sub-module has what it needs to render them.
+ * A task is never closed -- past its deadline it is overdue, which is a
+ * fact about the date, not a lock. It is done only when the student has
+ * handed work in through the app: pass their `task_submissions` row as
+ * `submission` (plan section 9, 2026-09-13) and the state is 'done', with
+ * dueAt kept so the chip can still say when it was due and whether it was
+ * late. A task that does not accept submissions has no row and never reads
+ * done, which is what every task was before. The attachments and
+ * instructions ride along so a screen listing tasks under a sub-module has
+ * what it needs to render them.
  *
  * @param {object} task the class_tasks/{id} document, with `id`
  * @param {object} ctx
  * @param {string} [ctx.className]
  * @param {number|Date} [ctx.now]
+ * @param {object|null} [ctx.submission] this student's row for the task, if any
  */
-export function fromTask(task, { className = '', now = Date.now() } = {}) {
+export function fromTask(task, { className = '', now = Date.now(), submission = null } = {}) {
   const kind = TASK_KINDS.includes(task?.kind) ? task.kind : 'other'
   const d = {
     id: task?.id ?? '',
@@ -144,8 +150,10 @@ export function fromTask(task, { className = '', now = Date.now() } = {}) {
     attachments: Array.isArray(task?.attachments) ? task.attachments : [],
     instructions: task?.instructions_markdown ?? '',
     status: task?.status ?? 'draft',
+    acceptsSubmissions: task?.accepts_submissions === true,
     closedByTeacher: false,
-    done: false,
+    done: !!submission,
+    submission: submission ?? null,
     href: taskHref(task?.class_id ?? '', task?.topic_id ?? null),
   }
   d.state = stateOf(d, now)
@@ -284,6 +292,20 @@ function formatDayTime(date, now) {
   return `${formatDay(date, now)}, ${formatTime(date)}`
 }
 
+/* The task's Submitted line, inline rather than imported from
+   lib/taskSubmissions.js because that module imports this one for the
+   date words; the rule it applies -- late is submitted_at after dueAt,
+   strict, and nothing is late without both -- is the same one
+   taskSubmissions.isLate states, and deliverables.test.js holds the two
+   sentences equal. */
+function describeSubmitted(d, now) {
+  const v = d.submission?.submitted_at
+  const at = v == null ? null : typeof v?.toDate === 'function' ? v.toDate() : v instanceof Date ? v : new Date(v)
+  if (!at || Number.isNaN(at.getTime())) return 'Submitted'
+  const late = d.dueAt ? at.getTime() > toMs(d.dueAt) : false
+  return `Submitted · ${formatDayTime(at, now)}${late ? ' · late' : ''}`
+}
+
 /**
  * The one sentence every chip shows for a window. No vendor names, no error
  * text: every branch is something a teacher or a student would say aloud.
@@ -293,12 +315,12 @@ function formatDayTime(date, now) {
  *   due_today  Due today, 11:59 PM
  *   overdue    Overdue since Thu 18 Sep
  *   closed     Closed Fri 19 Sep            · Closed (by the teacher, no date)
- *   done       Done
+ *   done       Done                         · Submitted · Fri 19 Sep, 3:12 PM (· late) for a task
  */
 export function describeWindow(d, now = Date.now()) {
   switch (stateOf(d, now)) {
     case 'done':
-      return 'Done'
+      return d.source === 'task' && d.submission ? describeSubmitted(d, now) : 'Done'
     case 'scheduled':
       return `Opens ${formatDayTime(d.opensAt, now)}`
     case 'due_today':
