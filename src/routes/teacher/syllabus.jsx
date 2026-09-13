@@ -507,6 +507,28 @@ function GenerateModal({ classes = [], onClose, onDraft }) {
           Pick a class or type the subject details. The draft follows the curriculum you choose below — check it before you save.
         </p>
 
+        {/* T-58: a first-time teacher filled the bare form, got a thin draft and
+            generated again -- each run spends one of the day's generations.
+            A native <details>, open, so a repeat user can fold it; no state,
+            no component. Line 3 says what duration_weeks really does in the
+            backend prompt (modules for an N-week term, about one topic a
+            week), not what a teacher might assume (a date range). */}
+        <details open className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <summary className="cursor-pointer select-none font-medium text-slate-700">How to get a good draft</summary>
+          <ol className="mt-1.5 list-decimal space-y-1 pl-4 leading-snug">
+            <li>Pick your class first — it fills the code, name, level and curriculum for you.</li>
+            <li>
+              Check the curriculum. DepEd K-12 gives every topic a MELC code; "No official standard" leaves codes
+              blank. Then pick the quarter (K-12), strand (Grades 11–12) or program (college).
+            </li>
+            <li>
+              Duration sets how much the draft covers — it plans about one topic per week over that many weeks.
+              Notes are where you say what to focus on or leave out; the more specific, the closer the draft.
+            </li>
+            <li>Generate makes a draft, not a syllabus: read it, edit it, then Save Syllabus.</li>
+          </ol>
+        </details>
+
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
@@ -557,6 +579,7 @@ function GenerateModal({ classes = [], onClose, onDraft }) {
               onChange={(e) => typeGradeLevel(e.target.value)}
               className={inputCls}
             />
+            <p className="mt-1 text-xs text-slate-500">Decides the suggested curriculum and which fields show below.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">Duration (Weeks)</label>
@@ -634,6 +657,9 @@ function GenerateModal({ classes = [], onClose, onDraft }) {
             onChange={(e) => setNotes(e.target.value)}
             className={inputCls}
           />
+          <p className="mt-1 text-xs text-slate-500">
+            Optional. Topics to emphasise or skip, a textbook you follow, a school-specific requirement.
+          </p>
         </div>
 
         <div className="flex gap-3 justify-end pt-2">
