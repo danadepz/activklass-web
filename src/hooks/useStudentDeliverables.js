@@ -16,6 +16,9 @@
  *                 the student branch of the rule reads, and lib/roster.js
  *                 explains why ten, not thirty
  *   quiz_attempts where('student_id', '==', uid), once -- to mark a quiz done
+ *   task_submissions where('student_id', '==', uid), once -- to mark a task
+ *                 done (the submission bin, plan section 9); the rule lets a
+ *                 student read their own rows and nothing else
  *
  * Every per-class and per-chunk read goes through Promise.allSettled, so one
  * class that fails (a rule refusal, a bad id) costs that class's items and
@@ -62,10 +65,11 @@ async function fetchPublishedTasks(classIds) {
  * @param {string[][]} args.taskChunks  the class-id chunks the task reads were made for
  * @param {PromiseSettledResult<object[]>[]} args.taskResults  one per chunk, in order
  * @param {object[]} args.attempts  the student's own quiz_attempts
+ * @param {object[]} [args.submissions]  the student's own task_submissions
  * @param {string} args.studentId
  * @param {number|Date} [args.now]
  */
-export function assembleDeliverables({ classes, quizResults, taskChunks, taskResults, attempts, studentId, now = Date.now() }) {
+export function assembleDeliverables({ classes, quizResults, taskChunks, taskResults, attempts, submissions = [], studentId, now = Date.now() }) {
   const byId = new Map(classes.map((c) => [c.id, c]))
   const failedIds = new Set()
   const items = []
@@ -81,11 +85,12 @@ export function assembleDeliverables({ classes, quizResults, taskChunks, taskRes
     }
   })
 
+  const submissionByTask = new Map((submissions ?? []).map((sub) => [sub.task_id, sub]))
   taskResults.forEach((r, i) => {
     if (r.status !== 'fulfilled') { taskChunks[i].forEach((id) => failedIds.add(id)); return }
     for (const t of r.value) {
       const c = byId.get(t.class_id)
-      items.push(fromTask(t, { className: studentClassName(c), now }))
+      items.push(fromTask(t, { className: studentClassName(c), now, submission: submissionByTask.get(t.id) ?? null }))
     }
   })
 
@@ -99,12 +104,17 @@ export async function fetchStudentDeliverables(studentId) {
   const taskChunks = []
   for (let i = 0; i < classIds.length; i += IN_CHUNK) taskChunks.push(classIds.slice(i, i + IN_CHUNK))
 
-  const [quizResults, taskResults, attempts] = await Promise.all([
+  const [quizResults, taskResults, attempts, submissions] = await Promise.all([
     Promise.allSettled(classes.map((c) => fetchQuizzesFor(c.id))),
     Promise.allSettled(taskChunks.map(fetchPublishedTasks)),
     // Without attempts every quiz simply reads as not done; the list still shows.
     getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', studentId))).then(docs).catch((err) => {
       console.error('Deliverables: quiz attempts did not load', err)
+      return []
+    }),
+    // Same for submissions: without them every task reads as not yet handed in.
+    getDocs(query(collection(db, 'task_submissions'), where('student_id', '==', studentId))).then(docs).catch((err) => {
+      console.error('Deliverables: task submissions did not load', err)
       return []
     }),
   ])
@@ -116,7 +126,7 @@ export async function fetchStudentDeliverables(studentId) {
     if (r.status === 'rejected') console.error(`Deliverables: tasks for classes ${taskChunks[i].join(', ')} did not load`, r.reason)
   })
 
-  return assembleDeliverables({ classes, quizResults, taskChunks, taskResults, attempts, studentId })
+  return assembleDeliverables({ classes, quizResults, taskChunks, taskResults, attempts, submissions, studentId })
 }
 
 /**

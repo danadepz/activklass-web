@@ -103,6 +103,31 @@ describe('assembleDeliverables', () => {
     expect(byClass).toEqual({ c1: 'done', c2: 'open' })
   })
 
+  it('marks a task done from this student’s own submission, and leaves the rest as before', () => {
+    const out = assembleDeliverables({
+      classes: [SCI],
+      quizResults: [ok([])],
+      taskChunks: [['c1']],
+      taskResults: [ok([task('lab', 'c1', { accepts_submissions: true }), task('essay', 'c1', { accepts_submissions: true }), task('exam', 'c1')])],
+      attempts: [],
+      submissions: [{ id: 'lab_s1', task_id: 'lab', class_id: 'c1', student_id: 's1', submitted_at: new Date(2026, 8, 16, 9, 0) }],
+      studentId: 's1',
+      now: NOW,
+    })
+    const byId = Object.fromEntries(out.items.map((d) => [d.id, d.state]))
+    expect(byId).toEqual({ lab: 'done', essay: 'open', exam: 'open' })
+    expect(out.items.find((d) => d.id === 'lab').submission.task_id).toBe('lab')
+  })
+
+  it('with no submissions passed at all (the read failed), every task reads as not yet handed in', () => {
+    const out = assembleDeliverables({
+      classes: [SCI], quizResults: [ok([])], taskChunks: [['c1']],
+      taskResults: [ok([task('lab', 'c1', { accepts_submissions: true })])],
+      attempts: [], studentId: 's1', now: NOW,
+    })
+    expect(out.items[0].state).toBe('open')
+  })
+
   it('with no classes at all, an empty list and nothing failed', () => {
     expect(assembleDeliverables({ classes: [], quizResults: [], taskChunks: [], taskResults: [], attempts: [], studentId: 's1', now: NOW }))
       .toEqual({ items: [], failed: [] })
