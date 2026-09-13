@@ -501,7 +501,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
 
   return (
     <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 flex items-center justify-center px-4 z-50">
-      <div {...panelProps} className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div {...panelProps} className="bg-white rounded-xl p-6 w-full max-w-4xl space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <h3 className="text-lg font-semibold text-slate-800">Generate Syllabus with AI</h3>
         <p className="text-sm text-slate-500">
           Pick a class or type the subject details. The draft follows the curriculum you choose below — check it before you save.
