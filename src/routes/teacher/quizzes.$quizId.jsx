@@ -1859,13 +1859,49 @@ export default function QuizBuilderPage() {
           )}
 
           <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-            <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 12px' }}>Questions (read-only)</h3>
+            <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 12px' }}>Questions and answer key (read-only)</h3>
             {(quiz.questions ?? []).map((q, i) => (
               <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '8px 0' }}>
                 <p style={{ fontSize: 13, color: '#3A4A6B', margin: 0 }}>
                   <span style={{ fontWeight: 700, color: ink }}>Q{i + 1}.</span> {q.text}
                   <span style={{ color: faint }}> · {TYPE_LABELS[q.qtype]} · {q.points} pts</span>
                 </p>
+                {/* The key, read off the saved question (T-60). Once a quiz is
+                    published the editor is gone, and this list was the only
+                    place a teacher could look before a student sits it or
+                    disputes an item -- and it showed no answers. What a
+                    student sees after submitting is the quiz's feedback
+                    setting's job (lib/quizFeedback.js), not this card's. */}
+                {q.qtype === 'mcq' && (
+                  <div className="mt-1 space-y-0.5 text-[12px] text-slate-500" style={{ paddingLeft: 22 }}>
+                    {(q.options ?? []).map((o, idx) => (
+                      <div key={o.id || idx} className="flex items-start gap-1.5">
+                        <span className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
+                        <span className={`break-words flex-1 ${o.is_correct ? 'font-semibold text-slate-700' : ''}`}>{o.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {q.qtype === 'true_false' && (
+                  <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0', paddingLeft: 22 }}>
+                    Answer: <span className="font-semibold text-slate-700">{q.answer_key?.value ? 'True' : 'False'}</span>
+                  </p>
+                )}
+                {q.qtype === 'short_answer' && (
+                  <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0', paddingLeft: 22 }}>
+                    Accepted answers: <span className="font-semibold text-slate-700">{(q.answer_key?.answers ?? []).join(', ') || '—'}</span>
+                  </p>
+                )}
+                {q.qtype === 'matching' && (
+                  <div className="mt-1 space-y-0.5 text-[12px] text-slate-500" style={{ paddingLeft: 22 }}>
+                    {(q.answer_key?.pairs ?? []).map((pair, idx) => (
+                      <div key={idx} className="break-words">{pair.left} → <span className="font-semibold text-slate-700">{pair.right}</span></div>
+                    ))}
+                  </div>
+                )}
+                {q.qtype === 'essay' && (
+                  <p style={{ fontSize: 12, color: faint, margin: '4px 0 0', paddingLeft: 22 }}>Marked by hand</p>
+                )}
               </div>
             ))}
           </div>
