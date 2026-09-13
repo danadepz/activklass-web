@@ -11,7 +11,7 @@
  * draft to edit before Save.
  *
  * Pinned here is what he would now see on opening it, before typing anything:
- * the guide block, open, with its four steps; the hint under Grade / Year
+ * the guide block, folded, with its four steps; the hint under Grade / Year
  * Level; the hint under Notes; the Duration line saying what the backend
  * prompt really does with the number (one topic a week over N weeks --
  * services/ai/syllabus_gen.py); and no vendor or model named anywhere in it.
@@ -54,9 +54,12 @@ const open = () => renderToStaticMarkup(<GenerateModal classes={[]} onClose={() 
 const guide = (html) => html.match(/<details[^>]*>[\s\S]*?<\/details>/)?.[0] ?? ''
 
 describe('Generate Syllabus with AI — the guide a first-time teacher opens on to (T-58)', () => {
-  it('opens with a "How to get a good draft" block, unfolded, so it is read before Generate', () => {
+  it('opens with a "How to get a good draft" block, folded, its summary line visible', () => {
+    // Folded by default since 2026-09-13 (owner): open, it pushed the form
+    // down on every visit. The summary is what a first-timer unfolds.
     const html = open()
-    expect(html).toMatch(/<details open/)
+    expect(html).toMatch(/<details class/)
+    expect(html).not.toMatch(/<details open/)
     expect(guide(html)).toContain('<summary')
     expect(guide(html)).toContain('How to get a good draft')
   })

@@ -299,10 +299,10 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             editor before anything reaches students.
           </p>
           {/* The guide a teacher asked for (T-59): what each field changes, in the
-              order the form asks for it. A native <details>, open, so a first
-              generation sees it and a repeat user can fold it; no component --
+              order the form asks for it. A native <details>, folded by default
+              (owner, 2026-09-13) with the summary line visible to unfold; no component --
               the Generate Syllabus dialog carries its own copy of the block. */}
-          <details open style={{ background: 'rgba(14,42,92,0.04)', border: '1px solid rgba(14,42,92,0.08)', borderRadius: 10, padding: '10px 14px' }}>
+          <details style={{ background: 'rgba(14,42,92,0.04)', border: '1px solid rgba(14,42,92,0.08)', borderRadius: 10, padding: '10px 14px' }}>
             <summary style={{ fontSize: 13, fontWeight: 600, color: navy, cursor: 'pointer', userSelect: 'none' }}>
               How to get a good draft
             </summary>

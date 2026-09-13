@@ -530,11 +530,12 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
 
         {/* T-58: a first-time teacher filled the bare form, got a thin draft and
             generated again -- each run spends one of the day's generations.
-            A native <details>, open, so a repeat user can fold it; no state,
-            no component. Line 3 says what duration_weeks really does in the
+            A native <details>, folded by default (owner, 2026-09-13: it
+            pushed the form down on every open) -- the summary line stays
+            visible so a first-timer can unfold it; no state, no component. Line 3 says what duration_weeks really does in the
             backend prompt (modules for an N-week term, about one topic a
             week), not what a teacher might assume (a date range). */}
-        <details open className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <summary className="cursor-pointer select-none font-medium text-slate-700">How to get a good draft</summary>
           <ol className="mt-1.5 list-decimal space-y-1 pl-4 leading-snug">
             <li>Pick your class first — it fills the code, name, level and curriculum for you.</li>

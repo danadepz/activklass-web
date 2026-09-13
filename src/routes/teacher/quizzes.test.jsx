@@ -163,7 +163,7 @@ describe('Quizzes list card names the class (T-36)', () => {
  * objectives, what "Bloom's level" means, or that the draft opens in the
  * editor to be reviewed before it is published.
  *
- * Pinned: the guide block, open, with its four steps; the relabelled
+ * Pinned: the guide block, folded, with its four steps; the relabelled
  * thinking-level select and its hint; and no model or vendor named. The
  * modal is exported for this -- it opens on a click, which a static render
  * cannot do (the same reason register.jsx lifted WrongPathNudge).
@@ -180,9 +180,11 @@ describe('Generate Quiz with AI — the guide a first-time teacher opens on to (
     expect(openGenerate()).not.toMatch(/llama|gemini|openai|anthropic|claude|firebase|math fallback/i)
   })
 
-  it('opens with a "How to get a good draft" block, unfolded', () => {
+  it('opens with a "How to get a good draft" block, folded, its summary line visible', () => {
+    // Folded by default since 2026-09-13 (owner). The summary is what unfolds it.
     const html = openGenerate()
-    expect(html).toMatch(/<details open/)
+    expect(html).toMatch(/<details style/)
+    expect(html).not.toMatch(/<details open/)
     expect(guideOf(html)).toContain('<summary')
     expect(guideOf(html)).toContain('How to get a good draft')
   })
