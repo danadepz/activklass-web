@@ -13,6 +13,7 @@ import {
 } from '@/hooks/useBankedQuestions'
 import { describeBankResult } from '@/lib/questionBank'
 import { LIFECYCLE_TABS, lifecycleOf } from '@/lib/quizAttempts'
+import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -508,6 +509,11 @@ function QuizCard({ quiz, classes, onDelete }) {
   const points = quiz.total_points ?? totalPoints(quiz.questions)
   const s = STATUS_PILL[quiz.status] ?? STATUS_PILL.draft
   const isAi = quiz.generated_by === 'ai_generated'
+  // The same sentence the student's dashboard and class page print for this
+  // window (lib/deliverables.js), so "Due Fri 19 Sep, 11:59 PM" here is
+  // exactly what they read. The pill beside it is the teacher's status; this
+  // is the date. classId only feeds the href, which the card does not use.
+  const window = describeWindow(fromQuiz(quiz, { classId: quiz.class_ids?.[0] ?? '' }))
 
   const assignedClasses = classes.filter((c) => (quiz.class_ids ?? []).includes(c.id))
 
@@ -516,9 +522,14 @@ function QuizCard({ quiz, classes, onDelete }) {
       className="ak-card-hov block relative bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition"
     >
       <div className="flex items-center justify-between gap-2" style={{ marginBottom: 10 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999 }}>
-          {s.label}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', fontSize: 11, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 999 }}>
+            {s.label}
+          </span>
+          <span title="What students read for this quiz's window" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', fontSize: 11, fontWeight: 600, color: muted, background: 'rgba(14,42,92,0.04)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 999 }}>
+            {window}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {isAi && (
             <span className="inline-flex items-center gap-1" style={{ ...mono, fontSize: 11, color: blueText, fontWeight: 600 }}>
