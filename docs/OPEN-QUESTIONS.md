@@ -12,11 +12,13 @@ for cross-repo questions. This file is for the ones that are the web client's to
 ## Open
 
 ### 1. Where does this get deployed, if it ever does?
-Confirmed 2026-08-25: **not deployed, and not part of the defense.** It runs on the Vite
-dev server with a forwarded VS Code port for remote viewers. Unanswered is what happens
-after the defense — Firebase Hosting is the obvious fit (same project, free tier, static
-build), but nothing has been decided and the Flask half would still need a host of its own.
-**Do not stand anything up without asking.**
+~~Confirmed 2026-08-25: not deployed, and not part of the defense.~~ **Reversed 2026-09-14:
+the defense requires a deployed system.** What would break, what the owner has to decide
+(where Flask runs — Cloud Run recommended; Firebase Hosting for the web; domain; warm
+instances; rotating the demo passwords) and the order to do it in are in
+`../activklass-backend/docs/09-deployment-readiness.md`. Until those decisions are
+recorded here, it still runs on the Vite dev server with a forwarded VS Code port.
+**Do not stand anything up without asking** — that part is unchanged.
 
 ### 2. Does the client-side validation ever get a server-side twin?
 `lib/validation.js` is now the single home for name, password, year-level and email rules,

@@ -5,8 +5,10 @@ React portal for **ActivKlass**, an AI-assisted class record system for Philippi
 (DepEd K-12 and CHED tertiary). This repo is the **teacher, student, admin and superadmin
 web client**. The Flask API, Firebase rules and the `docs/` shared by all three repos live
 in `activklass-backend`. Capstone project — **the next milestone is the defense demo**, so
-prefer what the demo shows over what a backlog lists. **Not deployed:** it runs on the Vite
-dev server, with a forwarded VS Code port for remote viewers.
+prefer what the demo shows over what a backlog lists. **Not deployed yet, but the defense
+requires it (2026-09-14):** it runs on the Vite dev server with a forwarded VS Code port
+until the decisions in `../activklass-backend/docs/09-deployment-readiness.md` are made;
+that doc is the list of what breaks on a real host.
 
 ## Lanes — the one rule that actually breaks things
 Several Claude Code panes work this same checkout at once. **Read `OWNERSHIP.md` before

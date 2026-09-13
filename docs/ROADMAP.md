@@ -387,7 +387,9 @@ Still open at this altitude:
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
-deployment and a real host; server-side validation parity; splitting the 654 kB main
+~~deployment and a real host~~ (**pulled forward 2026-09-14 — the defense requires a
+deployed system; the audit and the decisions it waits on are
+`../activklass-backend/docs/09-deployment-readiness.md`**); server-side validation parity; splitting the 654 kB main
 chunk; retiring the placeholder training data behind the risk model; the lint backlog;
 a real account-deletion path (see `OPEN-QUESTIONS.md` §8 — deactivate is the answer for
 now, and RA 10173 erasure is the reason it will not stay the answer).
