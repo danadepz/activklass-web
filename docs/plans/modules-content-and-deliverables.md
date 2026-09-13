@@ -1,7 +1,7 @@
 # Plan — Module content, open/due windows, and the student's deliverables view
 
-**Status: in build, 2026-09-13.** Written as a proposal that morning; by the evening the
-convoy was mostly through. Where each step stands (the Modules pane keeps this list current):
+**Status: built and verified, 2026-09-13.** Written as a proposal that morning; every step
+landed and was verified the same day. Where each step stands (the Modules pane keeps this list current):
 
 | Step | Pane | State |
 |---|---|---|
@@ -10,7 +10,7 @@ convoy was mostly through. Where each step stands (the Modules pane keeps this l
 | 3 Teacher Modules tab | Class detail | done — `74ce9e0` `58d3b64` `662c115` (Keel's work; committed from the Modules pane after that session closed). `modules.test.jsx` (11); **browser walk owed** to Step 6. |
 | 4 Student Modules chips + Up next | Student | done — `70de02c` `393cfac` `5061576`; verified headless as Carlo; live task rows blocked on the Step 1 deploy. |
 | 5 Quiz card chip + `?topic=` | Quizzes | done — `describeWindow` on every card, `?topic=` preselect, landed with the Generate-dialog work (`9c800db` and before). |
-| 6 Verify + ROADMAP entry | Verify | dispatched 2026-09-13 — both halves unblocked once the deploy landed (same day). |
+| 6 Verify + ROADMAP entry | Verify | **done 2026-09-13** — `beaf157`: teacher, student and rules halves driven headless on the live project, every convoy lock broken and seen red, two new guards in `lib/classTasksGuards.test.js`, the Phase 7 entry in `docs/ROADMAP.md`. `npm run test` 1035/1035. |
 
 Every prompt in section 6 is paste-ready and self-contained; a pane that receives one
 should still read `CLAUDE.md`, `OWNERSHIP.md` and `docs/DATA-MODEL.md` before its first
@@ -710,3 +710,26 @@ what did not, and fix nothing you fail.
 - **This is a defense-demo stretch.** The demo slice is: teacher ticks the box, Hana submits
   a link, the teacher sees "1 of N submitted" with her row. Everything past that in S-3 and
   S-4 (the missing-student rows, Replace) is what makes it real, not what makes it demo.
+
+---
+
+## 9. Left open after Step 6 (2026-09-13)
+
+Recorded here because the convoy is closed and these have no other home yet. None blocks
+the demo cut.
+
+- **Deleting a task orphans its file.** `deleteTask` removes the `class_tasks` document
+  and nothing else; the object under `task_files/{classId}/{taskId}/` stays in the bucket.
+  Fix belongs to `lib/classTasks.js` (Data/logic lane): list the task's attachments of
+  `resource_type: 'file'` and `deleteObject` each before the document delete, best-effort,
+  the way `publishTask` treats notifications. Storage is on Blaze's free allowance, so this
+  is tidiness for now, not cost.
+- **The seeded demo tasks are not on the live project.** `seed_demo.py` (backend `b75736f`)
+  carries three, but the seed was committed and never run, and a reseed resets every demo
+  password. Either the owner runs the seed before the defense, or the teacher creates the
+  task live in the demo — which is what the demo cut in section 5 shows anyway.
+- **Not driven by Step 6**, per its ROADMAP entry: editing a task after publishing (the
+  save-without-re-notifying path is unit-tested only); a non-PDF attachment; BSIT-C itself
+  (no student quick-login card — Newton and Carlo stood in for Hana); clicking a bell entry
+  rather than its URL.
+
