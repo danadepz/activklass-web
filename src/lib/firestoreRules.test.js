@@ -752,3 +752,101 @@ describe('class_tasks · the class owner writes, the class reads', () => {
     await assertFails(getDocs(query(collection(ctx(STUDENT), 'class_tasks'), where('class_id', '==', 'class-1'))))
   })
 })
+
+/* ────────────────────────────────────────────────────────────────────────
+ * task_submissions (2026-09-13, plan section 9): a student's hand-in for a
+ * class task whose teacher switched the bin on.
+ *
+ * The student writes only their own, only onto a task that is published,
+ * accepts submissions, and belongs to a class they are on; an update may
+ * not move the row to another task, class or student. Teachers never write.
+ * The teacher reads through the class -- so the teacher's list query must
+ * carry class_id beside task_id, and the last write-side test proves a
+ * task_id-only query is refused even for the owner, so nobody "simplifies"
+ * useTaskSubmissions later. A student reads their own and nobody else's.
+ * ──────────────────────────────────────────────────────────────────────── */
+async function seedSubmissions() {
+  await seedClassTasks()
+  await testEnv.withSecurityRulesDisabled(async (admin) => {
+    const db = admin.firestore()
+    await updateDoc(doc(db, 'class_tasks', 'task-pub'), { accepts_submissions: true })
+    await setDoc(doc(db, 'class_tasks', 'task-closed-bin'), {
+      class_id: 'class-1', teacher_id: OWN_TEACHER, kind: 'assignment', title: 'No bin',
+      topic_id: 't1', status: 'published', opens_at: null, due_at: null, attachments: [], accepts_submissions: false,
+    })
+    await setDoc(doc(db, 'class_tasks', 'task-elsewhere'), {
+      class_id: 'class-2', teacher_id: FOREIGN_TEACHER, kind: 'assignment', title: 'Other class',
+      topic_id: 't1', status: 'published', opens_at: null, due_at: null, attachments: [], accepts_submissions: true,
+    })
+    // OTHER_STUDENT has already handed in on task-pub.
+    await setDoc(doc(db, 'task_submissions', `task-pub_${OTHER_STUDENT}`), submission({ student_id: OTHER_STUDENT }))
+  })
+}
+
+const submission = (over = {}) => ({
+  task_id: 'task-pub', class_id: 'class-1', student_id: STUDENT,
+  attachment: { title: 'My doc', resource_type: 'link', url: 'https://docs.google.com/document/d/x' },
+  note: '', submitted_at: serverTimestamp(), resubmitted_count: 0, ...over,
+})
+
+describe('task_submissions · the student hands in their own, the class reads', () => {
+  beforeEach(seedSubmissions)
+
+  it('a student creates their own submission on a published task that accepts them', async () => {
+    await assertSucceeds(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-pub_${STUDENT}`), submission()))
+  })
+
+  it('is refused on a draft task, on a task whose bin is off, and on a class they are not on', async () => {
+    await assertFails(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-draft_${STUDENT}`), submission({ task_id: 'task-draft' })))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-closed-bin_${STUDENT}`), submission({ task_id: 'task-closed-bin' })))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-elsewhere_${STUDENT}`), submission({ task_id: 'task-elsewhere', class_id: 'class-2' })))
+  })
+
+  it('cannot be written under another student’s id, nor with a class_id the task does not belong to', async () => {
+    await assertFails(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-pub_${OTHER_STUDENT}`), submission({ student_id: OTHER_STUDENT })))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'task_submissions', `task-pub_${STUDENT}`), submission({ class_id: 'class-2' })))
+  })
+
+  it('re-submits their own (a set at the same id), but cannot move it to another task, class or student', async () => {
+    const own = doc(ctx(STUDENT), 'task_submissions', `task-pub_${STUDENT}`)
+    await assertSucceeds(setDoc(own, submission()))
+    await assertSucceeds(setDoc(own, submission({ note: 'Fixed the table.', resubmitted_count: 1 })))
+    await assertFails(setDoc(own, submission({ task_id: 'task-closed-bin' })))
+    await assertFails(setDoc(own, submission({ class_id: 'class-2' })))
+    await assertFails(setDoc(own, submission({ student_id: OTHER_STUDENT })))
+  })
+
+  it('a teacher never writes a submission, even on their own class', async () => {
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'task_submissions', `task-pub_${STUDENT}`), submission()))
+    await assertFails(updateDoc(doc(ctx(OWN_TEACHER), 'task_submissions', `task-pub_${OTHER_STUDENT}`), { note: 'edited' }))
+  })
+
+  it('the owner reads the bin with the (class_id, task_id) query useTaskSubmissions sends, and is refused a task_id-only one', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(ctx(OWN_TEACHER), 'task_submissions'),
+      where('class_id', '==', 'class-1'),
+      where('task_id', '==', 'task-pub'),
+    )))
+    await assertFails(getDocs(query(collection(ctx(OWN_TEACHER), 'task_submissions'), where('task_id', '==', 'task-pub'))))
+    await assertSucceeds(getDoc(doc(ctx(OWN_TEACHER), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+  })
+
+  it('a foreign teacher is refused every read and the delete; the owner may delete', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+    await assertFails(getDocs(query(
+      collection(ctx(FOREIGN_TEACHER), 'task_submissions'),
+      where('class_id', '==', 'class-1'),
+      where('task_id', '==', 'task-pub'),
+    )))
+    await assertFails(deleteDoc(doc(ctx(FOREIGN_TEACHER), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+    await assertSucceeds(deleteDoc(doc(ctx(OWN_TEACHER), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+  })
+
+  it('a student reads their own rows with the student_id query useStudentDeliverables sends, and not another student’s', async () => {
+    await assertSucceeds(getDocs(query(collection(ctx(OTHER_STUDENT), 'task_submissions'), where('student_id', '==', OTHER_STUDENT))))
+    await assertSucceeds(getDoc(doc(ctx(OTHER_STUDENT), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+    await assertFails(getDoc(doc(ctx(STUDENT), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+    await assertFails(getDocs(query(collection(ctx(STUDENT), 'task_submissions'), where('task_id', '==', 'task-pub'))))
+    await assertFails(deleteDoc(doc(ctx(OTHER_STUDENT), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
+  })
+})
