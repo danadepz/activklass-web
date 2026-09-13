@@ -17,6 +17,9 @@ import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { MetricCard } from '@/components/ui/Card'
 import { formatSchedule } from '@/lib/schedule'
 import { KIND_LABEL, describeWindow, fromQuiz, fromTask } from '@/lib/deliverables'
+import { describeSubmission, isLate, submissionFilePath, submitWork } from '@/lib/taskSubmissions'
+import { studentDeliverablesKey } from '@/hooks/useStudentDeliverables'
+import { SUBMISSION_NOTE_MAX } from '@/lib/validation'
 import Markdown from '@/components/Markdown'
 import { WindowChip, toneOf } from '../../deliverables/WindowChip'
 
@@ -50,7 +53,7 @@ async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
-  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap] =
+  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
       loadStudentEntry(classId, profile.id),
       loadStudentAttendance(classId, profile.id),
@@ -71,6 +74,11 @@ async function loadClassDetail(classId, profile) {
       // a refused read costs the Modules tab its task rows, not the page.
       getDocs(query(collection(db, 'class_tasks'), where('class_id', '==', classId), where('status', '==', 'published')))
         .catch((err) => { console.error('Class tasks did not load', err); return null }),
+      // This student's own hand-ins (the submission bin): the one shape the
+      // task_submissions rule lets a student read. A failed read means every
+      // task reads as not yet handed in; the page still shows.
+      getDocs(query(collection(db, 'task_submissions'), where('student_id', '==', profile.id)))
+        .catch((err) => { console.error('Task submissions did not load', err); return null }),
     ])
 
   const teacher = teachers[0] ?? null
@@ -104,6 +112,11 @@ async function loadClassDetail(classId, profile) {
   const tasks = (tasksSnap?.docs ?? [])
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((t) => t.status === 'published')
+  const submissionByTask = {}
+  ;(submissionsSnap?.docs ?? []).forEach((d) => {
+    const sub = { id: d.id, ...d.data() }
+    if (sub.class_id === classId) submissionByTask[sub.task_id] = sub
+  })
 
   return {
     clazz,
@@ -118,6 +131,7 @@ async function loadClassDetail(classId, profile) {
     attemptsByQuiz,
     scaffoldedTopicIds,
     tasks,
+    submissionByTask,
   }
 }
 
@@ -137,8 +151,11 @@ function Pill({ meta }) {
  * the same RESOURCE_META rows a material uses. The instructions open in the
  * lesson-note dialog, rendered as Markdown.
  */
-function TaskRow({ task, onReadInstructions }) {
+function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSubmitted }) {
   const attachments = (task.attachments ?? []).filter((a) => a?.url)
+  // The bin shows when the teacher opened it, or when this student already
+  // handed in (then read-only if it has since closed). Never otherwise.
+  const showBin = task.acceptsSubmissions || !!task.submission
   return (
     <div className="flex flex-col gap-2.5 p-3 rounded-xl border border-amber-100 bg-amber-50/30 w-full sm:col-span-2" data-task-id={task.id}>
       <div className="flex items-start gap-3">
@@ -183,13 +200,144 @@ function TaskRow({ task, onReadInstructions }) {
           })}
         </div>
       )}
+      {showBin && (
+        <SubmitBox task={task} classId={classId} studentId={studentId} onSubmitted={onSubmitted} />
+      )}
     </div>
   )
 }
 
-function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks = [], scaffoldedTopicIds, focusTopicId = null }) {
-  // Needed for the per-student attempt grant below.
+/**
+ * The submission bin, student side (plan section 9). One file or one link,
+ * an optional note, Submit. After it lands the box reads Submitted · when
+ * (late per isLate) with the work shown and a Replace that re-submits while
+ * the task still accepts submissions; once the teacher closes the bin a
+ * submission shows read-only with "Submissions are closed". Files go to
+ * task_files/{classId}/{taskId}/submissions/{uid}/ through the same
+ * AttachmentField materials use, so the size cap and the wording are the
+ * ones a student has already met. Nothing is graded here.
+ */
+function SubmitBox({ task, classId, studentId, onSubmitted }) {
+  const existing = task.submission ?? null
+  const open = task.acceptsSubmissions
+  const [editing, setEditing] = useState(!existing)
+  const [attachment, setAttachment] = useState(null)
+  const [note, setNote] = useState(existing?.note ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const taskDoc = { due_at: task.dueAt ? toWindowString(task.dueAt) : null }
+
+  async function submit() {
+    setError('')
+    if (!attachment) { setError('Attach your work first — upload a file or paste a link.'); return }
+    setBusy(true)
+    try {
+      await submitWork({ taskId: task.id, classId, studentId, attachment, note, existing })
+      setEditing(false)
+      setAttachment(null)
+      onSubmitted?.()
+    } catch (err) {
+      // A rule refusal or a dropped connection reads the same to the
+      // student; the reason goes to the console for whoever is asked.
+      console.error('submission failed', err)
+      setError(/too long|web address|Attach|Paste|uploading/.test(err.message) ? err.message : 'Your work could not be submitted. Check your connection and try again, or paste a link instead.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const meta = existing ? (RESOURCE_META[existing.attachment?.resource_type] ?? RESOURCE_META.file) : null
+
+  return (
+    <div className="pl-12" data-testid="submit-box" data-state={!open ? 'closed' : existing && !editing ? 'submitted' : 'editing'}>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2.5">
+        {existing && (
+          <div className="flex flex-wrap items-center gap-2" style={{ fontSize: 12.5 }}>
+            <span style={{ fontWeight: 700, color: isLate(existing, taskDoc) ? red : green }}>{describeSubmission(existing, taskDoc)}</span>
+            {existing.attachment?.url && (
+              <a href={existing.attachment.url} target="_blank" rel="noopener noreferrer" style={{ color: blueText, fontWeight: 600 }}>
+                {meta.icon} {existing.attachment.title || meta.label}
+              </a>
+            )}
+            {existing.note && <span style={{ color: muted, fontStyle: 'italic' }}>“{existing.note}”</span>}
+            {open && !editing && (
+              <button type="button" onClick={() => setEditing(true)} style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: navy, background: 'transparent', border: `1.5px solid ${line}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer' }}>
+                Replace
+              </button>
+            )}
+          </div>
+        )}
+        {!open && (
+          <p style={{ fontSize: 12, color: faint, margin: 0 }}>
+            {existing ? 'Submissions are closed. Your work above is what the teacher has.' : 'Submissions are closed.'}
+          </p>
+        )}
+        {open && editing && (
+          <>
+            {!existing && (
+              <p style={{ fontSize: 12.5, color: ink, margin: 0, fontWeight: 600 }}>Hand in your work</p>
+            )}
+            <AttachmentField
+              compact
+              label={attachment ? `Attached: ${attachment.title}` : 'Your work — a file or a link'}
+              storagePath={submissionFilePath(classId, task.id, studentId, '').replace(/\/$/, '')}
+              onAttached={(url, info) => setAttachment({ title: info?.name ?? url, resource_type: info?.kind === 'link' ? 'link' : 'file', url })}
+            />
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={SUBMISSION_NOTE_MAX}
+              rows={2}
+              placeholder="A note for your teacher (optional)"
+              style={{ width: '100%', padding: '8px 10px', fontSize: 13, color: ink, border: `1.5px solid rgba(14,42,92,0.14)`, borderRadius: 9, resize: 'vertical' }}
+            />
+            {error && (
+              <p role="alert" style={{ fontSize: 12.5, color: red, margin: 0 }}>{error}</p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy}
+                className="transition hover:brightness-110 disabled:opacity-50"
+                style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer' }}
+              >
+                {busy ? 'Submitting…' : existing ? 'Submit replacement' : 'Submit'}
+              </button>
+              {existing && (
+                <button type="button" onClick={() => { setEditing(false); setError(''); setAttachment(null) }} disabled={busy} style={{ fontSize: 12.5, fontWeight: 600, color: muted, background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                  Keep what I submitted
+                </button>
+              )}
+              <span style={{ fontSize: 11.5, color: faint, marginLeft: 'auto' }}>
+                {existing ? 'Replacing overwrites your earlier submission.' : 'You can replace it until the teacher closes submissions.'}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* fromTask parsed the deadline into a Date; isLate / describeSubmission read
+   the document's zone-less string, so it is put back the way the task
+   document stores it. */
+function toWindowString(date) {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`
+}
+
+function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks = [], submissionByTask = {}, onSubmitted, scaffoldedTopicIds, focusTopicId = null }) {
+  // Needed for the per-student attempt grant below, and for the submission bin.
   const { profile } = useAuth()
+  const queryClient = useQueryClient()
+  const afterSubmit = () => {
+    onSubmitted?.()
+    // The dashboard's Up next reads the same rows; a task just handed in
+    // should read Submitted there too, not on the next reload.
+    queryClient.invalidateQueries({ queryKey: studentDeliverablesKey(profile?.id) })
+  }
   const [activeNote, setActiveNote] = useState(null)
   const { overlayProps: noteOverlay, panelProps: notePanel } =
     useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Lesson note' })
@@ -228,7 +376,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks
               const linkedQuizzes = quizzesForTopic(t.id, quizzes)
               // The class's published tasks under this sub-module, in the
               // shape the dashboard renders, so the chip reads the same here.
-              const linkedTasks = t.id ? tasks.filter((task) => task.topic_id === t.id).map((task) => fromTask(task)) : []
+              const linkedTasks = t.id ? tasks.filter((task) => task.topic_id === t.id).map((task) => fromTask(task, { submission: submissionByTask[task.id] ?? null })) : []
               const resources = t.resources ?? []
               // Derived from this student's own best attempt, so it moves the
               // moment they finish a quiz linked to this topic.
@@ -426,7 +574,14 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks
                       })}
 
                       {linkedTasks.map((task) => (
-                        <TaskRow key={task.id} task={task} onReadInstructions={() => setActiveNote({ title: task.title, content_markdown: task.instructions, markdown: true })} />
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          classId={classId}
+                          studentId={profile?.id}
+                          onSubmitted={afterSubmit}
+                          onReadInstructions={() => setActiveNote({ title: task.title, content_markdown: task.instructions, markdown: true })}
+                        />
                       ))}
                     </div>
                   )}
@@ -1463,7 +1618,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [] } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {} } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1549,6 +1704,8 @@ export default function StudentClassDetail() {
           quizzes={quizzes}
           attemptsByQuiz={attemptsByQuiz}
           tasks={tasks}
+          submissionByTask={submissionByTask}
+          onSubmitted={invalidate}
           scaffoldedTopicIds={scaffoldedTopicIds}
           focusTopicId={focusTopicId}
         />

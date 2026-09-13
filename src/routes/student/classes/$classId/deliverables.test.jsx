@@ -14,7 +14,7 @@ import { describeWindow, fromQuiz, fromTask } from '@/lib/deliverables'
 const state = vi.hoisted(() => ({ data: null }))
 
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'S1', role: 'student', first_name: 'Carlo', last_name: 'Mendoza' } }) }))
-vi.mock('@/lib/firebase', () => ({ db: {} }))
+vi.mock('@/lib/firebase', () => ({ db: {}, storage: {} }))
 vi.mock('@/lib/studentData', () => ({
   loadSyllabus: vi.fn(), loadStudentEntry: vi.fn(), loadStudentAttendance: vi.fn(),
   loadStudentContests: vi.fn(), loadStudentGradeContests: vi.fn(),
@@ -157,5 +157,71 @@ describe('Quizzes tab -- the card state follows stateOf', () => {
     }
     // The badge does not repeat the chip: "Closed" appears in the chip only.
     expect((card('Quiz that closed').match(/>Closed[^<]*</g) ?? []).length).toBe(1)
+  })
+})
+
+/* The submission bin, student side (plan section 9, S-4). The bin shows
+   only where the teacher opened it or the student already handed in; a
+   task with neither reads exactly as before. */
+describe('Modules tab -- the submission bin', () => {
+  const lab = { ...tasks[0], accepts_submissions: true }
+  const handedIn = {
+    id: `${lab.id}_S1`, task_id: lab.id, class_id: 'demo-sci9-newton', student_id: 'S1',
+    attachment: { title: 'Pendulum lab (Google Doc)', resource_type: 'link', url: 'https://docs.google.com/document/d/x' },
+    note: 'Repeated the 60 cm run.', submitted_at: new Date(soon.getFullYear(), soon.getMonth(), soon.getDate(), 15, 12), resubmitted_count: 0,
+  }
+  const box = (html) => html.match(/<div class="pl-12" data-testid="submit-box"[^>]*>[\s\S]*?<\/div><\/div>/)?.[0] ?? ''
+
+  it('a task whose bin is open shows Hand in your work, with the attachment field, a note and Submit; the paper exam shows none', () => {
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [lab, tasks[1]] })
+    expect(html.split('data-testid="submit-box"').length - 1).toBe(1)
+    const b = box(html)
+    expect(b).toContain('data-state="editing"')
+    expect(b).toContain('Hand in your work')
+    expect(b).toContain('https://drive.google.com/')
+    expect(b).toContain('A note for your teacher (optional)')
+    expect(b).toMatch(/>Submit</)
+    expect(b).toContain('You can replace it until the teacher closes submissions.')
+  })
+
+  it('a task whose bin is off, with nothing handed in, shows no bin at all', () => {
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks })
+    expect(html).not.toContain('data-testid="submit-box"')
+  })
+
+  it('once handed in, the box reads Submitted · when with the work, the note and Replace; the chip reads Submitted too', () => {
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [lab], submissionByTask: { [lab.id]: handedIn } })
+    const b = box(html)
+    expect(b).toContain('data-state="submitted"')
+    expect(b).toMatch(/Submitted · [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}, 3:12 PM/)
+    expect(b).not.toContain('· late')
+    expect(b).toContain('https://docs.google.com/document/d/x')
+    expect(b).toContain('Repeated the 60 cm run.')
+    expect(b).toMatch(/>Replace</)
+    expect(b).not.toContain('Hand in your work')
+    // the row's window chip follows the deliverable state
+    const row = html.slice(html.indexOf(`data-task-id="${lab.id}"`), html.indexOf('data-testid="submit-box"'))
+    expect(row).toMatch(/Submitted ·/)
+    expect(row).not.toMatch(/Due /)
+  })
+
+  it('says late in red when the hand-in came after the deadline', () => {
+    const lateAt = new Date(soon.getFullYear(), soon.getMonth(), soon.getDate() + 1, 8, 5)
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [lab], submissionByTask: { [lab.id]: { ...handedIn, submitted_at: lateAt } } })
+    expect(box(html)).toContain('· late')
+  })
+
+  it('once the teacher closes the bin, a submission shows read-only with Submissions are closed and no Replace', () => {
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [{ ...lab, accepts_submissions: false }], submissionByTask: { [lab.id]: handedIn } })
+    const b = box(html)
+    expect(b).toContain('data-state="closed"')
+    expect(b).toContain('Submissions are closed. Your work above is what the teacher has.')
+    expect(b).not.toMatch(/>Replace</)
+    expect(b).not.toMatch(/>Submit</)
+  })
+
+  it('names no vendor or exception anywhere in the bin', () => {
+    const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [lab], submissionByTask: { [lab.id]: handedIn } })
+    expect(box(html)).not.toMatch(/firebase|firestore|storage\.googleapis|error|failed/i)
   })
 })

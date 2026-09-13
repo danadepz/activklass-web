@@ -340,6 +340,39 @@ Still open at this altitude:
   cells. The task, its column and its 8 notifications were deleted after, and one
   record save re-synced the students' `entries`. **Not driven:** the quiz publish modal's
   pre-fill (the same tested function; the modal opens only on Publish).
+- `[x]` **A task can open a submission bin, and the student hands work in through the app**
+  (2026-09-13, the convoy in `docs/plans/modules-content-and-deliverables.md` §9 — the owner
+  reversed D7 the same day the first convoy closed; S-1 to S-4 built here, S-5 is the Verify
+  pane's). Per task, opt-in: the teacher ticks **Accept submissions through the app** (never
+  offered on a paper exam) and the row gains a **"N of M submitted"** chip that unfolds every
+  student on the roster — who handed in and when, late in red, their file or link and note,
+  the rest greyed as *not yet* — with a link to the class record, where the mark is still
+  typed; nothing is graded in the bin. The student's class page gets a **Hand in your work**
+  box on such a task (one file to `task_files/{classId}/{taskId}/submissions/{uid}/` or one
+  link, an optional note), then *Submitted · when* with **Replace** until the teacher unticks
+  the box, after which it reads *Submissions are closed*; the deliverable turns `done`, so
+  **Up next** files it under Finished with the same Submitted line. One row per student per
+  task (`task_submissions/{taskId}_{studentId}`, the id built only by `submissionId()`),
+  written only by that student, only onto a published task that accepts and lists them; the
+  teacher reads through the class, so the list query carries `class_id` beside `task_id`;
+  *late* is derived, never stored. Cross-repo: the rule block, the `(class_id, task_id)`
+  index and the storage path (backend `6c67c45` … `44ce1d3`), **deployed by the owner
+  2026-09-13**. *Verified:* `npm run test:rules` 64/64 (+8) — and with the
+  `accepts_submissions` condition removed from the rule one goes red; `taskSubmissions.test.js`
+  (13), `deliverables.test.js` (+2), `useStudentDeliverables.test.js` (+2),
+  `classTasks.test.js` (+4), `modules.test.jsx` (+7), the student `deliverables.test.jsx` (+6);
+  `npm run test` 1081/1081, build clean. Live, after the deploy: as the seeded teacher on
+  Newton a throwaway activity published with the box ticked read **1 of 8 submitted** and
+  unfolded Hana's row (time, link, note) over seven *not yet*; headless as Hana
+  (`drive.mjs`, `page.login('Hana')`) the class page showed her submission with Replace,
+  Replace with a new link and note re-submitted through the live rule (the Admin SDK showed
+  the new url, a fresh `submitted_at` and the counter climbing), and the dashboard's
+  Finished section listed the task as *Submitted · Sun 13 Sep, 10:34 PM*. The task, its
+  submissions and its 8 notifications were deleted after. **Not driven:** a file upload
+  through the box (the link path was; the file path is the same `AttachmentField` the
+  syllabus and contest forms already prove, on a Storage path only that student may write);
+  the seed's Hana submission (`seed_demo.py` has never been run on the live project). S-5's
+  REST-API refusals are the Verify pane's.
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
