@@ -20,6 +20,9 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
+import { quizzesToAutoPost } from '@/lib/quizToRecord'
+import { useQuizzes } from '@/hooks/useQuizzes'
+import { useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { isPassingGrade } from '@/lib/grading'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
@@ -1140,6 +1143,20 @@ export default function ClassRecordPage() {
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
 
+  /* Quiz scores post themselves when this page opens (owner decision
+     2026-09-13): every published quiz mapped to this class runs the same sync
+     the quiz page's Post scores button runs, then the record refetches so the
+     columns show what landed. Only once the gradebook is known to be
+     configured -- the sync would refuse anyway, but silently. The student
+     reads the new mark through the entries sync inside. */
+  const { data: quizzes } = useQuizzes()
+  const autoPost = useAutoPostScores({
+    classId,
+    quizzes: quizzesToAutoPost(quizzes ?? [], classId),
+    enabled: !!bundle?.configured,
+    onPosted: refetch,
+  })
+
   if (isLoading) {
     // Five KPI tiles then the score table, which is the shape that lands.
     return (
@@ -1160,7 +1177,16 @@ export default function ClassRecordPage() {
       <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
         Class Record
       </h1>
-      {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 22px' }}>{subline}</p>}
+      {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 6px' }}>{subline}</p>}
+      {bundle.configured && (
+        <p role="status" style={{ fontSize: 12, color: autoPost.skipped.length ? goldDeep : faint, margin: '0 0 22px', lineHeight: 1.5 }}>
+          {autoPost.status === 'posting'
+            ? 'Posting quiz scores…'
+            : autoPost.skipped.length
+              ? `Quiz scores post here on their own when this page opens. Not posted: ${autoPost.skipped.join(' ')}`
+              : `Quiz scores post here on their own when this page opens${autoPost.status === 'done' && autoPost.written ? ` — ${autoPost.written} posted just now` : ''}.`}
+        </p>
+      )}
 
       <GradeContestsPanel classId={classId} assessments={bundle.assessments} />
 

@@ -225,3 +225,25 @@ export function describeSyncResult({ written = 0, pendingEssays = 0, notTaken = 
   if (versionMismatch) parts.push(`${versionMismatch} took an earlier version of this quiz`)
   return `${parts.join(' · ')}.`
 }
+
+/**
+ * The quizzes whose scores a class's record should pick up on its own.
+ *
+ * Since 2026-09-13 (owner decision) a quiz's scores are posted whenever the
+ * teacher opens the class record or the quiz's results, not only when the
+ * Post scores button is pressed. The student cannot write the gradebook --
+ * the rules let them read only their own `entries` -- so "automatic" means
+ * "the next time the teacher looks", and this is what decides which quizzes
+ * that look covers: published, assigned to the class, and mapped to a
+ * component and period there (a quiz without a mapping has nowhere to land;
+ * the button already says so).
+ */
+export function quizzesToAutoPost(quizzes = [], classId) {
+  if (!classId) return []
+  return quizzes.filter(
+    (q) =>
+      q?.status === 'published' &&
+      (q.class_ids ?? []).includes(classId) &&
+      !!q.class_mappings?.[classId],
+  )
+}

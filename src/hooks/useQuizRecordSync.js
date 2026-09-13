@@ -12,6 +12,7 @@
  * the promise in the dialog stopped being true and every quiz mark went back
  * to being typed in by hand on the record page.
  */
+import { useEffect, useRef, useState } from 'react'
 import {
   collection,
   doc,
@@ -154,4 +155,59 @@ export async function syncQuizToAllRecords({ quiz, classMappings }) {
   }
 
   return { ...totals, skipped }
+}
+
+/**
+ * Post a class's quiz scores on their own, the moment a teacher looks.
+ *
+ * Owner decision 2026-09-13: quiz marks should reach the class record --
+ * and so the student's grade, the Performance tab and the risk snapshot --
+ * without a button. A student's device may not write the gradebook (the
+ * rules let them read their own `entries` and nothing else), so the trigger
+ * is the teacher's screen: the class record page and a quiz's results view
+ * both run this on open. It is the same sync the Post scores button runs,
+ * and the same rules hold -- a locked period is skipped and said so, an
+ * essay stays blank until it is marked, the scoring policy is the quiz's.
+ *
+ * Runs once per (class, set of quizzes) per mount, so a record page that
+ * refetches after the post does not post again; `syncEntries` inside the sync
+ * is what makes the student read the new mark. Silent unless it wrote
+ * something or had to skip a class -- both are returned for the caller to
+ * show in a line, not a toast: the teacher did not press anything.
+ */
+export function useAutoPostScores({ classId, quizzes = [], enabled = true, onPosted }) {
+  const [state, setState] = useState({ status: 'idle', written: 0, skipped: [] })
+  const ranFor = useRef('')
+  const key = `${classId}|${quizzes.map((q) => q.id).sort().join(',')}`
+
+  useEffect(() => {
+    if (!enabled || !classId || quizzes.length === 0 || ranFor.current === key) return
+    ranFor.current = key
+    let cancelled = false
+    setState({ status: 'posting', written: 0, skipped: [] })
+    ;(async () => {
+      let written = 0
+      const skipped = []
+      for (const quiz of quizzes) {
+        try {
+          const result = await syncQuizToClassRecord({ quiz, classId, mapping: quiz.class_mappings[classId] })
+          if (result.skipped) skipped.push(`${quiz.title}: ${result.skipped}`)
+          else written += result.written ?? 0
+        } catch (err) {
+          skipped.push(`${quiz.title}: ${err.message}`)
+        }
+      }
+      if (cancelled) return
+      setState({ status: 'done', written, skipped })
+      if (written > 0) onPosted?.()
+    })()
+    return () => {
+      cancelled = true
+    }
+    // `key` stands in for classId + quizzes; onPosted is a callback the
+    // caller may rebuild every render and must not retrigger the post.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key])
+
+  return state
 }

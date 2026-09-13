@@ -49,7 +49,11 @@ vi.mock('@/hooks/useBankedQuestions', () => ({
   bankQuestions: vi.fn(), filterBankedQuestions: () => [], useBankedQuestions: () => ({ data: [] }),
 }))
 vi.mock('@/hooks/useAttemptSession', () => ({ discardAttempt: vi.fn(), grantExtraAttempt: vi.fn() }))
-vi.mock('@/hooks/useQuizRecordSync', () => ({ syncQuizToAllRecords: vi.fn(), syncQuizToClassRecord: vi.fn() }))
+vi.mock('@/hooks/useQuizRecordSync', () => ({
+  syncQuizToAllRecords: vi.fn(),
+  syncQuizToClassRecord: vi.fn(),
+  useAutoPostScores: () => ({ status: 'idle', written: 0, skipped: [] }),
+}))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true) }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/components/ui/useAsyncAction', () => ({ useAsyncAction: (fn) => [fn, false] }))

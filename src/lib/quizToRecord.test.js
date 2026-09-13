@@ -17,6 +17,7 @@ import {
   describeSyncResult,
   quizScoreCells,
   quizTotalPoints,
+  quizzesToAutoPost,
 } from './quizToRecord.js'
 
 const attempt = (overrides = {}) => ({
@@ -260,5 +261,21 @@ describe('quizTotalPoints · pooled quizzes', () => {
       questions: Array.from({ length: 30 }, () => ({ points: 2 })),
     }
     expect(quizTotalPoints(quiz)).toBe(20)
+  })
+})
+
+describe('quizzesToAutoPost', () => {
+  const mapped = { status: 'published', class_ids: ['c1', 'c2'], class_mappings: { c1: { component_id: 'ww', grading_period_id: 'q1' } } }
+  const draft = { ...mapped, status: 'draft' }
+  const elsewhere = { ...mapped, class_ids: ['c9'] }
+  const unmapped = { ...mapped, class_mappings: {} }
+
+  it('keeps only published quizzes assigned to the class with a mapping there', () => {
+    expect(quizzesToAutoPost([mapped, draft, elsewhere, unmapped], 'c1')).toEqual([mapped])
+  })
+
+  it('is empty for a class the quiz is assigned to but not mapped in, and with no class', () => {
+    expect(quizzesToAutoPost([mapped], 'c2')).toEqual([])
+    expect(quizzesToAutoPost([mapped], '')).toEqual([])
   })
 })

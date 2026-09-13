@@ -11,7 +11,7 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import { bankQuestions, filterBankedQuestions, useBankedQuestions } from '@/hooks/useBankedQuestions'
 import { describeBankResult } from '@/lib/questionBank'
-import { SCORING_POLICIES, describeSyncResult } from '@/lib/quizToRecord'
+import { SCORING_POLICIES, describeSyncResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { topicOptions, topicPatch } from '@/lib/quizTopics'
 import {
@@ -37,7 +37,7 @@ import {
   openForMs,
 } from '@/lib/quizAttempts'
 import { discardAttempt, grantExtraAttempt } from '@/hooks/useAttemptSession'
-import { syncQuizToAllRecords, syncQuizToClassRecord } from '@/hooks/useQuizRecordSync'
+import { syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -472,12 +472,15 @@ const thHead = { padding: '13px 18px', textAlign: 'left', fontSize: 11, fontWeig
 /**
  * Posts the class on screen into its gradebook column.
  *
- * Manual rather than automatic on submit: attempts arrive over days, essays
- * are marked later still, and a record that rewrites itself under the teacher
- * is worse than one they press a button to update. Pressing it twice is
- * harmless -- the assessment row has a derived id and merges.
+ * Since 2026-09-13 the same sync also runs on its own when this view or the
+ * class record opens (useAutoPostScores) -- the owner wanted quiz marks in
+ * the record without a button. The button stays for the case in between:
+ * a teacher who has just marked an essay and wants the record updated now,
+ * without leaving. Pressing it twice is harmless -- the assessment row has
+ * a derived id and merges. `auto` is the last automatic run, for the line
+ * under the button.
  */
-function PostScoresButton({ quiz, classId }) {
+function PostScoresButton({ quiz, classId, auto }) {
   const mapping = quiz.class_mappings?.[classId]
   const [post, posting] = useAsyncAction(async () => {
     if (!mapping) {
@@ -492,17 +495,30 @@ function PostScoresButton({ quiz, classId }) {
       toast.error(`Could not post to the class record: ${err.message}`)
     }
   })
+  const autoLine =
+    auto?.status === 'posting' ? 'Posting scores to the class record…'
+    : auto?.skipped?.length ? auto.skipped.join(' ')
+    : auto?.status === 'done' ? `Scores post to the class record on their own when this page or the record opens${auto.written ? ` — ${auto.written} posted just now` : ''}.`
+    : mapping ? null
+    : 'Not mapped to a grading component for this class, so nothing posts on its own — republish to map it.'
   return (
-    <button
-      type="button"
-      onClick={post}
-      disabled={posting}
-      title="Write each student's best graded attempt into the class record"
-      className="transition hover:brightness-105 disabled:opacity-50"
-      style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy, marginLeft: 'auto' }}
-    >
-      {posting ? 'Posting…' : 'Post scores to class record'}
-    </button>
+    <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+      <button
+        type="button"
+        onClick={post}
+        disabled={posting}
+        title="Write each student's best graded attempt into the class record now"
+        className="transition hover:brightness-105 disabled:opacity-50"
+        style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy }}
+      >
+        {posting ? 'Posting…' : 'Post scores now'}
+      </button>
+      {autoLine && (
+        <p role="status" style={{ fontSize: 11.5, color: auto?.skipped?.length ? goldDeep : faint, margin: 0, textAlign: 'right', maxWidth: 420, lineHeight: 1.45 }}>
+          {autoLine}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -1807,6 +1823,15 @@ export default function QuizBuilderPage() {
     }
   }, [assignedClasses, selectedResultsClassId])
 
+  // The class on screen gets its scores posted the moment it is looked at
+  // (owner decision 2026-09-13). A closed quiz is not re-posted: its marks
+  // were posted while it was live and the record may have been corrected
+  // by hand since. `quiz` may be undefined until the load lands.
+  const autoPost = useAutoPostScores({
+    classId: selectedResultsClassId,
+    quizzes: quizzesToAutoPost(quiz ? [quiz] : [], selectedResultsClassId),
+  })
+
   const refetch = () => {
     queryClient.invalidateQueries({ queryKey: ['fs-quiz', quizId] })
     queryClient.invalidateQueries({ queryKey: ['fs-quizzes'] })
@@ -1918,7 +1943,7 @@ export default function QuizBuilderPage() {
                   ))}
                 </select>
                 {selectedResultsClassId && (
-                  <PostScoresButton quiz={quiz} classId={selectedResultsClassId} />
+                  <PostScoresButton quiz={quiz} classId={selectedResultsClassId} auto={autoPost} />
                 )}
               </div>
               {selectedResultsClassId && (

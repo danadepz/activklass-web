@@ -299,6 +299,24 @@ Still open at this altitude:
   clicking the bell entry itself rather than its URL. **Noted, not fixed:** deleting a task
   leaves its file in Storage; `seed_demo.py`'s three demo tasks are committed but were never
   run, so the live project has no seeded tasks.
+- `[x]` **Quiz scores reach the class record on their own** (2026-09-13, owner decision).
+  Publishing already created the record column; the marks only landed when the teacher
+  pressed **Post scores to class record**, so a student who finished a quiz stayed out of
+  the grades, the Performance tab and their own `entries` until then. A student's device
+  cannot write the gradebook (the rules let it read only its own entry), so "automatic"
+  is *the next time the teacher looks*: the class record page and a quiz's results view
+  both run the same sync on open (`useAutoPostScores` in `hooks/useQuizRecordSync.js`,
+  over `quizzesToAutoPost` — published, assigned, mapped) and say what they posted or why
+  a class was skipped (a locked period, no mapping); the button stays as **Post scores
+  now** for the moment after an essay is marked. Same scoring policy, same locked-period
+  refusal, same `syncEntries`. *Verified:* `quizToRecord.test.js` (+2), `npm run test`
+  1037/1037, build clean; live, as the seeded teacher: Curie's Respiratory quiz had one
+  graded attempt (Aquino, 11/29) and an empty record column from the day before — opening
+  the class record posted it ("1 posted just now"), the column read 11 and the Prelim
+  grade 69, and the Admin SDK showed the assessment's `scores` filled, `synced_at`
+  re-stamped, and Aquino's `entries` document carrying Prelim 69 one second later; the
+  quiz's results view showed the same line. **Not built:** posting at the moment of
+  submit, which needs a Flask route (the student cannot write the record).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
