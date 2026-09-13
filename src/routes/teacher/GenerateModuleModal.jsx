@@ -55,7 +55,7 @@ export default function GenerateModuleModal({ tree, subject, onAppend, onClose }
       overflowY: 'auto',
     }}>
       <form onSubmit={submit} style={{
-        margin: 'auto', width: '100%', maxWidth: 480, background: '#FFFFFF', borderRadius: 20,
+        margin: 'auto', width: '100%', maxWidth: 680, background: '#FFFFFF', borderRadius: 20,
         boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden',
       }}>
         <div style={{ padding: '22px 26px 18px', borderBottom: '1px solid rgba(14,42,92,0.07)',
