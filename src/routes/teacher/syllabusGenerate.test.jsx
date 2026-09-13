@@ -70,6 +70,8 @@ describe('Generate Syllabus with AI — the guide a first-time teacher opens on 
     expect(steps).toHaveLength(4)
     expect(steps[0]).toMatch(/^Pick your class first/)
     expect(steps[0]).toContain('fills the code, name, level and curriculum')
+    // Since 2026-09-13 the pick also rides into the editor's Apply to Classes.
+    expect(steps[0]).toContain('opens already applied to it')
     expect(steps[1]).toMatch(/^Check the curriculum/)
     expect(steps[1]).toContain('MELC code')
     expect(steps[1]).toContain('leaves codes blank')
@@ -126,5 +128,22 @@ describe('Generate Syllabus with AI — Clear form', () => {
     expect(clear).toContain('type="button"')
     expect(clear).toContain(' disabled=""')
     expect(html.indexOf('Clear form')).toBeLessThan(html.indexOf('>Cancel<'))
+  })
+})
+
+/**
+ * The "For class" pick carries through (2026-09-13, owner request). The
+ * picker filled four fields and then the draft opened with no class ticked
+ * under Apply to Classes, so the teacher ticked the same class again. Now
+ * onDraft receives the picked class as a second argument and the page opens
+ * the editor with it in class_ids. A static render cannot click Generate; it
+ * can pin that the label says what the pick now does.
+ */
+describe('Generate Syllabus with AI — the picked class carries into the editor', () => {
+  it('says beside the picker that the draft is applied to the picked class', () => {
+    const html = renderToStaticMarkup(
+      <GenerateModal classes={[{ id: 'c1', subject_code: 'SCI9', subject: 'Science 9', section: 'Newton' }]} onClose={() => {}} onDraft={() => {}} />,
+    )
+    expect(html).toContain('applies the draft to this class')
   })
 })

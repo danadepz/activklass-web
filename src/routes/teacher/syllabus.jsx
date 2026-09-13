@@ -513,7 +513,10 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
         strand: isSeniorHigh ? strand : undefined,
         program: isCollege ? program : undefined,
       })
-      onDraft(draft)
+      // The picked class rides along so the editor opens with it already
+      // ticked under Apply to Classes -- before this the teacher picked
+      // Newton to fill the form, generated, and had to tick Newton again.
+      onDraft(draft, classId ? [classId] : [])
     } catch (err) {
       fail(err.message)
       setGenerating(false)
@@ -538,7 +541,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
         <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <summary className="cursor-pointer select-none font-medium text-slate-700">How to get a good draft</summary>
           <ol className="mt-1.5 list-decimal space-y-1 pl-4 leading-snug">
-            <li>Pick your class first — it fills the code, name, level and curriculum for you.</li>
+            <li>Pick your class first — it fills the code, name, level and curriculum for you, and the draft opens already applied to it. Other classes can be ticked in the editor.</li>
             <li>
               Check the curriculum. DepEd K-12 gives every topic a MELC code; "No official standard" leaves codes
               blank. Then pick the quarter (K-12), strand (Grades 11–12) or program (college).
@@ -558,7 +561,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
         {classes.length > 0 && (
           <div>
             <label className="block text-sm font-medium text-slate-700">
-              For class <span className="font-normal text-slate-400">(optional — fills in the details)</span>
+              For class <span className="font-normal text-slate-400">(optional — fills in the details and applies the draft to this class)</span>
             </label>
             <select value={classId} onChange={(e) => pickClass(e.target.value)} className={inputCls}>
               <option value="">— none —</option>
@@ -1273,7 +1276,7 @@ export default function SyllabusIndexPage() {
         <GenerateModal
           classes={classes ?? []}
           onClose={() => setShowGenerate(false)}
-          onDraft={(d) => {
+          onDraft={(d, classIds = []) => {
             setShowGenerate(false)
             const newSyllId = newId()
             setEditingSyllabus({
@@ -1282,7 +1285,7 @@ export default function SyllabusIndexPage() {
               description: d.description ?? '',
               source: 'ai_generated',
               modules: d.modules ?? [],
-              class_ids: [],
+              class_ids: classIds,
             })
             setDraft({ ai: true, tree: d })
           }}
