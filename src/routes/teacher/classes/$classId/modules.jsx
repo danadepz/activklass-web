@@ -23,6 +23,9 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { useQuizzes } from '@/hooks/useQuizzes'
 import { useClassTasks, classTasksKey } from '@/hooks/useClassTasks'
+import { useTaskSubmissions } from '@/hooks/useTaskSubmissions'
+import { fetchUsersByIds } from '@/lib/roster'
+import { describeSubmission, isLate } from '@/lib/taskSubmissions'
 import { KIND_LABEL, describeWindow, fromQuiz, fromTask, stateOf } from '@/lib/deliverables'
 import { createTask, deleteTask, newTaskId, publishTask, syncTaskToRecord, updateTask, uploadTaskFile } from '@/lib/classTasks'
 import { suggestMapping, taskCountsTowardRecord } from '@/lib/recordMapping'
@@ -145,15 +148,21 @@ function DraftBadge() {
  * kind, title, the window sentence, what is attached, and whether it is
  * still a draft the student cannot see.
  */
-export function TaskRow({ task, now, onEdit, onDelete }) {
+export function TaskRow({ task, now, onEdit, onDelete, classId = '', roster = [] }) {
   const d = fromTask(task, { now })
   const attachments = d.attachments
+  const hasBin = d.status === 'published' && d.acceptsSubmissions
+  const [binOpen, setBinOpen] = useState(false)
   return (
-    <div style={rowStyle} data-testid="task-row" data-status={d.status}>
+    <div data-testid="task-row" data-status={d.status} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={rowStyle}>
       <KindTag>{KIND_LABEL[d.kind]}</KindTag>
       <span style={{ fontSize: 13.5, fontWeight: 600, color: ink, minWidth: 0, overflowWrap: 'anywhere' }}>{d.title}</span>
       {d.status !== 'published' && <DraftBadge />}
       <WindowChip deliverable={d} now={now} />
+      {hasBin && (
+        <SubmissionsChip classId={classId} taskId={task.id} roster={roster} open={binOpen} onToggle={() => setBinOpen((o) => !o)} />
+      )}
       {d.points != null && (
         <span style={{ ...mono, fontSize: 11.5, color: muted }}>{d.points} pts</span>
       )}
@@ -174,6 +183,79 @@ export function TaskRow({ task, now, onEdit, onDelete }) {
         <button type="button" onClick={onDelete} style={{ ...smallBtn, color: red, borderColor: 'rgba(192,57,43,0.3)' }}>Delete</button>
       </span>
     </div>
+    {hasBin && binOpen && <SubmissionsList classId={classId} task={task} roster={roster} now={now} />}
+    </div>
+  )
+}
+
+/**
+ * "3 of 24 submitted" on a task whose bin is open. The count is the rows
+ * the rule lets this teacher read (useTaskSubmissions: class_id AND
+ * task_id, or the query is refused) over the roster the class document
+ * lists. A button, so the list under the row is one click away and closed
+ * by default -- eight tasks each unfolded would bury the modules.
+ */
+function SubmissionsChip({ classId, taskId, roster, open, onToggle }) {
+  const { data: rows, isError } = useTaskSubmissions(classId, taskId)
+  const submitted = rows?.length ?? 0
+  const total = roster.length
+  const label = isError ? 'Submissions could not be loaded' : rows ? `${submitted} of ${total} submitted` : 'Loading submissions…'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      data-testid="submissions-chip"
+      style={{ ...smallBtn, fontSize: 11, padding: '3px 10px', borderRadius: 999, color: isError ? goldDeep : submitted === total && total > 0 ? green : navy, borderColor: 'rgba(14,42,92,0.18)' }}
+    >
+      {label} {open ? '▴' : '▾'}
+    </button>
+  )
+}
+
+/**
+ * One line per student on the roster: name, when they handed in (and late,
+ * per isLate against the task's due_at), their file or link, their note,
+ * and a way to the class record where the mark is typed. Students with no
+ * row are listed too, greyed, so the teacher sees who is missing without
+ * counting. Nothing is graded here (plan S9).
+ */
+export function SubmissionsList({ classId, task, roster, now }) {
+  const { data: rows = [] } = useTaskSubmissions(classId, task.id)
+  const byStudent = new Map(rows.map((r) => [r.student_id, r]))
+  const students = roster.length ? roster : rows.map((r) => ({ id: r.student_id }))
+  const name = (u) => [u?.last_name, u?.first_name].filter(Boolean).join(', ') || u?.id || 'Student'
+  const sorted = [...students].sort((a, b) => name(a).localeCompare(name(b)))
+  return (
+    <div data-testid="submissions-list" style={{ marginLeft: 12, borderLeft: `2px solid ${line}`, paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {sorted.length === 0 && <p style={{ fontSize: 12.5, color: faint, margin: 0 }}>No students on this class yet.</p>}
+      {sorted.map((u) => {
+        const sub = byStudent.get(u.id)
+        const meta = sub ? (RESOURCE_META[sub.attachment?.resource_type] ?? RESOURCE_META.file) : null
+        return (
+          <div key={u.id} data-testid="submission-row" data-submitted={!!sub} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 12.5, color: sub ? ink : faint, padding: '4px 0' }}>
+            <span style={{ fontWeight: 600, minWidth: 140 }}>{name(u)}</span>
+            {sub ? (
+              <>
+                <span style={{ color: isLate(sub, task) ? red : muted }}>{describeSubmission(sub, task, now)}</span>
+                {sub.attachment?.url && (
+                  <a href={sub.attachment.url} target="_blank" rel="noopener noreferrer" style={{ color: blueText, fontWeight: 600, textDecoration: 'none' }}>
+                    {meta.icon} {sub.attachment.title || meta.label}
+                  </a>
+                )}
+                {sub.note && <span style={{ color: muted, fontStyle: 'italic', overflowWrap: 'anywhere' }}>“{sub.note}”</span>}
+                {sub.resubmitted_count > 0 && <span style={{ ...mono, fontSize: 11, color: faint }}>re-submitted ×{sub.resubmitted_count}</span>}
+              </>
+            ) : (
+              <span>— not yet</span>
+            )}
+            <Link to={`/teacher/classes/${classId}/record`} style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: blueText, textDecoration: 'none' }}>
+              Class record →
+            </Link>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -186,7 +268,7 @@ const miniField = { ...field, padding: '7px 10px', fontSize: 13 }
  * kind from the + Add menu. Files are uploaded against the task's id before
  * the first save, which is why a new task gets its id up front (newTaskId).
  */
-function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, teacherId, onClose, onSaved }) {
+export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, teacherId, onClose, onSaved }) {
   const editing = !!task
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { labelledBy: 'task-dialog-title', closeOnBackdrop: false })
   const [taskId] = useState(() => task?.id ?? newTaskId())
@@ -202,6 +284,9 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
     // blank means "for information only", which is what every task was.
     component_id: task?.component_id ?? '',
     grading_period_id: task?.grading_period_id ?? '',
+    // The submission bin (plan section 9): opt-in per task, off by default,
+    // and never on a paper exam.
+    accepts_submissions: task?.accepts_submissions === true,
   })
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
@@ -286,6 +371,9 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
   const fields = () => ({
     ...form,
     title: form.title.trim(),
+    // A paper exam is handed in on paper; the box is hidden for it and the
+    // field is written false so a kind change cannot leave a bin open.
+    accepts_submissions: form.kind === 'exam' ? false : form.accepts_submissions === true,
     // A task edited from the "Not under a sub-module" list keeps the ids it
     // has; one opened under a sub-module is pinned to that sub-module.
     syllabus_id: topic ? (syllabusId ?? null) : (task?.syllabus_id ?? null),
@@ -492,6 +580,30 @@ function TaskDialog({ classId, clazz, syllabusId, module, topic, task, kind, tea
           Leave a date blank if it does not apply.
         </p>
 
+        {/* The submission bin. Hidden for a paper exam: nothing is handed in
+            through an app for one. */}
+        {form.kind !== 'exam' && (
+          <div className="mt-4" style={{ background: 'rgba(14,42,92,0.03)', border: `1px solid ${line}`, borderRadius: 11, padding: '12px 14px' }}>
+            <label className="flex items-start gap-2.5" style={{ cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                id="task-accepts-submissions"
+                checked={form.accepts_submissions}
+                onChange={(e) => setForm((f) => ({ ...f, accepts_submissions: e.target.checked }))}
+                style={{ marginTop: 3, accentColor: navy, width: 15, height: 15 }}
+              />
+              <span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Accept submissions through the app</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: faint, marginTop: 2, lineHeight: 1.45 }}>
+                  {form.accepts_submissions
+                    ? 'Students hand in a file or a link on their class page, and can replace it until you untick this — unticking is how the bin closes. You see who submitted and when; grading stays in the class record.'
+                    : 'Students hand in a file or a link on their class page. You see who submitted and when; grading stays in the class record.'}
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* Counts toward: the record column this task creates on publish.
             Pre-filled from the kind; "Not graded" leaves the record alone. */}
         <div className="mt-4" style={{ background: 'rgba(14,42,92,0.03)', border: `1px solid ${line}`, borderRadius: 11, padding: '12px 14px' }}>
@@ -630,6 +742,15 @@ export default function ModulesPage() {
   })
   const { data: quizzes = [] } = useQuizzes()
   const { data: tasks = [], isError: tasksFailed } = useClassTasks(classId)
+  // The roster's names, for a task's submissions list. Chunked at IN_CHUNK
+  // inside fetchUsersByIds (T-57); read once for the page, not per task.
+  const studentIds = data?.clazz?.student_ids ?? []
+  const { data: rosterData } = useQuery({
+    queryKey: ['fs-class-roster-lite', classId, studentIds.join(',')],
+    queryFn: () => fetchUsersByIds(studentIds),
+    enabled: studentIds.length > 0,
+  })
+  const roster = Array.isArray(rosterData) ? rosterData : []
 
   const [menuFor, setMenuFor] = useState(null)
   const [dialog, setDialog] = useState(null) // { module, topic, task, kind }
@@ -806,6 +927,8 @@ export default function ModulesPage() {
                                   key={task.id}
                                   task={task}
                                   now={now}
+                                  classId={classId}
+                                  roster={roster}
                                   onEdit={() => setDialog({ module: m, topic: t, task, kind: task.kind })}
                                   onDelete={() => remove(task)}
                                 />
@@ -837,6 +960,8 @@ export default function ModulesPage() {
                   key={task.id}
                   task={task}
                   now={now}
+                  classId={classId}
+                  roster={roster}
                   onEdit={() => setDialog({ module: null, topic: null, task, kind: task.kind })}
                   onDelete={() => remove(task)}
                 />

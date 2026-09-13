@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ modules: null, tasks: [], quizzes: [], tasksFailed: false }))
+const state = vi.hoisted(() => ({ modules: null, tasks: [], quizzes: [], tasksFailed: false, submissions: [], roster: [] }))
 
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'T1', role: 'teacher' } }) }))
 vi.mock('@/lib/firebase', () => ({ db: {}, storage: {} }))
@@ -17,13 +17,20 @@ vi.mock('@/lib/classTasks', () => ({
   uploadTaskFile: vi.fn(), newTaskId: () => 'new-id',
 }))
 vi.mock('@/hooks/useQuizzes', () => ({ useQuizzes: () => ({ data: state.quizzes }) }))
+vi.mock('@/hooks/useTaskSubmissions', () => ({
+  useTaskSubmissions: () => ({ data: state.submissions, isError: false }),
+  taskSubmissionsKey: (c, t) => ['fs-task-submissions', c, t],
+}))
+vi.mock('@/lib/roster', () => ({ fetchUsersByIds: vi.fn(async () => []), IN_CHUNK: 10 }))
 vi.mock('@/hooks/useClassTasks', () => ({
   useClassTasks: () => ({ data: state.tasks, isError: state.tasksFailed }),
   classTasksKey: (id) => ['fs-class-tasks', id],
 }))
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...(await importOriginal()),
-  useQuery: () => ({ data: state.modules, isLoading: false, isError: false }),
+  useQuery: ({ queryKey }) => queryKey?.[0] === 'fs-class-roster-lite'
+    ? { data: state.roster, isLoading: false, isError: false }
+    : { data: state.modules, isLoading: false, isError: false },
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
 vi.mock('react-router-dom', async (importOriginal) => ({
@@ -32,7 +39,7 @@ vi.mock('react-router-dom', async (importOriginal) => ({
   useNavigate: () => vi.fn(),
 }))
 
-import ModulesPage from './modules.jsx'
+import ModulesPage, { SubmissionsList, TaskDialog } from './modules.jsx'
 
 /* The day boundary the states turn on. `now` is fixed so the sentence
    describeWindow prints is the same on every run. */
@@ -64,6 +71,8 @@ beforeEach(() => {
   state.tasks = []
   state.quizzes = []
   state.tasksFailed = false
+  state.submissions = []
+  state.roster = []
 })
 
 describe('the tree', () => {
@@ -173,5 +182,78 @@ describe('task rows', () => {
     const html = render()
     expect(html).toContain('could not be loaded')
     expect(html).toContain('Module 1 · Doing Science')
+  })
+})
+
+/* The submission bin (plan section 9, S-3): the teacher's side. */
+describe('the submission bin on the Modules tab', () => {
+  const roster = [
+    { id: 'S1', first_name: 'Hana', last_name: 'Lorenzo' },
+    { id: 'S2', first_name: 'Carlo', last_name: 'Reyes' },
+    { id: 'S3', first_name: 'Mika', last_name: 'Solano' },
+  ]
+  const accepting = { ...base, id: 'lab', title: 'Pendulum lab', status: 'published', due_at: '2026-09-19T23:59', accepts_submissions: true }
+  const hana = { id: 'lab_S1', task_id: 'lab', class_id: 'C1', student_id: 'S1', submitted_at: new Date(2026, 8, 19, 15, 12), attachment: { title: 'My doc', resource_type: 'link', url: 'https://docs.google.com/d/x' }, note: 'Repeated the 60 cm run.', resubmitted_count: 1 }
+
+  it('a published task whose bin is open shows the count chip, closed; one whose bin is off shows none', () => {
+    state.roster = roster
+    state.submissions = [hana]
+    state.tasks = [accepting, { ...base, id: 'nobin', title: 'No bin', status: 'published', accepts_submissions: false }]
+    const html = render()
+    expect(html.split('data-testid="submissions-chip"').length - 1).toBe(1)
+    expect(html).toContain('1 of 3 submitted')
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).not.toContain('data-testid="submissions-list"')
+  })
+
+  it('a draft never shows the chip, even with the box ticked', () => {
+    state.tasks = [{ ...accepting, status: 'draft' }]
+    expect(render()).not.toContain('data-testid="submissions-chip"')
+  })
+
+  it('the list names every student on the roster: the one who handed in with when, her link and note; the rest greyed as not yet', () => {
+    state.submissions = [hana]
+    const html = renderToStaticMarkup(<MemoryRouter><SubmissionsList classId="C1" task={accepting} roster={roster} now={NOW} /></MemoryRouter>)
+    const rows = html.match(/data-testid="submission-row"[^>]*>/g) ?? []
+    expect(rows).toHaveLength(3)
+    expect(html.split('data-submitted="true"').length - 1).toBe(1)
+    expect(html.split('data-submitted="false"').length - 1).toBe(2)
+    expect(html).toContain('Lorenzo, Hana')
+    expect(html).toContain('Submitted · Sat 19 Sep, 3:12 PM')
+    expect(html).not.toContain('· late')
+    expect(html).toContain('https://docs.google.com/d/x')
+    expect(html).toContain('Repeated the 60 cm run.')
+    expect(html).toContain('re-submitted ×1')
+    expect(html).toContain('— not yet')
+    expect(html).toContain('/teacher/classes/C1/record')
+    // nothing is graded here
+    expect(html).not.toMatch(/score|mark|grade<|points/i)
+  })
+
+  it('says late when the hand-in came after the deadline', () => {
+    state.submissions = [{ ...hana, submitted_at: new Date(2026, 8, 20, 8, 5) }]
+    const html = renderToStaticMarkup(<MemoryRouter><SubmissionsList classId="C1" task={accepting} roster={roster} now={NOW} /></MemoryRouter>)
+    expect(html).toContain('Submitted · Sun 20 Sep, 8:05 AM · late')
+  })
+
+  const dialog = (kind, task = null) => renderToStaticMarkup(
+    <MemoryRouter><TaskDialog classId="C1" clazz={{ id: 'C1', student_ids: ['S1'] }} syllabusId="syl1" module={syllabus.modules[0]} topic={syllabus.modules[0].topics[0]} task={task} kind={kind} teacherId="T1" onClose={() => {}} onSaved={() => {}} /></MemoryRouter>,
+  )
+
+  it('the dialog offers "Accept submissions through the app", unticked, for a new activity', () => {
+    const html = dialog('activity')
+    expect(html).toContain('Accept submissions through the app')
+    expect(html).toMatch(/<input type="checkbox" id="task-accepts-submissions"(?![^>]*checked)/)
+    expect(html).toContain('grading stays in the class record')
+  })
+
+  it('hides the box for a paper exam', () => {
+    expect(dialog('exam')).not.toContain('Accept submissions through the app')
+  })
+
+  it('opens ticked on a task whose bin is open, and says unticking closes it', () => {
+    const html = dialog('assignment', accepting)
+    expect(html).toMatch(/<input type="checkbox" id="task-accepts-submissions"[^>]*checked/)
+    expect(html).toContain('unticking is how the bin closes')
   })
 })
