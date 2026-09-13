@@ -105,7 +105,7 @@ function blankQuiz({ classIds, teacherId, title, generatedBy = 'manual', questio
   }
 }
 
-function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopicId = '' }) {
+export function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopicId = '' }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a quiz with AI', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()

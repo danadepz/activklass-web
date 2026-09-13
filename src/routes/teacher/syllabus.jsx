@@ -402,7 +402,7 @@ function suggestCurriculum({ clazz, gradeLevel, subjectCode }) {
   return isGE ? 'ched_ge' : ''
 }
 
-function GenerateModal({ classes = [], onClose, onDraft }) {
+export function GenerateModal({ classes = [], onClose, onDraft }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a syllabus with AI', closeOnBackdrop: false })
   const [classId, setClassId] = useState('')
   const [subjectCode, setSubjectCode] = useState('')
