@@ -5,12 +5,12 @@ convoy was mostly through. Where each step stands (the Modules pane keeps this l
 
 | Step | Pane | State |
 |---|---|---|
-| 1 Rules, storage, schema, seed | Backend | **done, not deployed** — backend `9b99c5f` `5f69451` `ff33ed2` `b75736f`. A live student read of `class_tasks` is refused until the owner runs `firebase deploy --only firestore:rules,firestore:indexes,storage` from the backend repo. |
+| 1 Rules, storage, schema, seed | Backend | done and **deployed 2026-09-13** (owner ran it) — backend `9b99c5f` `5f69451` `ff33ed2` `b75736f`. Proven on the live project from a Node script with custom tokens, against two scratch tasks planted and deleted by the Admin SDK: Carlo (on Newton) reads the published task with the two-field query and is refused the same query without the status filter and a direct read of the draft; Fina (not on Newton) is refused the two-field query; the `(class_id, status)` index is listed; a signed-in `task_files` write, read-URL and delete all succeed. **The seed's three demo tasks are not on the live project** — `seed_demo.py` was committed, not run; whoever reseeds gets them. |
 | 2 Shared logic + rules test | Data/logic | done — `c364352` `ded328a` `72982f0` `0063710`; `npm run test:rules` 56/56. |
 | 3 Teacher Modules tab | Class detail | done — `74ce9e0` `58d3b64` `662c115` (Keel's work; committed from the Modules pane after that session closed). `modules.test.jsx` (11); **browser walk owed** to Step 6. |
 | 4 Student Modules chips + Up next | Student | done — `70de02c` `393cfac` `5061576`; verified headless as Carlo; live task rows blocked on the Step 1 deploy. |
 | 5 Quiz card chip + `?topic=` | Quizzes | done — `describeWindow` on every card, `?topic=` preselect, landed with the Generate-dialog work (`9c800db` and before). |
-| 6 Verify + ROADMAP entry | Verify | dispatched 2026-09-13 — teacher half can run now; the student half waits on the Step 1 deploy. |
+| 6 Verify + ROADMAP entry | Verify | dispatched 2026-09-13 — both halves unblocked once the deploy landed (same day). |
 
 Every prompt in section 6 is paste-ready and self-contained; a pane that receives one
 should still read `CLAUDE.md`, `OWNERSHIP.md` and `docs/DATA-MODEL.md` before its first
