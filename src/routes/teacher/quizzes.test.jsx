@@ -25,6 +25,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('react-router-dom', () => ({
   Link: ({ children }) => children,
   useNavigate: () => () => {},
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }))
 vi.mock('@/lib/firebase', () => ({ db: {} }))
 vi.mock('firebase/firestore', () => ({

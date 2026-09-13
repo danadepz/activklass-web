@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -105,14 +105,14 @@ function blankQuiz({ classIds, teacherId, title, generatedBy = 'manual', questio
   }
 }
 
-function GenerateQuizModal({ classes, onClose }) {
+function GenerateQuizModal({ classes, onClose, initialClassId = '', initialTopicId = '' }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Generate a quiz with AI', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { locks } = useMySubscription()
-  const [selectedClassId, setSelectedClassId] = useState(classes[0]?.id ?? '')
+  const [selectedClassId, setSelectedClassId] = useState(initialClassId || classes[0]?.id || '')
   const [form, setForm] = useState({
-    topic_id: '',
+    topic_id: initialTopicId,
     topic: '',
     count: 10,
     blooms_level: 'apply',
@@ -159,7 +159,7 @@ function GenerateQuizModal({ classes, onClose }) {
   // Topics page reads, so a quiz made here lands under a topic that page
   // shows. Reading only the first left a seeded class with an empty dropdown
   // and every quiz it generated unlinked from any topic.
-  const { data: syllabus } = useQuery({
+  const { data: syllabus, isFetched: syllabusFetched } = useQuery({
     queryKey: ['fs-syllabus-gen', selectedClassId, selectedClassMeta?.syllabus_id],
     queryFn: async () => {
       if (selectedClassMeta?.syllabus_id) {
@@ -189,9 +189,17 @@ function GenerateQuizModal({ classes, onClose }) {
     })
   }
 
+  const pickedTopic = topics.find((t) => t.id === form.topic_id)
+  // A topic that arrived on the URL (the class page's "+ Add -> Quiz") may
+  // not be in the syllabus of the class picked here -- the same syllabus can
+  // serve several classes, and a seeded class keeps its own copy. Say so
+  // rather than silently showing the first option, and let the description
+  // field back in so the teacher is not stuck.
+  const topicMissing = !!form.topic_id && syllabusFetched && !pickedTopic
+
   async function generate(e) {
     e.preventDefault()
-    const picked = topics.find((t) => t.id === form.topic_id)
+    const picked = pickedTopic
     const topicText = (picked?.title || form.topic).trim()
     if (!topicText) {
       setError('Pick a syllabus topic or describe one')
@@ -202,7 +210,7 @@ function GenerateQuizModal({ classes, onClose }) {
     try {
       const quiz = await generateQuiz({
         topic: topicText,
-        topicId: form.topic_id || null,
+        topicId: picked?.id ?? null,
         objectives: picked?.objectives ?? [],
         numQuestions: form.count,
         types: form.types,
@@ -222,7 +230,7 @@ function GenerateQuizModal({ classes, onClose }) {
         generatedBy: 'ai_generated',
         questions,
         extra: {
-          topic_id: form.topic_id || null,
+          topic_id: picked?.id ?? null,
           module_id: picked?.module_id || null,
           // Carried so the quiz editor can file its own 💾 saves under the
           // right syllabus folder; only this dialog knows which syllabus the
@@ -245,7 +253,7 @@ function GenerateQuizModal({ classes, onClose }) {
           const result = await bankQuestions({
             teacherId: profile.id,
             questions,
-            topicId: form.topic_id || null,
+            topicId: picked?.id ?? null,
             syllabusId: selectedClassMeta?.syllabus_id || null,
             origin: 'ai_generated',
             sourceQuizId: quizId,
@@ -281,7 +289,7 @@ function GenerateQuizModal({ classes, onClose }) {
 
           <div>
             <label style={labelStyle}>Target Class Context</label>
-            <select className="ak-input" value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setForm(f => ({ ...f, topic_id: '' })) }} style={selectStyle}>
+            <select className="ak-input" value={selectedClassId} onChange={(e) => { setSelectedClassId(e.target.value); setForm(f => ({ ...f, topic_id: f.topic_id === initialTopicId ? f.topic_id : '' })) }} style={selectStyle}>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>{c.section} ({c.subject})</option>
               ))}
@@ -301,7 +309,13 @@ function GenerateQuizModal({ classes, onClose }) {
                   title to go on, and fills the gap with its own idea of the
                   subject -- which may not be what was taught. Said before
                   generating, because after it the flag has nothing to check. */}
-              {form.topic_id && topics.find((t) => t.id === form.topic_id)?.objectives.length === 0 && (
+              {topicMissing && (
+                <p role="status" style={{ fontSize: 12, color: goldDeep, margin: '8px 0 0', lineHeight: 1.5 }}>
+                  The sub-module you came from is not in this class's syllabus. Pick the class it
+                  belongs to, or describe the topic below.
+                </p>
+              )}
+              {pickedTopic?.objectives.length === 0 && (
                 <p role="status" style={{ fontSize: 12, color: goldDeep, margin: '8px 0 0', lineHeight: 1.5 }}>
                   This topic has no learning objectives written, so the AI only has its title to go on
                   and may test things you did not teach. Add objectives on the Syllabus page first, or
@@ -312,7 +326,7 @@ function GenerateQuizModal({ classes, onClose }) {
           ) : (
             <p style={{ fontSize: 12, color: faint, margin: 0 }}>Tip: build a syllabus first and you can target its topics here.</p>
           )}
-          {!form.topic_id && (
+          {(!form.topic_id || topicMissing) && (
             <div>
               <label style={labelStyle}>Topic Description</label>
               <input className="ak-input" required={!form.topic_id} placeholder="e.g. Arithmetic sequences" value={form.topic} onChange={(e) => setForm((f) => ({ ...f, topic: e.target.value }))} style={fieldStyle} />
@@ -1158,7 +1172,11 @@ export default function QuizzesIndexPage() {
   const [activeTab, setActiveTab] = useState('quizzes') // 'quizzes' or 'bank'
   const { locks } = useMySubscription()
   const [showCreate, setShowCreate] = useState(false)
-  const [showGenerate, setShowGenerate] = useState(false)
+  // ?topic={topicId} -- the class page's Modules tab sends "+ Add -> Quiz"
+  // here with the sub-module it was under, so the Generate dialog opens on it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const topicParam = searchParams.get('topic') ?? ''
+  const [showGenerate, setShowGenerate] = useState(!!topicParam)
 
   // Fetch classes
   const { data: classes } = useTeacherClasses()
@@ -1168,6 +1186,31 @@ export default function QuizzesIndexPage() {
 
   // Fetch syllabi for the Quiz Bank structure
   const { data: syllabi } = useSyllabi()
+
+  // Which class the URL's topic belongs to: the syllabus that lists it, then
+  // the class that points at that syllabus -- the first of them when several
+  // share one, so the topic shows preselected and the teacher only changes
+  // the class if that guess was wrong. ?class= settles it outright. A topic
+  // held only in a seeded class's own copy resolves to nothing, and the
+  // dialog then says the topic is not in the picked class's syllabus.
+  const classParam = searchParams.get('class') ?? ''
+  const presetClassId = (() => {
+    if (!topicParam || !classes) return ''
+    if (classParam && classes.some((c) => c.id === classParam)) return classParam
+    const holder = (syllabi ?? []).find((s) =>
+      (s.modules ?? []).some((m) => (m.topics ?? []).some((t) => t.id === topicParam)),
+    )
+    return holder ? (classes.find((c) => c.syllabus_id === holder.id)?.id ?? '') : ''
+  })()
+  // The dialog reads its presets once, on mount, so it waits for the data
+  // they come from when a topic is on the URL.
+  const presetsReady = !topicParam || (!!classes && !!syllabi)
+
+  function closeGenerate() {
+    setShowGenerate(false)
+    // Drop the preset so a refresh or a second visit does not reopen the dialog.
+    if (topicParam) setSearchParams({}, { replace: true })
+  }
 
   async function handleDelete(quizId) {
     if (!(await confirmDialog({
@@ -1322,10 +1365,12 @@ export default function QuizzesIndexPage() {
         />
       )}
 
-      {showGenerate && (
+      {showGenerate && presetsReady && (
         <GenerateQuizModal
           classes={classes ?? []}
-          onClose={() => setShowGenerate(false)}
+          initialClassId={presetClassId}
+          initialTopicId={topicParam}
+          onClose={closeGenerate}
         />
       )}
     </div>
