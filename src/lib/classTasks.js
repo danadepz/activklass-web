@@ -50,6 +50,9 @@ function taskFields(input = {}) {
   // the student's information only, as every task was before.
   if ('component_id' in input) out.component_id = input.component_id || null
   if ('grading_period_id' in input) out.grading_period_id = input.grading_period_id || null
+  // The submission bin (plan section 9): a strict boolean, false unless true,
+  // because the task_submissions rule reads `== true` and nothing else.
+  if ('accepts_submissions' in input) out.accepts_submissions = input.accepts_submissions === true
   if ('status' in input) out.status = input.status === 'published' ? 'published' : 'draft'
   return out
 }

@@ -132,6 +132,13 @@ describe('syncTaskToRecord', () => {
     expect(syncEntries).not.toHaveBeenCalled()
   })
 
+  it('keeps accepts_submissions through the whitelist as a strict boolean', async () => {
+    await createTask({ classId: 'c1', teacherId: 't1', task: { title: 'X', accepts_submissions: true } })
+    expect(writes.set[0][1]).toMatchObject({ accepts_submissions: true })
+    await createTask({ classId: 'c1', teacherId: 't1', task: { title: 'Y', accepts_submissions: 'yes' } })
+    expect(writes.set[1][1]).toMatchObject({ accepts_submissions: false })
+  })
+
   it('keeps the two record fields through the whitelist, and drops a blank one to null', async () => {
     await createTask({ classId: 'c1', teacherId: 't1', task: { title: 'X', component_id: 'pt', grading_period_id: '' } })
     expect(writes.set[0][1]).toMatchObject({ component_id: 'pt', grading_period_id: null })
