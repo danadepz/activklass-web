@@ -96,12 +96,12 @@ export function masteryOf(linked = [], attemptsByQuiz = {}) {
 /**
  * A quiz reaches a student if it is assigned to everyone ('all', or a legacy
  * undefined) or names them. Shared so the class page and the remediation page
- * cannot disagree about which quizzes a student is allowed to see.
+ * cannot disagree about which quizzes a student is allowed to see. Since
+ * 2026-09-13 the one definition is lib/deliverables.js, which the student's
+ * dashboard hook also reads; re-exported here so the class and remediation
+ * pages keep their import.
  */
-export function assignedToStudent(quiz, studentId) {
-  const a = quiz?.assigned_to
-  return !a || a === 'all' || (Array.isArray(a) && a.includes(studentId))
-}
+export { assignedToStudent } from '@/lib/deliverables'
 
 /** The teacher's scaffolds page titles these `Remediation · <topic>`. */
 export function isRemediationQuiz(quiz) {
