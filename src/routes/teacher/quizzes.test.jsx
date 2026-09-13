@@ -46,7 +46,7 @@ vi.mock('@/components/ui/useDialogBehavior', () => ({
 }))
 vi.mock('@/lib/ai', () => ({ draftToQuestions: vi.fn(), generateQuiz: vi.fn(), QUIZ_TYPES: [] }))
 
-import QuizzesIndexPage from './quizzes.jsx'
+import QuizzesIndexPage, { GenerateQuizModal } from './quizzes.jsx'
 
 const q = (over) => ({
   id: 'q1', title: 'Chapter 5 Quiz', status: 'published', class_ids: [], ...over,
@@ -146,5 +146,74 @@ describe('Quizzes list card names the class (T-36)', () => {
 
   it('leaves "Not assigned" exactly as it was', () => {
     expect(chips(q({ class_ids: [] }), [])).toContain('Not assigned')
+  })
+})
+
+/**
+ * The Generate Quiz with AI dialog walks a first-time teacher through it, and
+ * no longer names a model (T-59, andecobs-78).
+ *
+ * The sister of T-58 on the syllabus dialog. His screenshot was the dialog
+ * as it opened -- class picked, Topic Description empty, 10 questions,
+ * "Apply", Multiple choice -- and one paragraph of guidance that was both
+ * wrong ("local Llama 3, with a math fallback": the backend had been on
+ * another model for weeks) and a vendor name in text a teacher reads, which
+ * CLAUDE.md forbids outright. Nothing said the topic list comes from the
+ * picked class, that a syllabus topic fences the questions to its learning
+ * objectives, what "Bloom's level" means, or that the draft opens in the
+ * editor to be reviewed before it is published.
+ *
+ * Pinned: the guide block, open, with its four steps; the relabelled
+ * thinking-level select and its hint; and no model or vendor named. The
+ * modal is exported for this -- it opens on a click, which a static render
+ * cannot do (the same reason register.jsx lifted WrongPathNudge).
+ */
+const openGenerate = (classes = [klass('c1', 'Curie', 'Special Science Program')]) =>
+  renderToStaticMarkup(<GenerateQuizModal classes={classes} onClose={() => {}} />)
+
+const guideOf = (html) => html.match(/<details[^>]*>[\s\S]*?<\/details>/)?.[0] ?? ''
+
+describe('Generate Quiz with AI — the guide a first-time teacher opens on to (T-59)', () => {
+  it('names no model or vendor anywhere in the dialog', () => {
+    // The sentence he read said "local Llama 3". The backend is not on it,
+    // and a teacher-facing string names no vendor either way.
+    expect(openGenerate()).not.toMatch(/llama|gemini|openai|anthropic|claude|firebase|math fallback/i)
+  })
+
+  it('opens with a "How to get a good draft" block, unfolded', () => {
+    const html = openGenerate()
+    expect(html).toMatch(/<details open/)
+    expect(guideOf(html)).toContain('<summary')
+    expect(guideOf(html)).toContain('How to get a good draft')
+  })
+
+  it('walks the four steps in order: class, syllabus topic, count/level/types, then the editor', () => {
+    const steps = [...guideOf(openGenerate()).matchAll(/<li>([\s\S]*?)<\/li>/g)]
+      .map((m) => m[1].replace(/\s+/g, ' ').trim())
+    expect(steps).toHaveLength(4)
+    expect(steps[0]).toMatch(/^Pick the class first/)
+    expect(steps[0]).toContain('syllabus topics fill the list')
+    expect(steps[1]).toMatch(/^Pick a syllabus topic rather than typing one/)
+    expect(steps[1]).toContain('learning objectives')
+    expect(steps[1]).toContain('the editor flags any that stray')
+    expect(steps[2]).toMatch(/how many questions.*thinking level.*question types/)
+    expect(steps[2]).toContain('Essays are marked by you')
+    expect(steps[3]).toMatch(/^Generate draft opens the quiz in the editor/)
+    expect(steps[3]).toContain('then publish')
+  })
+
+  it('calls the select "Thinking level (Bloom\'s)" and says what the levels mean', () => {
+    const html = openGenerate()
+    expect(html).toContain('Thinking level (Bloom&#x27;s)')
+    expect(html).not.toMatch(/>Bloom&#x27;s level</)
+    expect(html).toContain('Remember recalls facts, Apply uses them, Create makes something new.')
+  })
+
+  /* The other two pieces of help were to stay as they were: the no-syllabus
+     Tip when the class has no topics to offer. Both classes here have none
+     (useSyllabi is stubbed empty), so the Tip must still show under the
+     guide, not be replaced by it. */
+  it('keeps the "build a syllabus first" tip for a class with no topics', () => {
+    expect(openGenerate()).toContain('build a syllabus first')
   })
 })
