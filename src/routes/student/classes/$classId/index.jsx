@@ -218,7 +218,16 @@ function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSub
  * ones a student has already met. Nothing is graded here.
  */
 function SubmitBox({ task, classId, studentId, onSubmitted }) {
-  const existing = task.submission ?? null
+  /* What was just submitted, held locally until the page's refetch brings
+     the real row. Without it a FIRST submit showed the empty form again for
+     the second or two between "Submitting…" and the refetch (existing was
+     null until then), which reads as "it did not take" -- S-5 saw one run
+     take over 20 s. Dropped the moment the server's row arrives. */
+  const [justSubmitted, setJustSubmitted] = useState(null)
+  useEffect(() => {
+    if (task.submission) setJustSubmitted(null)
+  }, [task.submission])
+  const existing = task.submission ?? justSubmitted
   const open = task.acceptsSubmissions
   const [editing, setEditing] = useState(!existing)
   const [attachment, setAttachment] = useState(null)
@@ -233,6 +242,12 @@ function SubmitBox({ task, classId, studentId, onSubmitted }) {
     setBusy(true)
     try {
       await submitWork({ taskId: task.id, classId, studentId, attachment, note, existing })
+      // The server stamps submitted_at; until its row is read back, show the
+      // moment the write returned, which is within a second of it.
+      setJustSubmitted({
+        attachment, note: note.trim(), submitted_at: new Date(),
+        resubmitted_count: existing ? (Number(existing.resubmitted_count) || 0) + 1 : 0,
+      })
       setEditing(false)
       setAttachment(null)
       onSubmitted?.()
