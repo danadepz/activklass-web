@@ -371,8 +371,17 @@ Still open at this altitude:
   submissions and its 8 notifications were deleted after. **Not driven:** a file upload
   through the box (the link path was; the file path is the same `AttachmentField` the
   syllabus and contest forms already prove, on a Storage path only that student may write);
-  the seed's Hana submission (`seed_demo.py` has never been run on the live project). S-5's
-  REST-API refusals are the Verify pane's.
+  the seed's Hana submission (`seed_demo.py` has never been run on the live project).
+  **S-5, same day, by the pane that built S-2 to S-4 (said so in `8354160`):** 20/20 through
+  the live Firestore REST API as Hana, Marites, a second teacher and Carlo; the file path
+  driven headless (a PDF landed under Hana's uid); the everyday-suite guard
+  `taskSubmissionsGuards.test.js` proven to bite. Its two findings were fixed the same
+  evening: a first submit no longer flashes the empty form (`5f339f9`, re-driven headless —
+  Submitting… → Submitted with no frame between), and a task's **hand-out** folder now
+  takes writes only from the class owner through a cross-service `firestore.get()`
+  (backend `6364679`; the first `firebase deploy --only storage` did not take the IAM grant
+  the lookup needs and refused the owner too — the second did, 7/7 live: student and
+  foreign teacher refused, owner writes and deletes, the submissions path unchanged).
 - `[ ]` **A second full browser walkthrough** after the above, which is what actually
   closes this phase.
 
