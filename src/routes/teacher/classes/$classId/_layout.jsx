@@ -13,6 +13,7 @@ import { navy, ink, gold, goldDeep, muted, serif, mono, sansFamily as sans } fro
 // index (analytics + roster); the rest map to the per-class tools.
 const TABS = [
   { to: '', label: 'Overview', end: true },
+  { to: 'modules', label: 'Modules' },
   { to: 'record', label: 'Class Record' },
   { to: 'performance', label: 'Performance' },
   { to: 'attendance', label: 'Attendance' },

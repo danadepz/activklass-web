@@ -60,6 +60,7 @@ const ClassRecordPage    = lazyRoute(() => import('@/routes/teacher/classes/$cla
 const AttendancePage     = lazyRoute(() => import('@/routes/teacher/classes/$classId/attendance'))
 const PerformancePage    = lazyRoute(() => import('@/routes/teacher/classes/$classId/performance'))
 const ScaffoldTopicsPage = lazyRoute(() => import('@/routes/teacher/classes/$classId/scaffolds'))
+const ModulesPage        = lazyRoute(() => import('@/routes/teacher/classes/$classId/modules'))
 const HistoryPage        = lazyRoute(() => import('@/routes/teacher/classes/$classId/history'))
 
 export default function App() {
@@ -108,6 +109,7 @@ export default function App() {
           {/* Class tabs — ClassLayout renders the sub-navbar */}
           <Route path="classes/:classId" element={ClassLayout}>
             <Route index                   element={ClassDetailPage} />
+            <Route path="modules"          element={ModulesPage} />
             <Route path="record"           element={ClassRecordPage} />
             <Route path="attendance"       element={AttendancePage} />
             <Route path="performance"      element={PerformancePage} />
