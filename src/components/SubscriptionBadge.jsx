@@ -98,6 +98,14 @@ export function SubscriptionBox() {
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
         <span style={{ fontSize: 12.5, fontWeight: 800, color: tone.fg, letterSpacing: '0.01em' }}>{view.label}</span>
         <span style={{ ...mono, fontSize: 11, color: tone.fg, opacity: 0.85 }}>{view.detail}</span>
+        {/* A running trial took no card at registration and a tester asked why
+            (T-54). Say so here too, and when one will be asked -- before it ends,
+            no date, because the payment provider is still the owner's decision. */}
+        {view.kind === 'trial' && (
+          <span style={{ fontSize: 10.5, color: tone.fg, opacity: 0.85, marginTop: 2 }}>
+            No card needed for the trial. We'll ask for payment details before it ends.
+          </span>
+        )}
       </span>
     </Link>
   )

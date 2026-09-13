@@ -135,7 +135,7 @@ src/lib/pricing.test.js
 src/lib/subscription.js            ← Flask wrappers for /api/subscription/* + describeSubscription
 src/lib/subscription.test.js
 src/hooks/useMySubscription.js     ← the signed-in teacher's plan, as their screens describe it
-src/components/SubscriptionBadge.jsx
+src/components/SubscriptionBadge.jsx  (+ .test.jsx, added 2026-09-13 by the T-54 build pane)
 src/routes/admin/SubscriptionTab.jsx
 ```
 
