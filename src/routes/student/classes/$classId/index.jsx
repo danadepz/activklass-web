@@ -16,6 +16,9 @@ import AttachmentField from '@/components/AttachmentField'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { MetricCard } from '@/components/ui/Card'
 import { formatSchedule } from '@/lib/schedule'
+import { KIND_LABEL, describeWindow, fromQuiz, fromTask } from '@/lib/deliverables'
+import Markdown from '@/components/Markdown'
+import { WindowChip, toneOf } from '../../deliverables/WindowChip'
 
 const ATT_META = {
   present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
@@ -47,7 +50,7 @@ async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
-  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap] =
+  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap] =
     await Promise.all([
       loadStudentEntry(classId, profile.id),
       loadStudentAttendance(classId, profile.id),
@@ -62,6 +65,12 @@ async function loadClassDetail(classId, profile) {
       // only marks which sub-modules have a review guide; if it fails, the
       // Modules tab loses the markers and nothing else.
       getDocs(query(collection(db, 'remediations'), where('student_id', '==', profile.id))).catch(() => null),
+      // This class's published tasks (activities, assignments, paper exams).
+      // Both filters are what the student branch of the class_tasks rule
+      // reads; without `status` the whole query is refused. Its own catch:
+      // a refused read costs the Modules tab its task rows, not the page.
+      getDocs(query(collection(db, 'class_tasks'), where('class_id', '==', classId), where('status', '==', 'published')))
+        .catch((err) => { console.error('Class tasks did not load', err); return null }),
     ])
 
   const teacher = teachers[0] ?? null
@@ -92,6 +101,10 @@ async function loadClassDetail(classId, profile) {
       .map((r) => r.topic_id),
   )
 
+  const tasks = (tasksSnap?.docs ?? [])
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((t) => t.status === 'published')
+
   return {
     clazz,
     teacher,
@@ -104,6 +117,7 @@ async function loadClassDetail(classId, profile) {
     quizzes,
     attemptsByQuiz,
     scaffoldedTopicIds,
+    tasks,
   }
 }
 
@@ -115,7 +129,65 @@ function Pill({ meta }) {
   )
 }
 
-function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaffoldedTopicIds, focusTopicId = null }) {
+/**
+ * One class task -- an activity, assignment or paper exam -- under the
+ * sub-module it was published to. Nothing is submitted through the app, so
+ * the row has no button of its own: it says what the task is, when it is
+ * due, and hands over the template or link the teacher attached, drawn with
+ * the same RESOURCE_META rows a material uses. The instructions open in the
+ * lesson-note dialog, rendered as Markdown.
+ */
+function TaskRow({ task, onReadInstructions }) {
+  const attachments = (task.attachments ?? []).filter((a) => a?.url)
+  return (
+    <div className="flex flex-col gap-2.5 p-3 rounded-xl border border-amber-100 bg-amber-50/30 w-full sm:col-span-2" data-task-id={task.id}>
+      <div className="flex items-start gap-3">
+        <span className="text-lg bg-white w-9 h-9 rounded-lg border border-amber-100 flex items-center justify-center shadow-sm flex-shrink-0">📋</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: goldDeep }}>
+            {KIND_LABEL[task.kind]}{task.points != null ? ` · ${task.points} pts` : ''}
+          </div>
+          <div className="text-sm font-bold text-slate-800" title={task.title}>{task.title}</div>
+          <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 5 }}>
+            <WindowChip item={task} />
+            {task.instructions?.trim() && (
+              <button
+                type="button"
+                onClick={onReadInstructions}
+                style={{ fontSize: 11.5, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Read instructions
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      {attachments.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-12">
+          {attachments.map((att, i) => {
+            const meta = RESOURCE_META[att.resource_type] ?? RESOURCE_META.file
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => window.open(att.url, '_blank', 'noopener,noreferrer')}
+                className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition w-full cursor-pointer"
+              >
+                <span className="text-base bg-slate-50 w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center flex-shrink-0">{meta.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{meta.label}</div>
+                  <div className="text-[13px] font-bold text-slate-800 truncate" title={att.title}>{att.title || meta.label}</div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks = [], scaffoldedTopicIds, focusTopicId = null }) {
   // Needed for the per-student attempt grant below.
   const { profile } = useAuth()
   const [activeNote, setActiveNote] = useState(null)
@@ -154,6 +226,9 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
           <div className="flex flex-col gap-6 pl-2">
             {(m.topics ?? []).map((t, ti) => {
               const linkedQuizzes = quizzesForTopic(t.id, quizzes)
+              // The class's published tasks under this sub-module, in the
+              // shape the dashboard renders, so the chip reads the same here.
+              const linkedTasks = t.id ? tasks.filter((task) => task.topic_id === t.id).map((task) => fromTask(task)) : []
               const resources = t.resources ?? []
               // Derived from this student's own best attempt, so it moves the
               // moment they finish a quiz linked to this topic.
@@ -233,7 +308,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
                     </div>
                   )}
 
-                  {(resources.length > 0 || linkedQuizzes.length > 0) && (
+                  {(resources.length > 0 || linkedQuizzes.length > 0 || linkedTasks.length > 0) && (
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {resources.map((res) => {
                         const meta = RESOURCE_META[res.resource_type] ?? RESOURCE_META.file
@@ -299,6 +374,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
                           .map((a) => a.total_score)
                           .filter((v) => v != null)
                         const best = scored.length ? Math.max(...scored) : null
+                        const window = fromQuiz(quiz, { classId, attempts })
 
                         let statusText = 'Not taken'
                         if (live) {
@@ -321,6 +397,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
                                   {isRemediationQuiz(quiz) ? 'Mastery test' : 'Quiz'} · {statusText}
                                 </div>
                                 <div className="text-sm font-bold text-slate-800 truncate" title={quiz.title}>{quiz.title}</div>
+                                <div style={{ marginTop: 5 }}><WindowChip item={window} /></div>
                               </div>
                             </div>
                             <div>
@@ -347,6 +424,10 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
                           </div>
                         )
                       })}
+
+                      {linkedTasks.map((task) => (
+                        <TaskRow key={task.id} task={task} onReadInstructions={() => setActiveNote({ title: task.title, content_markdown: task.instructions, markdown: true })} />
+                      ))}
                     </div>
                   )}
                 </div>
@@ -362,7 +443,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
           <div {...notePanel} style={{ width: '100%', maxWidth: 600, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
             <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
               <div className="flex items-center gap-2">
-                <span className="text-xl">✍️</span>
+                <span className="text-xl">{activeNote.markdown ? '📋' : '✍️'}</span>
                 <h3 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>{activeNote.title}</h3>
               </div>
               <button onClick={() => setActiveNote(null)} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
@@ -370,9 +451,13 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, scaff
               </button>
             </div>
             <div style={{ padding: '24px', maxHeight: '60vh', overflowY: 'auto' }}>
-              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-sans">
-                {activeNote.content_markdown}
-              </div>
+              {activeNote.markdown ? (
+                <Markdown text={activeNote.content_markdown} />
+              ) : (
+                <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                  {activeNote.content_markdown}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
               <button onClick={() => setActiveNote(null)} style={{ padding: '8px 16px', fontSize: 13.5, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
@@ -863,15 +948,29 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
         const canTake = quiz.status === 'published' && (live || used < allowed)
         const scored = finished.map((a) => a.total_score).filter((v) => v != null)
         const best = scored.length ? Math.max(...scored) : null
+        // The card's state is the one lib/deliverables derives, so "Not open
+        // yet", "Due today" and "Closed" here mean what the dashboard and the
+        // player mean. A quiz the player would refuse (not open yet, or
+        // closed by date or by hand) shows no Take button; before this a
+        // closed-by-date quiz still offered one that led to "Quiz closed".
+        const window = fromQuiz(quiz, { classId, attempts })
+        // The badge names the state only when the chip does not already open
+        // with it: "Not open yet" beside "Opens Mon 15 Sep", but not "Closed"
+        // beside "Closed Tue 30 Jun".
+        const sentence = describeWindow(window)
+        const badgeWord = toneOf(window.state).badge
+        const badge = window.state === 'done' || !badgeWord || sentence.startsWith(badgeWord) ? null : badgeWord
+        const startable = canTake && window.state !== 'scheduled' && window.state !== 'closed'
         return (
-          <div key={quiz.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+          <div key={quiz.id} data-state={window.state} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div style={{ minWidth: 0 }}>
-                <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+                <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 4 }}>
                   <span style={{ fontSize: 16, fontWeight: 700, color: ink }}>{quiz.title}</span>
-                  {quiz.status === 'closed' && (
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.18)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 999, padding: '2px 9px' }}>Closed</span>
+                  {badge && (
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: toneOf(window.state).fg, background: toneOf(window.state).bg, border: `1px solid ${toneOf(window.state).border}`, borderRadius: 999, padding: '2px 9px' }}>{badge}</span>
                   )}
+                  <WindowChip item={window} />
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1" style={{ ...mono, fontSize: 12, color: muted }}>
                   <span>{(quiz.questions ?? []).length} items</span>
@@ -895,7 +994,7 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
                     View result
                   </Link>
                 )}
-                {canTake ? (
+                {startable ? (
                   <Link
                     to={`/student/classes/${classId}/quizzes/${quiz.id}`}
                     style={{ padding: '9px 16px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none' }}
@@ -903,7 +1002,9 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
                     {live ? 'Resume' : used > 0 ? 'Retake' : 'Take quiz'}
                   </Link>
                 ) : !latest ? (
-                  <span style={{ fontSize: 12.5, color: faint }}>{quiz.status === 'closed' ? 'Not taken' : 'No attempts left'}</span>
+                  <span style={{ fontSize: 12.5, color: faint }}>
+                    {window.state === 'scheduled' ? 'Opens later' : window.state === 'closed' ? 'Not taken' : 'No attempts left'}
+                  </span>
                 ) : null}
               </div>
             </div>
@@ -1362,7 +1463,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [] } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1447,6 +1548,7 @@ export default function StudentClassDetail() {
           classId={classId}
           quizzes={quizzes}
           attemptsByQuiz={attemptsByQuiz}
+          tasks={tasks}
           scaffoldedTopicIds={scaffoldedTopicIds}
           focusTopicId={focusTopicId}
         />
