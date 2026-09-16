@@ -363,7 +363,30 @@ export default function Register() {
     if (addingSchool && school) {
       queryClient.invalidateQueries({ queryKey: ['school-directory'] })
     }
-    // 3. ActivKlass profile doc in the Firestore 'users' collection.
+    const uid = auth.currentUser.uid
+
+    // 3. Institution: write the request BEFORE the profile (T-61). A
+    // request refused by the rules must not strand the account behind a
+    // profile that already says "pending" — with no profile written yet, a
+    // refusal here just leaves a bare Firebase account, and the next sign-in
+    // lands in the existing `completing` walk, which re-collects everything
+    // and tries again. The ActivKlass team picks the request up from here —
+    // they provision the school on these seat counts and make this account
+    // its admin, and the admin then issues every teacher and student login.
+    if (kind === 'institution') {
+      await addDoc(collection(db, 'subscription_requests'), {
+        ...details(),
+        uid,
+        email: auth.currentUser.email,
+        teacher_seats: Number(form.teacherSeats),
+        students_per_teacher: Number(form.studentsPerTeacher),
+        student_seats: totalStudents,
+        status: 'pending',
+        created_at: serverTimestamp(),
+      })
+    }
+
+    // 4. ActivKlass profile doc in the Firestore 'users' collection.
     // Always a teacher, on both paths: a person may only ever give
     // themselves that role (the rules refuse 'admin' — escalation guard),
     // and students, admins and parents are provisioned by their school.
@@ -373,7 +396,6 @@ export default function Register() {
     // affiliation only — school_id stays the billing link and is never
     // written here (see lib/schoolDirectory.js).
     const { school_name: _unused, ...profile } = details()
-    const uid = auth.currentUser.uid
     await setDoc(doc(db, 'users', uid), {
       ...profile,
       email: auth.currentUser.email,
@@ -406,22 +428,9 @@ export default function Register() {
       return
     }
 
-    // 4. Institution: the account exists now, but the school does not. The
-    // request is what the ActivKlass team picks up — they provision the
-    // school on these seat counts and make this account its admin, and the
-    // admin then issues every teacher and student login. Until then there is
-    // nothing for this person to do inside, so they are signed out and told
-    // to wait for us rather than dropped into an empty teacher portal.
-    await addDoc(collection(db, 'subscription_requests'), {
-      ...details(),
-      uid,
-      email: auth.currentUser.email,
-      teacher_seats: Number(form.teacherSeats),
-      students_per_teacher: Number(form.studentsPerTeacher),
-      student_seats: totalStudents,
-      status: 'pending',
-      created_at: serverTimestamp(),
-    })
+    // The request landed and the profile is written — nothing left for this
+    // person to do inside until we act on the request, so they are signed
+    // out and told to wait for us rather than dropped into an empty portal.
     await logout()
     setStep('sent')
   }

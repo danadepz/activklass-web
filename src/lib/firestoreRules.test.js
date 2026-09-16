@@ -551,6 +551,63 @@ describe('school_directory · the registration page dropdown', () => {
   })
 })
 
+describe('subscription_requests · the Institution path on /register', () => {
+  // The exact shape register.jsx's details() + createAccount() build (T-61:
+  // 'he'/'she'/'others' and no middle_name/gender_custom key refused every
+  // request after the form switched to female/male/custom).
+  const request = (overrides = {}) => ({
+    uid: TEACHER,
+    first_name: 'Maykel',
+    last_name: 'Dela Cruz',
+    gender: 'female',
+    phone: '09171234567',
+    school_name: 'University of Cebu-Banilad',
+    school_type: 'private',
+    academic_calendar: 'school_year',
+    position: 'faculty',
+    email: 'maykel@ucb.edu.ph',
+    teacher_seats: 20,
+    students_per_teacher: 120,
+    student_seats: 2400,
+    status: 'pending',
+    created_at: serverTimestamp(),
+    ...overrides,
+  })
+
+  it('lets a signed-in requester file their own request with a female gender', async () => {
+    await assertSucceeds(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request()),
+    )
+  })
+
+  it('lets a Custom gender with a gender_custom note and a middle name through', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(collection(ctx(TEACHER), 'subscription_requests')),
+        request({ gender: 'custom', gender_custom: 'Nonbinary', middle_name: 'Santos' }),
+      ),
+    )
+  })
+
+  it('refuses the old pronoun-shaped gender values', async () => {
+    await assertFails(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request({ gender: 'he' })),
+    )
+  })
+
+  it('refuses a request signed with someone else’s uid', async () => {
+    await assertFails(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request({ uid: 'someone-else' })),
+    )
+  })
+
+  it('never lets the requester read their own request back', async () => {
+    const ref = doc(collection(ctx(TEACHER), 'subscription_requests'))
+    await setDoc(ref, request())
+    await assertFails(getDoc(ref))
+  })
+})
+
 /* ────────────────────────────────────────────────────────────────────────
  * A teacher handles the students in their own classes (2026-08-31).
  *
