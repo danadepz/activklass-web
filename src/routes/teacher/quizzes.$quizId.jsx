@@ -499,7 +499,7 @@ function PostScoresButton({ quiz, classId, auto }) {
   const autoLine =
     auto?.status === 'posting' ? 'Posting scores to the class record…'
     : auto?.skipped?.length ? auto.skipped.join(' ')
-    : auto?.status === 'done' ? `Scores post to the class record on their own when this page or the record opens${auto.written ? ` — ${auto.written} posted just now` : ''}.`
+    : auto?.status === 'done' ? `Scores post to the class record on their own when this page or the record opens${auto.written ? ` — ${auto.written} posted just now` : ''}${auto.kept ? ` — ${auto.kept} kept as typed` : ''}.`
     : mapping ? null
     : 'Not mapped to a grading component for this class, so nothing posts on its own — republish to map it.'
   return (

@@ -114,6 +114,57 @@ describe('quizScoreCells', () => {
     })
     expect(result.scores.s1).toBeDefined()
   })
+
+  it('never recomputes a score a teacher typed by hand, even with a newer attempt', () => {
+    const result = quizScoreCells({
+      attemptsByStudent: { s1: [attempt({ total_score: 5 })] },
+      students: [{ student_id: 's1' }],
+      totalPoints: 10,
+      existingScores: { s1: { status: 'graded', raw_score: 8, manual: true } },
+    })
+    // Carried forward unchanged, not just left out -- a merge write with an
+    // *empty* scores object would wipe the whole map (Firestore replaces a
+    // nested map field wholesale when it has no leaf paths to merge on), so
+    // the kept value has to still be there for the write to stay safe.
+    expect(result.scores).toEqual({ s1: { status: 'graded', raw_score: 8, manual: true } })
+    expect(result.kept).toEqual(['s1'])
+  })
+
+  it('never recomputes a score a recovery already applied', () => {
+    const result = quizScoreCells({
+      attemptsByStudent: { s1: [attempt({ total_score: 5 })] },
+      students: [{ student_id: 's1' }],
+      totalPoints: 10,
+      existingScores: { s1: { status: 'graded', raw_score: 8 } },
+      existingRecovery: { s1: { applied_score: 8 } },
+    })
+    expect(result.scores).toEqual({ s1: { status: 'graded', raw_score: 8 } })
+    expect(result.kept).toEqual(['s1'])
+  })
+
+  it('still posts an untouched student alongside a kept one', () => {
+    const result = quizScoreCells({
+      attemptsByStudent: { s1: [attempt({ total_score: 5 })], s2: [attempt({ total_score: 6 })] },
+      students,
+      totalPoints: 10,
+      existingScores: { s1: { status: 'graded', raw_score: 9, manual: true } },
+    })
+    expect(result.scores).toEqual({
+      s1: { status: 'graded', raw_score: 9, manual: true },
+      s2: { status: 'graded', raw_score: 6 },
+    })
+    expect(result.kept).toEqual(['s1'])
+  })
+
+  it('produces a non-empty scores object when every student is kept, so the write cannot wipe the map', () => {
+    const result = quizScoreCells({
+      attemptsByStudent: { s1: [attempt({ total_score: 5 })] },
+      students: [{ student_id: 's1' }],
+      totalPoints: 10,
+      existingScores: { s1: { status: 'graded', raw_score: 8, manual: true } },
+    })
+    expect(Object.keys(result.scores)).toHaveLength(1)
+  })
 })
 
 describe('assessmentFromQuiz', () => {
@@ -166,6 +217,10 @@ describe('describeSyncResult', () => {
 
   it('reads plainly when everything landed', () => {
     expect(describeSyncResult({ written: 1 })).toBe('1 score posted to the class record.')
+  })
+
+  it('names how many were left as typed', () => {
+    expect(describeSyncResult({ written: 5, kept: 2 })).toBe('5 scores posted to the class record · 2 kept as typed.')
   })
 })
 

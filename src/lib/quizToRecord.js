@@ -136,6 +136,23 @@ export function attemptForScoring(attempts = [], policy = SCORING_BEST) {
  *   of a different total and is not comparable to the assessment's
  *   `total_points`.
  *
+ * A fourth refusal protects a human decision rather than a data gap: **a
+ * student whose current score was typed by a teacher, or came from an
+ * applied recovery, is left alone.** Those are read from the assessment's
+ * existing `scores`/`recovery` maps, carried into the returned `scores` map
+ * unchanged, and reported back as `kept`, so a sync that runs on every page
+ * open (`useAutoPostScores`) never quietly restates a mark a person already
+ * decided.
+ *
+ * Carrying the kept value forward, rather than simply leaving that student's
+ * key out of the map, matters beyond bookkeeping: the caller writes this
+ * whole object onto the assessment's `scores` field with a merge, and
+ * Firestore's merge replaces a nested map field wholesale when the map it is
+ * given for that field is *empty* -- there is no leaf path to merge on. A
+ * class where every student's score is manual or recovered would otherwise
+ * compute an empty `scores` object and the write would wipe the very scores
+ * this function exists to protect.
+ *
  * Each refusal is counted rather than swallowed, so the caller can say why a
  * class of 40 produced 31 scores.
  */
@@ -144,14 +161,22 @@ export function quizScoreCells({
   students = [],
   totalPoints = null,
   scoringPolicy = SCORING_BEST,
+  existingScores = {},
+  existingRecovery = {},
 }) {
   const scores = {}
   const pendingEssays = []
   const notTaken = []
   const versionMismatch = []
+  const kept = []
 
   for (const student of students) {
     const id = student.student_id ?? student.id
+    if (existingScores[id]?.manual || existingRecovery[id]) {
+      if (existingScores[id]) scores[id] = existingScores[id]
+      kept.push(id)
+      continue
+    }
     const attempts = attemptsByStudent[id] ?? []
     const best = attemptForScoring(attempts, scoringPolicy)
 
@@ -171,7 +196,7 @@ export function quizScoreCells({
     scores[id] = { status: 'graded', raw_score: Number(best.total_score) }
   }
 
-  return { scores, pendingEssays, notTaken, versionMismatch }
+  return { scores, pendingEssays, notTaken, versionMismatch, kept }
 }
 
 /**
@@ -218,8 +243,9 @@ export function quizTotalPoints(quiz) {
 }
 
 /** One sentence for the toast after a sync. */
-export function describeSyncResult({ written = 0, pendingEssays = 0, notTaken = 0, versionMismatch = 0 } = {}) {
+export function describeSyncResult({ written = 0, pendingEssays = 0, notTaken = 0, versionMismatch = 0, kept = 0 } = {}) {
   const parts = [`${written} score${written === 1 ? '' : 's'} posted to the class record`]
+  if (kept) parts.push(`${kept} kept as typed`)
   if (pendingEssays) parts.push(`${pendingEssays} waiting on essay marking`)
   if (notTaken) parts.push(`${notTaken} have not taken it`)
   if (versionMismatch) parts.push(`${versionMismatch} took an earlier version of this quiz`)

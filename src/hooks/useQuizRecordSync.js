@@ -89,22 +89,33 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
   const studentIds = classSnap.exists() ? (classSnap.data().student_ids ?? []) : []
   const students = studentIds.length ? await fetchUsersByIds(studentIds) : []
 
-  const { scores, pendingEssays, notTaken, versionMismatch } = quizScoreCells({
+  // Read before writing: a score a teacher typed, or a recovery already
+  // applied, must never be recomputed from the attempt underneath it.
+  const existingSnap = await getDoc(assessmentRef)
+  const existing = existingSnap.exists() ? existingSnap.data() : null
+
+  const { scores, pendingEssays, notTaken, versionMismatch, kept } = quizScoreCells({
     attemptsByStudent: await attemptsByStudentFor(quiz.id, classId),
     students,
     totalPoints,
     // The teacher's choice, not this module's. It used to be hardcoded to the
     // best attempt, which quietly turned every retake into score-farming.
     scoringPolicy: quiz.scoring_attempt,
+    existingScores: existing?.scores ?? {},
+    existingRecovery: existing?.recovery ?? {},
   })
 
   await setDoc(
     assessmentRef,
     {
       ...assessmentFromQuiz({ quiz, mapping, totalPoints }),
-      // Only the students with evidence; an empty map here would still merge
-      // cleanly, which is why publishing before anyone has taken the quiz is
-      // simply a row with no scores.
+      // Every student with evidence, plus every kept student's score carried
+      // forward unchanged (see quizScoreCells) -- Firestore's merge replaces
+      // this whole nested field when the object has no keys at all, so a
+      // kept-only sync still has to hand back a non-empty map to avoid
+      // wiping the scores it exists to protect. Publishing before anyone has
+      // taken the quiz is simply a row with an empty map, which is fine: the
+      // field does not exist yet, so there is nothing to wipe.
       scores,
       created_at: serverTimestamp(),
       synced_at: serverTimestamp(),
@@ -123,10 +134,14 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
   }
 
   return {
-    written: Object.keys(scores).length,
+    // `scores` also carries the kept students' unchanged values (see
+    // quizScoreCells), so they have to be subtracted back out here --
+    // otherwise a kept score would be reported as newly "posted".
+    written: Object.keys(scores).length - kept.length,
     pendingEssays: pendingEssays.length,
     notTaken: notTaken.length,
     versionMismatch: versionMismatch.length,
+    kept: kept.length,
   }
 }
 
@@ -138,7 +153,7 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
  * scores, and the teacher needs to be told which class was left out.
  */
 export async function syncQuizToAllRecords({ quiz, classMappings }) {
-  const totals = { written: 0, pendingEssays: 0, notTaken: 0, versionMismatch: 0 }
+  const totals = { written: 0, pendingEssays: 0, notTaken: 0, versionMismatch: 0, kept: 0 }
   const skipped = []
 
   for (const [classId, mapping] of Object.entries(classMappings ?? {})) {
@@ -176,7 +191,7 @@ export async function syncQuizToAllRecords({ quiz, classMappings }) {
  * show in a line, not a toast: the teacher did not press anything.
  */
 export function useAutoPostScores({ classId, quizzes = [], enabled = true, onPosted }) {
-  const [state, setState] = useState({ status: 'idle', written: 0, skipped: [] })
+  const [state, setState] = useState({ status: 'idle', written: 0, kept: 0, skipped: [] })
   const ranFor = useRef('')
   const key = `${classId}|${quizzes.map((q) => q.id).sort().join(',')}`
 
@@ -184,21 +199,25 @@ export function useAutoPostScores({ classId, quizzes = [], enabled = true, onPos
     if (!enabled || !classId || quizzes.length === 0 || ranFor.current === key) return
     ranFor.current = key
     let cancelled = false
-    setState({ status: 'posting', written: 0, skipped: [] })
+    setState({ status: 'posting', written: 0, kept: 0, skipped: [] })
     ;(async () => {
       let written = 0
+      let kept = 0
       const skipped = []
       for (const quiz of quizzes) {
         try {
           const result = await syncQuizToClassRecord({ quiz, classId, mapping: quiz.class_mappings[classId] })
           if (result.skipped) skipped.push(`${quiz.title}: ${result.skipped}`)
-          else written += result.written ?? 0
+          else {
+            written += result.written ?? 0
+            kept += result.kept ?? 0
+          }
         } catch (err) {
           skipped.push(`${quiz.title}: ${err.message}`)
         }
       }
       if (cancelled) return
-      setState({ status: 'done', written, skipped })
+      setState({ status: 'done', written, kept, skipped })
       if (written > 0) onPosted?.()
     })()
     return () => {

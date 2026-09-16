@@ -185,7 +185,7 @@ export async function applyRecoveryToAssessment({
     // changed between the read above and this write.
     const updates = {}
     for (const [studentId, result] of entries) {
-      updates[`scores.${studentId}`] = { status: 'graded', raw_score: result.applied_score }
+      updates[`scores.${studentId}`] = { status: 'graded', raw_score: result.applied_score, manual: true }
       updates[`recovery.${studentId}`] = {
         ...result,
         remediation_id: plan.id,

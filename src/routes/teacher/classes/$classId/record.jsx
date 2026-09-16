@@ -373,12 +373,17 @@ function RecordGrid({ classId, record, refetch }) {
           if (assessment.recovery?.[studentId]) {
             updates[`recovery.${studentId}`] = deleteField()
           }
+          /* A cell on a quiz-linked column is a person overriding the posted
+             score -- mark it so the auto-post never recomputes over it.
+             Clearing the cell (`deleteField` below) drops the mark with it,
+             so a blank cell is posted again next time the quiz syncs. */
+          const manual = assessment.source_quiz_id ? { manual: true } : {}
           if (parsed.status === 'none') {
             updates[`scores.${studentId}`] = deleteField()
           } else if (parsed.status === 'graded') {
-            updates[`scores.${studentId}`] = { status: 'graded', raw_score: parsed.raw_score }
+            updates[`scores.${studentId}`] = { status: 'graded', raw_score: parsed.raw_score, ...manual }
           } else {
-            updates[`scores.${studentId}`] = { status: parsed.status }
+            updates[`scores.${studentId}`] = { status: parsed.status, ...manual }
           }
         }
         if (Object.keys(updates).length) {
@@ -1192,7 +1197,7 @@ export default function ClassRecordPage() {
             ? 'Posting quiz scores…'
             : autoPost.skipped.length
               ? `Quiz scores post here on their own when this page opens. Not posted: ${autoPost.skipped.join(' ')}`
-              : `Quiz scores post here on their own when this page opens${autoPost.status === 'done' && autoPost.written ? ` — ${autoPost.written} posted just now` : ''}.`}
+              : `Quiz scores post here on their own when this page opens${autoPost.status === 'done' && autoPost.written ? ` — ${autoPost.written} posted just now` : ''}${autoPost.status === 'done' && autoPost.kept ? ` — ${autoPost.kept} kept as typed` : ''}.`}
         </p>
       )}
 
