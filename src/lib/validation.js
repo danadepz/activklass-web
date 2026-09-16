@@ -258,11 +258,80 @@ export function schoolAbbrError(value) {
    the shortest TLD there is (.ph, .co), so nothing real is refused. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
 
+/* One-spelling mail providers (T-63, Discord ticket maykel_64440-80): a real
+   account on any of these only ever ends in exactly this domain, so a
+   lookalike is almost certainly a typo, not an address anyone actually uses
+   -- unlike a school's own domain or a real short TLD, which EMAIL_RE above
+   must keep accepting (T-53). This checks the provider by name, not by TLD
+   length, so it never has to narrow that general rule. */
+const KNOWN_MAIL_PROVIDERS = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com']
+
+/** True if `a` and `b` differ by at most one substitution, insertion,
+ *  deletion or adjacent-letter swap. */
+function isOneLetterSlip(a, b) {
+  if (a === b) return false
+  const lenDiff = Math.abs(a.length - b.length)
+  if (lenDiff > 1) return false
+  if (a.length === b.length) {
+    let firstDiff = -1
+    let diffCount = 0
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        diffCount++
+        if (firstDiff === -1) firstDiff = i
+      }
+    }
+    if (diffCount === 1) return true
+    if (diffCount === 2 && firstDiff < a.length - 1) {
+      return (
+        a[firstDiff] === b[firstDiff + 1] &&
+        a[firstDiff + 1] === b[firstDiff] &&
+        a.slice(firstDiff + 2) === b.slice(firstDiff + 2)
+      )
+    }
+    return false
+  }
+  const [shorter, longer] = a.length < b.length ? [a, b] : [b, a]
+  let i = 0
+  let j = 0
+  let skipped = false
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] !== longer[j]) {
+      if (skipped) return false
+      skipped = true
+      j++
+    } else {
+      i++
+      j++
+    }
+  }
+  return true
+}
+
+/** The real provider domain a mistyped one was probably aiming for, or
+ *  '' if `domain` isn't a near miss of any known provider. */
+function suggestedProviderDomain(domain) {
+  for (const provider of KNOWN_MAIL_PROVIDERS) {
+    if (domain === provider) return ''
+    const providerName = provider.slice(0, provider.indexOf('.'))
+    const dot = domain.indexOf('.')
+    const domainName = dot === -1 ? domain : domain.slice(0, dot)
+    if (domainName === providerName) return provider // right name, wrong ending: gmail.co, gmail.con
+    if (isOneLetterSlip(domainName, providerName)) return provider // wrong name, right idea: gmial.com
+  }
+  return ''
+}
+
 /** @param {string} value */
 export function emailError(value) {
   const text = String(value ?? '').trim()
   if (!text) return 'Email is required.'
   if (!EMAIL_RE.test(text)) return 'Enter a valid email address, like name@school.edu.ph.'
+  const at = text.lastIndexOf('@')
+  const localPart = text.slice(0, at)
+  const domain = text.slice(at + 1).toLowerCase()
+  const suggestion = suggestedProviderDomain(domain)
+  if (suggestion) return `Did you mean ${localPart}@${suggestion}?`
   return ''
 }
 

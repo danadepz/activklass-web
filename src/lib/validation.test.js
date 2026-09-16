@@ -235,6 +235,18 @@ describe('emailError', () => {
     expect(emailError('name@school.edu.ph')).toBe('')
     expect(emailError('juan.dela-cruz@deped.gov.ph')).toBe('')
   })
+  /* T-63 (Discord ticket maykel_64440-80): asd@gmail.co passed the general
+     check because .co is a real TLD (T-53 keeps that rule) -- this catches
+     the known provider's own misspelling instead of narrowing EMAIL_RE. */
+  it('refuses a well-known provider domain spelled wrong', () => {
+    expect(emailError('asd@gmail.co')).toBe('Did you mean asd@gmail.com?')
+    expect(emailError('asd@gmail.con')).toBe('Did you mean asd@gmail.com?')
+    expect(emailError('asd@gmial.com')).toBe('Did you mean asd@gmail.com?')
+  })
+  it('still accepts a real TLD or a school domain that only looks short', () => {
+    expect(emailError('x@y.co')).toBe('')
+    expect(emailError('name@school.edu.ph')).toBe('')
+  })
 })
 
 /* T-53 (maykel_64440-70): the ID type used to change the label and nothing
