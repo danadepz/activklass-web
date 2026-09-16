@@ -271,8 +271,9 @@ export default function ParentalAccessPanel({
                   <CopyButton value={code} label="Copy code" copiedLabel="Copied" />
                 </div>
                 <p style={{ fontSize: 12.5, color: muted, margin: '12px auto 0', lineHeight: 1.5, maxWidth: 400 }}>
-                  Give this to your parent or guardian. You still approve or decline
-                  every request it produces.
+                  Give this to your parent or guardian — they enter it in the ActivKlass
+                  mobile app to create their account. You still approve or decline every
+                  request it produces.
                 </p>
               </div>
             )}
