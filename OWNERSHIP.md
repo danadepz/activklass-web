@@ -181,7 +181,7 @@ For work inside one screen. Each page belongs to one pane at a time.
 
 | Pane | Pages |
 |---|---|
-| **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
+| **Quizzes** | `teacher/quizzes.jsx`, `teacher/quizzes.$quizId.jsx`, `teacher/quizWording.js` (+ test — pure, no Firebase; colocated for `quizzes.$quizId.jsx`'s Edit-wording/Back-to-draft checks, T-74), `student/quiz-player.jsx`, `student/quiz-feedback.jsx` |
 | **Class detail** | `teacher/classes/$classId/**` |
 | **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx`, `teacher/StudentAccounts.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |

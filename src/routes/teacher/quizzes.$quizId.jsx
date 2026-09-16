@@ -38,7 +38,8 @@ import {
   openForMs,
 } from '@/lib/quizAttempts'
 import { discardAttempt, grantExtraAttempt } from '@/hooks/useAttemptSession'
-import { syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
+import { removeQuizFromAllRecords, syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
+import { backToDraftRefusal, wordingEditError } from './quizWording'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -1773,6 +1774,122 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
   )
 }
 
+/**
+ * Correcting a typo on a live quiz (T-74) -- a question's prompt and, for
+ * multiple choice, its options' text. Nothing else here is editable: no id,
+ * type, points, or correctness field has an input in this dialog, so the
+ * only way `wordingEditError` ever fires is a bug, not a teacher's typing --
+ * it stands as the check that would catch one.
+ */
+function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Edit wording', closeOnBackdrop: false })
+  const [edits, setEdits] = useState([])
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    setError(null)
+    setEdits(
+      (quiz.questions ?? []).map((q) => ({
+        id: q.id,
+        text: q.text ?? '',
+        options: (q.options ?? []).map((o) => ({ id: o.id, text: o.text ?? '' })),
+      })),
+    )
+  }, [isOpen, quiz.questions])
+
+  if (!isOpen) return null
+
+  const setQuestionText = (i, text) => setEdits((rows) => rows.map((r, j) => (j === i ? { ...r, text } : r)))
+  const setOptionText = (i, k, text) =>
+    setEdits((rows) =>
+      rows.map((r, j) => (j === i ? { ...r, options: r.options.map((o, l) => (l === k ? { ...o, text } : o)) } : r)),
+    )
+
+  async function save() {
+    setSaving(true)
+    setError(null)
+    try {
+      const original = quiz.questions ?? []
+      const next = original.map((q, i) => ({
+        ...q,
+        text: edits[i]?.text ?? q.text,
+        options: q.options ? q.options.map((o, k) => ({ ...o, text: edits[i]?.options?.[k]?.text ?? o.text })) : q.options,
+      }))
+      const problem = wordingEditError(original, next)
+      if (problem) {
+        setError(problem)
+        return
+      }
+      await updateDoc(doc(db, 'quizzes', quiz.id), { questions: next, updated_at: serverTimestamp() })
+      refetch()
+      toast.success('Wording updated.')
+      onClose()
+    } catch {
+      setError('Could not save the wording. Check your connection and try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 560, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Edit wording</h2>
+          <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 0' }}>
+            Fix a typo in a question or an option. The question type, its points, and which
+            option is correct stay exactly as published — changing those needs a regrade,
+            which this does not do.
+          </p>
+        </div>
+        <div style={{ padding: '20px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
+          {error && <AlertBox>{error}</AlertBox>}
+          {edits.map((row, i) => {
+            const q = quiz.questions?.[i]
+            return (
+              <div key={row.id ?? i} style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 14 }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: muted, marginBottom: 4 }}>
+                  Q{i + 1} · {TYPE_LABELS[q?.qtype]} · {q?.points} pts
+                </label>
+                <textarea
+                  rows={2}
+                  value={row.text}
+                  onChange={(e) => setQuestionText(i, e.target.value)}
+                  className="ak-input"
+                  style={{ ...fieldStyle, resize: 'vertical' }}
+                />
+                {row.options.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {row.options.map((o, k) => (
+                      <input
+                        key={o.id ?? k}
+                        value={o.text}
+                        onChange={(e) => setOptionText(i, k, e.target.value)}
+                        className="ak-input"
+                        style={{ ...fieldStyle, fontSize: 13, padding: '7px 10px' }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>
+          <button type="button" onClick={onClose} disabled={saving} className="transition hover:brightness-105" style={btnModalGhost}>
+            Cancel
+          </button>
+          <button type="button" onClick={save} disabled={saving} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+            {saving ? 'Saving…' : 'Save wording'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function QuizBuilderPage() {
   const { quizId } = useParams()
   const queryClient = useQueryClient()
@@ -1839,6 +1956,57 @@ export default function QuizBuilderPage() {
     queryClient.invalidateQueries({ queryKey: ['fs-quizzes'] })
     if (selectedResultsClassId) {
       queryClient.invalidateQueries({ queryKey: ['fs-quiz-results', selectedResultsClassId, quizId] })
+    }
+  }
+
+  const [isEditWordingOpen, setIsEditWordingOpen] = useState(false)
+
+  /**
+   * Take a published quiz back to draft -- maykel's ask: Publish was a
+   * misclick and nobody has touched the quiz yet.
+   *
+   * Checked against every class the quiz is *assigned* to (`class_ids`),
+   * not just the mapped ones -- a student can sit an unmapped quiz too,
+   * it just never posted a score, and unpublishing under them would still
+   * throw them out mid-attempt. Only once nobody has started anywhere does
+   * this remove the record column in the classes that were mapped
+   * (`removeQuizFromAllRecords`, T-73's helper) and flip the status back.
+   */
+  async function backToDraft() {
+    try {
+      const classIds = quiz.class_ids ?? []
+      const counts = await Promise.all(
+        classIds.map((cid) =>
+          getDocs(query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quiz.id), where('class_id', '==', cid))),
+        ),
+      )
+      const started = counts.reduce((n, snap) => n + snap.size, 0)
+      const refusal = backToDraftRefusal(started)
+      if (refusal) {
+        toast.error(refusal)
+        return
+      }
+      if (!(await confirmDialog({
+        title: 'Take this quiz back to draft?',
+        message: "Students haven't started it yet. It goes back to a draft you can edit, and comes off the class record until you publish again.",
+        confirmLabel: 'Back to draft',
+        tone: 'danger',
+      }))) return
+
+      const { locked } = await removeQuizFromAllRecords({ quiz, classMappings: quiz.class_mappings ?? {} })
+      if (locked.length) {
+        const names = locked
+          .map(({ classId, periodName }) => `${periodName} is locked on ${classes?.find((c) => c.id === classId)?.section ?? 'a class'}`)
+          .join('; ')
+        toast.error(`Could not take the quiz back to draft — ${names}. Unlock it on the class record first.`)
+        return
+      }
+
+      await updateDoc(doc(db, 'quizzes', quiz.id), { status: 'draft', published_at: null, updated_at: serverTimestamp() })
+      refetch()
+      toast.success('Back to draft. It comes off the class record until you publish again.')
+    } catch {
+      toast.error('Could not take the quiz back to draft. Check your connection and try again.')
     }
   }
 
@@ -1909,9 +2077,14 @@ export default function QuizBuilderPage() {
           </p>
         </div>
         {quiz.status === 'published' && (
-          <button onClick={closeQuiz} className="transition hover:brightness-105" style={btnGold}>
-            Close quiz
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={backToDraft} className="transition hover:brightness-105" style={btnGhost} title="Only while nobody has started it">
+              Back to draft
+            </button>
+            <button onClick={closeQuiz} className="transition hover:brightness-105" style={btnGold}>
+              Close quiz
+            </button>
+          </div>
         )}
       </div>
 
@@ -1957,7 +2130,14 @@ export default function QuizBuilderPage() {
           )}
 
           <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-            <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 12px' }}>Questions and answer key (read-only)</h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-2" style={{ marginBottom: 12 }}>
+              <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Questions and answer key (read-only)</h3>
+              {quiz.status === 'published' && (
+                <button onClick={() => setIsEditWordingOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
+                  Edit wording
+                </button>
+              )}
+            </div>
             {(quiz.questions ?? []).map((q, i) => (
               <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '8px 0' }}>
                 <p style={{ fontSize: 13, color: '#3A4A6B', margin: 0 }}>
@@ -2004,6 +2184,15 @@ export default function QuizBuilderPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {quiz.status === 'published' && (
+        <EditWordingModal
+          isOpen={isEditWordingOpen}
+          onClose={() => setIsEditWordingOpen(false)}
+          quiz={quiz}
+          refetch={refetch}
+        />
       )}
     </div>
   )
