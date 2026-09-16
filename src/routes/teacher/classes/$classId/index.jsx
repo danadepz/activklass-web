@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
@@ -10,7 +10,7 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError, birthdateError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { classEducationLevel } from '@/lib/classForm'
-import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, middleNamesToWrite } from '@/lib/roster'
+import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, isDroppedFromClass, teacherAccountMessage, parseCsv, addToRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
 import { issuedLoginId, isIssuedLoginId } from '@/lib/logins'
@@ -912,7 +912,7 @@ function GuardiansSection({ student }) {
    modal to `mode='edit'` in place, so a look never has to become a form
    before the teacher decides it should. */
 // 2026-06-20: Added first_name and last_name fields so teachers can correct student names
-function EditStudentModal({ student, classId, clazz, programs, mode: initialMode = 'edit', onClose, onDone }) {
+function EditStudentModal({ student, classId, clazz, programs, mode: initialMode = 'edit', onClose, onDone, onToggleAccount, accountBusy = false }) {
   const [mode, setMode] = useState(initialMode)
   const readOnly = mode === 'view'
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: readOnly ? 'Student' : 'Edit student', closeOnBackdrop: false })
@@ -1005,6 +1005,26 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
           </select>
         </label>
         <GuardiansSection student={student} />
+        {/* T-70: the account-wide switch, moved off the row and in here.
+            This is the student's SIGN-IN everywhere, not this class -- the
+            row's own Disable/Enable now only drops them from this one class. */}
+        {onToggleAccount && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => onToggleAccount(student)}
+              disabled={accountBusy}
+              className="text-xs font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: (student.status ?? 'active') === 'active' ? goldDeep : green }}
+            >
+              {accountBusy
+                ? 'Working…'
+                : (student.status ?? 'active') === 'active'
+                  ? 'Disable sign-in'
+                  : 'Enable sign-in'}
+            </button>
+          </div>
+        )}
         <div className="flex gap-2 justify-end pt-2">
           {readOnly ? (
             <>
@@ -1354,6 +1374,7 @@ export default function ClassDetailPage() {
   const [rosterFilter, setRosterFilter] = useState('all')
   const [rosterSort, setRosterSort] = useState('az')
   const [accountBusy, setAccountBusy] = useState(null)
+  const [dropBusy, setDropBusy] = useState(null)
   const [notice, setNotice] = useState(null)
 
   const { data, isLoading, isError } = useQuery({
@@ -1494,13 +1515,62 @@ export default function ClassDetailPage() {
     }
   }
 
+  /**
+   * Disable or enable a student for THIS class only (T-70).
+   *
+   * Writes classes/{id}.dropped_student_ids -- a per-class array, not the
+   * account. student_ids is never touched, so the roster, the record and
+   * teacher_ids stay exactly as they are; a dropped student keeps their seat
+   * and their grades. The class owner may write any class field except
+   * student_ids/teacher_id (firestore.rules), so this goes straight to
+   * Firestore rather than through Flask, the way the roster's other fields
+   * already do.
+   */
+  async function handleToggleDropped(s) {
+    const dropped = isDroppedFromClass(clazz, s.id)
+    const who = `${s.first_name} ${s.last_name}`.trim()
+    const ask = dropped
+      ? {
+          title: `Enable ${who} on this class?`,
+          message: 'They can take quizzes, hand in work and open contests again.',
+          confirmLabel: 'Enable',
+        }
+      : {
+          title: `Disable ${who} on this class?`,
+          message:
+            'They stay on this roster and keep their grades — this only affects this class. ' +
+            'They can still open the class and see their grades and materials, but cannot take ' +
+            'quizzes, hand in work or open a contest until you enable them again.\n\n' +
+            'Their sign-in is untouched: to switch off their account everywhere, use ' +
+            '"Disable sign-in" inside View or Edit instead.',
+          confirmLabel: 'Disable',
+          tone: 'danger',
+        }
+    if (!(await confirmDialog(ask))) return
+    setDropBusy(s.id)
+    fail(null)
+    try {
+      await updateDoc(doc(db, 'classes', classId), {
+        dropped_student_ids: dropped ? arrayRemove(s.id) : arrayUnion(s.id),
+      })
+      queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
+    } catch (err) {
+      fail(err.message)
+    } finally {
+      setDropBusy(null)
+    }
+  }
+
   if (isLoading) return <SkeletonTable rows={8} cols={6} label="Loading roster" />
   if (isError || !data) return <p className="text-red-600">Class not found.</p>
 
   const { clazz, students } = data
   const maxStudents = clazz.max_students ?? 0
   const programs = programSuggestions(students, clazz)
-  const activeCount = students.filter((s) => (s.enrollment_status ?? 'AC') === 'AC').length
+  // T-70: Active (AC) / Inactive (IN) here read dropped_student_ids, the
+  // class-scoped Disable, not the enrollment_status select -- that field
+  // keeps its own academic-office meaning and its own column below.
+  const activeCount = students.filter((s) => !isDroppedFromClass(clazz, s.id)).length
   const inactiveCount = students.length - activeCount
 
   const filteredStudents = students
@@ -1509,12 +1579,12 @@ export default function ClassDetailPage() {
       const matchSearch = !rosterSearch ||
         name.includes(rosterSearch.toLowerCase()) ||
         (s.email ?? '').toLowerCase().includes(rosterSearch.toLowerCase())
-      const enroll = s.enrollment_status ?? 'AC'
+      const dropped = isDroppedFromClass(clazz, s.id)
       const prog = s.status ?? 'active'
       const matchFilter =
         rosterFilter === 'all' ||
-        (rosterFilter === 'AC' && enroll === 'AC') ||
-        (rosterFilter === 'IN' && enroll === 'IN') ||
+        (rosterFilter === 'AC' && !dropped) ||
+        (rosterFilter === 'IN' && dropped) ||
         (rosterFilter === 'needs_remediation' && prog === 'needs_remediation') ||
         (rosterFilter === 'mastered' && prog === 'mastered')
       return matchSearch && matchFilter
@@ -1651,9 +1721,10 @@ export default function ClassDetailPage() {
               {filteredStudents.map((s) => {
                 const status = s.status ?? 'active'
                 const enrollment = s.enrollment_status ?? 'AC'
+                const dropped = isDroppedFromClass(clazz, s.id)
                 const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
                 return (
-                  <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60">
+                  <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60" style={dropped ? { opacity: 0.55 } : undefined}>
                     <td className="px-5 py-3 text-slate-600 font-mono text-xs">{s.student_number ?? '—'}</td>
                     <td className="px-5 py-3">
                       <p className="font-medium text-slate-700">
@@ -1684,14 +1755,17 @@ export default function ClassDetailPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}>
-                        {/* Falls back for the account values ('inactive',
-                            'pending') that STATUS_LABELS does not carry —
-                            otherwise a disabled student rendered as blank. */}
-                        {STATUS_LABELS[status] ?? ACCOUNT_STATUS_LABELS[status] ?? status}
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${dropped ? STATUS_STYLE.inactive : STATUS_STYLE[status]}`}>
+                        {/* T-70: Disabled here means dropped from THIS class,
+                            not the account -- STATUS_LABELS' fallback for the
+                            account values ('inactive', 'pending') still backs
+                            the account-level Disable inside the modal. */}
+                        {dropped ? 'Disabled' : (STATUS_LABELS[status] ?? ACCOUNT_STATUS_LABELS[status] ?? status)}
                       </span>
                     </td>
-                    {/* T-62: View opens the same modal read-only; Edit opens it live. Remove is gone. */}
+                    {/* T-62: View opens the same modal read-only; Edit opens it live. Remove is gone.
+                        T-70: Disable/Enable here is class-scoped (dropped_student_ids); the
+                        account-level switch moved inside the View/Edit modal. */}
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button
@@ -1708,20 +1782,13 @@ export default function ClassDetailPage() {
                         >
                           Edit
                         </button>
-                        {/* Enable/Disable the login itself. Writes users.status
-                            AND toggles the Auth account -- status alone leaves
-                            a working password. */}
                         <button
-                          onClick={() => handleToggleAccount(s)}
-                          disabled={accountBusy === s.id}
+                          onClick={() => handleToggleDropped(s)}
+                          disabled={dropBusy === s.id}
                           className="text-xs font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                          style={{ color: status === 'active' ? goldDeep : green }}
+                          style={{ color: dropped ? green : goldDeep }}
                         >
-                          {accountBusy === s.id
-                            ? 'Working…'
-                            : status === 'active'
-                              ? 'Disable'
-                              : 'Enable'}
+                          {dropBusy === s.id ? 'Working…' : dropped ? 'Enable' : 'Disable'}
                         </button>
                       </div>
                     </td>
@@ -1763,6 +1830,8 @@ export default function ClassDetailPage() {
           programs={programs}
           onClose={() => setModal(null)}
           onDone={refresh}
+          onToggleAccount={handleToggleAccount}
+          accountBusy={accountBusy === modal.student.id}
         />
       )}
     </div>
