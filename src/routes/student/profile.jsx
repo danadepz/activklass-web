@@ -135,7 +135,7 @@ export default function StudentProfile() {
     ? null
     : age == null
       ? 'Your birthdate is not on file, so we cannot confirm you are of legal age to manage guardian access. Ask your teacher to add it to your record.'
-      : 'Because you are a minor, your parent or guardian has guardian access to your academic records under RA 10173. This access is managed by your school and cannot be changed here.'
+      : 'Because you are a minor, your parent or guardian has guardian access to your academic records under RA 10173. It was set up for you by your teacher and cannot be changed here.'
   const parentName = consent
     ? [consent.parent_first_name, consent.parent_last_name].filter(Boolean).join(' ')
     : null
@@ -208,7 +208,7 @@ export default function StudentProfile() {
         </div>
 
         <p style={{ fontSize: 12, color: faint, margin: '14px 0 0' }}>
-          Your name and these details are managed by your school. Ask your teacher
+          Your name and these details were set up for you. Ask your teacher
           to correct anything that is wrong. Your profile photo is yours to change.
         </p>
       </section>
