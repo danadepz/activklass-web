@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { fetchUsersByIds } from '@/lib/roster'
+import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
 import { ArrowRight, Sparkles } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
@@ -608,6 +608,7 @@ function GrantAttemptButton({ quizId, studentId, refetch }) {
 }
 
 function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
+  const [detailsFor, setDetailsFor] = useState(null)
   const { data, isLoading } = useQuery({
     queryKey: ['fs-quiz-results', classId, quizId, Array.isArray(assignedTo) ? assignedTo.join(',') : 'all'],
     queryFn: async () => {
@@ -616,7 +617,21 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
       const users = ids.length ? await fetchUsersByIds(ids) : []
       const students = users
         .filter((u) => !Array.isArray(assignedTo) || assignedTo.includes(u.id))
-        .map((u) => ({ student_id: u.id, first_name: u.first_name, last_name: u.last_name }))
+        .map((u) => ({
+          student_id: u.id,
+          first_name: u.first_name,
+          last_name: u.last_name,
+          // Kept for the read-only details panel (T-76) -- fetchUsersByIds
+          // already returns the whole profile, this is what a teacher
+          // already sees on the roster, minus anything a password touches.
+          login_id: u.login_id,
+          student_number: u.student_number,
+          lrn: u.lrn,
+          email: u.email,
+          course: u.course,
+          year_level: u.year_level,
+          status: u.status,
+        }))
         .sort((a, b) =>
           `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`),
         )
@@ -668,7 +683,16 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
             const granted = Number(quiz?.extra_attempts?.[s.student_id]) || 0
             return (
               <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
-                <td style={{ padding: '12px 18px', fontWeight: 700, color: ink }}>{s.last_name}, {s.first_name}</td>
+                <td style={{ padding: '12px 18px', fontWeight: 700 }}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailsFor({ student: s, allowed, best, attempts: finished })}
+                    className="transition hover:opacity-70"
+                    style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: ink, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(14,42,92,0.25)' }}
+                  >
+                    {s.last_name}, {s.first_name}
+                  </button>
+                </td>
                 <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>
                   {finished.length || '—'}
                   <span
@@ -723,6 +747,86 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
           })}
         </tbody>
       </table>
+      {detailsFor && (
+        <StudentDetailsModal
+          detailsFor={detailsFor}
+          classId={classId}
+          totalPoints={totalPoints}
+          onClose={() => setDetailsFor(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Who a student is, read-only (T-76, maykel_64440-91) -- maykel wanted to
+ * click a name on the results list and see the student behind it. There is
+ * no teacher-side student profile page to link to, so this is the smallest
+ * build: a dialog over the fields a teacher already sees on the roster,
+ * plus this quiz's attempts for that student. Never a password -- the
+ * fields kept on the row (see ResultsView above) do not include one.
+ */
+function StudentDetailsModal({ detailsFor, classId, totalPoints, onClose }) {
+  const { student: s, allowed, best, attempts } = detailsFor
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: `${s.last_name}, ${s.first_name}` })
+
+  const fields = [
+    ['ID / login', s.login_id],
+    ['Student number', s.student_number],
+    ['LRN', s.lrn],
+    ['Email', s.email],
+    ['Program', s.course],
+    ['Year level', s.year_level],
+    ['Status', STATUS_LABELS[s.status] ?? s.status],
+  ].filter(([, value]) => value)
+
+  return (
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 420, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div className="flex items-start justify-between gap-3" style={{ padding: '22px 26px 16px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
+          <h2 style={{ ...serif, fontSize: 20, margin: 0, color: ink }}>{s.last_name}, {s.first_name}</h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: faint, cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: '18px 26px', overflowY: 'auto' }} className="flex flex-col gap-4">
+          {fields.length > 0 && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+              {fields.map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</div>
+                  <div style={{ fontSize: 13.5, color: ink, marginTop: 2 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 6 }}>This quiz</div>
+            <p style={{ fontSize: 13, color: muted, margin: 0 }}>
+              {attempts.length} of {attemptsLabel(allowed)} attempt{attempts.length === 1 ? '' : 's'} used
+              {best !== null && <> · Best {best} / {totalPoints}</>}
+            </p>
+            {attempts.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1">
+                {attempts.map((a, i) => (
+                  <div key={i} style={{ ...mono, fontSize: 12, color: '#3A4A6B', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{a.submitted_at ? new Date(a.submitted_at.seconds ? a.submitted_at.seconds * 1000 : a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `Attempt ${i + 1}`}</span>
+                    <span>{a.total_score != null ? `${a.total_score} / ${a.total_possible ?? totalPoints}` : a.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Link
+            to={`/teacher/classes/${classId}`}
+            onClick={onClose}
+            style={{ fontSize: 13, fontWeight: 600, color: blueText, textDecoration: 'underline' }}
+          >
+            Open in class roster →
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }
