@@ -360,6 +360,11 @@ function RecordGrid({ classId, record, refetch }) {
     setError(null)
     try {
       const batch = writeBatch(db)
+      // One clock for every change this save makes, so events from the same
+      // click sort together on the Logs page. A server timestamp cannot sit
+      // inside an array value, so this is the client's -- good enough for a
+      // log line, and updated_at (below) still carries the server's.
+      const now = new Date().toISOString()
 
       for (const [assessmentId, cells] of Object.entries(dirty)) {
         const assessment = record.assessments.find((a) => a.id === assessmentId)
@@ -387,6 +392,16 @@ function RecordGrid({ classId, record, refetch }) {
           }
         }
         if (Object.keys(updates).length) {
+          /* What the Logs page reads to say "Scores recorded" -- what and
+             when, not from-what-to-what; the old value is not kept anywhere.
+             Capped at 200 entries so a term's worth of saves does not grow
+             the document without bound; the newest 200 are what a teacher
+             would actually go looking for. */
+          updates.updated_at = serverTimestamp()
+          updates.changes = [
+            ...(assessment.changes ?? []),
+            { at: now, student_ids: Object.keys(cells), by: profile.id },
+          ].slice(-200)
           batch.update(doc(db, 'gradebooks', classId, 'assessments', assessmentId), updates)
         }
       }
@@ -406,6 +421,12 @@ function RecordGrid({ classId, record, refetch }) {
         overrideUpdates[path] = num
       }
       if (Object.keys(overrideUpdates).length) {
+        const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
+        const existing = gbSnap.exists() ? (gbSnap.data().override_changes ?? []) : []
+        overrideUpdates.override_changes = [
+          ...existing,
+          { at: now, period_id: record.period.id, student_ids: Object.keys(dirtyOverrides), by: profile.id },
+        ].slice(-200)
         batch.update(doc(db, 'gradebooks', classId), overrideUpdates)
       }
 

@@ -4,8 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
+import { resolveSyllabus } from './classSyllabus'
+import { assessmentEvents, overrideEvents } from './historyEvents'
 import Button from '@/components/ui/Button'
-import { navy, ink, goldDeep, muted, faint, blueText, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { navy, ink, goldDeep, muted, faint, blueText, green, red, violet, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonList } from '@/components/ui/Skeleton'
 
 const KIND = {
@@ -14,6 +16,7 @@ const KIND = {
   submission: { tag: 'Submission', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   ai: { tag: 'AI', fg: goldDeep, bg: 'rgba(245,197,24,0.20)', border: 'rgba(245,197,24,0.55)' },
   config: { tag: 'Settings', fg: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
+  record: { tag: 'Class record', fg: violet, bg: 'rgba(124,92,224,0.12)', border: 'rgba(124,92,224,0.4)' },
 }
 
 
@@ -27,6 +30,9 @@ function toDate(ts) {
   }
   return null
 }
+
+// Reads still local to this page produce raw timestamps of the same shapes
+// historyEvents.js already normalises; `toDate` above stays here for them.
 
 function dayInfo(d) {
   const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate())
@@ -44,7 +50,8 @@ async function loadHistory(classId) {
   const events = []
 
   const classSnap = await getDoc(doc(db, 'classes', classId))
-  const ids = classSnap.exists() ? classSnap.data().student_ids ?? [] : []
+  const clazz = classSnap.exists() ? classSnap.data() : null
+  const ids = clazz?.student_ids ?? []
   const users = ids.length ? await fetchUsersByIds(ids) : []
   const nameById = {}
   users.forEach((u) => { nameById[u.id] = `${u.last_name}, ${u.first_name}` })
@@ -106,25 +113,35 @@ async function loadHistory(classId) {
     events.push({ ts, kind: 'attendance', actor: 'You', summary: `Recorded attendance${a.date ? ` · ${a.date}` : ''}`, detail: `${cnt} student${cnt === 1 ? '' : 's'} marked` })
   })
 
-  const sylSnap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current'))
-  if (sylSnap.exists()) {
-    const s = sylSnap.data()
-    const ts = toDate(s.updated_at)
+  // A syllabus lives in two places (DATA-MODEL.md rule 3): one saved from the
+  // syllabus page at syllabi/{classes.syllabus_id}, the seed's per-class
+  // fallback otherwise. Reading only the fallback (as this did until now) is
+  // why a BSIT-C-style class never showed "Updated syllabus" at all.
+  const { data: syl } = await resolveSyllabus(classId, clazz)
+  if (syl) {
+    const ts = toDate(syl.updated_at)
     if (ts) {
-      const mods = s.modules?.length ?? 0
-      const isAi = s.source === 'ai_generated'
+      const mods = syl.modules?.length ?? 0
+      const isAi = syl.source === 'ai_generated'
       events.push({ ts, kind: isAi ? 'ai' : 'config', actor: 'You', summary: 'Updated syllabus', detail: `${mods} module${mods === 1 ? '' : 's'}${isAi ? ' · AI draft' : ''}` })
     }
   }
 
   const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
-  if (gbSnap.exists()) {
-    const g = gbSnap.data()
-    const ts = toDate(g.updated_at)
+  const gb = gbSnap.exists() ? gbSnap.data() : null
+  if (gb) {
+    const ts = toDate(gb.updated_at)
     if (ts) {
-      events.push({ ts, kind: 'config', actor: 'You', summary: 'Updated grading setup', detail: `${g.components?.length ?? 0} components · ${g.periods?.length ?? 0} periods` })
+      events.push({ ts, kind: 'config', actor: 'You', summary: 'Updated grading setup', detail: `${gb.components?.length ?? 0} components · ${gb.periods?.length ?? 0} periods` })
     }
+    events.push(...overrideEvents(gb, nameById))
   }
+
+  // The class record: no audit collection exists, so each assessment
+  // document is asked to carry its own history the same way everything
+  // else on this page does (see assessmentEvents in historyEvents.js).
+  const assessSnap = await getDocs(collection(db, 'gradebooks', classId, 'assessments'))
+  assessSnap.forEach((d) => events.push(...assessmentEvents(d.data())))
 
   events.sort((a, b) => b.ts - a.ts)
   return events
@@ -158,7 +175,7 @@ export default function HistoryPage() {
           Class Logs
         </h1>
         <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
-          Quizzes, submissions, attendance, and setup changes — reconstructed from this class's records.
+          Quizzes, submissions, attendance, the class record, and setup changes — reconstructed from this class's records.
         </p>
       </div>
       <div className="flex flex-wrap gap-2.5">
