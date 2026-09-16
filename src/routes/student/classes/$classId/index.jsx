@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { fetchUsersByIds } from '@/lib/roster'
+import { fetchUsersByIds, isDroppedFromClass } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
@@ -132,6 +132,11 @@ async function loadClassDetail(classId, profile) {
     scaffoldedTopicIds,
     tasks,
     submissionByTask,
+    // T-70: a per-class Disable, not an account one -- the student stays
+    // enrolled (student_ids untouched) and keeps reading grades and
+    // materials, but nothing in the class can be started, submitted or
+    // contested until the teacher enables them again.
+    dropped: isDroppedFromClass(clazz, profile.id),
   }
 }
 
@@ -151,11 +156,13 @@ function Pill({ meta }) {
  * the same RESOURCE_META rows a material uses. The instructions open in the
  * lesson-note dialog, rendered as Markdown.
  */
-function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSubmitted }) {
+function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSubmitted, dropped = false }) {
   const attachments = (task.attachments ?? []).filter((a) => a?.url)
   // The bin shows when the teacher opened it, or when this student already
   // handed in (then read-only if it has since closed). Never otherwise.
-  const showBin = task.acceptsSubmissions || !!task.submission
+  // T-70: a dropped student never gets a fresh bin to hand work into, but an
+  // existing submission still shows -- it was handed in while they could.
+  const showBin = !!task.submission || (task.acceptsSubmissions && !dropped)
   return (
     <div className="flex flex-col gap-2.5 p-3 rounded-xl border border-amber-100 bg-amber-50/30 w-full sm:col-span-2" data-task-id={task.id}>
       <div className="flex items-start gap-3">
@@ -201,7 +208,7 @@ function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSub
         </div>
       )}
       {showBin && (
-        <SubmitBox task={task} classId={classId} studentId={studentId} onSubmitted={onSubmitted} />
+        <SubmitBox task={task} classId={classId} studentId={studentId} onSubmitted={onSubmitted} dropped={dropped} />
       )}
     </div>
   )
@@ -217,7 +224,7 @@ function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSub
  * AttachmentField materials use, so the size cap and the wording are the
  * ones a student has already met. Nothing is graded here.
  */
-function SubmitBox({ task, classId, studentId, onSubmitted }) {
+function SubmitBox({ task, classId, studentId, onSubmitted, dropped = false }) {
   /* What was just submitted, held locally until the page's refetch brings
      the real row. Without it a FIRST submit showed the empty form again for
      the second or two between "Submitting…" and the refetch (existing was
@@ -228,7 +235,9 @@ function SubmitBox({ task, classId, studentId, onSubmitted }) {
     if (task.submission) setJustSubmitted(null)
   }, [task.submission])
   const existing = task.submission ?? justSubmitted
-  const open = task.acceptsSubmissions
+  // T-70: a dropped student's bin reads the same as one the teacher closed --
+  // their existing hand-in still shows, nothing new can go in.
+  const open = task.acceptsSubmissions && !dropped
   const [editing, setEditing] = useState(!existing)
   const [attachment, setAttachment] = useState(null)
   const [note, setNote] = useState(existing?.note ?? '')
@@ -343,7 +352,7 @@ function toWindowString(date) {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`
 }
 
-function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks = [], submissionByTask = {}, onSubmitted, scaffoldedTopicIds, focusTopicId = null }) {
+function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks = [], submissionByTask = {}, onSubmitted, scaffoldedTopicIds, focusTopicId = null, dropped = false }) {
   // Needed for the per-student attempt grant below, and for the submission bin.
   const { profile } = useAuth()
   const queryClient = useQueryClient()
@@ -532,7 +541,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks
                         const allowed = attemptsAllowedFor(quiz, profile.id)
                         const used = finished.length
                         const points = quizPoints(quiz)
-                        const canTake = quiz.status === 'published' && (live || used < allowed)
+                        const canTake = quiz.status === 'published' && (live || used < allowed) && !dropped
                         const scored = finished
                           .map((a) => a.total_score)
                           .filter((v) => v != null)
@@ -596,6 +605,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks
                           studentId={profile?.id}
                           onSubmitted={afterSubmit}
                           onReadInstructions={() => setActiveNote({ title: task.title, content_markdown: task.instructions, markdown: true })}
+                          dropped={dropped}
                         />
                       ))}
                     </div>
@@ -790,7 +800,7 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
   )
 }
 
-function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAssessment, onContested }) {
+function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAssessment, onContested, dropped = false }) {
   const [contestAsmt, setContestAsmt] = useState(null)
   if (!entry || entry.final_grade == null) {
     return <Empty icon={<ClipboardList className="h-6 w-6" />} title="No grades yet" text="Your grade summary appears here once your teacher records and saves your scores." />
@@ -801,7 +811,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
   const periods = (entry.periods ?? []).filter(
     (p) => p.grade != null || assessments.some((a) => a.period_id === p.id),
   )
-  const canContest = (a) => a.status === 'graded' || a.status === 'missing'
+  const canContest = (a) => !dropped && (a.status === 'graded' || a.status === 'missing')
 
   return (
     <div className="flex flex-col gap-4">
@@ -1003,7 +1013,7 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
   )
 }
 
-function AttendanceTab({ attendance, contestsByDate, classId, studentId, studentName, onContested }) {
+function AttendanceTab({ attendance, contestsByDate, classId, studentId, studentName, onContested, dropped = false }) {
   const { log, tally, rate } = attendance
   const [contestDay, setContestDay] = useState(null)
 
@@ -1057,6 +1067,8 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
                               <span style={{ fontSize: 11, color: faint, maxWidth: 180, textAlign: 'right' }}>{contest.resolution_note}</span>
                             )}
                           </div>
+                        ) : dropped ? (
+                          <span style={{ fontSize: 12, color: faint }}>—</span>
                         ) : (
                           <button
                             onClick={() => setContestDay(d)}
@@ -1097,7 +1109,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
   )
 }
 
-function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
+function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId, dropped = false }) {
   if (quizzes.length === 0) {
     return <Empty icon={<FileText className="h-6 w-6" />} title="No quizzes yet" text="Quizzes your teacher publishes for this class will show up here." />
   }
@@ -1130,7 +1142,7 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId }) {
         const sentence = describeWindow(window)
         const badgeWord = toneOf(window.state).badge
         const badge = window.state === 'done' || !badgeWord || sentence.startsWith(badgeWord) ? null : badgeWord
-        const startable = canTake && window.state !== 'scheduled' && window.state !== 'closed'
+        const startable = canTake && window.state !== 'scheduled' && window.state !== 'closed' && !dropped
         return (
           <div key={quiz.id} data-state={window.state} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1633,7 +1645,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {} } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1694,6 +1706,16 @@ export default function StudentClassDetail() {
         </div>
       </div>
 
+      {/* T-70: a per-class Disable -- the student stays enrolled and keeps
+          reading their grades and materials, but nothing here can be
+          started, submitted or contested until the teacher enables them
+          again. */}
+      {dropped && (
+        <div className="mt-4" style={{ background: 'rgba(154,166,189,0.12)', border: `1px solid ${line}`, borderRadius: 14, padding: '14px 18px', fontSize: 13.5, color: muted }}>
+          <strong style={{ color: ink }}>You are no longer active in this class.</strong> You can still see your grades and materials, but you cannot take quizzes or hand in work.
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="mt-6 mb-5 flex gap-1.5 overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: 6 }}>
         {TABS.map(({ key, label, Icon }) => {
@@ -1723,9 +1745,10 @@ export default function StudentClassDetail() {
           onSubmitted={invalidate}
           scaffoldedTopicIds={scaffoldedTopicIds}
           focusTopicId={focusTopicId}
+          dropped={dropped}
         />
       )}
-      {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={profile.id} />}
+      {tab === 'quizzes' && <QuizzesTab classId={classId} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={profile.id} dropped={dropped} />}
       {tab === 'grades' && (
         <GradesTab
           entry={entry}
@@ -1734,6 +1757,7 @@ export default function StudentClassDetail() {
           studentName={studentName}
           gradeContestsByAssessment={gradeContestsByAssessment}
           onContested={invalidate}
+          dropped={dropped}
         />
       )}
       {tab === 'analytics' && (
@@ -1755,6 +1779,7 @@ export default function StudentClassDetail() {
           studentId={profile.id}
           studentName={studentName}
           onContested={invalidate}
+          dropped={dropped}
         />
       )}
       {tab === 'announcements' && <AnnouncementsTab announcements={announcements} />}

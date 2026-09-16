@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { fetchUsersByIds, ageFromBirthdate } from '@/lib/roster'
+import { fetchUsersByIds, ageFromBirthdate, isDroppedFromClass } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus } from '@/lib/studentData'
 import { TrendingUp, CalendarCheck, BookOpen, AlertCircle, ShieldCheck, ChevronRight } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serif, mono } from '@/theme'
@@ -56,8 +56,13 @@ function ClassCard({ c }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: ink, lineHeight: 1.25 }}>
-            {c.subject_code ? `${c.subject_code} · ` : ''}{c.subject || c.section}
+          <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 16, fontWeight: 700, color: ink, lineHeight: 1.25 }}>
+            <span>{c.subject_code ? `${c.subject_code} · ` : ''}{c.subject || c.section}</span>
+            {c.dropped && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: muted, background: 'rgba(14,42,92,0.06)', border: '1px solid rgba(14,42,92,0.15)', borderRadius: 999, padding: '2px 9px' }}>
+                Disabled
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{c.section}</div>
           <div style={{ fontSize: 12.5, color: faint, marginTop: 4 }}>{c.teacher_name}</div>
@@ -137,6 +142,9 @@ async function loadDashboard(profile) {
         grade_policy: entry ?? null,
         attendance_rate: attendance.rate,
         module_count: syllabus?.modules?.length ?? 0,
+        // T-70: a per-class Disable, not an account one -- the class still
+        // lists, it just reads as inactive for this student.
+        dropped: isDroppedFromClass(c, profile.id),
       }
     }),
   )
