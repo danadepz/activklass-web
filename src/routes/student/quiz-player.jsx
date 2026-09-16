@@ -5,6 +5,7 @@ import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firesto
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { questionsForAttempt, questionsForStudent } from '@/lib/quizPool'
+import { isDroppedFromClass } from '@/lib/roster'
 import {
   attemptsAllowedFor,
   canStart,
@@ -47,6 +48,10 @@ async function loadPlayerData(classId, quizId, studentId) {
   const quiz = { id: quizSnap.id, ...quizSnap.data() }
   const clazz = classSnap.data()
   if (!(clazz.student_ids ?? []).includes(studentId)) throw new Error('not_enrolled')
+  // T-70: a per-class Disable, not an account one -- still enrolled, but may
+  // not START a quiz. Finished-attempt feedback lives on a different route
+  // (student/quiz-feedback.jsx) and is untouched by this.
+  if (isDroppedFromClass(clazz, studentId)) throw new Error('dropped')
   // Respect targeted assignment ('all'/legacy = everyone; otherwise an id list).
   const assignedTo = quiz.assigned_to
   if (assignedTo && assignedTo !== 'all' && !(Array.isArray(assignedTo) && assignedTo.includes(studentId))) {
@@ -622,6 +627,7 @@ export default function QuizPlayer() {
   if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
   if (isError) {
     if (error?.message === 'not_enrolled') return <Gate title="Not enrolled" classId={classId}>You can only take quizzes for classes you're enrolled in.</Gate>
+    if (error?.message === 'dropped') return <Gate title="Not active in this class" classId={classId}>You're no longer active in this class, so you can't take quizzes right now. Ask your teacher if this isn't right.</Gate>
     if (error?.message === 'not_assigned') return <Gate title="Not assigned to you" classId={classId}>Your teacher assigned this quiz to specific students, and you're not on the list.</Gate>
     return <Gate title="Quiz not found" classId={classId}>This quiz may have been removed.</Gate>
   }
