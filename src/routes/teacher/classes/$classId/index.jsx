@@ -10,7 +10,7 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError, birthdateError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { classEducationLevel } from '@/lib/classForm'
-import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, removeFromRoster, middleNamesToWrite } from '@/lib/roster'
+import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, teacherAccountMessage, parseCsv, addToRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
 import { issuedLoginId, isIssuedLoginId } from '@/lib/logins'
@@ -143,7 +143,7 @@ function programSuggestions(students, clazz) {
   return [...own, ...common]
 }
 
-function ProgramYearFields({ fields, set, clazz, programs = [] }) {
+function ProgramYearFields({ fields, set, clazz, programs = [], disabled = false }) {
   const options = yearOptionsFor(clazz)
   const year = fields.year_level ?? ''
   const offList = year && !options.includes(year) ? year : null
@@ -151,7 +151,7 @@ function ProgramYearFields({ fields, set, clazz, programs = [] }) {
     <div className="grid grid-cols-2 gap-3">
       <div>
         <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
-        <input className="ak-input" list="ak-programs" autoComplete="off" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} />
+        <input className="ak-input" list="ak-programs" autoComplete="off" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} disabled={disabled} />
         <datalist id="ak-programs">
           {programs.map((p) => (
             <option key={p} value={p} />
@@ -160,7 +160,7 @@ function ProgramYearFields({ fields, set, clazz, programs = [] }) {
       </div>
       <div>
         <label style={labelStyle}>Year <span style={optHint}>(opt)</span></label>
-        <select className="ak-input" value={year} onChange={set('year_level')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+        <select className="ak-input" value={year} onChange={set('year_level')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
           <option value="">—</option>
           {offList && <option value={offList}>{offList}</option>}
           {options.map((o) => (
@@ -304,25 +304,25 @@ function announceLogins(created) {
   )
 }
 
-function StudentFields({ fields, setFields, clazz, programs }) {
+function StudentFields({ fields, setFields, clazz, programs, disabled = false }) {
   const set = (key) => (e) => setFields((f) => ({ ...f, [key]: e.target.value }))
   return (
     <div className="flex flex-col gap-3.5">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label style={labelStyle}>ID Number</label>
-          <input className="ak-input" placeholder="Student ID" value={fields.student_number} onChange={set('student_number')} style={fieldStyle} />
+          <input className="ak-input" placeholder="Student ID" value={fields.student_number} onChange={set('student_number')} style={fieldStyle} disabled={disabled} />
         </div>
         <div>
           <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
-          <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} />
+          <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} disabled={disabled} />
         </div>
       </div>
-      <ProgramYearFields fields={fields} set={set} clazz={clazz} programs={programs} />
+      <ProgramYearFields fields={fields} set={set} clazz={clazz} programs={programs} disabled={disabled} />
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
-          <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+          <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
             <option value="">—</option>
             {REMARKS_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -331,7 +331,7 @@ function StudentFields({ fields, setFields, clazz, programs }) {
         </div>
         <div>
           <label style={labelStyle}>Enrollment status</label>
-          <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+          <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
             {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label} ({value})</option>
             ))}
@@ -341,11 +341,11 @@ function StudentFields({ fields, setFields, clazz, programs }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label style={labelStyle}>LRN <span style={optHint}>(basic ed, opt)</span></label>
-          <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} />
+          <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} disabled={disabled} />
         </div>
         <div>
           <label style={labelStyle}>Birthdate</label>
-          <input className="ak-input" type="date" max={TODAY_ISO} value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+          <input className="ak-input" type="date" max={TODAY_ISO} value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled} />
           <BirthdateHint missing={!fields.birthdate} />
         </div>
       </div>
@@ -906,10 +906,16 @@ function GuardiansSection({ student }) {
   )
 }
 
-/* Edit roster fields on one student (rules allow teachers to maintain these). */
+/* Edit (and, T-62, View) roster fields on one student (rules allow teachers
+   to maintain these). One modal, two modes: `mode='view'` opens read-only --
+   every field disabled, no Save -- with an Edit button that flips the same
+   modal to `mode='edit'` in place, so a look never has to become a form
+   before the teacher decides it should. */
 // 2026-06-20: Added first_name and last_name fields so teachers can correct student names
-function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }) {
-  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit student', closeOnBackdrop: false })
+function EditStudentModal({ student, classId, clazz, programs, mode: initialMode = 'edit', onClose, onDone }) {
+  const [mode, setMode] = useState(initialMode)
+  const readOnly = mode === 'view'
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: readOnly ? 'Student' : 'Edit student', closeOnBackdrop: false })
   // 2026-06-20: Name state — editable first and last name
   const [firstName, setFirstName] = useState(student.first_name ?? '')
   const [lastName, setLastName] = useState(student.last_name ?? '')
@@ -955,28 +961,11 @@ function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }
     }
   }
 
-  async function removeFromClass() {
-    if (!(await confirmDialog({
-      title: `Remove ${student.first_name} from this class?`,
-      message: 'Their account is kept, along with their work in every other class. Only this roster changes.',
-      confirmLabel: 'Remove',
-      tone: 'danger',
-    }))) return
-    setBusy(true)
-    try {
-      await removeFromRoster(classId, student.id)
-      onDone()
-    } catch (err) {
-      fail(err.message)
-      setBusy(false)
-    }
-  }
-
   return (
     <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
       <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
-        <h3 className="text-lg font-semibold text-slate-800">Edit Student</h3>
+        <h3 className="text-lg font-semibold text-slate-800">{readOnly ? 'Student' : 'Edit Student'}</h3>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
         )}
@@ -987,6 +976,7 @@ function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
+              disabled={readOnly}
               className={`${inputCls} w-full mt-1`}
             />
           </label>
@@ -995,16 +985,18 @@ function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
+              disabled={readOnly}
               className={`${inputCls} w-full mt-1`}
             />
           </label>
         </div>
-        <StudentFields fields={fields} setFields={setFields} clazz={clazz} programs={programs} />
+        <StudentFields fields={fields} setFields={setFields} clazz={clazz} programs={programs} disabled={readOnly} />
         <label className="block">
           <span className="text-sm font-medium text-slate-700">Academic progress</span>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
+            disabled={readOnly}
             className={`${inputCls} w-full mt-1 bg-white`}
           >
             {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -1013,27 +1005,35 @@ function EditStudentModal({ student, classId, clazz, programs, onClose, onDone }
           </select>
         </label>
         <GuardiansSection student={student} />
-        <div className="flex gap-3 justify-between pt-2">
-          <button
-            onClick={removeFromClass}
-            disabled={busy}
-            className="rounded-lg border border-red-200 text-red-600 px-4 py-2 text-sm hover:bg-red-50 disabled:opacity-50"
-          >
-            Remove from class
-          </button>
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              disabled={busy}
-              className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
-              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
-            >
-              {busy ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+        <div className="flex gap-2 justify-end pt-2">
+          {readOnly ? (
+            <>
+              <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+                Close
+              </button>
+              <button
+                onClick={() => setMode('edit')}
+                className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+              >
+                Edit
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={busy}
+                className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+              >
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          )}
         </div>
       </div>
       </div>
@@ -1403,23 +1403,6 @@ export default function ClassDetailPage() {
     }
   }
 
-  // 2026-06-20: Quick remove from table row — does not open the edit modal
-  async function handleRemoveStudent(s) {
-    if (!(await confirmDialog({
-      title: `Remove ${s.first_name} ${s.last_name} from this class?`,
-      message: 'Their student account is kept - they simply stop appearing on this roster.',
-      confirmLabel: 'Remove',
-      tone: 'danger',
-    }))) return
-    try {
-      await removeFromRoster(classId, s.id)
-      queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
-      queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
-    } catch (err) {
-      fail(err.message)
-    }
-  }
-
   /**
    * Enable or disable a student's account from the roster.
    *
@@ -1660,7 +1643,7 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-semibold">Remarks</th>
                 <th className="px-5 py-2.5 font-semibold text-center">Enrollment</th>
                 <th className="px-5 py-2.5 font-semibold">Progress</th>
-                {/* 2026-06-20: Actions column header — Edit and Remove per row */}
+                {/* T-62: View · Edit · Disable per row — Remove dropped (owner's word, dawny808-89) */}
                 <th className="px-5 py-2.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -1684,7 +1667,7 @@ export default function ClassDetailPage() {
                       {!s.birthdate && (
                         <button
                           type="button"
-                          onClick={() => setModal(s)}
+                          onClick={() => setModal({ student: s, mode: 'edit' })}
                           title="Needed before the student can set up guardian access. Click to add it."
                           className="mt-1 rounded-full px-2 py-0.5 text-[11px] font-semibold hover:brightness-95"
                           style={{ color: goldDeep, background: 'rgba(245,197,24,0.16)', border: 'none', cursor: 'pointer' }}
@@ -1708,11 +1691,18 @@ export default function ClassDetailPage() {
                         {STATUS_LABELS[status] ?? ACCOUNT_STATUS_LABELS[status] ?? status}
                       </span>
                     </td>
-                    {/* 2026-06-20: Edit opens modal with name + roster fields; Remove immediately removes from class */}
+                    {/* T-62: View opens the same modal read-only; Edit opens it live. Remove is gone. */}
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button
-                          onClick={() => setModal(s)}
+                          onClick={() => setModal({ student: s, mode: 'view' })}
+                          className="text-xs font-medium hover:underline"
+                          style={{ color: '#0E2A5C' }}
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => setModal({ student: s, mode: 'edit' })}
                           className="text-xs font-medium hover:underline"
                           style={{ color: '#0E2A5C' }}
                         >
@@ -1732,12 +1722,6 @@ export default function ClassDetailPage() {
                             : status === 'active'
                               ? 'Disable'
                               : 'Enable'}
-                        </button>
-                        <button
-                          onClick={() => handleRemoveStudent(s)}
-                          className="text-xs font-medium hover:underline text-red-500"
-                        >
-                          Remove
                         </button>
                       </div>
                     </td>
@@ -1772,7 +1756,8 @@ export default function ClassDetailPage() {
       )}
       {modal && typeof modal === 'object' && (
         <EditStudentModal
-          student={modal}
+          student={modal.student}
+          mode={modal.mode}
           classId={classId}
           clazz={clazz}
           programs={programs}
