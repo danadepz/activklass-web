@@ -149,6 +149,10 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
         <WeightBadge ok={ok}>{sum.toFixed(sum % 1 === 0 ? 0 : 2)}%</WeightBadge>
       </div>
 
+      <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
+        Change one weight and the others rescale so the total stays 100%.
+      </p>
+
       {ignored > 0 && (
         <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
           {ignored} row{ignored === 1 ? '' : 's'} without a name {ignored === 1 ? 'is' : 'are'} not
@@ -193,7 +197,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
                 placeholder="0"
                 value={row.weight_percent}
                 onChange={(e) => update(i, 'weight_percent', e.target.value)}
-                style={{ ...fieldStyle, width: 76, paddingRight: 26, textAlign: 'right' }}
+                style={{ ...fieldStyle, width: 92, paddingRight: 26, textAlign: 'right' }}
               />
               <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
             </div>
