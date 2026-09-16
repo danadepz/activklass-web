@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -170,6 +171,49 @@ export async function syncQuizToAllRecords({ quiz, classMappings }) {
   }
 
   return { ...totals, skipped }
+}
+
+/**
+ * Undo what a publish did: delete the assessment row a quiz created in
+ * every class it is mapped to, and re-sync entries so students stop reading
+ * a score for a quiz that no longer exists.
+ *
+ * Checks every mapped class's period *before* deleting anything in any of
+ * them. A quiz mapped to two classes where only one has a locked period
+ * would otherwise leave the delete half-done -- one class's column gone,
+ * the other's still there pointing at a quiz that no longer exists, with no
+ * way to finish the job once the quiz doc itself is deleted. So this is all
+ * or nothing: any locked period refuses the whole removal and names every
+ * class it found locked, for the caller to say before touching Firestore.
+ */
+export async function removeQuizFromAllRecords({ quiz, classMappings }) {
+  const entries = Object.entries(classMappings ?? {})
+
+  const withPeriod = await Promise.all(
+    entries.map(async ([classId, mapping]) => {
+      const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
+      const gb = gbSnap.exists() ? gbSnap.data() : null
+      const period = (gb?.periods ?? []).find((p) => p.id === mapping?.grading_period_id)
+      return { classId, period }
+    }),
+  )
+
+  const locked = withPeriod
+    .filter(({ period }) => period?.locked)
+    .map(({ classId, period }) => ({ classId, periodName: period.name }))
+  if (locked.length) return { removed: [], locked }
+
+  const removed = []
+  for (const { classId } of withPeriod) {
+    await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', assessmentIdForQuiz(quiz.id)))
+    try {
+      await syncEntries(classId)
+    } catch {
+      /* Entries are derived; the next record save re-syncs them. */
+    }
+    removed.push(classId)
+  }
+  return { removed, locked: [] }
 }
 
 /**

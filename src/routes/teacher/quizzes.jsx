@@ -19,6 +19,7 @@ import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useQuizzes } from '@/hooks/useQuizzes'
+import { removeQuizFromAllRecords } from '@/hooks/useQuizRecordSync'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -1273,19 +1274,30 @@ export default function QuizzesIndexPage() {
   }
 
   async function handleDelete(quizId) {
+    const quiz = sqliteQuizzes?.find((q) => q.id === quizId)
     if (!(await confirmDialog({
       title: 'Delete this quiz?',
-      message: 'Attempts students have already submitted are deleted with it, and the gradebook loses those scores. This cannot be undone.',
+      message: "Its column comes off the class record in every class it was assigned to, and the grades are recomputed without it. Students' answers are kept, but no longer count. This cannot be undone.",
       confirmLabel: 'Delete quiz',
       tone: 'danger',
       typeToConfirm: 'DELETE',
     }))) return
     try {
+      if (quiz?.class_mappings && Object.keys(quiz.class_mappings).length) {
+        const { locked } = await removeQuizFromAllRecords({ quiz, classMappings: quiz.class_mappings })
+        if (locked.length) {
+          const names = locked
+            .map(({ classId, periodName }) => `${periodName} is locked on ${classes?.find((c) => c.id === classId)?.section ?? 'a class'}`)
+            .join('; ')
+          toast.error(`Could not delete the quiz — ${names}. Unlock it on the class record first.`)
+          return
+        }
+      }
       await deleteDoc(doc(db, 'quizzes', quizId))
       refetch()
       toast.success('Quiz deleted.')
-    } catch (err) {
-      toast.error(`Could not delete the quiz: ${err.message}`)
+    } catch {
+      toast.error('Could not delete the quiz. Check your connection and try again.')
     }
   }
 
