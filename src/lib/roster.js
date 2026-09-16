@@ -116,6 +116,21 @@ export function removeFromRoster(classId, studentId) {
   return api(`/api/classes/${classId}/roster/${studentId}`, { method: 'DELETE' })
 }
 
+/**
+ * Is this student dropped from this one class? (T-70)
+ *
+ * A per-CLASS flag, not an account state -- `classes/{id}.dropped_student_ids`
+ * -- so a dropout stays on the roster and in the record (student_ids is
+ * untouched) but may no longer act on this one class: start a quiz, hand
+ * work in, or open a contest. Their account and every other class they are
+ * on are unaffected. The class owner may write any class field except
+ * `student_ids`/`teacher_id` (firestore.rules), so a client toggles this one
+ * directly rather than through Flask.
+ */
+export function isDroppedFromClass(clazz, studentId) {
+  return (clazz?.dropped_student_ids ?? []).includes(studentId)
+}
+
 export function ageFromBirthdate(birthdate) {
   if (!birthdate) return null
   const born = new Date(birthdate)

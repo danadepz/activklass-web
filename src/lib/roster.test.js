@@ -37,7 +37,7 @@ vi.mock('firebase/firestore', () => ({
   })),
 }))
 
-const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage, middleNamesToWrite, parseCsv, fetchUsersByIds, IN_CHUNK } = await import('./roster')
+const { findStudentsByNumber, findStudentByEmail, teacherAccountMessage, middleNamesToWrite, parseCsv, fetchUsersByIds, IN_CHUNK, isDroppedFromClass } = await import('./roster')
 
 const answers = (payload) =>
   vi.stubGlobal('fetch', vi.fn(async () => ({
@@ -173,6 +173,27 @@ describe('fetchUsersByIds reads at most ten ids per query', () => {
     const sizes = getDocs.mock.calls.map(([clause]) => clause.value.length)
     expect(sizes).toEqual([10, 10, 1])
     expect(IN_CHUNK).toBe(10)
+  })
+})
+
+describe('isDroppedFromClass (T-70)', () => {
+  it('is false when the class carries no dropped_student_ids array at all', () => {
+    expect(isDroppedFromClass({ student_ids: ['s1'] }, 's1')).toBe(false)
+  })
+
+  it('is false for a student the array does not name', () => {
+    expect(isDroppedFromClass({ dropped_student_ids: ['s2'] }, 's1')).toBe(false)
+  })
+
+  it('is true only for a student the array names', () => {
+    const clazz = { dropped_student_ids: ['s1', 's3'] }
+    expect(isDroppedFromClass(clazz, 's1')).toBe(true)
+    expect(isDroppedFromClass(clazz, 's2')).toBe(false)
+  })
+
+  it('is false against a missing or null class', () => {
+    expect(isDroppedFromClass(null, 's1')).toBe(false)
+    expect(isDroppedFromClass(undefined, 's1')).toBe(false)
   })
 })
 
