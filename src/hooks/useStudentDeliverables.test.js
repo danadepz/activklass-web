@@ -132,4 +132,33 @@ describe('assembleDeliverables', () => {
     expect(assembleDeliverables({ classes: [], quizResults: [], taskChunks: [], taskResults: [], attempts: [], studentId: 's1', now: NOW }))
       .toEqual({ items: [], failed: [] })
   })
+
+  it('T-70: a class this student is dropped from contributes no items, and is never named as failed', () => {
+    const DROPPED = { ...SCI, dropped_student_ids: ['s1'] }
+    const out = assembleDeliverables({
+      classes: [DROPPED, IT],
+      quizResults: [ok([quiz('q-sci')]), ok([quiz('q-it')])],
+      taskChunks: [['c1', 'c2']],
+      taskResults: [ok([task('k-sci', 'c1'), task('k-it', 'c2')])],
+      attempts: [],
+      studentId: 's1',
+      now: NOW,
+    })
+    expect(out.items.map((d) => d.id).sort()).toEqual(['k-it', 'q-it'])
+    expect(out.failed).toEqual([])
+  })
+
+  it('T-70: a dropped class inside a refused chunk still names only the classes that actually failed', () => {
+    const DROPPED = { ...SCI, dropped_student_ids: ['s1'] }
+    const out = assembleDeliverables({
+      classes: [DROPPED, IT],
+      quizResults: [ok([]), ok([])],
+      taskChunks: [['c1', 'c2']],
+      taskResults: [refused()],
+      attempts: [],
+      studentId: 's1',
+      now: NOW,
+    })
+    expect(out.failed).toEqual([{ classId: 'c2', label: 'IT101 · Web Systems' }])
+  })
 })

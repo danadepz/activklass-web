@@ -30,7 +30,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
-import { IN_CHUNK } from '@/lib/roster'
+import { IN_CHUNK, isDroppedFromClass } from '@/lib/roster'
 import { assignedToStudent, fromQuiz, fromTask, sortDeliverables } from '@/lib/deliverables'
 
 export const studentDeliverablesKey = (studentId) => ['fs-student-deliverables', studentId]
@@ -73,9 +73,14 @@ export function assembleDeliverables({ classes, quizResults, taskChunks, taskRes
   const byId = new Map(classes.map((c) => [c.id, c]))
   const failedIds = new Set()
   const items = []
+  // T-70: a class this student is dropped from (disabled) contributes no
+  // items -- Up next is for what they can still act on. Not a failure, so
+  // it never joins `failed` either.
+  const droppedIds = new Set(classes.filter((c) => isDroppedFromClass(c, studentId)).map((c) => c.id))
 
   quizResults.forEach((r, i) => {
     const c = classes[i]
+    if (droppedIds.has(c.id)) return
     if (r.status !== 'fulfilled') { failedIds.add(c.id); return }
     for (const q of r.value) {
       if (q.status !== 'published' && q.status !== 'closed') continue
@@ -87,8 +92,9 @@ export function assembleDeliverables({ classes, quizResults, taskChunks, taskRes
 
   const submissionByTask = new Map((submissions ?? []).map((sub) => [sub.task_id, sub]))
   taskResults.forEach((r, i) => {
-    if (r.status !== 'fulfilled') { taskChunks[i].forEach((id) => failedIds.add(id)); return }
+    if (r.status !== 'fulfilled') { taskChunks[i].forEach((id) => { if (!droppedIds.has(id)) failedIds.add(id) }); return }
     for (const t of r.value) {
+      if (droppedIds.has(t.class_id)) continue
       const c = byId.get(t.class_id)
       items.push(fromTask(t, { className: studentClassName(c), now, submission: submissionByTask.get(t.id) ?? null }))
     }
