@@ -11,10 +11,14 @@ for cross-repo questions. This file is for the ones that are the web client's to
 
 ## Open
 
-### 1. ~~Where does this get deployed, if it ever does?~~ Moved to DECIDED (2026-09-14).
-The remaining sub-decisions and the order of work are in
-`../activklass-backend/docs/09-deployment-readiness.md`. Until the release is proven on
-the real URL, it still runs on the Vite dev server with a forwarded port.
+### 1. Where does this get deployed, if it ever does?
+~~Confirmed 2026-08-25: not deployed, and not part of the defense.~~ **Reversed 2026-09-14:
+the defense requires a deployed system.** What would break, what the owner has to decide
+(where Flask runs — Cloud Run recommended; Firebase Hosting for the web; domain; warm
+instances; rotating the demo passwords) and the order to do it in are in
+`../activklass-backend/docs/09-deployment-readiness.md`. Until those decisions are
+recorded here, it still runs on the Vite dev server with a forwarded VS Code port.
+**Do not stand anything up without asking** — that part is unchanged.
 
 ### 2. Does the client-side validation ever get a server-side twin?
 `lib/validation.js` is now the single home for name, password, year-level and email rules,
@@ -107,28 +111,6 @@ not started from a ticket:
 
 ## DECIDED ✅
 
-- **The system is released to Cloud Run + Firebase Hosting, in `activklass1`** (owner,
-  2026-09-14 — reversing 2026-08-25's "not deployed, not part of the defense": the defense
-  requires a hosted system). **Vocabulary: it is a "release", not a "deployment".** The
-  owner found "deployment" confusing — it suggested the hosted site would track the
-  working tree the way the tunnel does. It does not: a release is a snapshot of the last
-  build pushed (`npm run build` + `firebase deploy --only hosting`; `gcloud run deploy`
-  for Flask), and the dev server + tunnel stay the day-to-day workbench. Firestore, Auth
-  and Storage are the same project, so records made on either side show on both at once.
-  **Why Cloud Run:** the owner does not want to pay anything. Cloud Run at
-  `min-instances 0` is $0 at demo scale (2M free requests/month) and needs no new account,
-  card or service-account key leaving the laptop — the service uses its own identity, and
-  Firebase Hosting's `/api/**` rewrite gives one origin, so no `VITE_API_URL` and no CORS.
-  The cost of "free" is a ~10 s cold start after idle (the risk forest retrains at boot);
-  if that is turned into `min-instances 1` for the demo hours it is well under a dollar
-  and comes out of the $40 Google Developer Program credits on the same billing account
-  before any card. Render/Railway/Fly/PythonAnywhere were compared and set aside: each
-  needs a new account and either a monthly fee or a sleeping free tier (~50 s wake), and
-  the free PythonAnywhere tier cannot reach Gemini. The laptop + Cloudflare tunnel stays
-  the fallback if the release breaks the night before. Still Blaze, still no Cloud
-  Functions. **Sub-decisions taken as defaults unless the owner says otherwise:**
-  `activklass1.web.app`, no custom domain; `min-instances 0` except during the demo;
-  rotate the seeded `pass1234` and delete the 12 probe accounts before the URL is shared.
 - **Firestore is the system of record.** Re-litigated twice, settled. Clients read it
   directly and `firestore.rules` is the authorization layer. SQL is legacy and no new work
   goes there.
