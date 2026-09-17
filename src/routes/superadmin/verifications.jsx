@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Timestamp, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { trialEndsFrom } from '@/lib/pricing'
 import { teacherApprovalMessage } from '@/lib/approvalMessage'
+import { notifyTeacherApproval } from '@/lib/superadmin'
 import { db } from '@/lib/firebase'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
@@ -26,6 +27,10 @@ import {
  * one field on the teacher's own profile, and firestore.rules lets the super
  * admin claim — and nobody else — set verification_status to approved or
  * rejected. There is no plan catalogue or seat arithmetic for Flask to own.
+ * Approving still calls Flask once, after the fact, to send the welcome
+ * email — that needs the mail credentials only the server holds (T-69's
+ * sender, reused). A failed send never undoes the approval; it just means
+ * the notice below has to go out by hand instead.
  *
  * Links open in a new tab; we never fetch the image ourselves. The file is
  * whatever the teacher shared from their own Drive — the ID check was built
@@ -74,17 +79,27 @@ export default function SuperAdminVerificationsPage() {
           trial_ends_at: Timestamp.fromDate(trialEndsAt),
         }),
       })
-      return { trialEndsAt }
+      // The Firestore write above is what actually opens the account; this
+      // is best-effort on top of it. The server holds the mail credentials
+      // the browser never can, so it is the one part of the job that has to
+      // happen there — but a mail outage must not read as the approval
+      // having failed, so a rejected notify call is swallowed here.
+      const notice = status === 'approved' ? await notifyTeacherApproval(uid).catch(() => null) : null
+      return { trialEndsAt, notice }
     },
-    onSuccess: ({ trialEndsAt }, { status, name, teacher }) => {
-      toast.success(status === 'approved' ? `${name} approved — their account is open and the free month has started.` : `${name} sent back with your note.`)
-      /* Approving opens the account silently: nothing reaches the teacher,
-         who is still watching /pending-verification. No mail provider exists
-         (no Cloud Functions), so the notice is written here and sent
-         by hand, exactly as the school requests queue does it. */
+    onSuccess: ({ trialEndsAt, notice }, { status, name, teacher }) => {
+      const emailed = notice?.sent
+      toast.success(
+        status === 'approved'
+          ? `${name} approved — their account is open and the free month has started.` +
+              (emailed ? ` The welcome email went out to ${notice.to}.` : ' The welcome email did not go out automatically — send it by hand below.')
+          : `${name} sent back with your note.`,
+      )
       if (status === 'approved') {
         setMessage({
           name,
+          sent: emailed,
+          sentTo: notice?.to,
           ...teacherApprovalMessage({
             firstName: teacher?.first_name,
             email: teacher?.email,
@@ -215,7 +230,11 @@ export default function SuperAdminVerificationsPage() {
       {message && (
         <MessageDialog
           title={`Welcome notice — ${message.name}`}
-          subtitle="Sent by hand: copy this into an email to the teacher. Nothing goes out automatically."
+          subtitle={
+            message.sent
+              ? `Emailed to ${message.sentTo} automatically. Copy it below only if you need to send it again.`
+              : 'The automatic email did not go out — copy this into an email to the teacher yourself.'
+          }
           message={message}
           copiedHint="Copied. Paste it into an email to the teacher."
           onClose={() => setMessage(null)}
@@ -226,7 +245,7 @@ export default function SuperAdminVerificationsPage() {
         <div className="mt-10">
           <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
-            The notice is sent by hand. Open it again here if it did not go out.
+            The welcome email goes out on approval. Open it again here to resend it by hand.
           </p>
           <ul className="mt-3 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/40">
             {approved.map((t) => {
@@ -236,12 +255,19 @@ export default function SuperAdminVerificationsPage() {
                   <div className="min-w-0 text-sm">
                     <span className="font-semibold text-zinc-200">{name}</span>
                     <span className="text-zinc-500"> · {t.email} · {when(t.verification_reviewed_at)}</span>
+                    {t.verification_notice_sent_at ? (
+                      <span className="ml-2 text-xs text-emerald-400">emailed</span>
+                    ) : (
+                      <span className="ml-2 text-xs text-amber-400">not sent — copy it</span>
+                    )}
                   </div>
                   <button
                     type="button"
                     onClick={() =>
                       setMessage({
                         name,
+                        sent: Boolean(t.verification_notice_sent_at),
+                        sentTo: t.verification_notice_to,
                         ...teacherApprovalMessage({
                           firstName: t.first_name,
                           email: t.email,

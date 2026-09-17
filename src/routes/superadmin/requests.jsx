@@ -81,7 +81,7 @@ export default function SuperAdminRequestsPage() {
         signInUrl: signInUrl(),
       })
     },
-    onSuccess: (m, r) => setMessage({ school: r.school_name, ...m }),
+    onSuccess: (m, r) => setMessage({ school: r.school_name, sent: Boolean(r.notice_sent_at), sentTo: r.notice_to, ...m }),
     onError: () => toast.error('Could not rebuild the message. Try again.'),
   })
 
@@ -228,11 +228,15 @@ export default function SuperAdminRequestsPage() {
           onClose={() => setApproving(null)}
           onDone={(res) => {
             setApproving(null)
+            const emailed = res.notice?.sent
             toast.success(
-              `${res.school.name} is set up. ${res.admin.first_name ?? 'The requester'} is now its admin and signs in with the password they already have.`,
+              `${res.school.name} is set up. ${res.admin.first_name ?? 'The requester'} is now its admin and signs in with the password they already have.` +
+                (emailed ? ` The welcome email went out to ${res.notice.to}.` : ' The welcome email did not go out automatically — send it by hand below.'),
             )
             setMessage({
               school: res.school.name,
+              sent: emailed,
+              sentTo: res.notice?.to,
               ...approvalMessage({
                 schoolName: res.school.name,
                 campus: res.school.campus,
@@ -254,7 +258,11 @@ export default function SuperAdminRequestsPage() {
       {message && (
         <MessageDialog
           title={`Approval notice — ${message.school}`}
-          subtitle="Sent by hand: copy this into an email to the school. Nothing goes out automatically."
+          subtitle={
+            message.sent
+              ? `Emailed to ${message.sentTo} automatically. Copy it below only if you need to send it again.`
+              : 'The automatic email did not go out — copy this into an email to the school yourself.'
+          }
           message={message}
           copiedHint="Copied. Paste it into an email to the school."
           onClose={() => setMessage(null)}
@@ -267,7 +275,7 @@ export default function SuperAdminRequestsPage() {
             <div>
               <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
               <p className="mt-0.5 text-xs text-zinc-500">
-                The notice is sent by hand. Open it again here if it did not go out.
+                The welcome email goes out on approval. Open it again here to resend it by hand.
               </p>
             </div>
           </div>
@@ -277,6 +285,11 @@ export default function SuperAdminRequestsPage() {
                 <div className="min-w-0 text-sm">
                   <span className="font-semibold text-zinc-200">{r.school_name}</span>
                   <span className="text-zinc-500"> · {r.email} · {when(r.decided_at)}</span>
+                  {r.notice_sent_at ? (
+                    <span className="ml-2 text-xs text-emerald-400">emailed</span>
+                  ) : (
+                    <span className="ml-2 text-xs text-amber-400">not sent — copy it</span>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -345,7 +358,7 @@ function ApproveDialog({ request, onClose, onDone }) {
   return (
     <Dialog
       title={`Approve ${request.school_name || 'this school'}`}
-      subtitle="Creates the school and its subscription on a 30-day trial, and makes the requester its admin. Check the details; what you confirm is what gets written."
+      subtitle="Creates the school and its subscription on a 30-day trial, makes the requester its admin, and emails them the welcome notice. Check the details; what you confirm is what gets written."
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-4">

@@ -72,6 +72,20 @@ export function approveRequest(requestId, overrides = {}) {
 }
 
 /**
+ * Email a self-registered teacher once their ID check is approved.
+ *
+ * verifications.jsx flips verification_status itself, straight to Firestore
+ * -- the rules let the super admin claim do that with no plan or seat
+ * decision for Flask to own. This is the one part of the job that has to
+ * happen here anyway: the mail credentials only the server holds. Call it
+ * right after that write lands; a failure here means the letter did not go
+ * out, not that the approval failed.
+ */
+export function notifyTeacherApproval(uid) {
+  return api(`/api/superadmin/teachers/${uid}/notify-approval`, { method: 'POST' })
+}
+
+/**
  * Change plan, status, or negotiated seat limits.
  *
  * Send only what changes. `limits` is merged onto the current values, so a

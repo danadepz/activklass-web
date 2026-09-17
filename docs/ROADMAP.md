@@ -99,7 +99,8 @@ Still open at this altitude:
   **School requests** queue over `subscription_requests`; **Approve** creates the school
   and its trial subscription on the seats the school chose and promotes the requester to
   its admin in one Flask batch (`POST /api/superadmin/requests/{id}/approve`,
-  **cross-repo**); the approval notice is a copy-ready message, sent by hand; a
+  **cross-repo**); the approval notice was a copy-ready message, sent by hand until
+  2026-09-18 (below) — the queue's copy dialog is now the fallback, not the only path; a
   **suspended or cancelled school is suspended for everyone in it** (status mirrored onto
   `schools/{id}`, gated in `ProtectedRoute`, `/suspended` screen); the welcome page links a
   school to `/register?type=institution`. *Verified:* `npm run test` 523/523,
@@ -382,8 +383,27 @@ Still open at this altitude:
   (backend `6364679`; the first `firebase deploy --only storage` did not take the IAM grant
   the lookup needs and refused the owner too — the second did, 7/7 live: student and
   foreign teacher refused, owner writes and deletes, the submissions path unchanged).
-- `[ ]` **A second full browser walkthrough** after the above, which is what actually
-  closes this phase.
+- `[~]` **The two approval notices go out on their own, not just as a copy-ready dialog**
+  (2026-09-18). Both the school-request approval and the teacher ID-check approval used to
+  end at a "copy this into an email" dialog — the queue's own docs called that the whole
+  notification path, since no mail provider was wired in. T-69 wired one in for payment
+  receipts (Gmail SMTP with an app password, `app/services/mail.py`, no new dependency), so
+  both approvals now reuse it: `POST /api/superadmin/requests/{id}/approve` emails the
+  school's welcome notice itself, in the same batch response, and stamps `notice_sent_at` /
+  `notice_to` or `notice_error` on the request; `verifications.jsx` still approves
+  Firestore-direct (unchanged — no plan or seat decision belongs in Flask for that path) and
+  now calls the new `POST /api/superadmin/teachers/{uid}/notify-approval` right after,
+  stamping the same three fields onto `verification_notice_*` on the teacher's profile. Both
+  are best-effort: a mail outage never undoes an approval that already landed, it just means
+  the copy dialog — still there, wording changed to say whether the email went out — is the
+  way to send it by hand instead. *Verified:* `tests/smoke_superadmin.py` (+21: the
+  requester's own inbox gets the letter with the right seat figures, the teacher's welcome
+  email carries the trial end read off their own profile, and a forced mail failure on each
+  path still returns 200/201 with the school or account already written and the failure
+  recorded server-side, never in the client response); `npm run test` 1182/1182,
+  `npm run build` clean. **Owed:** the browser click-through — approving a live school
+  request and a live teacher verification with a real inbox on the other end, since nothing
+  here has been driven past the two Flask endpoints and the pure test suite.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:

@@ -186,7 +186,7 @@ For work inside one screen. Each page belongs to one pane at a time.
 | **Class setup** | `teacher/classes/index.jsx`, `features/classes/**`, `teacher/grading.jsx`, `teacher/record.jsx`, `teacher/reports.jsx`, `teacher/attendance.jsx`, `teacher/students.jsx`, `teacher/StudentAccounts.jsx` |
 | **Syllabus** | `teacher/syllabus.jsx`, `teacher/announcements.jsx`, `teacher/index.jsx`, `teacher/GenerateModuleModal.jsx` |
 | **Student** | `student/index.jsx`, `student/classes/**`, `student/profile.jsx`, `student/remediation.jsx`, `student/deliverables/**` (the "Up next" panel, its month calendar and the window chip — added 2026-09-13; if the teacher side wants the same calendar it lifts to `components/`, UI/UX lane) |
-| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx`, `src/lib/csv.js`, `src/lib/xlsx.js`, `src/lib/approvalMessage.js` (+ test) |
+| **Admin** | `routes/admin/**` (except `SubscriptionTab.jsx` — Subscription / pricing lane), `routes/superadmin/**`, `teacher/account.jsx`, `src/lib/csv.js`, `src/lib/xlsx.js`, `src/lib/approvalMessage.js` (+ test), `src/lib/superadmin.js` |
 
 **Why Classes is now two lanes.** It was one — `teacher/classes/**` plus the
 four teacher-level pages plus `features/classes/**` — and in practice two panes
@@ -241,6 +241,12 @@ edits three other panes' screens, so announce that the way Shared is
 announced; a fix inside `saveBlob`, `csvCell` or `readXlsxRows` is lane-local.
 If a fourth caller appears, that is the argument for moving them to the
 Data/logic lane, which is where a concern this cross-cutting really belongs.
+
+**`src/lib/superadmin.js`, added 2026-09-18.** It was in no lane — the Flask wrappers for
+the developer-tier console (`requests.jsx`, and now `verifications.jsx` for the new
+`notifyTeacherApproval`). Every caller is `routes/superadmin/**`, so it lands here beside
+`approvalMessage.js` rather than the Data/logic lane, which owns Firestore-direct reads,
+not this collection's Flask surface.
 
 ## Shared
 

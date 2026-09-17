@@ -1,11 +1,13 @@
 /**
  * The message a school receives when its access request is approved.
  *
- * Sent BY HAND (owner's decision, 2026-08-30): the superadmin copies this
- * from the console into whatever mail client they use. No mail provider is
- * wired in and none is planned for the demo, so this text is the whole
- * notification path -- it has to carry everything the school needs to get in
- * and get started, and nothing that is not true yet.
+ * Sent automatically now (T-69's Gmail sender, reused server-side in
+ * app/api/superadmin.py -- cross-repo): approving a request emails this
+ * same letter without a click. This copy is what the console still renders
+ * for a superadmin to read, copy, or resend by hand when the automatic send
+ * fails or an older approval needs a second copy -- so it has to carry
+ * everything the school needs to get in and get started on its own, same as
+ * when it was the only path (owner's decision, 2026-08-30, superseded).
  *
  * Pure: no Firestore, no window. Callers pass the sign-in URL so the same
  * text is right on a forwarded port and on a real host.
@@ -82,14 +84,15 @@ export function approvalMessage({
 /**
  * The message a self-registered teacher receives when their ID check passes.
  *
- * Hand-sent for the same reason as the school notice above, but a different
- * letter, because a solo teacher arrives differently: nobody issued them
- * anything. They made the account and chose the password themselves and have
- * been sitting on /pending-verification since, so the two questions this has
- * to answer are "am I in?" and "what do I sign in with?" -- and the answer to
- * the second is nothing new. Saying so explicitly is the point: the schools
- * letter can talk about credentials we created, and this one must not, or a
- * teacher goes looking for a password that was never sent.
+ * Sent automatically now, the same way as the school notice above, but a
+ * different letter, because a solo teacher arrives differently: nobody
+ * issued them anything. They made the account and chose the password
+ * themselves and have been sitting on /pending-verification since, so the
+ * two questions this has to answer are "am I in?" and "what do I sign in
+ * with?" -- and the answer to the second is nothing new. Saying so
+ * explicitly is the point: the schools letter can talk about credentials we
+ * created, and this one must not, or a teacher goes looking for a password
+ * that was never sent.
  *
  * @param {object} p
  * @param {string} [p.firstName]  for the greeting
