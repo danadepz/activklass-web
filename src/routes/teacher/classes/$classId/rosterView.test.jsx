@@ -118,3 +118,34 @@ describe('T-62 — View opens the student read-only', () => {
     expect(buttons).toEqual(['Disable sign-in', 'Cancel', 'Save'])
   })
 })
+
+/* T-70 (dawny808-89): Disable on the row is a CLASS state now -- the student
+   stays on the roster, greyed, reading Disabled with Enable beside it. The
+   student side of the same state is droppedClass.test.jsx. */
+describe('T-70 — a student disabled on this class stays on the roster, greyed', () => {
+  function rowOf(html) {
+    return html.match(/<tr[^>]*>(?:(?!<\/tr>).)*S2026-1001(?:(?!<\/tr>).)*<\/tr>/s)?.[0] ?? ''
+  }
+
+  it("an active student's row is not greyed and offers Disable", () => {
+    clazz.dropped_student_ids = []
+    const row = rowOf(render())
+    expect(row).not.toMatch(/opacity:\s*0\.55/)
+    expect(rowActions(render())).toEqual(['View', 'Edit', 'Disable'])
+  })
+
+  it('a dropped student keeps their row, greyed, reading Disabled, with Enable in place of Disable', () => {
+    clazz.dropped_student_ids = ['S1']
+    try {
+      const html = render()
+      const row = rowOf(html)
+      expect(row).toContain('Aquino')
+      expect(row).toMatch(/<tr[^>]*style="opacity:\s*0\.55"/)
+      expect(row).toMatch(/>\s*Disabled\s*</)
+      expect(rowActions(html)).toEqual(['View', 'Edit', 'Enable'])
+      expect(html).not.toMatch(/>\s*Remove(?: from class)?\s*</)
+    } finally {
+      delete clazz.dropped_student_ids
+    }
+  })
+})
