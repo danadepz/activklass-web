@@ -401,12 +401,16 @@ export default function Register() {
       email: auth.currentUser.email,
       role: 'teacher',
       ...(school && { teaching_school_id: school.id, teaching_school_name: school.name }),
+      // Both paths are on a 30-day trial from the moment the account exists
+      // (the estimate step promises this on either card) -- only the
+      // institution branch used to stamp it, so a self-registered solo
+      // teacher's account never carried a trial at all: accountKind() read
+      // them as 'none', describeSubscription() had nothing to show a day
+      // count from, and there was no trial for T-68's Pay button to ever end.
+      subscription_status: 'trial',
+      trial_ends_at: Timestamp.fromDate(trialEndsFrom()),
       ...(kind === 'institution'
-        ? {
-            school_request_pending: true,
-            subscription_status: 'trial',
-            trial_ends_at: Timestamp.fromDate(trialEndsFrom()),
-          }
+        ? { school_request_pending: true }
         : {
             student_seats: Number(form.soloStudents),
             // Nobody vouched for a self-registered teacher, so the account
