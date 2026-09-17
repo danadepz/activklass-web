@@ -99,11 +99,11 @@ export function SubscriptionBox() {
         <span style={{ fontSize: 12.5, fontWeight: 800, color: tone.fg, letterSpacing: '0.01em' }}>{view.label}</span>
         <span style={{ ...mono, fontSize: 11, color: tone.fg, opacity: 0.85 }}>{view.detail}</span>
         {/* A running trial took no card at registration and a tester asked why
-            (T-54). Say so here too, and when one will be asked -- before it ends,
-            no date, because the payment provider is still the owner's decision. */}
+            (T-54). Say so here too, and how to pay when ready -- Pay for this
+            school year now lives on the Account page this box links to (T-68). */}
         {view.kind === 'trial' && (
           <span style={{ fontSize: 10.5, color: tone.fg, opacity: 0.85, marginTop: 2 }}>
-            No card needed for the trial. We'll ask for payment details before it ends.
+            No card needed for the trial. Pay for the school year any time from your Account page.
           </span>
         )}
       </span>

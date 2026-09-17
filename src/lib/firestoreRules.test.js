@@ -608,6 +608,37 @@ describe('subscription_requests · the Institution path on /register', () => {
   })
 })
 
+describe('payments · the PayMongo checkout flip (T-68)', () => {
+  // Written only by the Flask subscription endpoints through the Admin SDK,
+  // which these rules do not govern -- a client never gets to write one.
+  async function seedPayment(ownerId) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'payments', `pay-${ownerId}`), {
+        owner_id: ownerId,
+        amount: 3600,
+        provider: 'paymongo',
+        status: 'paid',
+      })
+    })
+  }
+
+  it('lets the paying teacher read their own payment', async () => {
+    await seedPayment(TEACHER)
+    await assertSucceeds(getDoc(doc(ctx(TEACHER), 'payments', `pay-${TEACHER}`)))
+  })
+
+  it('refuses a client write, even from the owner', async () => {
+    await assertFails(
+      setDoc(doc(ctx(TEACHER), 'payments', 'pay-new'), { owner_id: TEACHER, amount: 1, status: 'paid' }),
+    )
+  })
+
+  it('refuses another teacher reading it', async () => {
+    await seedPayment(TEACHER)
+    await assertFails(getDoc(doc(ctx(STUDENT), 'payments', `pay-${TEACHER}`)))
+  })
+})
+
 /* ────────────────────────────────────────────────────────────────────────
  * A teacher handles the students in their own classes (2026-08-31).
  *

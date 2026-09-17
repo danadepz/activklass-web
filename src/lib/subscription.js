@@ -65,6 +65,26 @@ export function changePlan(ownerId, plan) {
 }
 
 /**
+ * Start a PayMongo test-mode checkout for one school year (T-68). The amount
+ * is recomputed server-side from the stored seats; nothing is sent from
+ * here. Returns `{ checkout_url, reference }` -- the caller sends the
+ * browser to `checkout_url` and keeps `reference` to poll with below.
+ */
+export function startCheckout(ownerId) {
+  return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST' })
+}
+
+/**
+ * The return-page poll: ask whether PayMongo has actually confirmed the
+ * payment yet. `{ status: 'paid' | 'pending' }` -- a fresh return from the
+ * hosted page may still read 'pending' for a moment, so callers should try
+ * again rather than treat one 'pending' as final.
+ */
+export function confirmCheckout(ownerId, reference) {
+  return api(`/api/subscription/${ownerId}/checkout/${reference}/confirm`, { method: 'POST' })
+}
+
+/**
  * Bytes actually stored, grouped by folder.
  *
  * Returns `{ available: false, reason }` when Firebase Storage was never

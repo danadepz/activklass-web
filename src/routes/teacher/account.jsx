@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
-import { changePlan, describeSubscription, fetchPlans, fetchSubscription, formatBytes } from '@/lib/subscription'
+import { changePlan, confirmCheckout, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout } from '@/lib/subscription'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -170,10 +171,118 @@ function PlanType({ label, detail }) {
   )
 }
 
+/**
+ * "Pay for this school year" -- sends the browser to PayMongo's own hosted
+ * Checkout page (T-68, test mode: test card numbers, nothing real is ever
+ * charged) and back. Only rendered for a subscription this teacher owns and
+ * pays for themselves, on a trial or expired -- never a school's plan, which
+ * their admin pays for, and never one already active.
+ */
+function PayButton({ ownerId }) {
+  const [err, setErr] = useState('')
+  const mut = useMutation({
+    mutationFn: () => startCheckout(ownerId),
+    onSuccess: (res) => { window.location.href = res.checkout_url },
+    onError: (e) => setErr(e.message),
+  })
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Button disabled={mut.isPending} onClick={() => { setErr(''); mut.mutate() }}>
+        {mut.isPending ? 'Starting payment…' : 'Pay for this school year'}
+      </Button>
+      <Notice>{err}</Notice>
+    </div>
+  )
+}
+
+const CHECKOUT_BANNER = {
+  checking: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Checking your payment…' },
+  paid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — you are subscribed for the school year.' },
+  unconfirmed: {
+    bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
+    text: 'We could not confirm the payment yet. If you completed it on PayMongo, refresh in a moment — otherwise nothing was charged.',
+  },
+  cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
+}
+
+function CheckoutBanner({ state, dismiss }) {
+  if (!state) return null
+  const s = CHECKOUT_BANNER[state]
+  return (
+    <div style={{
+      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: '12px 16px',
+      marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+    }}>
+      <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>{s.text}</span>
+      {state !== 'checking' && (
+        <button
+          type="button"
+          onClick={dismiss}
+          style={{ background: 'none', border: 'none', color: s.color, fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0 }}
+        >
+          Dismiss
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The trip back from PayMongo's hosted page. `checkout_ref` in the URL is
+ * this account's OWN reference (T-68), minted before the gateway is called
+ * -- not PayMongo's session id, which does not exist yet at that point.
+ * Polls a few times because a test payment can take a moment to settle,
+ * then stops rather than polling forever.
+ */
+function useCheckoutReturn(ownerId) {
+  const [params, setParams] = useSearchParams()
+  const qc = useQueryClient()
+  const reference = params.get('checkout_ref')
+  const cancelled = params.get('checkout_cancelled')
+  const [state, setState] = useState(reference ? 'checking' : cancelled ? 'cancelled' : null)
+
+  useEffect(() => {
+    if (!reference || !ownerId) return undefined
+    let stopped = false
+    let attempt = 0
+    async function poll() {
+      attempt += 1
+      try {
+        const res = await confirmCheckout(ownerId, reference)
+        if (stopped) return
+        if (res.status === 'paid') {
+          setState('paid')
+          qc.invalidateQueries({ queryKey: ['subscription'] })
+          return
+        }
+      } catch {
+        if (stopped) return
+      }
+      if (attempt < 5) setTimeout(poll, 2000)
+      else if (!stopped) setState('unconfirmed')
+    }
+    poll()
+    return () => { stopped = true }
+    // reference/ownerId only -- qc is stable, and re-running on every
+    // render would restart the poll from attempt 1 forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference, ownerId])
+
+  function dismiss() {
+    setState(null)
+    params.delete('checkout_ref')
+    params.delete('checkout_cancelled')
+    setParams(params, { replace: true })
+  }
+
+  return { state, dismiss }
+}
+
 function SubscriptionCard() {
   const { profile, school } = useAuth()
   const qc = useQueryClient()
   const [err, setErr] = useState('')
+  const checkout = useCheckoutReturn(profile.id)
 
   const { data: plansRes } = useQuery({ queryKey: ['subscription-plans'], queryFn: fetchPlans })
   const { data, isLoading, isError, error } = useQuery({
@@ -198,7 +307,7 @@ function SubscriptionCard() {
   // name carried on the profile, which is all a teacher without one has.
   const schoolName = school?.name || view.detail
 
-  if (isLoading) return <div style={card}><p style={{ color: faint, margin: 0 }}>Loading subscription…</p></div>
+  if (isLoading) return <div style={card}><CheckoutBanner {...checkout} /><p style={{ color: faint, margin: 0 }}>Loading subscription…</p></div>
 
   // A teacher on an institution plan has no subscription of their own -- their
   // school holds it. Which of the two this is comes from the profile, not from
@@ -206,6 +315,7 @@ function SubscriptionCard() {
   if (isError) {
     return (
       <div style={card}>
+        <CheckoutBanner {...checkout} />
         <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Subscription</h2>
         {error?.status !== 404 ? (
           <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
@@ -227,6 +337,9 @@ function SubscriptionCard() {
                 ? 'There is no subscription on this account, and no school plan covering it.'
                 : `${view.label} — ${view.detail}. This plan is on your own account, not a school's.`}
             </p>
+            {/* No subscriptions doc exists yet -- the self-registered solo
+                path, until the first payment creates one (T-68). */}
+            {(view.kind === 'trial' || view.kind === 'expired') && <PayButton ownerId={profile.id} />}
           </>
         )}
       </div>
@@ -243,6 +356,7 @@ function SubscriptionCard() {
   if (isAbsorbed(sub)) {
     return (
       <div style={card}>
+        <CheckoutBanner {...checkout} />
         <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Subscription</h2>
         <PlanType label="Institution subscription" detail={schoolName} />
         <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
@@ -259,6 +373,7 @@ function SubscriptionCard() {
 
   return (
     <div style={card}>
+      <CheckoutBanner {...checkout} />
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your subscription</h2>
@@ -271,6 +386,13 @@ function SubscriptionCard() {
           <p style={{ fontSize: 13, color: muted, margin: 0 }}>
             {sub.period_label} · {sub.period_start} → {sub.period_end}
           </p>
+          {/* A subscriptions doc exists but is still trial/expired -- an
+              admin-provisioned trial, or a first Pay attempt that was never
+              completed (T-68). Never for an institution: the school's admin
+              pays for it, not this teacher's own screen. */}
+          {sub.type !== 'institution' && (sub.status === 'trial' || sub.status === 'expired') && (
+            <PayButton ownerId={profile.id} />
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{

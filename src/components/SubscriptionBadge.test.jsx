@@ -18,7 +18,7 @@ vi.mock('@/hooks/useMySubscription', () => ({ useMySubscription: () => state.sub
 
 import { SubscriptionBox } from './SubscriptionBadge.jsx'
 
-const NO_CARD = 'No card needed for the trial. We&#x27;ll ask for payment details before it ends.'
+const NO_CARD = 'No card needed for the trial. Pay for the school year any time from your Account page.'
 
 const show = (sub, school = null) => {
   state.sub = { isLoading: false, ...sub }

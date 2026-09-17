@@ -704,11 +704,12 @@ export default function Register() {
                   </div>
                 </div>
                 <TrialLine />
-                {/* Nothing here takes a card, and a tester asked why (T-54): say so,
-                    and say when one will be asked -- before the trial ends, no date,
-                    since the payment provider is still the owner's decision. */}
+                {/* Nothing here takes a card, and a tester asked why (T-54). Since
+                    T-68, paying is self-serve -- a "Pay for this school year" button
+                    on the Account page, whenever the teacher is ready -- so this says
+                    that instead of promising an ask that never came. */}
                 <div style={{ fontSize: 12.5, color: muted, marginTop: 6, lineHeight: 1.45 }}>
-                  No card needed for the trial. We'll ask for payment details before it ends.
+                  No card needed for the trial. Pay for the school year any time from your Account page.
                 </div>
                 <div style={{ fontSize: 12, color: '#9AA6BD', marginTop: 10, lineHeight: 1.45 }}>
                   Your seat carries the AI generation and your records; each student seat is
