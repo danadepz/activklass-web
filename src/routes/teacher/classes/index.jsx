@@ -329,6 +329,32 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
   )
 }
 
+// T-71: what an archived card shows instead of ClassMenu -- read-only past
+// the Archive/Delete/badge-colour actions, so Unarchive is the one thing
+// offered here.
+function UnarchiveButton({ onUnarchive }) {
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onUnarchive() }}
+      title="Move this class back to Active"
+      style={{
+        padding: '6px 12px',
+        fontSize: 12.5,
+        fontWeight: 700,
+        fontFamily: sans,
+        color: navy,
+        background: '#FFFFFF',
+        border: '1px solid rgba(14,42,92,0.22)',
+        borderRadius: 8,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      Unarchive
+    </button>
+  )
+}
+
 // ─── Delete confirmation modal ────────────────────────────────────────────────
 // 2026-06-20: Teacher must type the subject code exactly before deletion proceeds
 function DeleteConfirmModal({ cls, onClose, onDeleted }) {
@@ -419,10 +445,17 @@ export default function ClassesPage() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('default')
   const [view, setView] = useState('list')
+  // T-71 (2026-09-17): which classes this page shows -- 'active' (the
+  // longstanding default) or 'archived'. useTeacherClasses already fetches
+  // every class unfiltered; archiving hid the rest by filtering the same
+  // array, so the tab is another filter on it, not a second query.
+  const [tab, setTab] = useState('active')
   // 2026-06-20: Tracks which class the delete confirmation modal targets
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   const { data: classes, isLoading } = useTeacherClasses()
+  const archivedCount = (classes ?? []).filter((c) => c.archived_at).length
+  const activeCount = (classes ?? []).length - archivedCount
 
   // 2026-06-20: Persist chosen badge colour to Firestore
   async function handleColorChange(cls, color) {
@@ -468,9 +501,22 @@ export default function ClassesPage() {
     }
   }
 
-  // 2026-06-20: Filter out archived classes from the displayed list
+  // T-71: the same clear the Archive toast's own Undo already uses -- a
+  // single nullable field, so this puts the class back exactly as it was.
+  async function handleUnarchive(cls) {
+    try {
+      await updateDoc(doc(db, 'classes', cls.id), { archived_at: null })
+      queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+      toast.success(`"${cls.section}" is back in your class list.`)
+    } catch (err) {
+      setWarning(`Could not restore the class: ${err.message}`)
+    }
+  }
+
+  // 2026-06-20: Active/Archived is a tab, not a permanent filter -- T-71
+  // added the Archived side so last year's classes are still reachable.
   const filtered = (classes ?? [])
-    .filter((c) => !c.archived_at)
+    .filter((c) => (tab === 'archived' ? !!c.archived_at : !c.archived_at))
     .filter((c) => {
       const q = search.trim().toLowerCase()
       if (!q) return true
@@ -534,6 +580,36 @@ export default function ClassesPage() {
         </div>
       )}
 
+      {/* T-71: Active / Archived -- an archived class is otherwise reachable
+          only through the Archive toast's own Undo, which is gone the moment
+          the page reloads. */}
+      <div className="flex items-center gap-1" style={{ marginTop: 20, borderBottom: `1px solid ${line}` }}>
+        {[
+          { key: 'active', label: `Active${activeCount ? ` (${activeCount})` : ''}` },
+          { key: 'archived', label: `Archived${archivedCount ? ` (${archivedCount})` : ''}` },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            style={{
+              padding: '9px 4px',
+              marginRight: 22,
+              marginBottom: -1,
+              fontSize: 14,
+              fontWeight: 700,
+              fontFamily: sans,
+              color: tab === t.key ? navy : muted,
+              background: 'none',
+              border: 'none',
+              borderBottom: tab === t.key ? `2px solid ${navy}` : '2px solid transparent',
+              cursor: 'pointer',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 mt-5">
         <input
@@ -569,6 +645,10 @@ export default function ClassesPage() {
       {/* Classes */}
       {isLoading ? (
         <div style={{ marginTop: 20 }}><SkeletonCards count={6} label="Loading classes" /></div>
+      ) : isEmpty && !search && tab === 'archived' ? (
+        <div style={{ background: '#FFFFFF', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
+          Nothing archived. Archiving a class from the ⋮ menu moves it here.
+        </div>
       ) : isEmpty && !search ? (
         <div style={{ background: '#FFFFFF', borderRadius: 14, border: `1px solid ${line}`, padding: '48px 24px', marginTop: 20, textAlign: 'center', color: muted, fontSize: 14 }}>
           No classes yet. Create your first class section to start building its roster.
@@ -636,14 +716,18 @@ export default function ClassesPage() {
                   </div>
                 </Link>
 
-                {/* ⋮ menu — outside the Link */}
+                {/* ⋮ menu — outside the Link -- an archived row gets Unarchive instead */}
                 <div style={{ padding: '0 14px 0 8px', flexShrink: 0 }}>
-                  <ClassMenu
-                    cls={c}
-                    onColorChange={(color) => handleColorChange(c, color)}
-                    onArchive={() => handleArchive(c)}
-                    onDelete={() => setDeleteTarget(c)}
-                  />
+                  {tab === 'archived' ? (
+                    <UnarchiveButton onUnarchive={() => handleUnarchive(c)} />
+                  ) : (
+                    <ClassMenu
+                      cls={c}
+                      onColorChange={(color) => handleColorChange(c, color)}
+                      onArchive={() => handleArchive(c)}
+                      onDelete={() => setDeleteTarget(c)}
+                    />
+                  )}
                 </div>
               </div>
             )
@@ -663,14 +747,19 @@ export default function ClassesPage() {
                 className="transition hover:-translate-y-0.5 hover:shadow-md"
                 style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, position: 'relative' }}
               >
-                {/* ⋮ menu — absolute top-right, outside the card Link */}
+                {/* ⋮ menu — absolute top-right, outside the card Link -- an
+                    archived card gets Unarchive instead */}
                 <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
-                  <ClassMenu
-                    cls={c}
-                    onColorChange={(color) => handleColorChange(c, color)}
-                    onArchive={() => handleArchive(c)}
-                    onDelete={() => setDeleteTarget(c)}
-                  />
+                  {tab === 'archived' ? (
+                    <UnarchiveButton onUnarchive={() => handleUnarchive(c)} />
+                  ) : (
+                    <ClassMenu
+                      cls={c}
+                      onColorChange={(color) => handleColorChange(c, color)}
+                      onArchive={() => handleArchive(c)}
+                      onDelete={() => setDeleteTarget(c)}
+                    />
+                  )}
                 </div>
 
                 <Link
