@@ -205,15 +205,25 @@ const CHECKOUT_BANNER = {
   cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
 }
 
-function CheckoutBanner({ state, dismiss }) {
+function CheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
   const s = CHECKOUT_BANNER[state]
+  // T-69: once paid, say what happened to the receipt too -- never left as
+  // a silent "did that actually send" guess.
+  const receiptLine = state === 'paid' && receipt
+    ? (receipt.receiptSentTo
+        ? `A receipt was sent to ${receipt.receiptSentTo}.`
+        : 'We could not send the receipt — it is on your Account page.')
+    : null
   return (
     <div style={{
       background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: '12px 16px',
       marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
     }}>
-      <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>{s.text}</span>
+      <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>
+        {s.text}
+        {receiptLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{receiptLine}</span>}
+      </span>
       {state !== 'checking' && (
         <button
           type="button"
@@ -240,6 +250,7 @@ function useCheckoutReturn(ownerId) {
   const reference = params.get('checkout_ref')
   const cancelled = params.get('checkout_cancelled')
   const [state, setState] = useState(reference ? 'checking' : cancelled ? 'cancelled' : null)
+  const [receipt, setReceipt] = useState(null)
 
   useEffect(() => {
     if (!reference || !ownerId) return undefined
@@ -252,6 +263,9 @@ function useCheckoutReturn(ownerId) {
         if (stopped) return
         if (res.status === 'paid') {
           setState('paid')
+          // T-69: sent to <email>, or explicitly not sent -- never guessed
+          // from silence.
+          setReceipt({ receiptSentTo: res.receipt_sent_to ?? null, receiptFailed: !!res.receipt_failed })
           qc.invalidateQueries({ queryKey: ['subscription'] })
           return
         }
@@ -275,7 +289,7 @@ function useCheckoutReturn(ownerId) {
     setParams(params, { replace: true })
   }
 
-  return { state, dismiss }
+  return { state, receipt, dismiss }
 }
 
 function SubscriptionCard() {

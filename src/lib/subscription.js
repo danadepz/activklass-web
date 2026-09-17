@@ -78,7 +78,10 @@ export function startCheckout(ownerId) {
  * The return-page poll: ask whether PayMongo has actually confirmed the
  * payment yet. `{ status: 'paid' | 'pending' }` -- a fresh return from the
  * hosted page may still read 'pending' for a moment, so callers should try
- * again rather than treat one 'pending' as final.
+ * again rather than treat one 'pending' as final. Once paid, also carries
+ * `receipt_sent_to` (the address, T-69) or `receipt_failed: true` -- the
+ * mail outage that caused a failure never blocks the payment itself, so
+ * this is reported, not retried here.
  */
 export function confirmCheckout(ownerId, reference) {
   return api(`/api/subscription/${ownerId}/checkout/${reference}/confirm`, { method: 'POST' })
