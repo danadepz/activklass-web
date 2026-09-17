@@ -116,6 +116,23 @@ export default function SuperAdminVerificationsPage() {
     onError: () => toast.error('That did not save. Check the rules deploy and try again.'),
   })
 
+  /* Sends the same email again, without re-reviewing the teacher -- how to
+     confirm a delivery actually landed, or retry one that didn't. Nothing
+     here guards against calling it on an already-approved teacher, since
+     that is exactly what a resend is. */
+  const resend = useMutation({
+    mutationFn: (uid) => notifyTeacherApproval(uid),
+    onSuccess: (res) => {
+      toast[res.sent ? 'success' : 'error'](
+        res.sent
+          ? `Sent to ${res.to}.`
+          : 'Did not send -- check the backend has MAIL_USER / MAIL_APP_PASSWORD configured.',
+      )
+      queryClient.invalidateQueries({ queryKey: APPROVED_TEACHERS_KEY })
+    },
+    onError: () => toast.error('That did not go through. Try again.'),
+  })
+
   if (isLoading) return <SkeletonTable rows={4} cols={4} tone="dark" label="Loading verifications" />
   if (error) {
     return (
@@ -245,7 +262,8 @@ export default function SuperAdminVerificationsPage() {
         <div className="mt-10">
           <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
-            The welcome email goes out on approval. Open it again here to resend it by hand.
+            The welcome email goes out on approval. Resend it to confirm it landed, or open it
+            to copy by hand.
           </p>
           <ul className="mt-3 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/40">
             {approved.map((t) => {
@@ -261,25 +279,35 @@ export default function SuperAdminVerificationsPage() {
                       <span className="ml-2 text-xs text-amber-400">not sent — copy it</span>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMessage({
-                        name,
-                        sent: Boolean(t.verification_notice_sent_at),
-                        sentTo: t.verification_notice_to,
-                        ...teacherApprovalMessage({
-                          firstName: t.first_name,
-                          email: t.email,
-                          trialEndsAt: t.trial_ends_at,
-                          signInUrl: signInUrl(),
-                        }),
-                      })
-                    }
-                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500"
-                  >
-                    Welcome notice
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={resend.isPending && resend.variables === t.id}
+                      onClick={() => resend.mutate(t.id)}
+                      className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+                    >
+                      {resend.isPending && resend.variables === t.id ? 'Sending…' : 'Resend welcome email'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMessage({
+                          name,
+                          sent: Boolean(t.verification_notice_sent_at),
+                          sentTo: t.verification_notice_to,
+                          ...teacherApprovalMessage({
+                            firstName: t.first_name,
+                            email: t.email,
+                            trialEndsAt: t.trial_ends_at,
+                            signInUrl: signInUrl(),
+                          }),
+                        })
+                      }
+                      className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500"
+                    >
+                      Welcome notice
+                    </button>
+                  </div>
                 </li>
               )
             })}

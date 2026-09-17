@@ -72,6 +72,18 @@ export function approveRequest(requestId, overrides = {}) {
 }
 
 /**
+ * Send the school's welcome email again, without re-running the approval.
+ *
+ * Approve refuses to run twice on the same request -- that guard is what
+ * stops a second school being created -- so this is the only way to confirm
+ * an email actually landed after the fact. Reads the school, subscription
+ * and admin the approval itself wrote, never the original request.
+ */
+export function resendApprovalNotice(requestId) {
+  return api(`/api/superadmin/requests/${requestId}/resend-notice`, { method: 'POST' })
+}
+
+/**
  * Email a self-registered teacher once their ID check is approved.
  *
  * verifications.jsx flips verification_status itself, straight to Firestore
@@ -79,7 +91,10 @@ export function approveRequest(requestId, overrides = {}) {
  * decision for Flask to own. This is the one part of the job that has to
  * happen here anyway: the mail credentials only the server holds. Call it
  * right after that write lands; a failure here means the letter did not go
- * out, not that the approval failed.
+ * out, not that the approval failed. The endpoint has no re-approval guard
+ * to run into, so this same call is also the "resend" action on an already-
+ * approved teacher -- unlike the school side, nothing here needs a separate
+ * resend endpoint.
  */
 export function notifyTeacherApproval(uid) {
   return api(`/api/superadmin/teachers/${uid}/notify-approval`, { method: 'POST' })

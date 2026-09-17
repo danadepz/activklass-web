@@ -404,6 +404,25 @@ Still open at this altitude:
   `npm run build` clean. **Owed:** the browser click-through — approving a live school
   request and a live teacher verification with a real inbox on the other end, since nothing
   here has been driven past the two Flask endpoints and the pure test suite.
+- `[x]` **A superadmin can resend either welcome email on demand** (2026-09-18, same day,
+  owner's request — needed to actually check a real inbox without re-running the approval
+  each time). Approve refuses to run twice on the same request, on purpose: that guard is
+  what stops a second school from being minted on a retry. So there was no way to confirm
+  delivery after the fact, or retry a failed send, without the destructive dance of undoing
+  the approval first. New `POST /api/superadmin/requests/{id}/resend-notice` reads the
+  school, subscription and admin the approval itself wrote (never the stale request) and
+  calls the same sender again; the teacher side needed nothing new; `POST
+  /api/superadmin/teachers/{uid}/notify-approval` already had no re-approval guard to run
+  into, so calling it again already was a resend. Both queues' **Recently approved** lists
+  get a **Resend welcome email** button beside the existing copy-dialog one. Also added:
+  `scripts/reset_for_retest.py` (backend, not wired into the app) — for the harder case of
+  wanting to re-run Approve itself, not just resend, it rewinds a test teacher or request
+  back to pending and deletes the school/subscription the approval created, dry-run by
+  default. *Verified:* `tests/smoke_superadmin.py` (+10: resend is refused on an unapproved
+  request and on a still-pending teacher, a school admin can't call it, a second call sends
+  a second email without touching approval state); `npm run test` 1182/1182, `npm run build`
+  clean. **Owed:** same as above — nobody has clicked Resend in a browser against a real
+  inbox yet either.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
-import { approveRequest } from '@/lib/superadmin'
+import { approveRequest, resendApprovalNotice } from '@/lib/superadmin'
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import MessageDialog from './MessageDialog'
@@ -83,6 +83,21 @@ export default function SuperAdminRequestsPage() {
     },
     onSuccess: (m, r) => setMessage({ school: r.school_name, sent: Boolean(r.notice_sent_at), sentTo: r.notice_to, ...m }),
     onError: () => toast.error('Could not rebuild the message. Try again.'),
+  })
+
+  /* Sends the same email again, without touching the approval -- how to
+     confirm a delivery actually landed, or retry one that didn't. */
+  const resend = useMutation({
+    mutationFn: (r) => resendApprovalNotice(r.id),
+    onSuccess: (res) => {
+      toast[res.sent ? 'success' : 'error'](
+        res.sent
+          ? `Sent to ${res.to}.`
+          : 'Did not send -- check the backend has MAIL_USER / MAIL_APP_PASSWORD configured.',
+      )
+      queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
+    },
+    onError: () => toast.error('That did not go through. Try again.'),
   })
 
   const decline = useMutation({
@@ -275,7 +290,8 @@ export default function SuperAdminRequestsPage() {
             <div>
               <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
               <p className="mt-0.5 text-xs text-zinc-500">
-                The welcome email goes out on approval. Open it again here to resend it by hand.
+                The welcome email goes out on approval. Resend it to confirm it landed, or open
+                it to copy by hand.
               </p>
             </div>
           </div>
@@ -291,14 +307,24 @@ export default function SuperAdminRequestsPage() {
                     <span className="ml-2 text-xs text-amber-400">not sent — copy it</span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  disabled={reopen.isPending && reopen.variables?.id === r.id}
-                  onClick={() => reopen.mutate(r)}
-                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
-                >
-                  Approval message
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={resend.isPending && resend.variables?.id === r.id}
+                    onClick={() => resend.mutate(r)}
+                    className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-bold text-zinc-950 hover:bg-amber-300 disabled:opacity-50"
+                  >
+                    {resend.isPending && resend.variables?.id === r.id ? 'Sending…' : 'Resend welcome email'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reopen.isPending && reopen.variables?.id === r.id}
+                    onClick={() => reopen.mutate(r)}
+                    className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+                  >
+                    Approval message
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
