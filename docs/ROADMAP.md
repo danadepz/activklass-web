@@ -401,9 +401,14 @@ Still open at this altitude:
   email carries the trial end read off their own profile, and a forced mail failure on each
   path still returns 200/201 with the school or account already written and the failure
   recorded server-side, never in the client response); `npm run test` 1182/1182,
-  `npm run build` clean. **Owed:** the browser click-through — approving a live school
-  request and a live teacher verification with a real inbox on the other end, since nothing
-  here has been driven past the two Flask endpoints and the pure test suite.
+  `npm run build` clean. **The teacher side is now confirmed live** (2026-09-18, via the
+  Resend button below, not the original approval): a real recipient (Maykel) reported
+  receiving the "Your ActivKlass account is verified" email. **Still owed:** the same
+  confirmation on the school-request side — three Tabor Hill College test accounts show
+  `notice_sent_at` with no `notice_error` (SMTP accepted all three), but no recipient has
+  yet confirmed one actually arrived; most likely sitting in Spam or the Promotions/Updates
+  tab rather than genuinely lost, since it is the same sender and the same code path that
+  just proved out on the teacher side, but that is a guess until someone actually looks.
 - `[x]` **A superadmin can resend either welcome email on demand** (2026-09-18, same day,
   owner's request — needed to actually check a real inbox without re-running the approval
   each time). Approve refuses to run twice on the same request, on purpose: that guard is
@@ -421,8 +426,10 @@ Still open at this altitude:
   default. *Verified:* `tests/smoke_superadmin.py` (+10: resend is refused on an unapproved
   request and on a still-pending teacher, a school admin can't call it, a second call sends
   a second email without touching approval state); `npm run test` 1182/1182, `npm run build`
-  clean. **Owed:** same as above — nobody has clicked Resend in a browser against a real
-  inbox yet either.
+  clean. **Live 2026-09-18:** Resend was clicked in the browser against six real test
+  accounts (three Tabor Hill College institution requests, three self-registered teachers);
+  the teacher side has one confirmed real-world delivery (Maykel), closing the browser gap
+  the entry above still leaves open for the school-request side.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
