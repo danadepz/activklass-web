@@ -16,6 +16,8 @@
  * not need a live Firebase call to reach them (register.test.jsx's
  * WrongPathNudge is the model). The email path is unchanged and checked too.
  */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -69,5 +71,29 @@ describe('forgot password and an issued login (T-47)', () => {
     expect(html).toContain('ask your teacher or your school admin')
     // Still says nothing about whether the email is registered (anti-enumeration).
     expect(html).not.toMatch(/no account|not found|not registered/i)
+  })
+})
+
+/* T-79 (andecobs-102): Derick asked for a reset, got the mail, clicked the link
+   and was told it had "expired or already used" on the first click. The code was
+   fine; Firebase's own hosted handler was not, and it could not be configured
+   away (the console refuses that save on this project). The fix takes Firebase's
+   page out of the path: our backend issues the code and mails a link at our own
+   reset-password.jsx. Send the browser back to sendPasswordResetEmail and the
+   tester's dead link returns, with every assertion above still green.
+
+   The backend half — that the mailed link points at our page and never at
+   activklass1.firebaseapp.com — is locked by
+   activklass-backend/tests/smoke_forgot_password.py. */
+const source = readFileSync(fileURLToPath(new URL('./forgot-password.jsx', import.meta.url)), 'utf8')
+
+describe('T-79 — the reset link comes from us, not from Firebase', () => {
+  it('asks our own backend to send it', () => {
+    expect(source).toMatch(/api\('\/api\/auth\/forgot-password', \{ method: 'POST'/)
+  })
+
+  it("never calls Firebase's client-side reset, whose hosted page was the bug", () => {
+    expect(source).not.toMatch(/sendPasswordResetEmail/)
+    expect(source).not.toMatch(/firebaseapp\.com/)
   })
 })
