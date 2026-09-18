@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { sendPasswordResetEmail } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import AuthLayout, { SubmitButton, AuthError, AuthNotice } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { emailError } from '@/lib/validation'
@@ -12,10 +11,16 @@ import { navy } from '@/theme'
  * password?" link that goes to its own page, instead of the old inline
  * "Forgot?" button that reused whatever was typed in the login email field.
  *
- * The reset itself is Firebase's own emailed link; this page only collects
- * the address. Note the success message does not confirm the account exists
- * -- Firebase answers the same either way, and so do we, so this page cannot
- * be used to probe which emails are registered.
+ * The link itself is ours, not Firebase's (T-79): Firebase's own hosted reset
+ * page is broken on this project -- a fresh, never-opened code fails there on
+ * the very first click, and Google refuses every attempt to point its console
+ * at our own page instead. `POST /api/auth/forgot-password` generates the
+ * same kind of code server-side and mails our own link straight at
+ * reset-password.jsx, through the Gmail sender T-69 already built. This page
+ * only collects the address. Note the success message does not confirm the
+ * account exists -- the backend answers the same either way regardless of
+ * what actually happened, so this page cannot be used to probe which emails
+ * are registered.
  *
  * It can only ever help an account that signs in with an email. A school- or
  * teacher-issued login (`snhs-123456`, see lib/logins.js) is stored behind an
@@ -78,15 +83,14 @@ export default function ForgotPassword() {
     if (problem) { setError(problem); return }
     setSubmitting(true)
     try {
-      await sendPasswordResetEmail(auth, email.trim())
+      // Always answers { sent: true } -- an unknown email, a mail-send
+      // failure, and a real send all look identical here on purpose (the
+      // anti-enumeration promise above). A thrown ApiError means the request
+      // never reached the server at all (network down, Flask not running).
+      await api('/api/auth/forgot-password', { method: 'POST', body: { email: email.trim() }, requireAuth: false })
       setSent(true)
     } catch (err) {
-      // user-not-found still shows the success screen (see the note above);
-      // only a genuinely failed send is worth reporting.
-      if (err.code === 'auth/user-not-found') setSent(true)
-      else if (err.code === 'auth/invalid-email') setError('That email address is not valid.')
-      else if (err.code === 'auth/too-many-requests') setError('Too many attempts. Try again in a few minutes.')
-      else setError('Could not send a reset link. Check your connection and try again.')
+      setError(err.message || 'Could not send a reset link. Check your connection and try again.')
     } finally {
       setSubmitting(false)
     }

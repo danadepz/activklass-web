@@ -22,8 +22,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('react-router-dom', () => ({
   Link: ({ children, ...p }) => <a {...p}>{children}</a>,
 }))
-vi.mock('@/lib/firebase', () => ({ auth: {} }))
-vi.mock('firebase/auth', () => ({ sendPasswordResetEmail: vi.fn() }))
+vi.mock('@/lib/api', () => ({ api: vi.fn() }))
 
 import ForgotPassword, {
   ISSUED_LOGIN_NOTE,
