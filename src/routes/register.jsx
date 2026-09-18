@@ -467,10 +467,12 @@ export default function Register() {
             <Check className="h-8 w-8" />
           </span>
           <p style={{ fontSize: 15, color: muted, margin: 0, lineHeight: 1.55, maxWidth: 360 }}>
-            Thanks, {form.firstName.trim()}. Your account is created. The ActivKlass team will
-            reach you at <strong style={{ color: navy }}>{form.email.trim()}</strong> to set up{' '}
-            <strong style={{ color: navy }}>{details().school_name}</strong> and make you its admin
-            — sign in once you hear from us.
+            Thanks, {form.firstName.trim()}. Your request for{' '}
+            <strong style={{ color: navy }}>{details().school_name}</strong> is with the
+            ActivKlass team — we'll reach you at{' '}
+            <strong style={{ color: navy }}>{form.email.trim()}</strong> to set it up and make
+            you its admin. Your sign-in already exists, but you're signed out for now, so sign
+            in once you hear from us. Nothing to pay today — your quote comes with the setup.
           </p>
           <Link to="/" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy, fontSize: 14 }}>
             Back to home
