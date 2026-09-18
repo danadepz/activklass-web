@@ -383,7 +383,7 @@ Still open at this altitude:
   (backend `6364679`; the first `firebase deploy --only storage` did not take the IAM grant
   the lookup needs and refused the owner too — the second did, 7/7 live: student and
   foreign teacher refused, owner writes and deletes, the submissions path unchanged).
-- `[~]` **The two approval notices go out on their own, not just as a copy-ready dialog**
+- `[x]` **The two approval notices go out on their own, not just as a copy-ready dialog**
   (2026-09-18). Both the school-request approval and the teacher ID-check approval used to
   end at a "copy this into an email" dialog — the queue's own docs called that the whole
   notification path, since no mail provider was wired in. T-69 wired one in for payment
@@ -401,14 +401,13 @@ Still open at this altitude:
   email carries the trial end read off their own profile, and a forced mail failure on each
   path still returns 200/201 with the school or account already written and the failure
   recorded server-side, never in the client response); `npm run test` 1182/1182,
-  `npm run build` clean. **The teacher side is now confirmed live** (2026-09-18, via the
-  Resend button below, not the original approval): a real recipient (Maykel) reported
-  receiving the "Your ActivKlass account is verified" email. **Still owed:** the same
-  confirmation on the school-request side — three Tabor Hill College test accounts show
-  `notice_sent_at` with no `notice_error` (SMTP accepted all three), but no recipient has
-  yet confirmed one actually arrived; most likely sitting in Spam or the Promotions/Updates
-  tab rather than genuinely lost, since it is the same sender and the same code path that
-  just proved out on the teacher side, but that is a guess until someone actually looks.
+  `npm run build` clean. **Both sides confirmed live** (2026-09-18, via the Resend button
+  below, not the original approval): a real teacher recipient (Maykel) reported receiving
+  "Your ActivKlass account is verified", and a real recipient on one of the three Tabor
+  Hill College test accounts reported receiving the school's "Your ActivKlass school
+  account is ready" email — the server log (`notice_sent_at`, no `notice_error` on all
+  three) was correct, delivery just took a look in the actual inbox to confirm rather than
+  being assumed from a clean send.
 - `[x]` **A superadmin can resend either welcome email on demand** (2026-09-18, same day,
   owner's request — needed to actually check a real inbox without re-running the approval
   each time). Approve refuses to run twice on the same request, on purpose: that guard is
@@ -428,8 +427,9 @@ Still open at this altitude:
   a second email without touching approval state); `npm run test` 1182/1182, `npm run build`
   clean. **Live 2026-09-18:** Resend was clicked in the browser against six real test
   accounts (three Tabor Hill College institution requests, three self-registered teachers);
-  the teacher side has one confirmed real-world delivery (Maykel), closing the browser gap
-  the entry above still leaves open for the school-request side.
+  both sides have a confirmed real-world delivery now — a teacher (Maykel) and one of the
+  three Tabor Hill College accounts — closing the browser gap the entry above used to leave
+  open.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
