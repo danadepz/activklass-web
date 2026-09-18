@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '@/context/useAuth'
 import { ink, muted, sansFamily, serifFamily, navy } from '@/theme'
 import Button from '@/components/ui/Button'
@@ -35,7 +36,7 @@ export default function SignOutButton({ children = 'Sign out', className, style 
         {children}
       </button>
 
-      {asking && (
+      {asking && createPortal(
         <div
           role="dialog"
           aria-modal="true"
@@ -87,7 +88,8 @@ export default function SignOutButton({ children = 'Sign out', className, style 
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
