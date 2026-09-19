@@ -101,6 +101,25 @@ export function notifyTeacherApproval(uid) {
 }
 
 /**
+ * Move a solo teacher's account under an institution's subscription (T-71).
+ *
+ * MOVES the account -- classes, quizzes, syllabi, gradebooks and grading
+ * presets all hang off the uid, so nothing is re-created. One Admin-SDK
+ * batch on the server: the teacher's login changes to the school's issued
+ * shape (their real email stays on the profile for recovery, only the Auth
+ * sign-in email is renamed), every eligible student of theirs joins the
+ * school, their stale classes archive, and their solo subscription cancels.
+ * Refused if the uid already belongs to a school, or if the login this would
+ * issue is already taken at this school.
+ */
+export function absorbTeacher(schoolId, { teacherUid, employeeNumber }) {
+  return api(`/api/superadmin/schools/${schoolId}/absorb`, {
+    method: 'POST',
+    body: { teacher_uid: teacherUid, employee_number: employeeNumber },
+  })
+}
+
+/**
  * Change plan, status, or negotiated seat limits.
  *
  * Send only what changes. `limits` is merged onto the current values, so a

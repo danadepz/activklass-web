@@ -82,6 +82,48 @@ export function approvalMessage({
 }
 
 /**
+ * The message a teacher receives after being absorbed into a school's
+ * subscription (T-71).
+ *
+ * The one thing this letter has to be completely unambiguous about: the
+ * teacher's old email sign-in STOPS WORKING the moment the batch runs --
+ * Firebase Auth holds one email per account, and this move renamed it to
+ * the issued login. Everything else about their account is unchanged: same
+ * password, same classes, same quizzes, same records. Getting this wrong in
+ * either direction is bad -- understating it locks someone out with no
+ * warning, overstating it (implying data was touched) worries a teacher
+ * about students and grades that were never at risk.
+ *
+ * @param {object} p
+ * @param {string} p.schoolName
+ * @param {string} [p.firstName]     for the greeting
+ * @param {string} p.loginId         the new issued login, e.g. "ucb-123456"
+ * @param {string} p.oldEmail        what they used to sign in with
+ * @param {string} p.signInUrl
+ * @returns {{ subject: string, body: string }}
+ */
+export function absorbMessage({ schoolName, firstName, loginId, oldEmail, signInUrl }) {
+  const subject = `Your ActivKlass sign-in has changed — ${schoolName}`
+  const body = [
+    `Hi ${firstName || 'there'},`,
+    '',
+    `${schoolName} has added you to its ActivKlass subscription. Every class, quiz, syllabus and record you already have is still yours -- nothing about your work was touched.`,
+    '',
+    `Sign in: ${signInUrl}`,
+    `Login: ${loginId}`,
+    'Password: the one you already use. We did not change it.',
+    '',
+    `Your old sign-in, ${oldEmail}, stops working from now on -- an account can only hold one sign-in address, and this is the new one. Use ${loginId} instead.`,
+    '',
+    'Reply to this email if anything does not look right.',
+    '',
+    '— The ActivKlass team',
+  ].join('\n')
+
+  return { subject, body }
+}
+
+/**
  * The message a self-registered teacher receives when their ID check passes.
  *
  * Sent automatically now, the same way as the school notice above, but a

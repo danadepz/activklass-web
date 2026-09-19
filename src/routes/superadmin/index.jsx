@@ -8,11 +8,16 @@ import {
   fetchSubscribers,
   updateSubscriber,
 } from '@/lib/superadmin'
+import { absorbMessage } from '@/lib/approvalMessage'
 import { SEGMENTS, STATUSES, analyticsFor, filterRows } from '@/lib/superadminAnalytics'
 import AnalyticsBand from './AnalyticsBand'
+import AbsorbDialog from './AbsorbDialog'
+import MessageDialog from './MessageDialog'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+
+const signInUrl = () => `${window.location.origin}/login`
 
 /**
  * Subscriber console.
@@ -125,6 +130,8 @@ export default function SuperAdminSubscribersPage() {
   const queryClient = useQueryClient()
   const [showProvision, setShowProvision] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [absorbing, setAbsorbing] = useState(null) // the institution row being absorbed into
+  const [absorbNotice, setAbsorbNotice] = useState(null) // the copy-ready notice after a successful absorb
   const [banner, setBanner] = useState(null)
   const [segment, setSegment] = useState('all')
   const [status, setStatus] = useState('all')
@@ -386,6 +393,14 @@ export default function SuperAdminSubscribersPage() {
                       >
                         Manage
                       </button>
+                      {sub.type === 'institution' && (
+                        <button
+                          onClick={() => setAbsorbing({ schoolId: sub.id, schoolName: owner?.name || sub.name })}
+                          className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-zinc-700"
+                        >
+                          Absorb a teacher…
+                        </button>
+                      )}
                       {sub.status === 'suspended' ? (
                         <button
                           onClick={() => patch.mutate({ ownerId: sub.id, status: 'active' })}
@@ -432,6 +447,43 @@ export default function SuperAdminSubscribersPage() {
           busy={patch.isPending}
           onClose={() => setEditing(null)}
           onSave={(changes) => patch.mutate({ ownerId: editing.id, ...changes })}
+        />
+      )}
+
+      {absorbing && (
+        <AbsorbDialog
+          schoolId={absorbing.schoolId}
+          schoolName={absorbing.schoolName}
+          onClose={() => setAbsorbing(null)}
+          onDone={({ teacher, loginId, studentsMoved, classesArchived }) => {
+            setAbsorbing(null)
+            refresh()
+            toast.success(
+              `${teacher.firstName || teacher.email} now signs in as ${loginId}. ` +
+                `${studentsMoved} student${studentsMoved === 1 ? '' : 's'} moved, ` +
+                `${classesArchived} class${classesArchived === 1 ? '' : 'es'} archived.`,
+            )
+            setAbsorbNotice({
+              schoolName: absorbing.schoolName,
+              ...absorbMessage({
+                schoolName: absorbing.schoolName,
+                firstName: teacher.firstName,
+                loginId,
+                oldEmail: teacher.email,
+                signInUrl: signInUrl(),
+              }),
+            })
+          }}
+        />
+      )}
+
+      {absorbNotice && (
+        <MessageDialog
+          title={`Absorption notice — ${absorbNotice.schoolName}`}
+          subtitle="Not sent automatically. Copy this to the teacher yourself — it tells them their old sign-in stops working and what to use instead."
+          message={absorbNotice}
+          copiedHint="Copied. Paste it into an email to the teacher."
+          onClose={() => setAbsorbNotice(null)}
         />
       )}
     </div>
