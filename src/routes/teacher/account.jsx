@@ -7,7 +7,7 @@ import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
-import { changePlan, confirmCheckout, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout } from '@/lib/subscription'
+import { changePlan, confirmCheckout, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout, toMillis } from '@/lib/subscription'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -366,13 +366,23 @@ function SubscriptionCard() {
   // Absorbed: the school took over the bill, so there is no plan of their own
   // left to show or change. Without this the card would render a cancelled
   // subscription complete with a plan picker, which reads as "your account
-  // lapsed" rather than "your school covers this now".
+  // lapsed" rather than "your school covers this now". `superseded_at` is
+  // stamped the same way whether a teacher accepted an invite themselves
+  // (api/institution.py) or a superadmin moved them in one batch (T-71) --
+  // one field, read here regardless of which path set it.
   if (isAbsorbed(sub)) {
+    const since = toMillis(sub.superseded_at)
+    const sinceLabel = since
+      ? new Date(since).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : null
     return (
       <div style={card}>
         <CheckoutBanner {...checkout} />
         <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Subscription</h2>
-        <PlanType label="Institution subscription" detail={schoolName} />
+        <PlanType
+          label="Institution subscription"
+          detail={sinceLabel ? `Under ${schoolName}'s subscription since ${sinceLabel}` : schoolName}
+        />
         <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
           Your school covers your ActivKlass plan. Your administrator manages the plan and the seats
           for everyone, so there is nothing to pay or choose here.
