@@ -39,7 +39,7 @@ import {
 } from '@/lib/quizAttempts'
 import { discardAttempt, grantExtraAttempt } from '@/hooks/useAttemptSession'
 import { removeQuizFromAllRecords, syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
-import { backToDraftRefusal, wordingEditError } from './quizWording'
+import { applyWordingEdits, backToDraftRefusal, wordingEditError } from './quizWording'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -1916,11 +1916,7 @@ function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
     setError(null)
     try {
       const original = quiz.questions ?? []
-      const next = original.map((q, i) => ({
-        ...q,
-        text: edits[i]?.text ?? q.text,
-        options: q.options ? q.options.map((o, k) => ({ ...o, text: edits[i]?.options?.[k]?.text ?? o.text })) : q.options,
-      }))
+      const next = applyWordingEdits(original, edits)
       const problem = wordingEditError(original, next)
       if (problem) {
         setError(problem)

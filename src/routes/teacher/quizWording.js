@@ -44,6 +44,28 @@ export function wordingEditError(before = [], after = []) {
 }
 
 /**
+ * Applies a wording edit to a quiz's questions for saving (T-74). `edits` is
+ * the modal's row state -- `{ text, options: [{ text }] }` per question, in
+ * question order.
+ *
+ * A question with no `options` key (short_answer, essay, true_false...) must
+ * come out with no `options` key either -- writing `options: undefined`
+ * passes `wordingEditError` (it never looks at options for a non-mcq
+ * question) but is refused client-side by the Firestore SDK before the
+ * write ever reaches the rules, which surfaced to the teacher as a generic
+ * connection error. Only touch `options` when the original question had it.
+ */
+export function applyWordingEdits(questions = [], edits = []) {
+  return questions.map((q, i) => {
+    const next = { ...q, text: edits[i]?.text ?? q.text }
+    if (q.options) {
+      next.options = q.options.map((o, k) => ({ ...o, text: edits[i]?.options?.[k]?.text ?? o.text }))
+    }
+    return next
+  })
+}
+
+/**
  * The sentence that refuses "Back to draft" once anyone has started the
  * quiz -- exact count, so the teacher knows why closing it is the option
  * left. `null` when there is nothing to refuse.

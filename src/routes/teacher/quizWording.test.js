@@ -4,7 +4,7 @@
  * triplecookiemonster-92).
  */
 import { describe, expect, it } from 'vitest'
-import { backToDraftRefusal, wordingEditError } from './quizWording.js'
+import { applyWordingEdits, backToDraftRefusal, wordingEditError } from './quizWording.js'
 
 const mcq = (overrides = {}) => ({
   id: 'q1',
@@ -82,6 +82,34 @@ describe('wordingEditError', () => {
     const before = [mcq()]
     const after = [mcq({ id: 'q999' })]
     expect(wordingEditError(before, after)).toMatch(/does not match/)
+  })
+})
+
+describe('applyWordingEdits', () => {
+  it('builds a payload with no undefined values for a quiz with a short_answer question (T-74)', () => {
+    const questions = [
+      mcq(),
+      { id: 'q4', qtype: 'short_answer', text: 'Name the capital of the Philippines.', points: 3, answer_key: { answers: ['Manila'] } },
+    ]
+    const edits = [
+      { text: mcq().text, options: mcq().options },
+      { text: 'Name the current capital of the Philippines.', options: [] },
+    ]
+    const next = applyWordingEdits(questions, edits)
+    expect(next[1].text).toBe('Name the current capital of the Philippines.')
+    expect('options' in next[1]).toBe(false)
+    for (const q of next) {
+      for (const value of Object.values(q)) {
+        expect(value).not.toBeUndefined()
+      }
+    }
+  })
+
+  it('leaves an mcq question\'s options rewritten with the edited text', () => {
+    const questions = [mcq()]
+    const edits = [{ text: mcq().text, options: [{ text: 'Four' }, { text: 'Three' }] }]
+    const next = applyWordingEdits(questions, edits)
+    expect(next[0].options.map((o) => o.text)).toEqual(['Four', 'Three'])
   })
 })
 
