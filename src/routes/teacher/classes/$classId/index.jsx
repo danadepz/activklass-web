@@ -1082,11 +1082,16 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
   const [error, setError] = useState(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
+  // T-89: how far the match loop below has gotten, so "Matching students…"
+  // has something to prove it is moving rather than stalled -- see the note
+  // at the loop itself for why that distinction matters here.
+  const [matchProgress, setMatchProgress] = useState({ done: 0, total: 0 })
 
   async function handleFile(file) {
     setBusy(true)
     fail(null)
     setPreview(null)
+    setMatchProgress({ done: 0, total: 0 })
     try {
       const rows = parseCsv(await file.text())
       if (rows.length < 2) throw new Error('CSV needs a header row plus at least one student')
@@ -1114,8 +1119,15 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
       const already = []
       const unmatched = []
       const seen = new Set()
-      // Sequential on purpose: a class roster is tens of rows, and each match
-      // is one or two indexed equality reads. Parallel adds nothing but load.
+      setMatchProgress({ done: 0, total: entries.length })
+      // Sequential on purpose, but not for the reason this comment used to
+      // give: each match used to be "one or two indexed equality reads"
+      // before the roster-scope rules moved this lookup behind Flask on
+      // 2026-08-31 (lib/roster.js). It is now one or two HTTP round-trips per
+      // row, so a 40-row CSV is 40+ requests in series against a dev Flask
+      // that may be cold on the first call -- slow, not free, and worth
+      // showing progress on. Still sequential: making it parallel is a
+      // behaviour change to a Flask-backed path, not what this fixes.
       for (const entry of entries) {
         const label =
           `${entry.last_name}, ${entry.first_name}`.replace(/^, |, $/g, '').trim() ||
@@ -1150,6 +1162,7 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           seen.add(account.id)
           matched.push({ label, account, middle_name: entry.middle_name })
         }
+        setMatchProgress((p) => ({ ...p, done: p.done + 1 }))
       }
       setPreview({ matched, already, unmatched })
     } catch (err) {
@@ -1263,7 +1276,17 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
           className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
         />
-        {busy && !preview && <p className="text-sm text-slate-400">Matching students…</p>}
+        {busy && !preview && (
+          <p className="flex items-center gap-2 text-sm text-slate-400" role="status" aria-live="polite">
+            <span
+              className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin"
+              aria-hidden="true"
+            />
+            {matchProgress.total > 0
+              ? `Matching students… ${matchProgress.done} of ${matchProgress.total}`
+              : 'Matching students…'}
+          </p>
+        )}
 
           {preview && (
             <>
