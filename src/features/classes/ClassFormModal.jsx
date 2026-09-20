@@ -658,10 +658,15 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             <FieldError id="err-schedule" message={errors.schedule} />
           </div>
 
-          {/* Row 4: Grade/Year Level, Max Students, School Year */}
+          {/* Row 4: Grade/Year Level, Max Students, School Year. Each cell
+              reserves a two-line label height (sm: and up, where the grid is
+              4 columns and a wrapped label would otherwise drop only that
+              cell's input) and bottom-aligns the label text inside it, so
+              every input in the row starts from the same top edge whether or
+              not its own label wraps (T-84). */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <label className="block col-span-1">
-              <span className="text-sm font-medium text-slate-700">Grade / Year Level<Req /></span>
+            <label className="flex flex-col col-span-1">
+              <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem]">Grade / Year Level<Req /></span>
               <input
                 required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')}
                 data-field="grade_level"
@@ -671,8 +676,8 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               />
               <FieldError id="err-grade_level" message={errors.grade_level} />
             </label>
-            <label className="block col-span-1">
-              <span className="text-sm font-medium text-slate-700">Max Students<Req /></span>
+            <label className="flex flex-col col-span-1">
+              <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem]">Max Students<Req /></span>
               <input
                 required
                 type="number"
@@ -690,8 +695,8 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             </label>
 
             {/* School Year Selectors */}
-            <div className="block col-span-2">
-              <span className="text-sm font-medium text-slate-700 block mb-1">School Year<Req /></span>
+            <div className="flex flex-col col-span-2">
+              <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem] mb-1">School Year<Req /></span>
               <div className="flex items-center gap-1">
                 <select
                   value={fromYear}
