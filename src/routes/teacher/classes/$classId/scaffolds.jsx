@@ -580,7 +580,7 @@ function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, o
             <div style={{ fontSize: 13, color: ink }}>
               <strong>Practice quiz:</strong>{' '}
               {plan.recommended_quiz_id ? (
-                <Link to={`/teacher/classes/${plan.class_id}/quizzes/${plan.recommended_quiz_id}`} style={{ color: blueText, fontWeight: 600 }}>
+                <Link to={`/teacher/quizzes/${plan.recommended_quiz_id}`} style={{ color: blueText, fontWeight: 600 }}>
                   open in quiz editor
                 </Link>
               ) : (
@@ -767,7 +767,7 @@ export default function ScaffoldTopicsPage() {
       }
       // No plan in hand (topic has no remediation yet) — the quiz is still
       // useful on its own, so behave as before and open the builder.
-      navigate(`/teacher/classes/${classId}/quizzes/${ref.id}`)
+      navigate(`/teacher/quizzes/${ref.id}`)
       return ref.id
     } catch (err) {
       setError(err.message)
@@ -853,7 +853,7 @@ export default function ScaffoldTopicsPage() {
                 ? 'Generate quizzes from syllabus topics (Quizzes → Generate with AI) so their attempts map to topics here.'
                 : 'No graded quiz submissions yet for syllabus-linked quizzes. Mastery appears once students submit.'}
           </p>
-          <Link to={`/teacher/classes/${classId}/quizzes`} className="mt-4 inline-flex transition hover:brightness-110" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
+          <Link to="/teacher/quizzes" className="mt-4 inline-flex transition hover:brightness-110" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
             Go to Quizzes
           </Link>
         </div>
