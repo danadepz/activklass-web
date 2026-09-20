@@ -20,6 +20,8 @@
  * asserted directly, the way PendingSchoolRequestNotice was lifted out of the
  * teacher dashboard for exactly this reason.
  */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -59,6 +61,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
   fetchSchoolDirectory: vi.fn(),
 }))
 
+import { PHONE_IN_USE_ERROR, phoneError } from '@/lib/validation'
 import Register, { WrongPathNudge, positionsFor, signedInAsSomeoneElse } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
@@ -230,5 +233,76 @@ describe('the Position list, per path', () => {
 
   it('leaves the stored values alone', () => {
     expect(positionsFor('institution').map((p) => p.value)).toEqual(['faculty', 'program_chair', 'dean', 'admin'])
+  })
+})
+
+/* T-88 (andecobs-117): Derick filed this with "Issue: Nothing" — nothing was
+   broken, it was an ask. "I suggest to have a validation to check if the
+   number is already taken." Two accounts could register the same phone number
+   and nothing, on either form or in the review queue, ever said so:
+   `phoneError` judged the shape of the number and nothing anywhere, client or
+   server, compared one against another. Live data still carries the proof —
+   `09434969549`, the number in his screenshot, sits on six accounts.
+
+   What is pinned here is the whole of what the fix promises, in the order it
+   promises it: the wording the person reads; that the yes/no comes from OUR
+   backend and not from a Firestore query in the browser (the rules would
+   allow that one, and it would hand any signed-in account a phone-number
+   enumeration oracle over every teacher on the platform); and that it is
+   asked BEFORE the Firebase account exists, so a predictable rejection cannot
+   strand anyone half-registered — the same position, for the same reason, as
+   the school-abbreviation clash beside it.
+
+   The decision itself lives in an async submit handler six steps in, which no
+   static render can drive and this repo has no DOM library to drive it with,
+   so the wiring is read off the source the way forgot-password.test.jsx's
+   T-79 block reads its own. Delete the call, move it after account creation,
+   swap it for a client-side `where('phone', ...)`, or reword the message, and
+   one of these fails. */
+const registerSource = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
+
+describe('T-88 — a phone number another account already uses', () => {
+  it('tells the person it is on another account, in words with no vendor or raw error in them', () => {
+    expect(PHONE_IN_USE_ERROR).toMatch(/already on another account/i)
+    expect(PHONE_IN_USE_ERROR).toMatch(/Double-check what you typed, or use a different number/)
+    expect(PHONE_IN_USE_ERROR).not.toMatch(/firebase|firestore|flask|admin sdk|error|exception/i)
+    // Says nothing about WHOSE account it is — the endpoint answers yes/no only.
+    expect(PHONE_IN_USE_ERROR).not.toMatch(/account of|belongs to|owned by/i)
+  })
+
+  it('asks our own backend for the yes/no, signed out', () => {
+    expect(registerSource).toMatch(/api\('\/api\/auth\/register\/phone-in-use', \{\s*method: 'POST'/)
+    expect(registerSource).toMatch(/body: \{ phone: form\.phone\.trim\(\) \}/)
+    expect(registerSource).toMatch(/requireAuth: false/)
+  })
+
+  it('stops the submit on a yes, with that message and nothing else', () => {
+    expect(registerSource).toMatch(/if \(in_use\) \{ setError\(PHONE_IN_USE_ERROR\); return \}/)
+  })
+
+  /* The neighbour that matters: a number nobody uses must still sail through.
+     Only a `yes` from the server blocks — the message is set in exactly one
+     place, behind that one guard, so a `no` (and an unreachable server) leaves
+     the walk exactly as it was. */
+  it('lets a number nobody uses through — only a yes blocks', () => {
+    expect(registerSource.match(/setError\(PHONE_IN_USE_ERROR\)/g)).toHaveLength(1)
+    expect(registerSource).not.toMatch(/if \(!in_use\)/)
+    // and the shape rule, which every number still passes through first, has
+    // no opinion about who else holds it
+    expect(phoneError('09338887766')).toBe('')
+    expect(phoneError('09434969549')).toBe('')
+  })
+
+  it('asks before the Firebase account is created, not after', () => {
+    const asked = registerSource.indexOf("'/api/auth/register/phone-in-use'")
+    const created = registerSource.indexOf('await createUserWithEmailAndPassword(')
+    expect(asked).toBeGreaterThan(-1)
+    expect(created).toBeGreaterThan(-1)
+    expect(asked).toBeLessThan(created)
+  })
+
+  it('never looks the number up from the browser', () => {
+    expect(registerSource).not.toMatch(/where\(\s*'phone'/)
+    expect(registerSource).not.toMatch(/getDocs|query\(/)
   })
 })
