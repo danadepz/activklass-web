@@ -362,6 +362,10 @@ function SubscriptionCard() {
 
   const { subscription: sub, usage } = data
   const catalogue = plansRes?.plans?.[sub.type] ?? {}
+  const trialEndsMs = toMillis(sub.trial_ends_at)
+  const trialEndsLabel = trialEndsMs
+    ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
 
   // Absorbed: the school took over the bill, so there is no plan of their own
   // left to show or change. Without this the card would render a cancelled
@@ -407,9 +411,11 @@ function SubscriptionCard() {
               picker sitting right under it. */}
           <PlanType label={typeLabel(sub.type === 'institution')}
                     detail={sub.type === 'institution' ? schoolName : null} />
-          <p style={{ fontSize: 13, color: muted, margin: 0 }}>
-            {sub.period_label} · {sub.period_start} → {sub.period_end}
-          </p>
+          {sub.status === 'trial' && trialEndsLabel && (
+            <p style={{ fontSize: 13, color: muted, margin: 0 }}>
+              Trial ends {trialEndsLabel}
+            </p>
+          )}
           {/* A subscriptions doc exists but is still trial/expired -- an
               admin-provisioned trial, or a first Pay attempt that was never
               completed (T-68). Never for an institution: the school's admin

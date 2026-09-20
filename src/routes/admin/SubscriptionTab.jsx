@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
+  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes, toMillis,
 } from '@/lib/subscription'
 import {
   fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
@@ -73,6 +73,10 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
   }
 
   const storageBytes = (sub.limits?.storage_gb ?? 0) * GB
+  const trialEndsMs = toMillis(sub.trial_ends_at)
+  const trialEndsLabel = trialEndsMs
+    ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
 
   return (
     <section style={{ ...card, padding: 22 }}>
@@ -90,11 +94,13 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
               {sub.type === 'institution' ? 'Institution subscription' : 'Solo teacher subscription'}
             </div>
             <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '4px 0 2px' }}>
-              {sub.school_name ?? ownerId}
+              {sub.name || sub.school_name || ownerId}
             </h2>
-            <div style={{ fontSize: 13, color: muted }}>
-              {sub.period_label} · {sub.period_start} → {sub.period_end}
-            </div>
+            {sub.status === 'trial' && trialEndsLabel && (
+              <div style={{ fontSize: 13, color: muted }}>
+                Trial ends {trialEndsLabel}
+              </div>
+            )}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
