@@ -17,7 +17,7 @@ import RolePicker from './RolePicker'
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
   'role', 'email', 'middle_name', 'password', // blank password -> the default
-  'personal_email',                           // their own inbox, for password recovery
+  'personal_email',                           // a contact address on file, never the sign-in
   'student_number', 'lrn',                    // students: number always; LRN for Grade 12 & below
   'grade', 'section', 'birthdate',            // grade is stored as year_level
   'employee_number', 'department',            // teachers: number required per row
@@ -58,14 +58,14 @@ const ROW_SPEC = {
     ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
-    ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com. This upload is the only place it gets on file (they can only confirm it later, not add it); without one, staff resets are their only recovery. Never the sign-in.'],
+    ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
   teacher: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
     ['department', 'Optional.'],
-    ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com. This upload is the only place it gets on file (they can only confirm it later, not add it); without one, staff resets are their only recovery. Never the sign-in.'],
+    ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
 }
@@ -95,7 +95,7 @@ function rowProblem(row, prefix) {
     if (!row.email) return 'admin rows need an email'
   } else {
     // Teachers and students always sign in with the issued login; an email
-    // on their row is their personal inbox (password recovery), not a login.
+    // on their row is a personal contact address, not a login.
     const personal = row.personal_email || row.email
     if (personal && emailError(personal)) return 'personal_email is not an email'
     if (!prefix) return 'no login prefix set'

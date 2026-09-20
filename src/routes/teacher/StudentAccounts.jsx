@@ -273,8 +273,13 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
           <span style={{ fontSize: 12, fontWeight: 400, color: faint }}>{BIRTHDATE_HINT}</span>
         </label>
         <label style={labelStyle}>
-          Personal email <span style={{ color: faint, fontWeight: 400 }}>({prefix ? 'optional — their password recovery' : 'becomes their login'})</span>
+          Personal email <span style={{ color: faint, fontWeight: 400 }}>({prefix ? 'optional — a contact address, not their sign-in' : 'becomes their login'})</span>
           <input style={fieldStyle} type="email" value={form.personalEmail} onChange={set('personalEmail')} />
+          {prefix && (
+            <span style={{ fontSize: 12, fontWeight: 400, color: faint }}>
+              They sign in with the issued login, not this address — Reset password below is how they get back in.
+            </span>
+          )}
         </label>
       </div>
 

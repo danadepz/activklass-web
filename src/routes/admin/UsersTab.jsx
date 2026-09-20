@@ -206,7 +206,7 @@ function CreateUserForm({ onCreated, settings, users }) {
       nameError(form.middleName, { label: 'Middle name', required: false }) ||
       nameError(form.lastName, { label: 'Last name' }) ||
       (role === 'admin' ? emailError(form.email) : '') ||
-      // Their own inbox, kept for password recovery — optional, but has to be
+      // A contact address on file, not the sign-in — optional, but has to be
       // an email when given.
       (role !== 'admin' && form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
       (role === 'student'
@@ -426,12 +426,8 @@ function CreateUserForm({ onCreated, settings, users }) {
 
         {(role === 'teacher' || role === 'student') && (
           <label style={labelStyle}
-                 title="Recorded here or nowhere: the account owner only confirms this address later — they cannot add one themselves. Without it, staff resets are their only way back in.">
-            Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — their password recovery)</span>
-            {/* This form is the ONLY place an address gets on file (the
-                owner's dashboard card just confirms it). Still optional —
-                not everyone has an email — but skipping it leaves staff
-                resets as the account's only recovery. */}
+                 title="Recorded here or nowhere -- the account owner cannot add one themselves. Not their sign-in: teacher and student logins are issued from the school prefix, so getting them back in is a reset from this page, with or without this address.">
+            Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — a contact address, not their sign-in)</span>
             <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
                    onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
           </label>
