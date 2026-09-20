@@ -1391,7 +1391,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <label style={labelStyle}>Instructions (optional)</label>
           <input className="ak-input" value={settings.instructions} onChange={set('instructions')} style={fieldStyle} />
         </div>
-        <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 items-start gap-3 sm:grid-cols-4">
           <div>
             <label style={labelStyle}>Attempts</label>
             <input
