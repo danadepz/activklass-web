@@ -117,8 +117,12 @@ export default function PendingVerification() {
               approved you go straight to your classes and your free month starts then, not
               now; if we need something else you will see it here.
             </p>
-            <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
+            <p style={{ fontSize: 12.5, color: muted, margin: '0 0 10px' }}>
               Signed in as <strong style={{ color: navy }}>{profile.email}</strong>
+            </p>
+            <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
+              Questions? Reach the ActivKlass team at{' '}
+              <a href="mailto:danadepz13@gmail.com" style={{ color: navy, fontWeight: 600 }}>danadepz13@gmail.com</a>.
             </p>
           </>
         )}
