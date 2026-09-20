@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -1074,9 +1074,16 @@ function adminSuffix(school) {
    creates accounts — under the issued-login scheme the admin makes accounts,
    and a typo'd ID must surface as "no account", not become a duplicate
    student nobody can sign in as. Preview first, with unmatched rows named. */
-function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
+export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Upload a roster CSV', closeOnBackdrop: false })
   const { profile, school } = useAuth()
+  // T-91: an issued teacher has an admin whose job it is to create student
+  // accounts; a solo subscriber has nobody above them and creates their own
+  // (Student accounts tab on the Students page). Same signal AddStudentModal
+  // already uses for its solo-only 'create' tab -- reused here rather than a
+  // second test, so the two screens can never disagree about which kind of
+  // account a teacher has.
+  const schoolIssued = accountKind(profile) === 'school'
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { matched: [], already: [], unmatched: [] }
   const [error, setError] = useState(null)
@@ -1233,7 +1240,9 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
           </ul>
           <p className="text-xs text-slate-400">
             This upload only enrolls students who already have an account — it never creates one.
-            Rows with no matching account are listed so you can ask your school admin to add them.
+            {schoolIssued
+              ? ' Rows with no matching account are listed so you can ask your school admin to add them.'
+              : " Rows with no matching account are listed below. Create those students' accounts first, then upload this file again."}
           </p>
           <div className="rounded-lg border border-slate-200 overflow-x-auto">
             <table className="w-full min-w-[600px] text-xs">
@@ -1323,11 +1332,20 @@ function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) 
               ))}
             </div>
             {preview.unmatched.length > 0 && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                {preview.unmatched.length} row{preview.unmatched.length === 1 ? '' : 's'} will not be
-                added, for the reason shown beside each. Ask your school admin to create or re-enable
-                those accounts, then upload this file again.
-              </p>
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1.5">
+                <p>
+                  {preview.unmatched.length} row{preview.unmatched.length === 1 ? '' : 's'} will not be
+                  added, for the reason shown beside each.{' '}
+                  {schoolIssued
+                    ? 'Ask your school admin to create or re-enable those accounts, then upload this file again.'
+                    : "Create those students' accounts first, then upload this file again."}
+                </p>
+                {!schoolIssued && (
+                  <Link to="/teacher/students" className="font-semibold underline">
+                    Create student accounts →
+                  </Link>
+                )}
+              </div>
             )}
             <button
               onClick={commit}
