@@ -178,6 +178,7 @@ export default function ClassLayout() {
           classId={classId}
           initial={classToForm(clazz)}
           currentSyllabusFile={clazz.syllabus_file}
+          enrolledCount={clazz.student_ids?.length ?? 0}
           onClose={() => setShowEdit(false)}
           onSaved={({ warning: w }) => {
             queryClient.invalidateQueries({ queryKey: ['fs-class-meta', classId] })

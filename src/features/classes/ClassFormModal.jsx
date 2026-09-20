@@ -103,7 +103,7 @@ const FIELD_ORDER = [
 /* Returns { field: message } -- one message per input, keyed by the field it
    belongs to. The old single string named five fields at once and left the
    teacher to work out which of them was actually empty. */
-function validate(form, selectedDays, originalMaxStudents = null) {
+export function validate(form, selectedDays, originalMaxStudents = null, enrolledCount = 0) {
   const errors = {}
   const isCollege = form.education_level === 'College'
   const required = (key, message) => {
@@ -134,6 +134,18 @@ function validate(form, selectedDays, originalMaxStudents = null) {
     errors.max_students = 'Max students must be a whole number.'
   } else if (Number(students) < MIN_STUDENTS) {
     errors.max_students = `Max students must be at least ${MIN_STUDENTS}.`
+  } else if (
+    enrolledCount > 0 &&
+    Number(students) < enrolledCount &&
+    Number(students) !== originalMaxStudents
+  ) {
+    /* T-92: nothing ever compared the new capacity against who is already
+       enrolled, so Edit Class would happily save a cap below the roster and
+       the class just sat over it, silently. Same exemption shape as the
+       MAX_STUDENTS check below -- a class already saved below its own
+       roster (the cap was lowered before this rule existed) can still be
+       edited and saved untouched; only a NEW value has to clear the bar. */
+    errors.max_students = `This class already has ${enrolledCount} students. Max students cannot be lower than that.`
   } else if (Number(students) > MAX_STUDENTS && Number(students) !== originalMaxStudents) {
     /* A class saved before this cap existed can hold a bigger number, and
        refusing it here blocked every OTHER edit to that class: a teacher
@@ -213,7 +225,7 @@ export function buildMeta(form, { writeCollegeFields = true } = {}) {
   return meta
 }
 
-export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, onClose, onSaved }) {
+export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, enrolledCount = 0, onClose, onSaved }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Class details', closeOnBackdrop: false })
   const { profile } = useAuth()
   // The teacher's other classes, for the same-time warning on submit. The
@@ -379,7 +391,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   async function submit(e) {
     e.preventDefault()
-    const nextErrors = validate(form, selectedDays, originalMaxStudents)
+    const nextErrors = validate(form, selectedDays, originalMaxStudents, enrolledCount)
     setErrors(nextErrors)
     const firstBad = FIELD_ORDER.find((key) => nextErrors[key])
     if (firstBad) {

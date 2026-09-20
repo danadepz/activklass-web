@@ -1566,6 +1566,11 @@ export default function ClassDetailPage() {
 
   const { clazz, students } = data
   const maxStudents = clazz.max_students ?? 0
+  // T-92: a class whose roster already exceeds its own cap (most likely the
+  // cap was lowered under it, since both add paths refuse the other
+  // direction) used to read as a neutral fact here. Nothing else on this
+  // page acts on it -- the roster is never trimmed automatically.
+  const isOverCapacity = maxStudents > 0 && students.length > maxStudents
   const programs = programSuggestions(students, clazz)
   // T-70: Active (AC) / Inactive (IN) here read dropped_student_ids, the
   // class-scoped Disable, not the enrollment_status select -- that field
@@ -1609,10 +1614,12 @@ export default function ClassDetailPage() {
               {students.length} <span style={{ color: '#9AA6BD' }}>/ {maxStudents || '—'}</span>
             </>
           }
-          sub="students enrolled"
+          sub={isOverCapacity ? 'over its maximum — raise the limit or move students' : 'students enrolled'}
           Icon={Layers}
           tint="rgba(63,169,245,0.13)"
           iconColor={blueText}
+          valueColor={isOverCapacity ? red : undefined}
+          highlight={isOverCapacity}
         />
       </div>
 
