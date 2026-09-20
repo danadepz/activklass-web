@@ -20,9 +20,9 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
 import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/gradebook'
-import { quizzesToAutoPost } from '@/lib/quizToRecord'
+import { describeSweepResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { useQuizzes } from '@/hooks/useQuizzes'
-import { useAutoPostScores } from '@/hooks/useQuizRecordSync'
+import { useAutoPostScores, useSweepOrphanedQuizzes } from '@/hooks/useQuizRecordSync'
 import { isPassingGrade } from '@/lib/grading'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
@@ -1191,6 +1191,22 @@ export default function ClassRecordPage() {
     onPosted: refetch,
   })
 
+  /* T-87 (triplecookiemonster-106): a quiz deleted before 89c1200 (T-73)
+     left its column on the record forever -- that fix only cleans up at the
+     moment of a delete. This sweeps what an earlier delete already
+     orphaned, the same moment the scores above post themselves. `quizzes`
+     is passed through exactly as useQuizzes() returns it (not the narrower
+     quizzesToAutoPost() list, and never defaulted to []) -- the hook itself
+     refuses to sweep anything unless that query resolved with real data. */
+  const sweep = useSweepOrphanedQuizzes({
+    classId,
+    assessments: bundle?.assessments ?? [],
+    periods: bundle?.periods ?? [],
+    quizzes,
+    enabled: !!bundle?.configured,
+    onSwept: refetch,
+  })
+
   if (isLoading) {
     // Five KPI tiles then the score table, which is the shape that lands.
     return (
@@ -1206,6 +1222,16 @@ export default function ClassRecordPage() {
     bundle.components.map((c) => `${c.name} ${fmt(c.weight_percent)}%`).join(' · ') +
     (bundle.mode === 'deped_k12' ? ' · transmuted per DepEd Order No. 8, s. 2015' : '')
 
+  // T-87: the sweep note is appended onto the auto-post's own status line
+  // rather than shown in a toast -- the teacher did not press anything to
+  // trigger either.
+  const sweepNote = describeSweepResult(sweep)
+  const autoPostLine = autoPost.skipped.length
+    ? `Quiz scores post here on their own when this page opens. Not posted: ${autoPost.skipped.join(' ')}`
+    : `Quiz scores post here on their own when this page opens${autoPost.status === 'done' && autoPost.written ? ` — ${autoPost.written} posted just now` : ''}${autoPost.status === 'done' && autoPost.kept ? ` — ${autoPost.kept} kept as typed` : ''}.`
+  const statusLine = sweepNote ? `${autoPostLine} ${sweepNote}` : autoPostLine
+  const statusIsWarning = autoPost.skipped.length > 0 || sweep.locked.length > 0
+
   return (
     <div>
       <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
@@ -1213,12 +1239,8 @@ export default function ClassRecordPage() {
       </h1>
       {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 6px' }}>{subline}</p>}
       {bundle.configured && (
-        <p role="status" style={{ fontSize: 12, color: autoPost.skipped.length ? goldDeep : faint, margin: '0 0 22px', lineHeight: 1.5 }}>
-          {autoPost.status === 'posting'
-            ? 'Posting quiz scores…'
-            : autoPost.skipped.length
-              ? `Quiz scores post here on their own when this page opens. Not posted: ${autoPost.skipped.join(' ')}`
-              : `Quiz scores post here on their own when this page opens${autoPost.status === 'done' && autoPost.written ? ` — ${autoPost.written} posted just now` : ''}${autoPost.status === 'done' && autoPost.kept ? ` — ${autoPost.kept} kept as typed` : ''}.`}
+        <p role="status" style={{ fontSize: 12, color: statusIsWarning ? goldDeep : faint, margin: '0 0 22px', lineHeight: 1.5 }}>
+          {autoPost.status === 'posting' || sweep.status === 'sweeping' ? 'Posting quiz scores…' : statusLine}
         </p>
       )}
 

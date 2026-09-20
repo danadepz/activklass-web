@@ -14,7 +14,9 @@ import {
   assessmentIdForQuiz,
   attemptForScoring,
   bestAttempt,
+  describeSweepResult,
   describeSyncResult,
+  orphanedQuizAssessments,
   quizScoreCells,
   quizTotalPoints,
   quizzesToAutoPost,
@@ -316,6 +318,68 @@ describe('quizTotalPoints · pooled quizzes', () => {
       questions: Array.from({ length: 30 }, () => ({ points: 2 })),
     }
     expect(quizTotalPoints(quiz)).toBe(20)
+  })
+})
+
+describe('orphanedQuizAssessments (T-87, triplecookiemonster-106)', () => {
+  const assessments = [
+    { id: 'quiz-q1', source_quiz_id: 'q1', period_id: 'p1' },
+    { id: 'quiz-q2', source_quiz_id: 'q2', period_id: 'p1' },
+    { id: 'manual-1', period_id: 'p1' }, // hand-entered, no source_quiz_id at all
+  ]
+
+  it('flags a column whose quiz is gone from the teacher\'s resolved list', () => {
+    expect(orphanedQuizAssessments(assessments, [{ id: 'q1' }])).toEqual([
+      { id: 'quiz-q2', source_quiz_id: 'q2', period_id: 'p1' },
+    ])
+  })
+
+  it('never flags a hand-entered row, which has no source_quiz_id', () => {
+    expect(orphanedQuizAssessments(assessments, [])).not.toContainEqual(
+      expect.objectContaining({ id: 'manual-1' }),
+    )
+  })
+
+  // The whole safety of the sweep: a broken read of the teacher's quizzes
+  // must look like "nothing is orphaned", not "everything is orphaned".
+  it('flags nothing while the quiz list is still loading (undefined)', () => {
+    expect(orphanedQuizAssessments(assessments, undefined)).toEqual([])
+  })
+
+  it('flags nothing when the quiz list resolved empty', () => {
+    expect(orphanedQuizAssessments(assessments, [])).toEqual([])
+  })
+
+  it('flags nothing when the quiz list is not an array (e.g. an error state)', () => {
+    expect(orphanedQuizAssessments(assessments, null)).toEqual([])
+  })
+})
+
+describe('describeSweepResult', () => {
+  it('is silent when there is nothing to report', () => {
+    expect(describeSweepResult({ removed: 0, locked: [] })).toBe('')
+  })
+
+  it('names a single removed column in the singular', () => {
+    expect(describeSweepResult({ removed: 1, locked: [] })).toBe(
+      'Removed 1 column for a quiz that no longer exists.',
+    )
+  })
+
+  it('counts several removed columns', () => {
+    expect(describeSweepResult({ removed: 2, locked: [] })).toBe(
+      'Removed 2 columns for quizzes that no longer exist.',
+    )
+  })
+
+  it('reports a locked period refusing removal, by name', () => {
+    expect(describeSweepResult({ removed: 0, locked: ['Quarter 1 is locked — unlock it to remove that column.'] }))
+      .toBe('Quarter 1 is locked — unlock it to remove that column.')
+  })
+
+  it('reports both a removal and a refusal together', () => {
+    expect(describeSweepResult({ removed: 1, locked: ['Quarter 1 is locked — unlock it to remove that column.'] }))
+      .toBe('Removed 1 column for a quiz that no longer exists. Quarter 1 is locked — unlock it to remove that column.')
   })
 })
 

@@ -273,3 +273,37 @@ export function quizzesToAutoPost(quizzes = [], classId) {
       !!q.class_mappings?.[classId],
   )
 }
+
+/**
+ * Assessment rows whose quiz document is gone -- the state every quiz
+ * delete left on the class record before `89c1200` started cleaning up
+ * after itself (T-87, triplecookiemonster-106).
+ *
+ * `quizzes` must be the teacher's own, fully resolved quiz list -- not
+ * filtered by status or class mapping, since a quiz that still exists
+ * anywhere is reason enough to leave its column alone. This deliberately
+ * returns nothing at all unless that list resolved with at least one quiz
+ * in it: a still-loading, empty, or failed query looks identical to "every
+ * quiz is gone" from in here, and treating it that way would flag every
+ * quiz column in the class as orphaned in a single pass. See
+ * `useSweepOrphanedQuizzes` in `hooks/useQuizRecordSync.js`, which is the
+ * only caller and holds the query in that state until it has real data.
+ */
+export function orphanedQuizAssessments(assessments = [], quizzes) {
+  if (!Array.isArray(quizzes) || quizzes.length === 0) return []
+  const quizIds = new Set(quizzes.map((q) => q.id))
+  return assessments.filter((a) => a.source_quiz_id && !quizIds.has(a.source_quiz_id))
+}
+
+/**
+ * One line for the record page's status area after a sweep for orphaned
+ * quiz columns -- reported there, not a toast, since the teacher did not
+ * press anything to trigger it.
+ */
+export function describeSweepResult({ removed = 0, locked = [] } = {}) {
+  const parts = []
+  if (removed === 1) parts.push('Removed 1 column for a quiz that no longer exists.')
+  else if (removed > 1) parts.push(`Removed ${removed} columns for quizzes that no longer exist.`)
+  if (locked.length) parts.push(locked.join(' '))
+  return parts.join(' ')
+}

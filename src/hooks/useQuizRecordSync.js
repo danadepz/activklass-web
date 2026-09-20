@@ -30,6 +30,7 @@ import { syncEntries } from '@/lib/gradebook'
 import {
   assessmentFromQuiz,
   assessmentIdForQuiz,
+  orphanedQuizAssessments,
   quizScoreCells,
   quizTotalPoints,
 } from '@/lib/quizToRecord'
@@ -214,6 +215,94 @@ export async function removeQuizFromAllRecords({ quiz, classMappings }) {
     removed.push(classId)
   }
   return { removed, locked: [] }
+}
+
+/**
+ * Delete the columns `orphanedQuizAssessments` found for one class, the
+ * same way a normal quiz delete would (see `removeQuizFromAllRecords`
+ * above): refuse the ones whose grading period is locked, naming it, and
+ * remove the rest, then re-sync `entries` once so the student stops
+ * reading a grade for a quiz that is not there any more.
+ *
+ * `periods` is the class record bundle's own `periods` array -- the caller
+ * already has it loaded, so this needs no extra read.
+ */
+export async function sweepOrphanedQuizColumns({ classId, orphans, periods = [] }) {
+  if (!orphans.length) return { removed: [], locked: [] }
+
+  const periodById = new Map(periods.map((p) => [p.id, p]))
+  const removed = []
+  const locked = []
+  for (const a of orphans) {
+    const period = periodById.get(a.period_id)
+    if (period?.locked) {
+      locked.push(`${period.name} is locked — unlock it to remove that column.`)
+      continue
+    }
+    await deleteDoc(doc(db, 'gradebooks', classId, 'assessments', a.id))
+    removed.push(a.id)
+  }
+
+  if (removed.length) {
+    try {
+      await syncEntries(classId)
+    } catch {
+      /* Entries are derived; the next record save re-syncs them. */
+    }
+  }
+
+  return { removed, locked: [...new Set(locked)] }
+}
+
+/**
+ * Sweep a class record, on open, for quiz columns whose quiz document was
+ * deleted outside the Quizzes page -- every delete before `89c1200` left
+ * exactly this behind, with nothing to clean it up after the fact (T-87,
+ * triplecookiemonster-106). Runs alongside `useAutoPostScores`, on the
+ * same page-open trigger, and its result is meant to be folded into that
+ * same status line rather than a toast: the teacher did not press
+ * anything.
+ *
+ * `quizzes` must be the teacher's full, unfiltered quiz list (`useQuizzes`,
+ * not `quizzesToAutoPost`'s narrower one) -- `orphanedQuizAssessments`
+ * itself refuses to call anything orphaned unless that list resolved with
+ * at least one quiz in it, so pass the query's raw `data` through exactly
+ * as `useQuizzes()` returns it: `undefined` while loading, `undefined` (or
+ * stale data) on error, `[]` if the teacher truly has none yet. Do not
+ * substitute `[]` for a loading/error state here -- that is the one thing
+ * that would turn a broken query into "every quiz is gone".
+ */
+export function useSweepOrphanedQuizzes({ classId, assessments = [], periods = [], quizzes, enabled = true, onSwept }) {
+  const [state, setState] = useState({ status: 'idle', removed: 0, locked: [] })
+  const ranFor = useRef('')
+  const orphans = orphanedQuizAssessments(assessments, quizzes)
+  const key = `${classId}|${orphans.map((a) => a.id).sort().join(',')}`
+
+  useEffect(() => {
+    if (!enabled || !classId || orphans.length === 0 || ranFor.current === key) return
+    ranFor.current = key
+    let cancelled = false
+    setState({ status: 'sweeping', removed: 0, locked: [] })
+    ;(async () => {
+      try {
+        const result = await sweepOrphanedQuizColumns({ classId, orphans, periods })
+        if (cancelled) return
+        setState({ status: 'done', removed: result.removed.length, locked: result.locked })
+        if (result.removed.length) onSwept?.()
+      } catch {
+        if (!cancelled) setState({ status: 'done', removed: 0, locked: [] })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // `key` stands in for classId + the orphan ids found this render;
+    // `periods` and `onSwept` may be rebuilt every render and must not
+    // retrigger the sweep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key])
+
+  return state
 }
 
 /**
