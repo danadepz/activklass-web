@@ -393,6 +393,19 @@ export function phoneError(value, { required = true } = {}) {
 }
 
 /**
+ * The message when a phone number already belongs to another account
+ * (T-88). Whether it does is answered by the server, not this file — a
+ * client-side lookup over `users` would work under the rules but would hand
+ * any signed-in account a phone-number enumeration oracle over every
+ * teacher on the platform, so `register.jsx` asks
+ * `POST /api/auth/register/phone-in-use` instead and shows this message
+ * when it comes back yes. Kept here, like every other form message, so the
+ * wording has one home.
+ */
+export const PHONE_IN_USE_ERROR =
+  'That phone number is already on another account. Double-check what you typed, or use a different number.'
+
+/**
  * A shareable https link — the attachment path beside every upload in this
  * app (and the only one before Storage was provisioned on 2026-09-12). Must
  * parse as a URL and be https;

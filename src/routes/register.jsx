@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
+import { api, ApiError } from '@/lib/api'
 import {
   emailError,
   linkError,
   nameError,
   passwordError,
   phoneError,
+  PHONE_IN_USE_ERROR,
   schoolAbbrError,
   schoolNameError,
   verificationIdError,
@@ -305,6 +307,25 @@ export default function Register() {
     if (addingSchool) {
       const clash = await abbrConflictError(form.newSchoolAbbr, form.newSchoolName)
       if (clash) { setError(clash); return }
+    }
+    // A phone number should belong to one account (T-88), checked here for
+    // the same reason as the abbreviation above: a predictable rejection
+    // must not strand anyone in the half-registered state. This cannot be a
+    // client-side query over `users` -- the rules would allow it once
+    // signed in, but that turns the check into a phone-number enumeration
+    // oracle over every teacher on the platform -- so the Admin SDK answers
+    // yes/no through Flask instead. A Flask outage is not this check's to
+    // enforce: it degrades to "not flagged" rather than blocking the whole
+    // form on a server that six other features already depend on being up.
+    try {
+      const { in_use } = await api('/api/auth/register/phone-in-use', {
+        method: 'POST',
+        body: { phone: form.phone.trim() },
+        requireAuth: false,
+      })
+      if (in_use) { setError(PHONE_IN_USE_ERROR); return }
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.code !== 'unreachable') throw err
     }
     // 0. Someone else's session is not ours to finish. Stop here, before any
     // account or directory write, and leave the form as it is: Sign out (the
