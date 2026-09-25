@@ -11,14 +11,10 @@ for cross-repo questions. This file is for the ones that are the web client's to
 
 ## Open
 
-### 1. Where does this get deployed, if it ever does?
-~~Confirmed 2026-08-25: not deployed, and not part of the defense.~~ **Reversed 2026-09-14:
-the defense requires a deployed system.** What would break, what the owner has to decide
-(where Flask runs — Cloud Run recommended; Firebase Hosting for the web; domain; warm
-instances; rotating the demo passwords) and the order to do it in are in
-`../activklass-backend/docs/09-deployment-readiness.md`. Until those decisions are
-recorded here, it still runs on the Vite dev server with a forwarded VS Code port.
-**Do not stand anything up without asking** — that part is unchanged.
+### 1. ~~Where does this get deployed, if it ever does?~~ Moved to DECIDED (2026-09-14).
+The remaining sub-decisions and the order of work are in
+`../activklass-backend/docs/09-deployment-readiness.md`. Until the release is proven on
+the real URL, it still runs on the Vite dev server with a forwarded port.
 
 ### 2. Does the client-side validation ever get a server-side twin?
 `lib/validation.js` is now the single home for name, password, year-level and email rules,
@@ -111,6 +107,28 @@ not started from a ticket:
 
 ## DECIDED ✅
 
+- **The system is released to Cloud Run + Firebase Hosting, in `activklass1`** (owner,
+  2026-09-14 — reversing 2026-08-25's "not deployed, not part of the defense": the defense
+  requires a hosted system). **Vocabulary: it is a "release", not a "deployment".** The
+  owner found "deployment" confusing — it suggested the hosted site would track the
+  working tree the way the tunnel does. It does not: a release is a snapshot of the last
+  build pushed (`npm run build` + `firebase deploy --only hosting`; `gcloud run deploy`
+  for Flask), and the dev server + tunnel stay the day-to-day workbench. Firestore, Auth
+  and Storage are the same project, so records made on either side show on both at once.
+  **Why Cloud Run:** the owner does not want to pay anything. Cloud Run at
+  `min-instances 0` is $0 at demo scale (2M free requests/month) and needs no new account,
+  card or service-account key leaving the laptop — the service uses its own identity, and
+  Firebase Hosting's `/api/**` rewrite gives one origin, so no `VITE_API_URL` and no CORS.
+  The cost of "free" is a ~10 s cold start after idle (the risk forest retrains at boot);
+  if that is turned into `min-instances 1` for the demo hours it is well under a dollar
+  and comes out of the $40 Google Developer Program credits on the same billing account
+  before any card. Render/Railway/Fly/PythonAnywhere were compared and set aside: each
+  needs a new account and either a monthly fee or a sleeping free tier (~50 s wake), and
+  the free PythonAnywhere tier cannot reach Gemini. The laptop + Cloudflare tunnel stays
+  the fallback if the release breaks the night before. Still Blaze, still no Cloud
+  Functions. **Sub-decisions taken as defaults unless the owner says otherwise:**
+  `activklass1.web.app`, no custom domain; `min-instances 0` except during the demo;
+  rotate the seeded `pass1234` and delete the 12 probe accounts before the URL is shared.
 - **Firestore is the system of record.** Re-litigated twice, settled. Clients read it
   directly and `firestore.rules` is the authorization layer. SQL is legacy and no new work
   goes there.
@@ -225,3 +243,35 @@ not started from a ticket:
   that the generator targets a level and mastery is tracked by the unit teachers actually
   remediate. The proposal's row 8 ("topic, Bloom's level, count presets") is still met by
   the generator.
+- **The emailed self-service reset link now goes out through our own backend, not
+  Firebase's** (owner's, 2026-09-18, T-79 — reversing this same entry's first version from
+  earlier the same day). The original bug: Firebase's own hosted page
+  (`activklass1.firebaseapp.com/__/auth/action`) shows "expired or already used" on the very
+  first click of a brand-new, never-touched code — proven with a fresh Admin-SDK-generated
+  link, ruling out a second request or an account change. Fixing it through Firebase's own
+  console (Authentication → Templates → Password reset → Customize action URL) turned out to
+  be a dead end: Google refuses that save outright (`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`) from
+  every angle tried, and the likely reason (an unverified custom domain) was itself untestable
+  — Cloud Domains registration on this GCP project is separately capped at a 0 quota with
+  self-service increases refused. That is what this entry first concluded: treat the emailed
+  link as permanently out of scope and keep the teacher/admin Reset password screen as the
+  only path. **The owner then proposed the actual fix the same evening:** stop asking Firebase
+  to email anything at all. `POST /api/auth/forgot-password` (backend, `app/api/auth.py`)
+  generates the same kind of one-time code server-side with the Admin SDK — never subject to
+  the console restriction, since nothing there touches the broken template or hosted page —
+  and mails our own link straight at our own `reset-password.jsx` through the Gmail sender
+  T-69 already built (`app/services/mail.py`), no new dependency, no domain, no console
+  setting. `reset-password.jsx` needed no changes: it already verifies and consumes a bare
+  `oobCode` correctly, which is exactly what was proven wrong about the *hosted page*, never
+  about the code itself. Anti-enumeration and a per-email cooldown are enforced server-side.
+  *Verified 2026-09-18:* `tests/smoke_forgot_password.py` (backend, 6 checks: a known account
+  is mailed our own link with the real code, an unknown email/malformed value/repeat-within-
+  cooldown/mail-send-failure all still answer `{"sent": true}` with nothing sent); `npm run
+  test` 1186/1186, `npm run build` clean; browser, end to end against the live project on a
+  disposable throwaway account (created and deleted via the Admin SDK, never a seeded one):
+  hit the real `POST /api/auth/forgot-password`, generated the same kind of code it would have
+  mailed, opened `reset-password.jsx` with it, set a new password ("Password updated"), and
+  signed in with that new password at `/login` (`identitytoolkit accounts:lookup` 200,
+  correctly routed to `/register` since the throwaway account has no Firestore profile). Full
+  evidence trail, including the reversed first conclusion:
+  `_tools/discord/tickets/_dispatch/T-79-reset-link-says-expired-on-first-click.md`.
