@@ -480,6 +480,44 @@ Still open at this altitude:
   `npm run test` 1296/1296, `npm run build` clean. **Not built:** enforcing
   `trial_ends_at` itself — recorded but nothing locks a lapsed trial out yet, a separate
   owner call.
+- `[x]` **The registration phone check no longer refuses a returning person their own
+  number, and now catches every format of the same number** (2026-09-26, T-94 then T-93,
+  both `/verify`'s own findings while checking T-88, `andecobs-117`). T-94 first: the
+  duplicate-phone check (T-88) ran before `createUserWithEmailAndPassword`, and therefore
+  before the `getDoc(users/uid) → navigate('/portal')` branch that recognises a finished
+  account resubmitting its own details — someone re-registering with their own email and
+  phone was told their own number was already on another account instead of being sent to
+  their portal. Fixed by reordering, not loosening: the existing-account branch (a
+  different session already signed in, or this person's own half-made/finished
+  registration) is settled first, and only a genuinely new registration reaches the phone
+  check; a stranger's number is still refused with the same wording, and the endpoint
+  still answers yes/no only, never whose account. T-93 next, now that the call site was
+  settled: the check compared exact bytes, so `09434969549` (6 accounts, Derick's own
+  screenshot) was refused, but `0943 496 9549`, `0943-496-9549` and `+639434969549` all
+  sailed through — and the field's own placeholder is the spaced form, so the un-checked
+  path was the default one. Owner's decision on 2026-09-21: a phone number belongs to one
+  person only. `normalizePhone` in `lib/validation.js` strips spacing/punctuation and
+  folds a leading `+63`/`63` to `0`; the backend's `_normalize_phone`
+  (`app/api/auth.py`, **cross-repo**) mirrors it in Python and now reads every stored
+  `users.phone` and normalises it there rather than an indexed exact-match query — chosen
+  over a stored `phone_canonical` field specifically because a canonical field only helps
+  rows written after it exists, and a backfill over the live accounts that already
+  collide was ruled out under this card and flagged to the owner instead (`09154686377`
+  on 3 accounts, `+639154686377` on a 4th, left untouched). *Verified:* a test beside
+  `register.jsx` locking the new call order (red against the old order, confirmed by
+  reverting the reorder and re-running); `normalizePhone` tests in
+  `validation.test.js`; the backend's `smoke_phone_in_use.py` extended with four in-use
+  format variants and three free-number variants, confirmed red first by reverting only
+  `app/api/auth.py` and re-running (the four variant checks failed, everything else
+  passed). `npm run test` 1301/1301, `npm run build` clean. Live against the real
+  `activklass1` project: three full registrations driven in the browser (a new
+  registration on a free number reached pending-verification as before; resubmitting the
+  same email and phone as a pending account was recognised and sent back to that
+  account's own status page instead of refused; a second account trying a number already
+  on the first was refused with the unchanged wording) plus a direct check that
+  `09434969549` now reads in-use in all three of the ticket's confirmed formats and that
+  `0943 496 9549` — the placeholder's own format — is refused end to end through the form;
+  every test account created for the passes was deleted afterward through the Admin SDK.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
