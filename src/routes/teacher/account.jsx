@@ -195,12 +195,14 @@ function PayButton({ ownerId }) {
   )
 }
 
-const CHECKOUT_BANNER = {
+// Exported so a test can lock CLAUDE.md's rule against this map without
+// having to drive five real polls through useCheckoutReturn's effect.
+export const CHECKOUT_BANNER = {
   checking: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Checking your payment…' },
   paid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — you are subscribed for the school year.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
-    text: 'We could not confirm the payment yet. If you completed it on PayMongo, refresh in a moment — otherwise nothing was charged.',
+    text: 'We could not confirm the payment yet. If you completed it, refresh in a moment — otherwise nothing was charged.',
   },
   cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
 }

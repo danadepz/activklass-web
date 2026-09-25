@@ -50,7 +50,7 @@ vi.mock('@/components/SignOutButton', () => ({ default: () => null }))
 vi.mock('@/routes/teacher/SchoolColleagues', () => ({ default: () => null }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn() }))
 
-import TeacherAccountPage from './account.jsx'
+import TeacherAccountPage, { CHECKOUT_BANNER } from './account.jsx'
 
 const PAY = 'Pay for this school year'
 const DAY = 24 * 60 * 60 * 1000
@@ -82,5 +82,13 @@ describe('T-68 — the Account page offers to pay, inside the website', () => {
   it("never offers it on a school's plan — the admin pays for those seats", () => {
     expect(page({ profile: { school_id: 'S1' }, subscription: { type: 'institution', status: 'trial' } })).not.toContain(PAY)
     expect(page({ subscription: { type: 'institution', status: 'expired' } })).not.toContain(PAY)
+  })
+})
+
+describe('T-68 — the checkout banners never name the gateway', () => {
+  it('none of the four banner strings mention the vendor', () => {
+    for (const { text } of Object.values(CHECKOUT_BANNER)) {
+      expect(text).not.toMatch(/paymongo/i)
+    }
   })
 })

@@ -430,6 +430,56 @@ Still open at this altitude:
   both sides have a confirmed real-world delivery now — a teacher (Maykel) and one of the
   three Tabor Hill College accounts — closing the browser gap the entry above used to leave
   open.
+- `[x]` **Payment happens inside the website, on play money (T-68, dawny808-87)**
+  (built 2026-09-17 → 09-19, this entry written 2026-09-26). Registration promised "We'll
+  ask for payment details before it ends" and nothing ever did — there was no money path
+  in either repo, and `trial_ends_at` was stamped and enforced nowhere. Owner decision:
+  Option A, PayMongo test mode, hosted checkout. The Account page's Subscription card
+  gets a **Pay for this school year** button whenever the account's own plan (never a
+  school's — the admin pays for those) is on trial or expired; it calls
+  `POST /api/subscription/{owner}/checkout`, which recomputes the amount server-side from
+  the stored seats and sends the browser to PayMongo's hosted page **(cross-repo,
+  `70846d6` web / backend)**. The register.jsx sentence now says what actually happens:
+  "No card needed for the trial. Pay for the school year any time from your Account page."
+  A first pass (`/verify` 2026-09-19) found the flow sound but not actually fixed: the
+  return page was the *only* thing that ever flipped a payment, so a payer who closed the
+  tab — maykel's real ₱3,600 test run among them — stayed on a trial forever even though
+  PayMongo had taken the payment; T-80 (separately) fixed the return URL following the
+  tester's own host instead of `localhost`. `reconcile_pending_payments()` closed the
+  other half **(backend `0de59f2`)**: `GET /subscription/{owner}` now re-checks that
+  owner's still-`pending` payments against PayMongo before answering, so a payer catches
+  up the moment they open any screen reading their own subscription — no `checkout_ref`,
+  no return trip required — and a new superadmin-only sweep
+  (`POST /api/superadmin/payments/reconcile`) catches a payer who never reopens the app at
+  all. Nothing here trusts the client: `_mark_paid` still re-reads the payment's own status
+  from PayMongo before writing anything; this only decides *when* to ask.
+  *Verified:* `tests/smoke_payments.py` (backend) — the exact shape `/verify` asked for: a
+  paid session nobody returns from still ends active the next time its owner's
+  subscription is read, a session PayMongo still calls unpaid never produces one, one
+  owner's read never touches another's pending payment, and the superadmin sweep flips
+  only what PayMongo actually confirms. `accountPayButton.test.jsx` locks when the button
+  appears (trial, expired, the self-registered no-document path; never active or a
+  school's plan). Read live against the real project (2026-09-26, read-only Admin SDK):
+  maykel's own `subscriptions/{uid}` document is `status: 'active'`,
+  `last_payment.reference` matches his real PayMongo payment id, and his `payments` doc
+  carries `receipt_sent_at` with no `receipt_error` — the reconciliation genuinely
+  recovered his write-off run, not just in the commit that claims it. **Browser, this
+  session:** a fresh trial teacher, provisioned directly (the shared dev browser was mid
+  in-flight test elsewhere), signed in, opened the Account page, saw "INDIVIDUAL TEACHER
+  · Free trial — 20 days left" with the Pay button, clicked it, and landed on a real
+  `checkout.paymongo.com` hosted page reading "ActivKlass — individual plan, one school
+  year," Total Due ₱1,200.00 — the correct `estimateSolo` amount for that account's actual
+  (zero) student count, proving the server priced it from real data rather than trusting
+  the client. Stopped there on purpose — completing a PayMongo test payment through
+  browser automation has been unreliable in past sessions and adds nothing the smoke
+  suite and the live Firestore read above do not already prove. **Also fixed this
+  session:** the "payment not yet confirmed" banner on the Account page named PayMongo by
+  name ("If you completed it on PayMongo, refresh in a moment…"), breaking the
+  never-name-a-vendor rule; reworded, and `accountPayButton.test.jsx` gained a check that
+  none of the four checkout banners mention the gateway, watched red before the fix.
+  `npm run test` 1296/1296, `npm run build` clean. **Not built:** enforcing
+  `trial_ends_at` itself — recorded but nothing locks a lapsed trial out yet, a separate
+  owner call.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
