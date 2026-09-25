@@ -245,20 +245,22 @@ describe('the Position list, per path', () => {
    `09434969549`, the number in his screenshot, sits on six accounts.
 
    What is pinned here is the whole of what the fix promises, in the order it
-   promises it: the wording the person reads; that the yes/no comes from OUR
-   backend and not from a Firestore query in the browser (the rules would
+   promises it: the wording the person reads; and that the yes/no comes from
+   OUR backend and not from a Firestore query in the browser (the rules would
    allow that one, and it would hand any signed-in account a phone-number
-   enumeration oracle over every teacher on the platform); and that it is
-   asked BEFORE the Firebase account exists, so a predictable rejection cannot
-   strand anyone half-registered — the same position, for the same reason, as
-   the school-abbreviation clash beside it.
+   enumeration oracle over every teacher on the platform).
 
    The decision itself lives in an async submit handler six steps in, which no
    static render can drive and this repo has no DOM library to drive it with,
    so the wiring is read off the source the way forgot-password.test.jsx's
-   T-79 block reads its own. Delete the call, move it after account creation,
-   swap it for a client-side `where('phone', ...)`, or reword the message, and
-   one of these fails. */
+   T-79 block reads its own. Delete the call, swap it for a client-side
+   `where('phone', ...)`, or reword the message, and one of these fails.
+
+   Where the call sits moved under T-94, below: it no longer runs before the
+   Firebase account exists (that used to strand a genuinely new registration
+   on a taken number less often, at the cost of refusing a RETURNING person
+   their own number before the code that would have recognised them ever
+   ran). */
 const registerSource = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
 
 describe('T-88 — a phone number another account already uses', () => {
@@ -293,16 +295,59 @@ describe('T-88 — a phone number another account already uses', () => {
     expect(phoneError('09434969549')).toBe('')
   })
 
-  it('asks before the Firebase account is created, not after', () => {
-    const asked = registerSource.indexOf("'/api/auth/register/phone-in-use'")
-    const created = registerSource.indexOf('await createUserWithEmailAndPassword(')
-    expect(asked).toBeGreaterThan(-1)
-    expect(created).toBeGreaterThan(-1)
-    expect(asked).toBeLessThan(created)
-  })
-
   it('never looks the number up from the browser', () => {
     expect(registerSource).not.toMatch(/where\(\s*'phone'/)
     expect(registerSource).not.toMatch(/getDocs|query\(/)
+  })
+})
+
+/* T-94 (andecobs-117, found by /verify while checking T-88): the phone check
+   above used to run before `createUserWithEmailAndPassword` and therefore
+   before the `getDoc(users/uid) -> navigate('/portal')` branch that
+   recognises a FINISHED account resubmitting its own details. The check
+   cannot tell whose number it matched — that yes/no shape is the whole point
+   of T-88 — so a returning person hit the refusal meant for a stranger,
+   instead of being sent to their portal the way they were before T-88.
+   Reordering, not loosening, is the fix: settle whether this browser already
+   holds the account (a different one still signed in, or this person's own,
+   finished or half-made) before ever asking about the phone. Read off the
+   source for the same reason the T-88 block above does. Move the phone check
+   back above `signedInAsSomeoneElse` or above the `getDoc` branch and either
+   of these goes red. */
+describe('T-94 — the existing-account branch is settled before the phone check runs', () => {
+  const phoneCheckAt = registerSource.indexOf("'/api/auth/register/phone-in-use'")
+  const signedInGuardAt = registerSource.indexOf('signedInAsSomeoneElse(auth.currentUser?.email, form.email)')
+  const existingProfileAt = registerSource.indexOf("getDoc(doc(db, 'users', auth.currentUser.uid))")
+
+  it('checks for a different signed-in session before asking about the phone', () => {
+    expect(signedInGuardAt).toBeGreaterThan(-1)
+    expect(phoneCheckAt).toBeGreaterThan(-1)
+    expect(signedInGuardAt).toBeLessThan(phoneCheckAt)
+  })
+
+  /* This is the exact branch a returning person needs: the one that finds
+     their finished profile and sends them to /portal. It has to run, and
+     return, before the phone check gets a chance to refuse them their own
+     number. */
+  it('checks for a finished profile to resume before asking about the phone', () => {
+    expect(existingProfileAt).toBeGreaterThan(-1)
+    expect(existingProfileAt).toBeLessThan(phoneCheckAt)
+  })
+
+  /* The reorder must not turn into a skip: a genuinely new registration —
+     nothing in `users` yet — still reaches the check, and it still runs
+     before anything that would be harder to walk back (the school directory
+     write, the institution request, the profile write itself). */
+  it('still runs the check for a genuinely new registration, before anything else gets written', () => {
+    const schoolWriteAt = registerSource.indexOf('addSchoolToDirectory(')
+    const profileWriteAt = registerSource.indexOf("setDoc(doc(db, 'users', uid)")
+    expect(schoolWriteAt).toBeGreaterThan(-1)
+    expect(profileWriteAt).toBeGreaterThan(-1)
+    expect(phoneCheckAt).toBeLessThan(schoolWriteAt)
+    expect(phoneCheckAt).toBeLessThan(profileWriteAt)
+  })
+
+  it('still refuses with the same wording — the endpoint answers yes/no only, so a stranger’s number is caught the same as before', () => {
+    expect(registerSource).toMatch(/if \(in_use\) \{ setError\(PHONE_IN_USE_ERROR\); return \}/)
   })
 })

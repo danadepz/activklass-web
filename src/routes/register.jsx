@@ -308,25 +308,6 @@ export default function Register() {
       const clash = await abbrConflictError(form.newSchoolAbbr, form.newSchoolName)
       if (clash) { setError(clash); return }
     }
-    // A phone number should belong to one account (T-88), checked here for
-    // the same reason as the abbreviation above: a predictable rejection
-    // must not strand anyone in the half-registered state. This cannot be a
-    // client-side query over `users` -- the rules would allow it once
-    // signed in, but that turns the check into a phone-number enumeration
-    // oracle over every teacher on the platform -- so the Admin SDK answers
-    // yes/no through Flask instead. A Flask outage is not this check's to
-    // enforce: it degrades to "not flagged" rather than blocking the whole
-    // form on a server that six other features already depend on being up.
-    try {
-      const { in_use } = await api('/api/auth/register/phone-in-use', {
-        method: 'POST',
-        body: { phone: form.phone.trim() },
-        requireAuth: false,
-      })
-      if (in_use) { setError(PHONE_IN_USE_ERROR); return }
-    } catch (err) {
-      if (!(err instanceof ApiError) || err.code !== 'unreachable') throw err
-    }
     // 0. Someone else's session is not ours to finish. Stop here, before any
     // account or directory write, and leave the form as it is: Sign out (the
     // notice above the form, or the button beside this message) and the same
@@ -375,7 +356,33 @@ export default function Register() {
         return
       }
     }
-    // 2. A newly declared school goes into the public directory first, so
+    // 2. A phone number should belong to one account (T-88). This runs AFTER
+    // the existing-account branch above, on purpose (T-94): that branch is
+    // the only thing that can tell a returning person's own number apart
+    // from a stranger's, because the endpoint itself cannot -- it answers
+    // yes/no and nothing else, deliberately, so it can never be used to
+    // enumerate who owns a number. Checking here first used to catch a
+    // returning person on their own number before the code below ever ran,
+    // and refuse them with the same wording a stranger gets. Only a
+    // genuinely new registration -- one Firebase didn't already recognise --
+    // reaches this. This cannot be a client-side query over `users` -- the
+    // rules would allow it once signed in, but that turns the check into a
+    // phone-number enumeration oracle over every teacher on the platform --
+    // so the Admin SDK answers yes/no through Flask instead. A Flask outage
+    // is not this check's to enforce: it degrades to "not flagged" rather
+    // than blocking the whole form on a server that six other features
+    // already depend on being up.
+    try {
+      const { in_use } = await api('/api/auth/register/phone-in-use', {
+        method: 'POST',
+        body: { phone: form.phone.trim() },
+        requireAuth: false,
+      })
+      if (in_use) { setError(PHONE_IN_USE_ERROR); return }
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.code !== 'unreachable') throw err
+    }
+    // 3. A newly declared school goes into the public directory first, so
     // the next teacher from that school finds it in the dropdown. Requires
     // the session that step 1 just created.
     const school = addingSchool
@@ -386,7 +393,7 @@ export default function Register() {
     }
     const uid = auth.currentUser.uid
 
-    // 3. Institution: write the request BEFORE the profile (T-61). A
+    // 4. Institution: write the request BEFORE the profile (T-61). A
     // request refused by the rules must not strand the account behind a
     // profile that already says "pending" — with no profile written yet, a
     // refusal here just leaves a bare Firebase account, and the next sign-in
@@ -407,7 +414,7 @@ export default function Register() {
       })
     }
 
-    // 4. ActivKlass profile doc in the Firestore 'users' collection.
+    // 5. ActivKlass profile doc in the Firestore 'users' collection.
     // Always a teacher, on both paths: a person may only ever give
     // themselves that role (the rules refuse 'admin' — escalation guard),
     // and students, admins and parents are provisioned by their school.
