@@ -518,6 +518,69 @@ Still open at this altitude:
   `09434969549` now reads in-use in all three of the ticket's confirmed formats and that
   `0943 496 9549` — the placeholder's own format — is refused end to end through the form;
   every test account created for the passes was deleted afterward through the Admin SDK.
+- `[~]` **An Institution sign-up pays for its seats at sign-up, not after approval**
+  (2026-09-26, T-82 Option B — triplecookiemonster-107, Kristine's "mag add pag payment
+  gateway here noh?"). T-82 was logged not-a-bug on 2026-09-19 (quote → approval → pay was
+  the design) and the owner reversed that decision on 2026-09-26; this is the build. The
+  backend half landed first, three commits in `activklass-backend` (`80fd35b`, `0a15838`,
+  `260e200`, **cross-repo**): checkout now accepts a `schools/{id}` document that exists
+  only as `status: 'pending'` (ownership traced through `subscription_requests/{id}.uid`,
+  amount from that same request's own seats), `_mark_paid` stamps `payment_status: 'paid'`
+  without ever creating a subscription or moving the school off `pending`, and a new
+  `POST /requests/{id}/decline` refunds through PayMongo before declining. That pass left
+  two loose ends flagged rather than guessed at (`docs/OPEN-QUESTIONS.md` Q8, backend repo):
+  the register page's "your final quote follows" copy, now false under Option B, and three
+  web surfaces that needed to move in step. Closed here, same day: `POST
+  /api/subscription/institution/pending-school` (new, Flask — `schools` stays
+  superadmin-only to write directly, so `/register` cannot create the pending document
+  itself; idempotent, called right after the request write, before the profile write)
+  gives `/register` something to check out against; the seat-picker card now says "Due
+  today" and "Refunded in full if we decline your request" instead of "nothing to pay
+  today"; submitting starts a PayMongo checkout with `flow: 'institution_signup'` (the
+  return trip goes to `/register?checkout_ref=…&checkout_school=…`, not
+  `/teacher/account` — the requester is not a member of anything yet, so the account page
+  has nothing of theirs to show) and the requester stays signed in through the redirect,
+  unlike every institution sign-up before this (the confirm call on return needs that same
+  session); a failed-to-start checkout retries on its own next submit via
+  `institutionSchoolId`, rather than re-running account creation into the existing-profile
+  branch's navigate-to-portal. **A third finding, not in Q8, surfaced while reading the
+  approve path closely:** `approve_request`'s CONFIRM branch always created a fresh 30-day
+  trial regardless of `payment_status` — a school that already paid for the year still came
+  out of approval as an ordinary trial, with nothing anywhere flipping it to what was
+  actually paid for. Owner confirmed the fix (asked directly, not defaulted): approving a
+  paid pending school now activates the subscription for the paid year (`status: 'active'`,
+  `paid_through` from the payment's own timestamp, no `trial_ends_at`) instead of starting
+  a trial; the welcome email says the year is already paid for instead of "your first 30
+  days are free". The superadmin console now shows a **Paid** badge and locks the seat
+  inputs in the Approve dialog for a request whose school already paid — editing seats
+  after the fact would approve a count the payment does not match — and Decline branches to
+  the new Flask endpoint only when a payment exists, keeping the old client-side write for
+  everything filed before this shipped or never paid. *Verified:* backend —
+  `tests/smoke_payments.py` (+2 sections: the new pending-school endpoint, idempotent, with
+  the wrong caller and an unknown request both refused, and the flow-aware redirect
+  checked byte-for-byte against `/register?checkout_ref=…&checkout_school=…`) and
+  `tests/smoke_superadmin.py` (+1 section: a paid pending school approves to `active` with
+  `paid_through` set, no `trial_ends_at`, the right PayMongo reference and amount on
+  `last_payment`, and the welcome email's wording asserted directly); the full backend
+  smoke suite (16 files) run directly, all green, no regressions. Web —
+  `register.test.jsx` (+7: the pending-school call sits between the request write and the
+  profile write, in that order; `logout()` no longer runs before the checkout redirect on
+  the institution path; `startCheckout` is called with `flow: 'institution_signup'`; a
+  failed checkout retries via `institutionSchoolId` before re-running account creation; the
+  old "nothing to pay today" / "final quote" copy is gone and the new "Due today" /
+  "Refunded in full" copy is present; the "sent" screen's copy no longer depends on `form`
+  state a full-page PayMongo round trip does not preserve; the confirming/cancelled return
+  screens render correctly off `checkout_ref`/`checkout_cancelled`/`checkout_school`) and a
+  new `requests.test.jsx` (+6, the page's first test file: Decline branches on `paid`
+  before deciding which path to take, the unpaid path is untouched, the seat inputs lock
+  when paid, `fetchPendingRequests` attaches `school_payment_status`). `npm run test`
+  1316/1316, `npm run build` clean. **Not done:** no browser walkthrough — a live PayMongo
+  test payment through this flow was not driven (the account.jsx equivalent has repeatedly
+  been unreliable through browser automation in past sessions; this needs a human pass,
+  quote → pay → confirm → approve → decline-and-refund, end to end); `docs/DATA-MODEL.md`
+  updated the same session, `docs/08-subscriptions-and-groups.md` and `OPEN-QUESTIONS.md`
+  Q8 (backend repo) still read as the backend-only pass and want a follow-up note once the
+  browser walk closes this out.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
