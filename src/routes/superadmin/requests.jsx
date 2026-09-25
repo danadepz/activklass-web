@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
-import { approveRequest, resendApprovalNotice } from '@/lib/superadmin'
+import { approveRequest, declineRequest, resendApprovalNotice } from '@/lib/superadmin'
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import MessageDialog from './MessageDialog'
@@ -19,12 +19,20 @@ import { Dialog, Field, inputCls } from './index'
  * school here. Until this page existed the only way to see a request was the
  * Firebase console.
  *
- * Firestore-direct for the list and for Decline, like the verifications queue
- * next door: firestore.rules lets the super admin claim -- and nobody else --
- * read or update this collection, and declining is one status field plus a
- * note. Approving is the opposite case and goes through Flask: it creates the
- * school and the subscription and promotes the requester's account, three
- * writes the client is deliberately not allowed to make.
+ * Firestore-direct for the list and for an ordinary Decline, like the
+ * verifications queue next door: firestore.rules lets the super admin claim
+ * -- and nobody else -- read or update this collection, and declining is one
+ * status field plus a note. Approving is the opposite case and goes through
+ * Flask: it creates the school and the subscription and promotes the
+ * requester's account, three writes the client is deliberately not allowed
+ * to make.
+ *
+ * T-82 (Option B, 2026-09-26): a request may already point at a pending
+ * school that paid for its year at sign-up. Declining one of those also goes
+ * through Flask -- refunding through PayMongo is not a write the client can
+ * make either -- and Approving one confirms the paid school instead of
+ * creating a fresh one on a 30-day trial (`fetchPendingRequests` attaches
+ * each row's `school_payment_status` so this page knows which is which).
  */
 
 const CALENDAR_LABEL = Object.fromEntries(CALENDARS.map((c) => [c.value, c.label]))
@@ -101,20 +109,38 @@ export default function SuperAdminRequestsPage() {
   })
 
   const decline = useMutation({
-    mutationFn: async ({ id, note }) => {
+    mutationFn: async ({ id, note, paid }) => {
+      // T-82: a request whose school already paid at sign-up must be
+      // refunded through PayMongo before it can be declined -- the client
+      // cannot call the gateway, so that case goes through Flask instead of
+      // the plain Firestore write below, which stays exactly as it was for
+      // a request nothing was ever charged on.
+      if (paid) {
+        return declineRequest(id, note.trim())
+      }
       await updateDoc(doc(db, 'subscription_requests', id), {
         status: 'declined',
         decision_note: note.trim(),
         decided_at: serverTimestamp(),
       })
+      return null
     },
-    onSuccess: (_, { school }) => {
-      toast.success(`${school} declined. Their teacher account is untouched.`)
+    onSuccess: (res, { school, paid }) => {
+      toast.success(
+        paid
+          ? `${school} declined and refunded${res?.refund ? ` (₱${Number(res.refund.amount).toLocaleString('en-PH')})` : ''}. Their teacher account is untouched.`
+          : `${school} declined. Their teacher account is untouched.`,
+      )
       setDeclining(null)
       setNote('')
       queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
     },
-    onError: () => toast.error('That did not save. Check the rules deploy and try again.'),
+    onError: (err, { paid }) =>
+      toast.error(
+        paid
+          ? (err.message || 'The refund could not be started, so nothing was declined. Try again in a moment.')
+          : 'That did not save. Check the rules deploy and try again.',
+      ),
   })
 
   if (isLoading) return <SkeletonTable rows={4} cols={4} tone="dark" label="Loading school requests" />
@@ -151,12 +177,18 @@ export default function SuperAdminRequestsPage() {
             const busy = decline.isPending && decline.variables?.id === r.id
             const teacherSeats = Number(r.teacher_seats ?? 0)
             const studentSeats = Number(r.student_seats ?? 0)
+            const paid = r.school_payment_status === 'paid'
             return (
               <li key={r.id} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="text-base font-semibold text-zinc-100">
                       {school}{r.campus ? <span className="text-zinc-400">, {r.campus}</span> : null}
+                      {paid && (
+                        <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+                          Paid
+                        </span>
+                      )}
                     </div>
                     <div className="mt-0.5 text-xs text-zinc-500">
                       {r.school_type ? `${r.school_type} · ` : ''}
@@ -173,13 +205,18 @@ export default function SuperAdminRequestsPage() {
                         {n(teacherSeats)} teachers × {n(r.students_per_teacher)} students each ={' '}
                         <span className="font-mono">{n(studentSeats)}</span> student seats
                       </dd>
-                      <dt className="text-zinc-500">Estimate</dt>
+                      <dt className="text-zinc-500">{paid ? 'Paid' : 'Estimate'}</dt>
                       <dd className="text-zinc-300">
                         {/* The same figure, the same way, as the seats step on
                             /register showed it to them -- so what they saw and
                             what we approve on is one number, not two. */}
                         <span className="font-mono">{pesos(estimateAnnual(teacherSeats, studentSeats))}</span> per school year
-                        <span className="text-zinc-500"> · {pesos(estimateAnnual(teacherSeats, studentSeats) / MONTHS_PER_SCHOOL_YEAR)} / month · first {TRIAL_DAYS} days free · shown to them as an estimate; prices not yet confirmed</span>
+                        <span className="text-zinc-500">
+                          {' '}· {pesos(estimateAnnual(teacherSeats, studentSeats) / MONTHS_PER_SCHOOL_YEAR)} / month ·{' '}
+                          {paid
+                            ? 'already charged at sign-up (T-82) -- approving confirms it, not a fresh 30-day trial'
+                            : `first ${TRIAL_DAYS} days free · shown to them as an estimate; prices not yet confirmed`}
+                        </span>
                       </dd>
                       <dt className="text-zinc-500">Requested</dt>
                       <dd className="text-zinc-300">{when(r.created_at)}</dd>
@@ -211,6 +248,12 @@ export default function SuperAdminRequestsPage() {
                     <label htmlFor={`note-${r.id}`} className="text-xs font-semibold text-zinc-400">
                       Why? Kept on the request for our own record; the school is told by hand.
                     </label>
+                    {paid && (
+                      <p className="text-xs text-amber-400">
+                        This school paid {pesos(estimateAnnual(teacherSeats, studentSeats))} at sign-up. Declining refunds it
+                        through PayMongo before anything else is written.
+                      </p>
+                    )}
                     <textarea
                       id={`note-${r.id}`}
                       rows={2}
@@ -223,10 +266,10 @@ export default function SuperAdminRequestsPage() {
                       <button
                         type="button"
                         disabled={busy || !note.trim()}
-                        onClick={() => decline.mutate({ id: r.id, note, school })}
+                        onClick={() => decline.mutate({ id: r.id, note, school, paid })}
                         className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-400 disabled:opacity-50"
                       >
-                        Decline request
+                        {busy ? (paid ? 'Refunding…' : 'Declining…') : paid ? 'Decline & refund' : 'Decline request'}
                       </button>
                     </div>
                   </div>
@@ -353,6 +396,12 @@ function ApproveDialog({ request, onClose, onDone }) {
   const [error, setError] = useState(null)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const requester = `${request.first_name ?? ''} ${request.last_name ?? ''}`.trim() || request.email
+  // T-82: this school already paid for the seats on the request -- changing
+  // them here would approve a seat count the payment does not match
+  // (checkout charged the request's own numbers, not whatever this dialog
+  // is later edited to). Seats stay locked to what was actually paid for;
+  // name/campus/school year, none of which the price depends on, still edit.
+  const paid = request.school_payment_status === 'paid'
 
   const approve = useMutation({
     mutationFn: () =>
@@ -384,7 +433,11 @@ function ApproveDialog({ request, onClose, onDone }) {
   return (
     <Dialog
       title={`Approve ${request.school_name || 'this school'}`}
-      subtitle="Creates the school and its subscription on a 30-day trial, makes the requester its admin, and emails them the welcome notice. Check the details; what you confirm is what gets written."
+      subtitle={
+        paid
+          ? 'This school already paid at sign-up (T-82) -- approving confirms it and activates the paid year, makes the requester its admin, and emails them the welcome notice.'
+          : 'Creates the school and its subscription on a 30-day trial, makes the requester its admin, and emails them the welcome notice. Check the details; what you confirm is what gets written.'
+      }
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-4">
@@ -409,16 +462,20 @@ function ApproveDialog({ request, onClose, onDone }) {
         <div className="border-t border-zinc-800 pt-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Seats</p>
           <div className="mt-3 grid grid-cols-2 gap-4">
-            <Field label="Teacher seats">
-              <input type="number" min="1" step="1" value={form.teacher_seats} onChange={set('teacher_seats')} className={inputCls} />
+            <Field label="Teacher seats" hint={paid ? 'Locked -- already paid for at this count.' : undefined}>
+              <input type="number" min="1" step="1" disabled={paid} value={form.teacher_seats} onChange={set('teacher_seats')} className={inputCls} />
             </Field>
-            <Field label="Student seats">
-              <input type="number" min="1" step="1" value={form.student_seats} onChange={set('student_seats')} className={inputCls} />
+            <Field label="Student seats" hint={paid ? 'Locked -- already paid for at this count.' : undefined}>
+              <input type="number" min="1" step="1" disabled={paid} value={form.student_seats} onChange={set('student_seats')} className={inputCls} />
             </Field>
           </div>
           <p className="mt-2 text-[11px] text-zinc-500">
             They asked for {Number(request.teacher_seats ?? 0).toLocaleString('en-PH')} teachers × {Number(request.students_per_teacher ?? 0).toLocaleString('en-PH')} students each.
-            Estimate at these seats: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year — an estimate until the prices are confirmed.
+            {paid ? (
+              <> Paid at sign-up: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year.</>
+            ) : (
+              <> Estimate at these seats: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year — an estimate until the prices are confirmed.</>
+            )}
           </p>
         </div>
 
@@ -433,7 +490,7 @@ function ApproveDialog({ request, onClose, onDone }) {
             disabled={approve.isPending}
             className="flex-1 rounded-lg bg-emerald-400 py-2.5 text-sm font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
           >
-            {approve.isPending ? 'Creating the school…' : 'Approve and create the school'}
+            {approve.isPending ? (paid ? 'Confirming the school…' : 'Creating the school…') : paid ? 'Approve and activate the school' : 'Approve and create the school'}
           </button>
           <button
             type="button"

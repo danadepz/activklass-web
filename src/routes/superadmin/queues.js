@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 /**
@@ -59,7 +59,19 @@ export async function fetchPendingRequests() {
   const snap = await getDocs(
     query(collection(db, 'subscription_requests'), where('status', '==', 'pending')),
   )
-  return snap.docs
+  const rows = snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (a.created_at?.seconds ?? 0) - (b.created_at?.seconds ?? 0))
+  // T-82: a request may already point at a pending school that paid for its
+  // year at sign-up (Option B). The console needs to know before it lets a
+  // superadmin edit seats out from under a price that was already charged,
+  // or declines the request as a bare write when a refund is actually owed
+  // -- both read this field, below.
+  return Promise.all(
+    rows.map(async (r) => {
+      if (!r.school_id) return r
+      const schoolSnap = await getDoc(doc(db, 'schools', r.school_id))
+      return { ...r, school_payment_status: schoolSnap.exists() ? (schoolSnap.data().payment_status ?? null) : null }
+    }),
+  )
 }
