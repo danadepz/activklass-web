@@ -1966,6 +1966,16 @@ No test pins either string. Card:
 `_dispatch/T-38-first-login-assumes-a-school-set-up-the-account.md` (Build brief; landing + auth
 lane, with `change-password.jsx` read-only from another lane).
 
+**Fixed 2026-09-10, `4a33abe`.** Both sentences in `login.jsx` now match the sibling screen
+rather than a third variant: the notice reads "Your account was set up for you, so the
+password you just used is not yours yet…" and the reuse refusal "…must be different from the
+one you were given." The temp-password read, the stage switch and every password rule are
+untouched, and `change-password.jsx` was read but not edited. *Verified:* 674 tests, clean
+build, and driven in the browser on a throwaway student with an issued login and
+`is_temp_password: true` (created and deleted afterwards) — notice, reuse refusal, then a new
+password to the student dashboard with the flag cleared. The "Welcome back" heading is still
+the wrong greeting for a first-ever sign-in; not raised by the tester, not changed.
+
 ## T-39 Editing a syllabus unassigns it from every class — 2026-09-09 (ticket pane, `triplecookiemonster-54`)
 
 **Bug · wrong data · web · dispatched.** Kristine reported having to re-assign a syllabus to
@@ -1978,6 +1988,232 @@ opens empty with every box unticked, and save writes `class_ids: []` (`:564`) pl
 clears each class's `syllabus_id` (`:579-581`). Since `classes.syllabus_id` is how a **student**
 reaches a syllabus, every save quietly removed it from them too. Fix is to carry `class_ids`
 on both paths. Card: `_dispatch/T-39-syllabus-edit-clears-class-assignment.md`.
+
+## T-40 A score dispute cannot be opened, so the teacher judges it blind — 2026-09-09 (ticket pane, `triplecookiemonster-55`)
+
+**Suggestion · feature gap · web · dispatched.** Kristine, on Class Record for MATH101 · 1A:
+"Once the student contests a score on a certain quiz, the teacher currently cannot view it
+directly to review one's answers." `GradeContestsPanel`
+(`routes/teacher/classes/$classId/record.jsx:766`) takes only `classId` and renders each
+dispute as a static div — student, column title, `1/3`, the reason, Accept / Reject. Nothing
+is clickable, and no teacher screen anywhere renders `per_question`: the teacher's own
+results view (`quizzes.$quizId.jsx:535-647`) stops at one aggregate row per student, and the
+only breakdown in the app is `student/quiz-feedback.jsx:150-200`, which hard-rejects a
+non-owner at `:74-81`. The link needed already exists — `lib/quizToRecord.js:204` stamps
+`source_quiz_id` on the assessment, `loadBundle` already returns the assessments to the page
+(`lib/gradebook.js:43-47`), so `contest.assessment_id` → assessment → quiz → the attempt.
+The teacher-side attempt query must carry `where('class_id','==',classId)` beside the
+`quiz_id` filter or the rules refuse the owner too (`DATA-MODEL` §4); `history.jsx:84` is the
+working example. Scoped to the first half of her ask — **the correct/wrong toggles that
+recompute the score are deliberately not in this card**: no regrade helper exists anywhere,
+it would need `total_score`/`score_ratio` recomputed, a re-post through `syncEntries`, and it
+reverses a decision the code records twice (`record.jsx:763`, `:906` — accepting records the
+decision, the teacher edits the grid). Card:
+`_dispatch/T-40-contest-opens-the-students-quiz-answers.md` (Build brief; Class detail lane).
+
+**Built 2026-09-10 (`f2ed03f`, Class detail pane).** A dispute whose column carries
+`source_quiz_id` now opens `ContestReviewModal` — the student's latest *finished* attempt,
+read with both `quiz_id` and `class_id` filters, rendered through `questionsOfAttempt` +
+`studentAnswerText` / `correctAnswerText` with the essay case (`pending: true`) shown as
+awaiting review rather than wrong. `feedbackVisibility` is deliberately not consulted: that
+setting gates what a *student* sees. Accept / Reject sit in the modal footer and call the
+existing `resolve()`, which now returns whether it went through, so cancelling the reject
+prompt no longer closes the modal on a decision nobody made; the row buttons stay. A
+hand-entered column is untouched. The correct/wrong toggles remain unbuilt, as scoped above.
+*Verified:* 674/674 tests, clean build, and driven in a browser on the pilot data — quiz
+published to Grade 10 - Rizal, sat as Juan (1/3), scores posted, contest filed from the
+student's Grade Center, reviewed and accepted from the band (row flipped to Accepted, pending
+count cleared, resolution confirmed in Firestore); the two Sci9 disputes on hand-entered
+columns rendered exactly as before. Leftover walkthrough data in the pilot class: the quiz
+**"Quiz 2 — Ratios"**, its Written Works column, and Juan's accepted dispute on it.
+
+**Also opened, nothing in it yet:** `triplecookiemonster-56` (2026-09-09 16:01) carries only
+the bot's greeting — no issue logged, waiting on Kristine.
+
+## T-41 Attendance needs a term overview, not one day at a time — 2026-09-10 (ticket pane, `triplecookiemonster-56`)
+
+**Suggestion · feature gap · web · dispatched.** Kristine asked for the sheet a colleague keeps
+in Excel: students down the side, the days the class actually met across the top, so she has an
+overview and can show a student at grading time which day they missed. The attendance screen is
+built around one date (`classes/$classId/attendance.jsx:532-533`), **but the same query already
+reads the whole collection on every load** — `getDocs(collection(db, 'classes', classId,
+'attendance'))` at `:548-549` — and reduces it to the P/L/A/E totals column (`:294`, `:318`). So
+the term is already in memory and the ask is a view, not a data path: no new query, no index, no
+Flask. Meeting days come from `scheduleMeetings` (`lib/schedule.js:141`, added for T-26), and
+`lib/csv.js` already powers the class record's Export CSV. Open decision recorded on the card:
+which days are the columns — recorded days only, scheduled days, or the union (recommended, since
+it degrades safely when a class's schedule is old free text). Card:
+`_dispatch/T-41-attendance-term-overview-grid.md`.
+
+## T-42 Approving an attendance dispute always writes "Excused" — 2026-09-10 (ticket pane, `triplecookiemonster-57`)
+
+**Suggestion · wrong data · web · dispatched.** Kristine marked Skittle **Late** by mistake;
+Skittle contested it ("di siya late = namali ug record"); she pressed Approve and the day
+became **Excused** — a third fact, and still not what happened. Her ask: a small picker on
+accept, "P, L, A, E and save button". Confirmed in code — `approve(c)` at
+`classes/$classId/attendance.jsx:403-408` hard-codes `status: 'excused'` and the remark
+"Excused — contest approved", and `:422` tells the student "it's now marked Excused"; the
+teacher is never asked. `syncAttendanceSummaries` at `:413` already runs after the write, so
+the projection follows whatever status is written and needs no change. The fix does **not**
+need the pop-up she described: `StatusButtons` (`:60`) and `STATUS_KEYS` (`:21`) are already
+in the file, so four buttons on the pending-dispute row — defaulting to `excused`, so one
+click still does the common case — keep the whole change inside the Class detail lane. A
+choice dialog would mean editing Shared `components/ui/dialogs.js`, which has no such kind.
+Card: `_dispatch/T-42-contest-approve-picks-the-status.md` (Build brief).
+
+## T-43 The teacher's own attendance row is written, shown, and read by nothing — 2026-09-10 (ticket pane, `triplecookiemonster-58`)
+
+**Suggestion · not-a-bug as filed (+ owner decision) · web · dispatched.** Kristine drew an
+arrow at the "My attendance (teacher)" card on the class Attendance sheet: "dili ra mu
+applicable ang P, L, A, E for the teacher … goods ra siya na wala for mee (what do u think
+:))". Nothing is broken, and the code agrees with her: the entry is rendered at
+`classes/$classId/attendance.jsx:244-266`, held in state at `:98-99`, saved onto the day
+document at `:162` (`teacher: teacherEntry`) and read back at `:563` — **and nowhere else in
+the client.** Grepped `lib/attendanceMirror.js`, `teacher/attendance.jsx`, `history.jsx`,
+`hooks/useClassRisk.js`, `lib/studentData.js` and the student and reports screens: none read
+it. It is in no summary, no report, no export, and not in `DATA-MODEL.md`. So it costs the
+full width of the sheet on the screen a teacher uses daily and feeds nothing. Owner decision
+on the card — remove (recommended, and what she asked) versus keep, which is only worth it if
+a teacher-attendance report is planned before the defense; nothing in ROADMAP Phase 7 asks for
+one. Note for whoever takes it: `hasChanges` at `:131` ORs in `teacherDirty`, so Save's
+enable/disable must be re-checked. Card: `_dispatch/T-43-teacher-own-attendance-row.md`
+(Build brief).
+
+## Tester tickets — 2026-09-10, Kristine on Add Student (ticket pane)
+
+1. **T-44 — Add Student can't find a student by the number their login is built from.**
+   suggestion · not-a-bug as filed · clarity · web (backend only under option B) ·
+   `triplecookiemonster-59`. Kristine, as the solo teacher `allan@gmail.com`, searched Add
+   Student for `231525` — a student Josy already has enrolled — and got "No student account
+   matches that ID. Use "Create New Manually" to add them yourself." She read it as a
+   school-visibility problem ("josy and allan are both from the same school"). It is not:
+   the lookup is **not scoped by school at all**. `app/api/classes.py:532-575` runs
+   `where('student_number','==',n)` and, on no hit, `where('lrn','==',n)` — two exact
+   equality queries over every student, reached through `lib/roster.js:52-61` from
+   `classes/$classId/index.jsx:415-452`. Her screenshot shows the student's number as
+   **`24231525`** (`teacher/students.jsx:281` prints `r.lrn`); `231525` is its last six
+   digits — the half of the issued login `slcsflu-231525` that people actually read and
+   type (`lib/logins.js:22-26`). So the empty result is correct, and the message is the
+   defect: it claims the account does not exist and sends a solo teacher to "Create New
+   Manually", which is how a second Skittle gets created. Owner decision on the card —
+   **A (recommended)**: when an ID search misses and the needle is 4–8 bare digits, say the
+   search was exact and name the full ID number, client-side only. **B**: also accept the
+   issued login, which needs a third exact query in Flask and a check that the student
+   document stores that address anywhere searchable — unconfirmed, `_LOOKUP_FIELDS` carries
+   no login field. Her second screenshot (Allan's side) never arrived; the ticket lists the
+   same attachment twice. Card: `_dispatch/T-44-add-student-id-is-not-the-login-number.md`
+   (Build brief).
+
+## T-45 Grade Config as CIT-U's CMRS — 2026-09-10 (ticket pane, `maykel_64440-39`)
+
+**Suggestion · feature gap · a design proposal, not a defect · dispatched pending an owner
+decision.** maykel's ticket opened 2026-09-07 asking whether Grade Config should follow his
+teacher's record sheet or the school's CMRS; on 2026-09-10 he attached a screen-by-screen
+write-up of that CMRS: a searchable list of named reusable templates, three grading structures
+(lecture / lecture with laboratory / class standing only), classifications with sub-weights
+under class standing, exams tagged by term, **different weights per term**, a teacher-set
+passing score with a selectable scale direction (CIT-U 5.0 = best), a live formula preview,
+and a grade simulator. Against the code: one preset per teacher already exists
+(`grading_presets/{uid}`, `grading.jsx:529`, saved through `/api/grading-setup`); the three
+grading types exist but the point scale is hard-wired to 1.0 = best and the pass mark to
+75 / 3.0 (`lib/grading.js:153-166`, `:182-187`); periods and components are flat lists on the
+gradebook (`gradebook.js:51-53`). So the classification hierarchy and the lab pair are
+expressible today by flattening, the preview and simulator are UI over `computeFinalGrade`,
+**per-term weights are not expressible** and would change the gradebook model, and multiple
+named templates is a rules + endpoint change. The card tiers it: (1) passing score + scale
+direction, (2) preview + simulator, (3) named templates (cross-repo), (4) the structural
+rebuild — with 1 + 2 recommended for the demo and 4 explicitly not to be started from a
+ticket. Card: `_dispatch/T-45-grade-config-templates-and-cit-u-structure.md`.
+
+## T-46 A teacher-reset password is a starting password again, and the teacher was not told so — 2026-09-11 (ticket pane, `triplecookiemonster-60`)
+
+**Suggestion · not-a-bug as filed · clarity · web · dispatched.** Kristine (student
+`slcsflu-24231525`, 2026-09-10 16:00): Allan reset Skittles' password from Students →
+Student accounts, Skittles signed in with it and the login page expanded to "Your account
+was set up for you, so the password you just used is not yours yet…"; she expected a normal
+login. Against the code: the reset endpoint stamps `is_temp_password: True` on every reset
+on purpose (`app/api/admin.py:696-700`, "back on a password staff issued"), and `login.jsx:93-103`
+holds the account on the page until a new password is chosen — the 2026-08-25 rule working.
+The gap is copy: the teacher's reset dialog says "they *should* change it after signing in"
+(`teacher/StudentAccounts.jsx:494-509`) while the admin's identical dialog was already corrected
+for T-16 to "they *will be asked* to choose a new password the next time they sign in"
+(`admin/UsersTab.jsx:563-575`). Build: the teacher dialog + toast (Class setup lane);
+optionally a login notice that fits a reset as well as a first login (`login.jsx:99`, Shared;
+its T-38 lock test `login.notice.test.js:43,57` and `change-password.jsx:49` move with it).
+Not a fix: dropping the flag on teacher resets. Card:
+`_dispatch/T-46-teacher-reset-password-is-a-temp-password-again.md`.
+
+## T-47 Forgot password cannot reach a student on a login ID — 2026-09-11 (ticket pane, `triplecookiemonster-61`)
+
+**Suggestion · feature gap · web (+ backend and a mail sender for the full version) ·
+dispatched, owner decision.** Kristine (student `slcsflu-24231525`, 2026-09-10 16:05): Login →
+Forgot Password asks for an account email; a student account is abbreviation + ID number
+and has none. She suggests requiring an email at first login. Against the code:
+`routes/forgot-password.jsx:29-33` calls `sendPasswordResetEmail` on whatever email is typed;
+an issued login's auth address is `<login>@activklass.internal` (`lib/logins.js:13,32`) with no
+inbox, so no link can reach it; and since user-not-found deliberately shows the success screen
+(`:36-38`), a student who types the personal email their teacher entered reads "a reset link is
+on its way" for a link that never comes. `personal_email` is collected "for password recovery"
+(`StudentAccounts.jsx:264`, `BulkUpload.jsx:20`, `api/admin.py:307`, `api/classes.py:728`) and
+nothing reads it for that — no backend route mints a reset link or sends mail. The true path
+is the teacher's **Reset password** (Students → Student accounts) or the admin Users tab. Options:
+**A** say so on the page and stop promising an inbox to an issued account (web only, demo-safe,
+recommended); **B** a Flask route that mails a reset link to `personal_email` — needs a mail
+sender, which is a new service under the no-new-service rule; **C** her ask, collect the email at
+first login — only useful with B, and the students are often minors (RA 10173 frame). `routes/
+forgot-password.jsx` and `reset-password.jsx` are in no lane; the fixing pane adds them to
+`OWNERSHIP.md` under Shared. Card: `_dispatch/T-47-forgot-password-cannot-reach-an-issued-login.md`.
+
+## Tester tickets — 2026-09-11 (ticket pane)
+
+Nothing new to fix. Two housekeeping notes from the morning sync:
+
+1. **`triplecookiemonster-62` — empty ticket, no issue.** Opened 2026-09-10 16:12 with only
+   the bot's greeting, the same minute Kristine signed off on #61 ("go raman"); a stray second
+   channel. Logged `no-issue`, close it in Discord.
+2. **`triplecookiemonster-61` — thread moved, T-47 did not.** The owner told Kristine in the
+   ticket (16:10) that a real self-service reset needs an email sender that is being considered
+   and is not built; she took it. T-47 stays `dispatched` on the A/B/C decision; the card carries
+   the thread note. Card: `_dispatch/T-47-forgot-password-cannot-reach-an-issued-login.md`.
+3. **T-45** was `fixed` at `4ef2ed9` (Tier 1 only; the Tier 2 preview is a separate commit
+   not yet landed) with no after-the-fix reply on its card; the ticket pane wrote one
+   (`_dispatch/T-45-…md` § "Reply draft — after the fix"). It waits on the verify pane's
+   sign-off and on Tier 2 before the owner pastes it.
+
+## Tester tickets — 2026-09-10 evening, Kristine and maykel on the solo plan (ticket pane, 2026-09-11)
+
+Fifteen tickets in an hour (`triplecookiemonster-62` … `-74`, `maykel_64440-65` … `-76`),
+all on the individual-teacher path. Ten issues, T-48 … T-57; `maykel_64440-67` is the
+disregarded T-05 again (school name/abbr accept gibberish) and gets no new row.
+
+1. **Deactivate blocks the whole sign-in, and the button never says so** — suggestion · not-a-bug as filed · web · `triplecookiemonster-62` · T-48. Deactivate disables the Auth user (`admin.py:783-786`) and is correctly scoped to the teacher's own roster (`:772-780`); per-class removal already exists as remove-from-roster. The gap is a confirm that says which is which. Card `_dispatch/T-48-deactivate-blocks-sign-in-not-just-the-class.md`.
+2. **No ID number on a solo teacher's Account page** — suggestion · feature gap · web · `triplecookiemonster-63` · T-49. `account.jsx:106-114` shows login id or email only; `verification_id_number` is on the profile and never shown. Card `_dispatch/T-49-teacher-id-number-on-account-page.md`.
+3. **Birthdate optional on Add Student, but guardian access needs it** — suggestion · data quality · web · `triplecookiemonster-64` · T-50. `student/profile.jsx:137` dead-ends a student without one; four creation paths would have to agree. Owner decision: required everywhere, or optional and flagged (recommended). Card `_dispatch/T-50-birthdate-required-when-adding-a-student.md`.
+4. **Registration: no middle name, gender is He / She / Others** — suggestion · clarity · web · `maykel_64440-65` · T-51. `GENDERS` at `register.jsx:48-52` are pronouns labelled as gender. Card `_dispatch/T-51-registration-middle-name-and-gender-options.md`.
+5. **"Admin" as a Position on the individual path** — suggestion · clarity · web · `maykel_64440-66` · T-52. One `POSITIONS` list (`:57-62`) serves both paths; self-registration is always a teacher. Card `_dispatch/T-52-admin-position-on-individual-registration.md`.
+6. **Registration accepts `asdsad@gma.c` and any string as a PRC licence** — bug · validation · web · `maykel_64440-68`, `-70` · T-53. `EMAIL_RE` (`lib/validation.js:229`) accepts a one-letter TLD; `idNumberError` is the generic rule and `register.jsx:210` ignores the ID type. Card `_dispatch/T-53-registration-accepts-bad-email-and-id-number.md`.
+7. **The free trial never asks for a card** — suggestion · product decision · `maykel_64440-71` · T-54, deferred: the gateway is undecided (ROADMAP). Build = an honest sentence, not a gateway. Card `_dispatch/T-54-free-trial-asks-for-no-payment-method.md`.
+8. **"Choose File" is a bare browser control** — suggestion · cosmetic · web · `triplecookiemonster-72` · T-55. `StudentAccounts.jsx:395` raw `<input type="file">`. Card `_dispatch/T-55-choose-file-is-not-a-button.md`.
+9. **Registering while another account is signed in lands you in that account** — **bug · blocks testing** · web · `maykel_64440-73`, `-75`, `-76` · T-56. All three screenshots are Marites's session: `register.jsx:275` skips account creation when `auth.currentUser` exists and `:303-309` finds her finished profile and navigates to `/portal`; the school-directory write after it never runs. The resume-a-half-made-registration branch never compares the signed-in email with the form's. Card `_dispatch/T-56-register-resumes-the-signed-in-account.md`.
+10. **Students page "Could not load students."** — bug · unconfirmed · web · `triplecookiemonster-74` · T-57. `students.jsx:172` swallows every error; candidates are an assessments-list rule dereferencing a gradebook that does not exist yet, or the dev server restarting (dawn, 16:09). Card `_dispatch/T-57-students-page-could-not-load.md`.
+
+**Process note.** Four auto-triage panes opened for `#63`–`#76` (00:15, 00:30, 00:47, 01:03) and none wrote a ledger row before exiting; the batch was triaged by hand here.
+
+## Tester tickets — 2026-09-12, Derick on the AI dialogs (ticket pane, 2026-09-13)
+
+Two tickets, both filed `Issue: NONE`, both a suggestion: put a guide inside the two
+AI dialogs so a teacher fills them in right the first time instead of generating again
+("dili pud waste na sige ug generate ang teacher kay nakuwang ang info"). One ask, two
+screens, two lanes — so two issues, each Build pane staying in its own lane.
+
+1. **The Generate Syllabus dialog gives no guide to what to enter** — suggestion · clarity · web · `andecobs-77` · T-58. `syllabus.jsx:505-508` is one sentence; hints exist only on For class, Curriculum and Coverage (the `1c9eb38` fields, which the screenshot already shows — the owner's "just added more details" reply at 16:13 is that commit). Nothing says a class pick fills four fields (`pickClass` :432-440), that Grade / Year Level drives the curriculum guess and which of Coverage / Strand / Program appear (:443-449, :587-626), or what Duration and Notes do; `generate()` (:472-480) refuses only no code+name or no curriculum, so a bare form makes a generic draft and burns a daily generation. Build = a native `<details>` "How to get a good draft" block plus two hints. Card `_dispatch/T-58-syllabus-generate-dialog-needs-a-guide.md`.
+2. **The Generate Quiz dialog gives no guide, and its one sentence is wrong** — suggestion · clarity · web · `andecobs-78` · T-59. `quizzes.jsx:275-278` says *"local Llama 3, with a math fallback"* — a model name in teacher-facing text, and not the model (backend `client.py:14` is Gemini). The Tip at :312 shows only when the class has no syllabus topics; Bloom's level (:128) has no hint; nothing says a syllabus topic fences the questions to its objectives. Build = rewrite that sentence vendor-free, the same `<details>` block, a Bloom's hint. Card `_dispatch/T-59-quiz-generate-dialog-needs-a-guide.md`.
+
+## Tester tickets — 2026-09-12, Derick on the published quiz (ticket pane, 2026-09-13)
+
+One ticket, filed `Issue: NONE`, a suggestion on the quiz editor after Publish.
+
+1. **A published quiz's Questions list shows no answers** — suggestion · feature gap · web · `andecobs-79` · T-60. `quizzes.$quizId.jsx:1768` makes the editor draft-only; every published or closed quiz falls to the "Questions (read-only)" card (`:1848-1858`), which prints text · type · points per question and never reads `options` or `answer_key`, though both sit on the same `quiz.questions` entries. The bank picker in the same file (`:1636-1643`) already draws an MCQ key with the correct option marked — reuse it. Teacher-only route; the student's feedback page keeps its own setting (`lib/quizFeedback.js`). Card `_dispatch/T-60-published-quiz-shows-no-answer-key.md`.
 
 ## Class tasks, Step 2 — the shared logic every deliverables screen reads — 2026-09-13 (Data/logic lane)
 
@@ -2031,3 +2267,587 @@ Open, and not this lane's to close:
   refused, and the `(class_id, status)` composite index does not exist on the project.
 - **A mobile port of `lib/deliverables.js`** is possible (it is pure) and is not in this plan.
 - **Zone-less dates** (plan D3) — fine on one demo machine, recorded, not fixed.
+
+## Class tasks, Step 4 — what the student sees — 2026-09-13 (Student pane)
+
+**Built (`70de02c`, `393cfac`, `5061576`).** Step 4 of
+`docs/plans/modules-content-and-deliverables.md`. The class page's Modules tab lists a
+sub-module's published `class_tasks` (kind, title, `describeWindow` chip, attachments as the
+material rows, "Read instructions" in the lesson-note dialog rendered as Markdown) and puts the
+chip on its linked quizzes; the Quizzes tab's cards take their state from `stateOf` (Not open
+yet / Due today / Closed, no Take button on a quiz the player would refuse). The dashboard gets
+**Up next** above "Your classes": `bucket()` sections in order, Finished folded, a List ⇄
+Calendar toggle in localStorage, and a hand-written `MonthCalendar.jsx` (dots by state through
+`STATE_TONE`, today outlined, a day's list under the grid, ‹ ›). New folder
+`src/routes/student/deliverables/**` is on the Student row of `OWNERSHIP.md`. *Verified:*
+`UpNextPanel.test.jsx` (9), `classes/$classId/deliverables.test.jsx` (7), `npm run test`
+993/993, `npm run build` clean; lint adds no new rule category (the three `react-hooks/purity`
+hits a first draft had are gone via `useNow`). Browser, headless as Carlo (there is no Hana
+quick-login card; Carlo is on SCI9 Newton, which holds two seeded tasks): list, calendar, day
+list, month nav, remembered view, the `?tab=topics&topic=t2` highlight and the quiz chips all
+read correctly.
+
+**Blocked, not this lane's:** the live project answers the student's `class_tasks` query with
+`permission-denied` — the Step 1 rule block and `(class_id, status)` index are emulator-tested
+but **not deployed**. Until the owner runs `firebase deploy --only
+firestore:rules,firestore:indexes,storage` from the backend repo, the panel names SCI9 as a
+class that could not be loaded (and still lists its quizzes), and the Modules tab shows no task
+rows. Both task paths are proven by the static-markup tests against the seed's shape; the live
+walk of "seeded tasks bucket under This week / Later, the PhET link opens, the instructions
+dialog renders" is owed to the deploy and should be re-run by /verify right after it.
+
+Two things the page panes should know: a closed quiz the student never took sits under
+**Overdue** with the chip reading "Closed …" (Data lane's decision, kept); and the `useNow`
+hook in `student/deliverables/` is the pattern for "one now per render tree" — `Date.now()` in
+a default prop trips `react-hooks/purity`, which the repo had no instance of before.
+
+## Tester tickets — 2026-09-14, maykel and Kristine (ticket pane, 2026-09-15)
+
+Seven tickets in half an hour (the last four triaged on the 09-15 pass, once 83 and 84 had
+their first message and 85, 86 arrived). Seven issues, one of them the first **blocks
+testing** since T-57 — and it has been live since 09-11.
+
+1. **Every Institution registration's request is refused since T-51** — bug · blocks testing
+   · wrong data · **backend + web** · `maykel_64440-82` · T-61. Checked on the live project
+   with the Admin SDK: for `asd@gmail.co` the Auth user, `users/{uid}`
+   (`school_request_pending: true`, `gender: 'custom'`, `middle_name: 'asd'`) and
+   `school_directory/asd` all landed at 15:51:10 UTC; **no `subscription_requests` row
+   exists**, and the only one in the collection is Carlyn's from 09-08. Step 4 of
+   `createAccount` (`register.jsx:415-424`) is refused by `firestore.rules:944`, `gender in
+   ['he','she','others']` — T-51 (`54cfff0`, 09-11) changed the form to `female / male /
+   custom` and added `middle_name` + `gender_custom` to `details()`, neither of which the
+   rule's `hasOnly` (`:930-932`) lists. The T-51 card said to grep `src/` for consumers of the
+   value; the consumer was the other repo. Nothing tests the request rule: no
+   `subscription_requests` block in `firestoreRules.test.js`, and `smoke_superadmin.py` seeds
+   through the Admin SDK. The retry cannot recover it — `register.jsx:348-355` sees the profile
+   and sends the person to `/portal`, where the T-31 notice says "pending" over an empty queue,
+   and a requester may never read the request back. Fix = the rule (deploy, owner), a rules
+   test built from the page's own field list, and a recoverable order on `register.jsx`
+   (Shared). The junk `asd` account and the `asd` directory entry (now in the public dropdown)
+   want deleting by hand. Card `_dispatch/T-61-institution-request-refused-since-t51.md`.
+2. **A teacher cannot look at a student without opening Edit** — suggestion · feature gap ·
+   web · `triplecookiemonster-81` · T-62. The roster's Actions
+   (`teacher/classes/$classId/index.jsx:1711-1743`) are Edit · Disable · Remove; the only
+   per-student surface on the teacher side is `EditStudentModal` (`:911-1040`), every input
+   live on open. Build = a `view` mode on the same modal (fields read-only, Edit + Close in
+   the footer), View first in the row. Card `_dispatch/T-62-roster-view-student-action.md`.
+3. **Sign-up accepts `asd@gmail.co`** — suggestion · data quality · not-a-bug as filed · web ·
+   `maykel_64440-80` · T-63. `EMAIL_RE` (`lib/validation.js:259`) requires a two-letter TLD
+   since T-53 and its comment names `.co` as real on purpose — it is. The narrower thing is
+   real: `gmail.co` is never Gmail, and on the Institution path the address is how the team
+   contacts the school. Build, if the owner wants it = a "Did you mean name@gmail.com?" check
+   for the one-spelling providers; not a TLD whitelist. Card
+   `_dispatch/T-63-email-accepts-gmail-co.md`.
+4. **The class Logs page never shows a score change or a new assessment** — bug · feature
+   gap · web · `triplecookiemonster-83` · T-64. `history.jsx:41-131` reconstructs the feed
+   from document timestamps (no log collection exists, none in the rules) and reads quizzes,
+   attempts, attendance, the per-class syllabus and the gradebook doc's `updated_at` — never
+   `gradebooks/{id}/assessments`. `record.jsx:176-185` stamps `created_at` on a new column
+   that nothing reads; `saveAll` (`:358-408`) writes scores and overrides with no timestamp
+   at all, so a score change is invisible to anything after the fact. The owner may write
+   any assessment field (`rules:322`), so the fix is web-only: stamp `changes` /
+   `override_changes` in the same batch before `syncEntries`, read the subcollection on Logs
+   under a **Class record** filter (added assessment · scores recorded · quiz scores posted
+   from `synced_at` · override set). What-and-when, not from-what-to-what — old values are not
+   stored. Card `_dispatch/T-64-class-logs-miss-the-record.md`.
+5. **Changing one grading weight moves the others, unannounced** — suggestion · clarity ·
+   not-a-bug as filed · web · `maykel_64440-84` · T-65. The owner replied on the thread: the
+   card keeps itself at 100 by design (`rebalanceWeights`, `lib/grading.js:324`;
+   `grading.jsx:133-139`). Nothing on the card says so, and the rescaled halves (67.5, 22.5)
+   clip in the 76-px box as "67.!" — the screenshot. Build = one sentence under the header
+   and a wider box; not a lock, not turning it off. Card
+   `_dispatch/T-65-grade-config-weights-rebalance-unannounced.md`.
+6. **A parent with a link code cannot find where to make their account** — suggestion ·
+   clarity · not-a-bug as filed · web · `triplecookiemonster-85` · T-66. Guardians sign up in
+   the mobile app by design (`App.jsx:154`, `ParentOnMobile.jsx:9-18`, the app's
+   `parent/register.tsx` takes the code as step 1); the web login's only invite is the
+   teacher one (`login.jsx:289-299`, whose comment wrongly says parents get accounts from the
+   school) and the code caption (`ParentalAccessPanel.jsx:274`) says who, not where. Build =
+   two sentences, no route, no store link that does not exist; `login.jsx` is Shared. Card
+   `_dispatch/T-66-parent-signup-not-pointed-to-from-login.md`.
+7. **The student Profile says "managed by your school"** — suggestion · clarity · web ·
+   `triplecookiemonster-86` · T-67. T-38 on the next screen: `student/profile.jsx:138` (the
+   minor-lock sentence) and `:211` (the details footer) name a school a solo teacher's
+   student does not have. The page cannot tell the plans apart — the provision endpoint
+   writes no `school_id` on either (`classes.py:907-915`) — so the T-38 answer applies:
+   wording true both ways, "set up for you by your teacher". Card
+   `_dispatch/T-67-profile-says-managed-by-your-school.md`.
+
+## Owner tickets — 2026-09-15, payment, email, roster and absorption (ticket pane, 2026-09-15)
+
+Four tickets the owner filed herself at 12:36–12:37 (`dawny808-87` … `-90`), relaying what the
+panel / adviser asked for ("daw"). None is a defect; all four are product decisions with a
+build behind them, two of them **new external services** — the owner filing them answers
+*whether*, and each card leaves *which* as the one question before Build. Also read on this
+pass: the owner's own replies on `maykel_64440-84` (T-65, "Noted" after the recording) and
+`triplecookiemonster-85` (T-66, "only in mobile") — both cards already said so; T-65 got
+the later thread appended, nothing else changed.
+
+1. **Payment happens inside the website, on play money** — suggestion · feature gap · **web +
+   backend** · `dawny808-87` · T-68. Nothing takes a payment anywhere: registration ends on
+   T-54's sentence *"No card needed for the trial. We'll ask for payment details before it
+   ends"* (`register.jsx:693-698`, `:769`) and `app/api/subscriptions.py` is `GET /mine`,
+   `/plans`, `/{owner}`, `POST /{owner}/plan` (`:72-142`) — no money path; trial expiry is
+   stamped and enforced nowhere. The amount already exists (`lib/pricing.js`). Options on the
+   card: **A** PayMongo test mode with hosted checkout (test cards, no charge — the "play
+   money"; the webhook needs the Cloud Run release for a public URL), or **B** a mock
+   gateway of our own. Either way the flip (`subscriptions/{owner}.status`, `paid_through`,
+   `payments/{id}`, the `schools` mirror) is Admin-SDK only. *(Update 2026-09-17: Option A confirmed by owner; PayMongo test account created, test secret key saved in backend `.env`, and API handshake verified 200 OK — ready for build).* Card
+   `_dispatch/T-68-payment-gateway-in-the-website.md`.
+2. **A confirmation email after a verified payment** — suggestion · feature gap · **backend**
+   (cross-repo) · `dawny808-88` · T-69, depends on T-68. Nothing in either repo sends mail
+   (no smtp/sendgrid/mailgun/flask_mail under `activklass-backend/app`;
+   `09-deployment-readiness.md:56`); every notice today is pasted by hand
+   (`lib/approvalMessage.js`, T-47's held-back reset link). Recommended **A**: Gmail SMTP from
+   the project's AI Gmail with an app password the owner creates — `smtplib`, no dependency,
+   no new account; **B** a provider's free tier later. A failed send never fails the payment;
+   an `@activklass.internal` address is never a recipient. The receipt text is on the card.
+   Card `_dispatch/T-69-payment-confirmation-email.md`.
+3. **View · Edit · Disable only; a disabled student stays on the roster greyed, view-only on
+   their side** — suggestion · feature gap · web (+ rules if enforced) · `dawny808-89` ·
+   **T-70, and T-62 amended** (Remove dropped from the row `index.jsx:1737-1742` and the Edit
+   modal `:967`). The catch, checked: today's Disable is an *account* switch —
+   `handleToggleAccount` (`index.jsx:1438-1479`) disables the Auth user and writes
+   `users.status = 'inactive'`, the dialog says "signed out immediately… everywhere" and, since
+   T-48, "To take them off this class only, use Remove instead" — so "the class still shows on
+   the student side, view-only" cannot happen with the current action. There is no per-class
+   enrolment state (`classes.student_ids` is the roster; the AC/IN select writes
+   `users.enrollment_status`, which nothing on the student side reads). Design on the card:
+   `classes/{id}.dropped_student_ids[]` (owner-writable, `rules:259-263`; `student_ids`
+   untouched so grades, `teacher_ids` and every rule stand), greyed row + "Disabled" chip,
+   student banner + Start / Hand in / Contest hidden, `quiz-player.jsx:49` refusing to start,
+   Up next skipping the class; the two create rules (`quiz_attempts` `:481`,
+   `task_submissions`) optionally gain the check. Decision flagged: the owner must confirm
+   Disable becomes a class state. Card `_dispatch/T-70-disabled-student-stays-on-roster-view-only.md`.
+4. **A solo teacher absorbed into their school's institution subscription, records intact** —
+   suggestion · feature gap (design proposal, post-defense-sized) · **backend + web** ·
+   `dawny808-90` · T-71. Every record hangs off the uid, so *moving* the account keeps
+   everything and re-creating it would orphan everything; an institution teacher is
+   `school_id` + `login_id` + the `@activklass.internal` Auth email (`_issued_login`,
+   `admin.py:209-219`); a solo teacher's students are already issued under
+   `teaching_school_id` — `ucb` — and `_login_prefix_for`'s docstring (`classes.py:609-633`)
+   anticipated exactly this. `archived_at` hides a class (`teacher/classes/index.jsx:437-460`)
+   and **no screen lists archived classes** — the Archived tab the ticket asks for is a gap
+   on its own and the slice recommended for the demo. Four slices on the card (absorb
+   endpoint, superadmin action with a copy-ready notice, Archived tab, Account wording); the
+   owner picks. Card `_dispatch/T-71-solo-teacher-absorbed-into-institution.md`.
+
+## Tester tickets — 2026-09-15, maykel and Kristine (ticket pane, 2026-09-16)
+
+Five tickets from the night of 15 September, all on quizzes and the student's bell. Two are
+defects in the class record; both cause lines were read in the code, not taken from comments.
+
+1. **A score typed on the class record goes back to the quiz score after a refresh** — bug ·
+   wrong data · web · `maykel_64440-94` · **T-72**. `useAutoPostScores`
+   (`hooks/useQuizRecordSync.js:178-213`, from `da8a984`) re-posts every *published* quiz each
+   time the record or the quiz results view mounts, and `syncQuizToClassRecord` (`:101-113`)
+   merges `scores` over whatever is there (`lib/quizToRecord.js:171`); the record's save writes
+   the same `{ status, raw_score }` shape (`record.jsx:379`), so a typed score, a recovered
+   mark (`gradeRecovery.js:188`) and a contest correction are all replaced. The comment at
+   `quizToRecord.js:189-192` claims hand corrections are safe; the hook's next write undoes
+   that. Fix: stamp `manual: true` on person-entered scores and skip them. His video is not
+   viewable, so the exact column is unconfirmed. Card
+   `_dispatch/T-72-quiz-auto-post-overwrites-typed-score.md`.
+2. **Deleting a quiz leaves its column and scores on the record and in the student's grade**
+   — bug · wrong data · web · `triplecookiemonster-93` · **T-73**. The dialog
+   (`teacher/quizzes.jsx:1278`) says attempts are deleted and "the gradebook loses those
+   scores"; `handleDelete` only deletes `quizzes/{id}` (`:1284`) — the
+   `assessments/quiz-{id}` column stays and `syncEntries` never runs, so the student's entry
+   keeps it. Fix: remove the column in every mapped class and re-sync (refusing on a locked
+   period), keep attempts, and make the dialog say so. Kristine's Trash with 30-day recovery is
+   noted on the card as a post-defense suggestion. Card `_dispatch/T-73-deleted-quiz-stays-on-record.md`.
+3. **A published quiz can't go back to draft or have its wording corrected** — suggestion ·
+   feature gap · web · `maykel_64440-91`, `triplecookiemonster-92` · **T-74**. Only a draft is
+   editable (`quizzes.$quizId.jsx:1879`); statuses are draft/published/closed and nothing
+   returns to draft. Build: Back to draft while no attempt exists in any status (removing the
+   record column), and a wording-only edit on a live quiz. Changing a key or points after
+   students sat it needs a regrade — attempts store their own score
+   (`useAttemptSession.js:114-125`) while the player reads keys from the live quiz — noted, not
+   built. Card `_dispatch/T-74-published-quiz-back-to-draft-and-fix-wording.md`.
+4. **A student's notifications don't say which subject they are for** — suggestion · clarity ·
+   web · `triplecookiemonster-95` · **T-75**. All six writers go through `notifyStudents`
+   (`lib/notifications.js:12-33`) with `class_id` but a message that never names the class.
+   Build: prefix the message there with `subject_code — section`, which reaches the mobile
+   screen too; old notifications keep their text. Card `_dispatch/T-75-notifications-name-the-subject.md`.
+5. **Clicking a student's name on a quiz's results should show who they are** — suggestion ·
+   feature gap · web · `maykel_64440-91` · **T-76**. No teacher-side student profile exists to
+   link to; the results rows already load the full profile (`quizzes.$quizId.jsx:615`) and keep
+   three fields (`:618`). Build: a read-only details panel (ID/login, email, program, year,
+   this quiz's attempts) with a link to the class roster; never a password. Card
+   `_dispatch/T-76-quiz-results-student-name-opens-details.md`.
+
+## Tester tickets — 2026-09-17, Derickk and maykel (ticket pane, 2026-09-17)
+
+1. **The Sign Out confirmation on "Verifying your account" dims only the form panel** — bug ·
+   cosmetic · web · `andecobs-97` · **T-77**. `SignOutButton.jsx:38-56` renders a
+   `position: fixed` backdrop inline, and `AuthLayout.jsx:335` wraps the form in the `ak-swap`
+   animation (`index.css:86`, `transform`, fill-mode `both`), so the leftover transform makes
+   that div the backdrop's containing block. Same on `/suspended` and the parent mobile screen.
+   Fix: portal the dialog to `document.body`. Card `_dispatch/T-77-sign-out-dialog-dims-only-the-form-panel.md`.
+2. **"Who verifies this?" on the pending screen** — question · not-a-bug · web ·
+   `maykel_64440-98` · **T-78**. The ActivKlass team does, in the superadmin **Verifications**
+   queue (`superadmin/verifications.jsx`); the screen already says so. Owner action: review
+   maykel's ID there. Optional build (a contact line on the pending card) waits on the owner
+   naming the contact. Card `_dispatch/T-78-who-verifies-an-individual-registration.md`.
+
+## Tester tickets — 2026-09-18, Derickk and maykel (ticket pane, 2026-09-18)
+
+1. **The password reset link says "expired or already used" the first time it is clicked** —
+   bug · wrong behaviour · web · `andecobs-102` · **T-79**. The email for
+   `lungcobandrew@gmail.com` arrived at 00:06 (in Spam) and its link failed at 00:08, well
+   inside a code's life. `forgot-password.jsx:81` sends with no action-code settings, so the
+   link opens the hosted default handler and never our `reset-password.jsx`; nothing in our code
+   consumes the code. Cause unconfirmed — likeliest a second request for the same address, or
+   the account changing in between. Card `_dispatch/T-79-reset-link-says-expired-on-first-click.md`.
+2. **Archive a class and bring it back — tester PASS** · `maykel_64440-101` · **T-71** (Archived
+   tab slice). State unchanged. His opinion on the open question: an archived class should
+   stay fully editable, not view-only — the owner decides whether that closes /verify's
+   "view-only" objection.
+
+## T-79 follow-up — cause confirmed, no code fix exists (debug pane, 2026-09-18)
+
+Item 1 above said cause unconfirmed. It is now confirmed, and it is not this repo's bug to
+fix. Evidence on the card: the Admin SDK shows nothing changed on the account between the
+email and the click (rules out a second request or a password/account change); a single,
+never-opened `generate_password_reset_link()` code failed on Firebase's own default hosted
+handler on the very first navigation, while the identical code succeeded immediately when
+handed straight to our own `reset-password.jsx` — so the code is valid and our page is fine,
+and the hosted page (`activklass1.firebaseapp.com/__/auth/action`) is what's broken.
+`actionCodeSettings`/`handleCodeInApp` was tried as a code-only workaround and does not
+reroute the initial password-reset link (only sets the post-completion `continueUrl`) — and
+would additionally have thrown `UNAUTHORIZED_DOMAIN` for anyone on the forwarded VS Code
+tunnel (`*.devtunnels.ms`, `vite.config.js`'s `allowedHosts`), which is how this app is
+actually reached before release. Reverted; nothing committed. The only fix is the owner
+pointing Authentication → Templates → Password reset → **Customize action URL** at
+`<release origin>/reset-password` once the Cloud Run/Hosting release is live — a decision
+that already exists (`docs/OPEN-QUESTIONS.md`, DECIDED 2026-09-14) but has no origin to
+point at yet. Until then, an issued or self-service account that needs a reset goes through
+a teacher's or admin's own Reset password screen, same as an issued login already does.
+
+**Addendum, same day:** the owner asked whether a verified custom domain would unlock the
+console's action-URL setting (the Identity Toolkit config schema sits `callbackUri` right
+next to `dnsInfo.customDomainState`, which is what pointed at this theory). Checked whether
+that path is even reachable before spending anything: money was never the issue —
+`activklass1` carries real GCP credit (a $300 free-trial credit plus ~$39.77 across
+Developer Program credits explicitly covering "all of Google Cloud Platform"), plenty for a
+~$12–15/yr domain. But Cloud Domains' `Domain registrations` quota on this project is **0**,
+and the self-service increase dialog refuses outright — "between 0 and 0... not eligible for
+a quota increase at this time... contact our Sales Team." Registering a domain through this
+project is blocked upstream of anything Firebase-specific, with no self-service path past
+it. Confirmed dead end, not pursued further; nothing purchased or registered. Full evidence
+on the card.
+
+**Owner decision, same day:** closing this out rather than leaving it pending — the emailed
+self-service reset link is permanently out of scope, by design. A teacher's or admin's own
+Reset password screen is the one supported reset path, full stop, not a stopgap for a
+release origin or a verified domain that may never happen. Recorded in
+`docs/OPEN-QUESTIONS.md` (DECIDED). No code changes follow from this — `forgot-password.jsx`
+already does the right thing today.
+
+**Reopened and actually fixed, same evening:** the owner asked why the reset flow depends on
+Firebase's own email at all when the backend already sends mail natively (T-69). New `POST
+/api/auth/forgot-password` (backend `app/api/auth.py`) generates the reset code server-side
+with the Admin SDK — never touching the broken template config, only issuing a one-time
+code — and mails our own link at our own `reset-password.jsx` through the existing Gmail
+sender. `forgot-password.jsx` now calls that endpoint instead of Firebase's client SDK;
+`reset-password.jsx` needed no changes, since it already verifies a bare `oobCode` correctly.
+No console setting, no domain, no release origin needed — the wall this ticket hit tonight
+was specific to Firebase's own hosted page and email template, and this path never goes near
+either. *Verified:* `tests/smoke_forgot_password.py` (backend, 6 checks, offline), `npm run
+test` 1186/1186, `npm run build` clean; full browser walkthrough on a disposable Admin-SDK
+throwaway account (created and deleted for the test) — real endpoint call, reset-password.jsx
+verify + confirm ("Password updated"), and a real sign-in with the new password
+(`accounts:lookup` 200). `docs/OPEN-QUESTIONS.md` updated in place to tell the whole story,
+including the reversed first conclusion. T-79 closed for real this time.
+
+## Tester tickets — 2026-09-18, the payment test (ticket pane)
+
+1. **T-68 + T-69 — a real test payment left the teacher on the free trial.** bug · blocks the
+   payment feature · web + backend · `maykel_64440-103`. maykel paid ₱3,600 by GCash at 11:50 PM,
+   was returned to a page that could not be reached, and his Account page still reads *Free trial —
+   30 days left*; no receipt. PayMongo holds a real paid payment (`pay_KqnsczfQkGHSCi4ACfcjzG7v`) for
+   session `cs_cd0b92cd…`, while `payments/6bT94RYivuQqB1ISSA…` is still `pending` and no
+   `subscriptions` document exists for him. Cause: `FRONTEND_URL` is `http://localhost:5173`
+   (`app/api/subscriptions.py:53`), so `success_url` (`:207`) returns every tester to their own
+   machine — and that return page is the only thing that confirms a payment in test mode, since the
+   webhook still has no public URL. Two consequences worth separating: the return URL must come from
+   deployment config, and a payment whose tab is closed has no second path home. maykel's payment is
+   recoverable by confirming that session once. Both issues need `/verify` to reopen them; ledger note
+   under the Issues table has the full trail.
+
+## Tester tickets — 2026-09-19, the cancelled payment (ticket pane)
+
+1. **T-80 — every link the server builds points at the developer's own machine.** bug · blocks
+   testing · backend (cross-repo; no `src/` change under the recommended fix) ·
+   `maykel_64440-104`, `maykel_64440-103`. maykel ran the cancel half of the payment task and it
+   passed on what the task asked — still on Trial, not Subscribed, no receipt — but his screenshot
+   shows where cancelling actually sent him: `localhost:5173/teacher/account?checkout_cancelled=1`,
+   Chrome's *This site can't be reached · ERR_CONNECTION_REFUSED*. Same root cause as yesterday's
+   FAIL, now written up as its own issue so the fix does not sit inside two entries `/verify` owns.
+   `app/api/subscriptions.py:53` reads `FRONTEND_URL`, defaulted **and** set in the backend `.env:18`
+   to `http://localhost:5173`; `:207` and `:208` hand it to PayMongo as the success and cancel URLs,
+   while testers reach the app on `*.devtunnels.ms` (the hosts `vite.config.js:27` allowlists for
+   exactly that reason). The same variable also builds the password-reset link (`auth.py:168` — T-79's
+   own replacement link) and both welcome emails' "Sign in:" line (`superadmin.py:476,582`); neither
+   has been reported yet, both read the same from the code. Recommended fix: build the link from the
+   request's `Origin`, validated against an allowlist, with `FRONTEND_URL` as the fallback — which is
+   also the right shape once the release moves to Firebase Hosting. Card:
+   `_tools/discord/tickets/_dispatch/T-80-server-built-links-point-at-localhost.md`.
+
+## Tester tickets — 2026-09-19, the Institution sign-up test (ticket pane)
+
+1. **T-81 — the Institution end screen says "Request sent" and "Your account is created" at
+   once, and never says what happens about paying.** suggestion · clarity · web ·
+   `triplecookiemonster-107`. Kristine finished a whole Institution sign-up and read the last
+   screen as a contradiction — "it says na magrequest pa pero nahimuoan na siyag account".
+   Both halves are true and neither is labelled: her sign-in account exists
+   (`users/GPWJQZ1XZFSEkxPsIxIFbFCljv43`), the school is what is pending
+   (`subscription_requests/sI0hpVZcz2sDnYlZxcFs`, `status: pending`), and `register.jsx:437`
+   signs her out before showing the screen, which the copy never mentions either.
+   `:445` is the heading, `:469-473` the body. Copy-only fix, in a Shared file. Card:
+   `_tools/discord/tickets/_dispatch/T-81-request-sent-screen-contradicts-itself.md`.
+
+2. **T-82 — "mag add pag payment gateway here noh?"** question · not-a-bug · web (backend only
+   if the owner ever wants pay-at-sign-up) · `triplecookiemonster-107`. Answered from the code
+   rather than deferred: a school is quoted at sign-up (`register.jsx:780-786` — an estimate,
+   "nothing to pay today", "your final quote follows … with your setup"), approval creates the
+   school, its subscription and its admin in one batch (`activklass-backend/app/api/superadmin.py:290-330`),
+   and the gateway is "Pay for this school year" on the Account page afterwards
+   (`src/routes/teacher/account.jsx:175-191`, T-68). Charging at sign-up would make the seat
+   estimate binding, force a school to exist before anyone approved it, and create refunds on
+   decline — an owner decision, not a defect. The reason she asked is T-81's screen, and T-81
+   carries the "nothing to pay today" line. Card:
+   `_tools/discord/tickets/_dispatch/T-82-payment-gateway-at-institution-signup.md`.
+
+3. **T-61 confirmed end-to-end by a tester who had never registered a school.** Kristine's run
+   (Lorma Colleges, Inc., 20 × 120 seats, gender `female`, 12:53 AM) finished without "we could
+   not finish setting it up", and the Admin SDK shows the request written at 16:53:13.317 UTC
+   and her profile at 16:53:13.475 UTC — the request **158 ms before** the profile, the exact
+   order `src/routes/registerInstitutionOrder.test.js` pins. T-61 was already verified; this is
+   independent confirmation of both halves, the rules' gender values and the write order.
+
+## Tester tickets — 2026-09-19, Derickk's eight-ticket run (ticket pane, 2026-09-20)
+
+Eight tickets in just over an hour, all Derickk except `triplecookiemonster-110`
+(Kristine). Two carry nothing but the bot's greeting — `triplecookiemonster-110` and
+`andecobs-115` — and a third, `andecobs-114`, is a TEST RESULT for T-74 that reports PASS
+but names no quiz, no time and no screenshot, and leaves blank the one field the task was
+really asking about (whether the quiz had a short-answer question — the case commit
+`2985cfe` fixed; an all-multiple-choice quiz always saved). All three are `waiting on
+tester`, with the questions in `_replies/andecobs-114.md` and in Kristine's #107 reply.
+T-74's own state is unchanged. The other five tickets are four issues.
+
+1. **T-83 — two "logouts" that are one broken link.** bug · blocks testing · web ·
+   `andecobs-108`, `andecobs-113`. Derick reported being logged out after clicking
+   **Go to Quizzes** on Scaffold Topics' empty state, and again after **open in quiz
+   editor** in the Edit remediation dialog. The session is never touched:
+   `src/routes/teacher/classes/$classId/scaffolds.jsx:583`, `:770` and `:856` all build
+   `/teacher/classes/<id>/quizzes[/<quizId>]`, which matches no route — the quiz routes
+   are flat (`src/App.jsx:133-134`) and `classes/:classId` has no `quizzes` child — so
+   all three fall to the catch-all at `App.jsx:174` and the URL is replaced with `/`, the
+   public landing page, whose header reads **Sign in**. **This is the second time this
+   exact defect has been reported**: `App.jsx:113-124` carries a comment written after the
+   "Open Grading Setup" buttons did the same thing, describing the same symptom in the
+   same words. `:770` is a third call site nobody reported — it runs after generating a
+   practice quiz for a topic with no remediation plan, so the teacher loses the quiz they
+   just generated. Fix is three string literals in `scaffolds.jsx`; no `App.jsx` change.
+   Card: `_tools/discord/tickets/_dispatch/T-83-scaffold-quiz-links-look-like-a-logout.md`.
+
+2. **T-84 — New Class's Grade / Year Level box hangs below its row.** bug · cosmetic ·
+   web · `andecobs-109`. `src/features/classes/ClassFormModal.jsx:662` is a plain
+   `grid sm:grid-cols-4` with an inline label above each input; "Grade / Year Level" plus
+   its required star is the only label long enough to wrap at a quarter width, and the
+   wrap pushes only that cell's input down. Card:
+   `_tools/discord/tickets/_dispatch/T-84-new-class-grade-level-box-sits-below-its-row.md`.
+
+3. **T-85 — the Subscription card has been naming schools by their document id.** bug ·
+   wrong data · web · `andecobs-111`. Derick's "jumbled words" is
+   `Ne29tuwGYhjLwVShnGUi`, printed as the card's heading.
+   `src/routes/admin/SubscriptionTab.jsx:93` reads `sub.school_name ?? ownerId`, but
+   **nothing has ever written `school_name`** — both backend writers spell it `name`
+   (`activklass-backend/app/api/superadmin.py:265` and `:386`), so the fallback always
+   wins and for an institution `ownerId` *is* the school document id.
+   `src/lib/subscription.js:143` already reads `sub.name` first, which is why the
+   teacher-side screens show a real name and this one never has. The same line's
+   neighbour, `:96`, renders `{sub.period_label} · {sub.period_start} → {sub.period_end}`
+   — a grep of both repos finds **no writer for any of the three**, so it has only ever
+   drawn its own punctuation, which is the bare `· →` in the screenshot.
+   `src/routes/teacher/account.jsx:411` is the same dead line on the teacher's Account
+   page, unreported and in a different lane. Card:
+   `_tools/discord/tickets/_dispatch/T-85-subscription-card-shows-the-school-id.md`.
+
+4. **T-86 — quiz settings: Opens and Closes sit a line below Attempts.** bug · cosmetic ·
+   web · `andecobs-112`. `src/routes/teacher/quizzes.$quizId.jsx:1394` bottom-aligns the
+   row (`items-end`), and the Attempts cell is the tallest because the **Unlimited until
+   it closes** checkbox sits under its input (`:1407-1410`) — so the two date cells are
+   pushed down by that checkbox's height. Checked on re-reading: `items-end` does nothing
+   for the rest of the grid — the "Students will read this as …" paragraph is
+   `col-span-2 sm:col-span-4` and the shuffle / backtracking column follows it, so each
+   is alone on its own grid row and has nothing to align against. Only the three field
+   cells share a row, so `items-start` is the whole fix. Card:
+   `_tools/discord/tickets/_dispatch/T-86-quiz-settings-attempts-sits-above-its-row.md`.
+
+**Worth noticing across the four:** three of them (T-83, T-84, T-86) are things a tester
+sees in the first ten seconds on a screen, and two are the same shape — a row whose
+fields do not line up. Neither test suite nor build can see either class of defect.
+T-83 in particular is the second sighting of a failure mode `App.jsx` already documents,
+which suggests the catch-all silently swallowing a bad `/teacher/**` URL is worth a
+second look after the defense — a teacher URL that matches nothing should not land on
+the signed-out landing page. Recorded here only; nothing built.
+
+## Tester tickets — 2026-09-20, Kristine's two results and Derick's four (ticket pane)
+
+Six tickets that the previous pass either never saw or saw stale: `triplecookiemonster-105`
+and `-106` had arrived with full test results while the ledger still recorded them as
+empty, and `andecobs-114` … `-117` came in over three minutes on the 19th. Four are test
+results against work already on the board; two are new issues. (Housekeeping in the same
+pass: the 01:16 and 01:30 runs of the previous pass had each appended the same eight ticket
+rows and four issue rows to `_ledger.md`, and written T-86's card twice under two slugs —
+the duplicates are gone and `T-86-quiz-settings-attempts-sits-above-its-row.md` is the
+surviving card.)
+
+1. **T-87 — quizzes deleted before the T-73 fix are still on the class record and in the
+   student's Grade Center.** bug · wrong data · web · `triplecookiemonster-106`. Kristine's
+   PASS on the delete task came with a PS: the quizzes she deleted during the *earlier,
+   failing* run are still there. Checked — she is right and it is not a leftover of her own
+   making. `src/hooks/useQuizRecordSync.js:189` (`removeQuizFromAllRecords`, the whole of
+   `89c1200`) is called only from the two delete handlers, `src/routes/teacher/quizzes.jsx:1287`
+   and `quizzes.$quizId.jsx:2096`; a grep of `src/` finds no sweep for rows already orphaned,
+   and no other caller. The cheap fix costs no extra reads: the record page already loads
+   `useQuizzes()` at `src/routes/teacher/classes/$classId/record.jsx:1186` for the auto-post,
+   so an assessment whose `source_quiz_id` is absent from that list is an orphan, and the
+   removal path (locked-period refusal, `deleteDoc`, `syncEntries`) already exists beside it.
+   The whole risk is the guard: a quiz list still loading or erroring must not sweep, or
+   every quiz column in the class goes at once. Card:
+   `_tools/discord/tickets/_dispatch/T-87-quizzes-deleted-before-the-fix-still-on-the-record.md`.
+
+2. **T-88 — registration takes a phone number another account already uses.** suggestion ·
+   data quality · web (+ backend under one option) · `andecobs-117`. Derick filed it as
+   "Issue: Nothing" — nothing is broken, it is an ask. `src/lib/validation.js:385`
+   (`phoneError`) checks shape only: allowed characters, 7–13 digits. `register.jsx:221` is
+   the only caller and `:292` writes the number straight onto the profile. A grep of the
+   backend finds one `phone` in `app/api/*.py` (`superadmin.py:367`, copying it to a school's
+   `contact_phone`), so there is no server-side uniqueness either. The rules make the choice
+   sharp: the `users` read rule ends `|| resource.data.role == 'teacher'`, so a client-side
+   `role == 'teacher' && phone == X` query *would* pass — and would hand any signed-in
+   account a phone-number enumeration oracle over every teacher on the platform, so the card
+   rules it out and offers a review-time flag (Admin lane, nothing new exposed) or a
+   rate-limited Flask lookup. His second ask — the ID number as a real identity key — is a
+   schema decision, not a validation, and is named as out of scope rather than promised;
+   `verification_id_number` is evidence for the review today (`register.jsx:422`, `:738`) and
+   nothing keys off it. Card:
+   `_tools/discord/tickets/_dispatch/T-88-registration-takes-a-phone-number-already-in-use.md`.
+
+**The four test results, none of which move an issue** (only `/verify` does):
+`triplecookiemonster-106` — **T-73 PASS**, teacher and student both clean, with accounts and
+times filled in; the most complete result anyone has sent. `triplecookiemonster-105` —
+**T-80 FAIL**, a second tester and a second path: cancelling on PayMongo returns to
+`localhost:5173/teacher/account`, visible in the address bar of both her screenshots, so the
+task's Expected could not be observed at all. `andecobs-115` — **T-74 PASS, thin**: back to
+draft works, but the record column leaving and returning is the half a click cannot show.
+`andecobs-116` — **T-71 PASS, thin**: archive and unarchive with nothing lost, no screenshot,
+and the task's own opinion question left blank (maykel answered it in `#101` — he wants an
+archived class to stay fully editable).
+
+**Worth noticing:** three of the four results are PASSes with the evidence boxes empty, and
+the one detailed result is the one that found a new bug. The Expected line in a test task is
+doing real work — Kristine's PS exists because she checked the record after deleting, which
+is what her task told her to do.
+
+## Tester tickets — 2026-09-20, the Bulk Upload progress line (ticket pane)
+
+Two tickets from Kristine, opened two minutes apart on the 19th and both arriving after the
+previous pass closed: `triplecookiemonster-110` (which the ledger still had as empty — she
+wrote it up at 17:53) and `triplecookiemonster-118`, which is still nothing but the bot's
+greeting and is most likely a stray second ticket.
+
+1. **T-89 — "Matching students…" on Bulk Upload never moves, so a teacher cannot tell the
+   match is running.** suggestion · clarity · web · `triplecookiemonster-110`. Kristine filed
+   it herself as low priority ("ux part, not prio (just dumping here para di malimtan)") and
+   asked for a loading sign that moves. Her screenshot is the Bulk Upload Roster dialog on
+   MATH-3 with the CSV chosen and one flat grey line under it. Checked: the whole busy state
+   is a single static paragraph, `teacher/classes/$classId/index.jsx:1266`, with no spinner,
+   no `aria-live` and no progress. The card asks for a row counter beside the spinner rather
+   than a spinner alone, for two reasons found while checking the code. First, the wait is
+   proportional to the CSV: the matching loop (`:1119`) is sequential and awaits **one Flask
+   round-trip per row** — `findStudentsByNumber` → `GET /api/students/lookup`
+   (`lib/roster.js:74`), plus a second by email when the ID misses — so 40 rows is 40+
+   requests in series, and the comment at `:1117` that justifies the sequential loop is
+   stale, still calling each match "one or two indexed equality reads" from before the
+   lookup moved behind Flask on 2026-08-31. Second, the T-27 verification pass on 2026-09-09
+   recorded an observation that was never turned into an issue: *"the first upload sat on
+   'Matching students…' until the modal was reopened"* (`_ledger.md`). That is unconfirmed
+   and the likeliest cause is the same cold-Flask serial cost, but it is exactly why a bare
+   spinner is the wrong fix — it would make a genuine stall look like healthy progress,
+   while a counter tells the two apart. Card:
+   `_tools/discord/tickets/_dispatch/T-89-matching-students-line-never-moves.md`.
+
+`triplecookiemonster-118` is logged as `waiting on tester`, not as an issue — an empty
+ticket is not a finding, and it is asked about in her reply.
+
+## Tester tickets — 2026-09-20, the student's personal email (ticket pane)
+
+Two more from Kristine, both opened on the 19th after the last pass: `triplecookiemonster-119`,
+which she wrote up, and `triplecookiemonster-120`, still nothing but the bot's greeting — her
+second empty ticket of that evening alongside `-118`, logged `waiting on tester` and asked
+about in her reply, not turned into an issue.
+
+1. **T-90 — "Personal email" on Add student is optional and the label calls it the student's
+   password recovery, but no reset can ever reach that address.** suggestion · clarity · web ·
+   `triplecookiemonster-119`. Kristine, as a solo teacher on Students → Student accounts →
+   Add student, read "Personal email (optional — their password recovery)" and asked for the
+   field to be made mandatory. Checked, and the label is the thing that is wrong:
+   `POST /api/auth/forgot-password` (`../activklass-backend/app/api/auth.py:123`) builds the
+   reset link with `generate_password_reset_link(email)`, which resolves a **Firebase Auth
+   sign-in address**; an issued student's is `<prefix>-<6 digits>@activklass.internal`
+   (`src/lib/logins.js:13,32`), so a personal address raises `UserNotFoundError` and the
+   endpoint answers `{"sent": true}` anyway under its anti-enumeration rule — a success
+   screen for a mail nobody sent. `personal_email` has exactly one reader in `src/`, the
+   admin duplicate check (`routes/admin/duplicates.js:57`); it is a contact on file and
+   nothing more. The real way back in is the teacher's **Reset password** on that same page,
+   which is what T-47 already put on `forgot-password.jsx:36` for the student who lands
+   there. So making the field mandatory would force an address out of students who often
+   have no email — the reason issued logins exist — and buy no recovery at all. The card
+   builds the copy fix instead (`StudentAccounts.jsx:276`, matching `admin/UsersTab.jsx:430`
+   and `admin/BulkUpload.jsx:61,68`, leaving the no-prefix "becomes their login" branch
+   alone, since for that student the address really is the sign-in) and leaves the larger
+   question — should a recorded personal email become a real recovery channel, via a
+   server-side lookup from `personal_email` to the internal sign-in address — as a decision
+   for the owner, post-defense. Also noted while checking: the comment at
+   `admin/UsersTab.jsx:429-433` describes an "owner's dashboard card" that confirms the
+   address; no such card exists in `src/`. Card:
+   `_tools/discord/tickets/_dispatch/T-90-student-personal-email-says-password-recovery.md`.
+
+## Tester tickets — 2026-09-20, Kristine's two class-roster findings (ticket pane)
+
+Both were filed 2026-09-19 evening and sat un-triaged: their ledger rows still read
+"only the bot's greeting in it — nothing reported yet", written before her messages
+landed, while `triaged through` had since been bumped past them. Caught by reading the
+files rather than trusting the row.
+
+1. **Bulk Upload tells a solo teacher to ask a school admin they do not have** —
+   suggestion · clarity, web, `triplecookiemonster-118`. Signed in as a solo trial
+   teacher, all 40 rows came back `no student account` and both explanations pointed her
+   at a school admin. `teacher/classes/$classId/index.jsx:1222-1223` and `:1303-1306` are
+   flat literals with no account-kind branch — yet the same file already draws that line
+   twice: the comment at `:425` ("a solo subscriber has nobody above them") and
+   `AddStudentModal`'s solo-only `create` tab at `:458`. A solo teacher makes student
+   accounts herself on `teacher/StudentAccounts.jsx`. The card branches both sentences on
+   the account kind and adds the link through to that page, which was her second ask.
+   Card: `_tools/discord/tickets/_dispatch/T-91-bulk-upload-tells-a-solo-teacher-to-ask-a-school-admin.md`.
+
+2. **A class holds more students than its capacity, and nothing ever says so** — bug ·
+   wrong data, web, `triplecookiemonster-120`. Her MATH101 · 1A Overview reads
+   "Capacity 61 / 40 students enrolled". Both add paths already refuse an over-capacity
+   add — `$classId/index.jsx:462` + `:539`/`:581` (Add Student) and `:1164-1165` (the CSV
+   upload, refused whole) — so her *Expected* is largely built already. What has no rule
+   is the capacity itself: `features/classes/ClassFormModal.jsx:130-144` validates
+   `max_students` only for whole-number and the 1…300 range, with a deliberate exemption
+   at `:137` so an existing over-cap value does not block unrelated edits, and **never**
+   compares it against the students already enrolled. So Edit Class accepts 40 on a
+   61-student class, and the Capacity card at `:1606-1612` prints the contradiction in
+   ordinary grey. Her actual route is unconfirmed and she has been asked; the second,
+   narrower possibility is that the guard counts `clazz.student_ids` while the card counts
+   the resolved roster. The card fixes the validator and the card's over state, and
+   explicitly does not build her pick-who-to-add dialog. Card:
+   `_tools/discord/tickets/_dispatch/T-92-class-holds-more-students-than-its-capacity.md`.
