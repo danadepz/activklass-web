@@ -393,6 +393,30 @@ export function phoneError(value, { required = true } = {}) {
 }
 
 /**
+ * The canonical form of a phone number, for deciding whether two typed
+ * numbers are the SAME number (T-93, andecobs-117). `09434969549`,
+ * `0943 496 9549`, `0943-496-9549` and `+639434969549` are one phone,
+ * written four ways -- the owner's call on 2026-09-21 is that a phone
+ * number belongs to one person only, so the duplicate check has to see
+ * through the spacing and the country code, not just match bytes.
+ *
+ * Strips everything but digits, then folds a leading `63` (from a typed
+ * `+63` or bare `63`) to a single `0`, so the four examples above all
+ * normalise to `09434969549`. Not a validity check -- `phoneError` above
+ * still owns that -- so a malformed value normalises too, just to
+ * something unlikely to coincidentally match a real number.
+ *
+ * This is the one place the rule is written down; `app/api/auth.py`'s
+ * `_normalize_phone` mirrors it in Python (no runtime to share across the
+ * two languages) and must be kept in step by hand if this changes.
+ * @param {string} value
+ */
+export function normalizePhone(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits.startsWith('63') ? `0${digits.slice(2)}` : digits
+}
+
+/**
  * The message when a phone number already belongs to another account
  * (T-88). Whether it does is answered by the server, not this file — a
  * client-side lookup over `users` would work under the rules but would hand
@@ -400,7 +424,9 @@ export function phoneError(value, { required = true } = {}) {
  * teacher on the platform, so `register.jsx` asks
  * `POST /api/auth/register/phone-in-use` instead and shows this message
  * when it comes back yes. Kept here, like every other form message, so the
- * wording has one home.
+ * wording has one home. The endpoint compares on the canonical form above
+ * (T-93), not the bytes this file sends -- `0943 496 9549` and
+ * `09434969549` get the same answer.
  */
 export const PHONE_IN_USE_ERROR =
   'That phone number is already on another account. Double-check what you typed, or use a different number.'

@@ -3,7 +3,7 @@ import {
   emailError, nameError, passwordError, tempPasswordError, yearLevelError,
   GRADE_LEVELS, YEAR_LEVELS,
   semesterError, semesterLabel,
-  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, linkError,
+  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, normalizePhone, linkError,
   prcLicenseError, verificationIdError,
   passingPercentError,
   birthdateError, BIRTHDATE_HINT,
@@ -289,6 +289,47 @@ describe('phoneError', () => {
     expect(phoneError('0917 ABC 4567')).not.toBe('')
     expect(phoneError('1234')).not.toBe('')
     expect(phoneError('12345678901234')).not.toBe('')
+  })
+})
+
+/* T-93 (andecobs-117): the registration phone-in-use check (T-88) only
+   caught a byte-identical string, so `09434969549`, `0943 496 9549`,
+   `0943-496-9549` and `+639434969549` -- one number, typed four ways --
+   read as four different numbers. Live data already carried an unflagged
+   pair before the fix: `09154686377` on 3 accounts and `+639154686377` on
+   1. This is the rule the duplicate check now compares on, on both the
+   web and backend side (register.jsx sends the raw value; the backend's
+   `_normalize_phone` in app/api/auth.py mirrors this function and
+   normalises what it reads from Firestore before comparing). */
+describe('normalizePhone', () => {
+  it('collapses the exact same number typed four different ways', () => {
+    const canonical = normalizePhone('09434969549')
+    expect(normalizePhone('0943 496 9549')).toBe(canonical)
+    expect(normalizePhone('0943-496-9549')).toBe(canonical)
+    expect(normalizePhone('+639434969549')).toBe(canonical)
+  })
+
+  it('strips spaces, dashes, dots and parentheses', () => {
+    expect(normalizePhone('0917 123 4567')).toBe('09171234567')
+    expect(normalizePhone('0917-123-4567')).toBe('09171234567')
+    expect(normalizePhone('0917.123.4567')).toBe('09171234567')
+    expect(normalizePhone('(032) 255-1234')).toBe('0322551234')
+  })
+
+  it('folds a leading +63 or 63 to a single 0, not two', () => {
+    expect(normalizePhone('+639171234567')).toBe('09171234567')
+    expect(normalizePhone('639171234567')).toBe('09171234567')
+    expect(normalizePhone('09171234567')).toBe('09171234567')
+  })
+
+  it('leaves two genuinely different numbers different', () => {
+    expect(normalizePhone('09171234567')).not.toBe(normalizePhone('09221112222'))
+  })
+
+  it('never throws on blank or garbage input', () => {
+    expect(normalizePhone('')).toBe('')
+    expect(normalizePhone(null)).toBe('')
+    expect(normalizePhone('abc')).toBe('')
   })
 })
 
