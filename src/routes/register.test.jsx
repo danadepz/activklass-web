@@ -351,3 +351,95 @@ describe('T-94 — the existing-account branch is settled before the phone check
     expect(registerSource).toMatch(/if \(in_use\) \{ setError\(PHONE_IN_USE_ERROR\); return \}/)
   })
 })
+
+/* T-82 (triplecookiemonster-107, owner reversed Option A to Option B on
+   2026-09-26): an Institution sign-up now pays for its seats before a
+   superadmin ever reviews the request, instead of after approval. Read off
+   the source for the same reason the T-88/T-94 blocks above do — this is an
+   async submit handler this repo has no DOM library to drive.
+
+   What has to be true, in order: the pending school is created right after
+   the request it belongs to, and before the profile write (the backend
+   endpoint needs the request's own id, and setInstitutionSchoolId must be
+   set before any later step could fail); nobody is signed out before the
+   trip to PayMongo, unlike every institution sign-up before this ticket
+   (the return trip needs this same session to confirm the payment); and a
+   checkout that fails to START retries on its own next submit, rather than
+   re-running account creation into the "existing profile" branch's
+   navigate-to-portal. */
+describe('T-82 — an Institution sign-up pays before a superadmin reviews it', () => {
+  const requestWriteAt = registerSource.indexOf("addDoc(collection(db, 'subscription_requests')")
+  const pendingSchoolAt = registerSource.indexOf('createPendingSchool(reqRef.id)')
+  const profileWriteAt = registerSource.indexOf("setDoc(doc(db, 'users', uid)")
+  const payAt = registerSource.indexOf('await payForInstitution(pendingSchoolId)')
+
+  it('creates the pending school right after the request, before the profile is written', () => {
+    expect(requestWriteAt).toBeGreaterThan(-1)
+    expect(pendingSchoolAt).toBeGreaterThan(-1)
+    expect(profileWriteAt).toBeGreaterThan(-1)
+    expect(requestWriteAt).toBeLessThan(pendingSchoolAt)
+    expect(pendingSchoolAt).toBeLessThan(profileWriteAt)
+  })
+
+  it('sends the browser to PayMongo as the last step, not "sent" directly', () => {
+    expect(payAt).toBeGreaterThan(-1)
+    expect(profileWriteAt).toBeLessThan(payAt)
+    // The pre-T-82 ending — signed out, straight to the confirmation screen
+    // with no payment involved — must be gone, not just reordered.
+    expect(registerSource).not.toMatch(/await logout\(\)\s*\n\s*setStep\('sent'\)/)
+  })
+
+  it('starts checkout with flow: institution_signup, so the return trip goes to /register, not /teacher/account', () => {
+    expect(registerSource).toMatch(/startCheckout\(schoolId, \{ flow: 'institution_signup' \}\)/)
+  })
+
+  it('a checkout that failed to start retries on its own, without re-running account creation', () => {
+    const retryCheckAt = registerSource.indexOf('if (institutionSchoolId) {')
+    const createAccountCallAt = registerSource.indexOf('await createAccount()')
+    expect(retryCheckAt).toBeGreaterThan(-1)
+    expect(createAccountCallAt).toBeGreaterThan(-1)
+    expect(retryCheckAt).toBeLessThan(createAccountCallAt)
+  })
+
+  it('the seat-picker no longer promises "nothing to pay today" or a quote for later — it charges now', () => {
+    expect(registerSource).not.toMatch(/Nothing to pay today/)
+    expect(registerSource).not.toMatch(/Your final quote follows/)
+    expect(registerSource).toMatch(/Due today/)
+    expect(registerSource).toMatch(/Refunded in full if we decline your request/)
+  })
+
+  it('the "request sent" screen no longer depends on form state the PayMongo round trip does not preserve', () => {
+    // A full-page redirect to PayMongo and back remounts the page, so `form`
+    // is back to its empty defaults — a screen built from it would read
+    // "Thanks, ." Confirmed generically instead.
+    const sentScreenAt = registerSource.indexOf('Thanks — your payment for the school year is on file')
+    expect(sentScreenAt).toBeGreaterThan(-1)
+    expect(registerSource).not.toMatch(/Thanks, \{form\.firstName\.trim\(\)\}/)
+  })
+})
+
+describe('T-82 — the trip back from PayMongo', () => {
+  const checkoutReturn = (qs) => {
+    searchState.current = qs
+    try { return renderToStaticMarkup(<Register />) } finally { searchState.current = '' }
+  }
+
+  it('shows a confirming screen when the return carries a reference and the school it belongs to', () => {
+    const html = checkoutReturn('checkout_ref=ref1&checkout_school=school1')
+    expect(html).toMatch(/Confirming your payment/)
+    expect(html).not.toMatch(/Payment not completed/)
+  })
+
+  it('shows a cancelled screen with a way to pay again when the return says cancelled', () => {
+    const html = checkoutReturn('checkout_cancelled=1&checkout_school=school1')
+    expect(html).toMatch(/Payment not completed/)
+    expect(html).toMatch(/Payment was cancelled — nothing was charged/)
+    expect(html).toMatch(/Pay now/)
+  })
+
+  it('shows neither screen on an ordinary visit with no checkout params', () => {
+    const html = checkoutReturn('')
+    expect(html).not.toMatch(/Confirming your payment/)
+    expect(html).not.toMatch(/Payment not completed/)
+  })
+})

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { api, ApiError } from '@/lib/api'
+import { confirmCheckout, createPendingSchool, startCheckout } from '@/lib/subscription'
 import {
   emailError,
   linkError,
@@ -138,6 +139,18 @@ export default function Register() {
   const [searchParams] = useSearchParams()
   const preset = searchParams.get('type') === 'institution' && !completing ? 'institution' : null
 
+  // T-82: the trip back from PayMongo's hosted page for an Institution
+  // sign-up. `checkout_school` is the pending school this session paid for
+  // (carried in the URL because the signed-in profile has no school_id of
+  // its own yet — it is not a member anywhere until approval); `checkout_ref`
+  // is this attempt's own reference, minted before the gateway is called.
+  // Read once, at mount, the same as `preset` above.
+  const [checkoutReturn] = useState(() => ({
+    reference: searchParams.get('checkout_ref'),
+    cancelled: searchParams.get('checkout_cancelled') === '1',
+    schoolId: searchParams.get('checkout_school'),
+  }))
+
   // First question, before any details: who is this account for? A solo
   // teacher goes on to create an account here. A school does not — its
   // subscription is arranged with the ActivKlass team, so that path ends in
@@ -179,6 +192,89 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  // T-82: the pending school an Institution sign-up paid for, once the
+  // request and its pending school both exist. Set once, before the
+  // checkout redirect leaves this page -- if the redirect itself fails to
+  // start (a gateway error), the next submit skips straight to retrying
+  // checkout instead of re-running the whole account creation and walking
+  // into the "existing profile" branch's navigate-to-portal. Also seeded
+  // from the cancel return trip, below, so "Pay now" there reuses the same
+  // retry path.
+  const [institutionSchoolId, setInstitutionSchoolId] = useState(checkoutReturn.cancelled ? checkoutReturn.schoolId : null)
+  // The trip back from PayMongo's hosted page for an Institution sign-up --
+  // 'confirming' while polling, 'paid' once confirmed, 'unconfirmed' if it
+  // never settles, 'cancelled' from the cancel URL. null the rest of the time.
+  const [checkoutState, setCheckoutState] = useState(
+    checkoutReturn.reference && checkoutReturn.schoolId ? 'confirming' : checkoutReturn.cancelled ? 'cancelled' : null,
+  )
+
+  // Polls PayMongo through our own server a few times because a test payment
+  // can take a moment to settle, same pattern as account.jsx's
+  // useCheckoutReturn. Signs out only once actually paid — staying signed in
+  // up to that point is what let the checkout call itself happen as this
+  // requester, and a still-unconfirmed payment should not sign anyone out of
+  // a session they might still need to retry from.
+  useEffect(() => {
+    const { reference, schoolId } = checkoutReturn
+    if (!reference || !schoolId) return undefined
+    let stopped = false
+    let attempt = 0
+    async function poll() {
+      attempt += 1
+      try {
+        const res = await confirmCheckout(schoolId, reference)
+        if (stopped) return
+        if (res.status === 'paid') { await settlePaidCheckout(); return }
+      } catch {
+        if (stopped) return
+      }
+      if (attempt < 5) setTimeout(poll, 2000)
+      else if (!stopped) setCheckoutState('unconfirmed')
+    }
+    poll()
+    return () => { stopped = true }
+    // Runs once, at mount, off the URL this page loaded with -- checkoutReturn
+    // itself never changes after mount (useState(() => ...) above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Signs out (a confirmed payment is the one point this session's job is
+  // done — nobody is a member of anything until a superadmin approves the
+  // request) and shows the same "request sent" screen a non-institution or
+  // pre-T-82 request always showed.
+  async function settlePaidCheckout() {
+    await logout()
+    setCheckoutState('paid')
+    setStep('sent')
+  }
+
+  // The "We could not confirm yet" screen's manual retry — a plain re-ask,
+  // not another 2-second poll loop, since a person pressing a button wants
+  // an answer now.
+  async function recheckPayment() {
+    setCheckoutState('confirming')
+    try {
+      const res = await confirmCheckout(checkoutReturn.schoolId, checkoutReturn.reference)
+      if (res.status === 'paid') { await settlePaidCheckout(); return }
+    } catch { /* falls through to unconfirmed below */ }
+    setCheckoutState('unconfirmed')
+  }
+
+  // "Payment was not completed" (the cancel return) offers to try again —
+  // the same checkout starter createAccount() itself calls, reusable here
+  // because institutionSchoolId was already seeded from the cancel URL.
+  async function retryInstitutionPayment() {
+    setError(null)
+    setSubmitting(true)
+    try {
+      await payForInstitution(institutionSchoolId)
+    } catch (err) {
+      console.error('[register] could not restart the payment:', err.code ?? '', err)
+      setError(FRIENDLY_ERRORS[err.code] ?? 'We could not start the payment. Try again in a moment.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   // Signing out from this page ends the other session and nothing else: the
@@ -261,7 +357,14 @@ export default function Register() {
     if (step < lastStep) { setStep(step + 1); return }
     setSubmitting(true)
     try {
-      await createAccount()
+      // T-82: a checkout that failed to start on a prior attempt retries on
+      // its own here, rather than re-running the whole account creation —
+      // the account, request and pending school all already exist by then.
+      if (institutionSchoolId) {
+        await payForInstitution(institutionSchoolId)
+      } else {
+        await createAccount()
+      }
     } catch (err) {
       // Raw exception text is not a message anyone should have to read, and
       // once step 1 has run the account exists: whatever failed after it, the
@@ -270,9 +373,11 @@ export default function Register() {
       console.error('[register] could not finish the account:', err.code ?? '', err)
       setError(
         FRIENDLY_ERRORS[err.code] ??
-          (auth.currentUser
-            ? 'Your account was created, but we could not finish setting it up. Try again with the same email address and password.'
-            : 'We could not create your account. Check your connection and try again.'),
+          (institutionSchoolId
+            ? 'We could not start the payment. Try again in a moment.'
+            : auth.currentUser
+              ? 'Your account was created, but we could not finish setting it up. Try again with the same email address and password.'
+              : 'We could not create your account. Check your connection and try again.'),
       )
     } finally {
       setSubmitting(false)
@@ -401,8 +506,9 @@ export default function Register() {
     // and tries again. The ActivKlass team picks the request up from here —
     // they provision the school on these seat counts and make this account
     // its admin, and the admin then issues every teacher and student login.
+    let pendingSchoolId = null
     if (kind === 'institution') {
-      await addDoc(collection(db, 'subscription_requests'), {
+      const reqRef = await addDoc(collection(db, 'subscription_requests'), {
         ...details(),
         uid,
         email: auth.currentUser.email,
@@ -412,6 +518,14 @@ export default function Register() {
         status: 'pending',
         created_at: serverTimestamp(),
       })
+      // T-82, Option B: the school pays for its year before a superadmin
+      // ever looks at the request. `schools` stays superadmin-only to write
+      // directly (same as every other school-creation path), so this is the
+      // Flask doorway -- idempotent, so a retry after a later failure (the
+      // checkout call below, say) does not mint a second pending school.
+      const pending = await createPendingSchool(reqRef.id)
+      pendingSchoolId = pending.school_id
+      setInstitutionSchoolId(pendingSchoolId)
     }
 
     // 5. ActivKlass profile doc in the Firestore 'users' collection.
@@ -460,21 +574,37 @@ export default function Register() {
       return
     }
 
-    // The request landed and the profile is written — nothing left for this
-    // person to do inside until we act on the request, so they are signed
-    // out and told to wait for us rather than dropped into an empty portal.
-    await logout()
-    setStep('sent')
+    // The request and its pending school both exist — send the browser to
+    // PayMongo (T-82, Option B). Staying signed in (no logout here, unlike
+    // before Option B) is deliberate: the trip back from PayMongo needs this
+    // same session to confirm the payment against the request it belongs to.
+    await payForInstitution(pendingSchoolId)
+  }
+
+  // Starts (or restarts) the PayMongo checkout for the Institution sign-up's
+  // own pending school. Split out from createAccount() so a checkout that
+  // failed to START (a gateway error) can be retried on its own — the next
+  // submit skips straight here via institutionSchoolId, rather than
+  // re-running account creation and walking into the "existing profile"
+  // branch above, which would navigate an unapproved requester to a portal
+  // with nothing in it.
+  async function payForInstitution(schoolId) {
+    const { checkout_url } = await startCheckout(schoolId, { flow: 'institution_signup' })
+    window.location.href = checkout_url
   }
 
   const title = completing
     ? 'One more step'
-    : sent
-      ? 'Request sent'
-      : 'Create your ActivKlass account'
+    : checkoutState === 'confirming'
+      ? 'Confirming your payment'
+      : checkoutState === 'cancelled'
+        ? 'Payment not completed'
+        : sent
+          ? 'Request sent'
+          : 'Create your ActivKlass account'
   const subtitle = completing
     ? 'Complete your profile to finish setting up your account.'
-    : sent
+    : checkoutState === 'confirming' || checkoutState === 'cancelled' || sent
       ? null
       : choosing
         ? 'Who is this account for?'
@@ -489,18 +619,46 @@ export default function Register() {
       titleSize={choosing ? 'clamp(34px, 7vw, 48px)' : undefined}
       subtitle={subtitle}
     >
-      {sent ? (
+      {checkoutState === 'confirming' ? (
+        <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 15, color: muted, margin: 0, lineHeight: 1.55, maxWidth: 360 }}>
+            One moment — checking your payment before we send your request to the ActivKlass team.
+          </p>
+        </div>
+      ) : checkoutState === 'unconfirmed' ? (
+        <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 15, color: muted, margin: 0, lineHeight: 1.55, maxWidth: 360 }}>
+            We could not confirm the payment yet. If you completed it, check again in a moment —
+            otherwise nothing was charged.
+          </p>
+          <SubmitButton type="button" onClick={recheckPayment} style={{ marginTop: 0 }}>
+            Check again
+          </SubmitButton>
+        </div>
+      ) : checkoutState === 'cancelled' ? (
+        <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 15, color: muted, margin: 0, lineHeight: 1.55, maxWidth: 360 }}>
+            Payment was cancelled — nothing was charged. Your account and your request are still
+            here; pay for the school year to send it to the ActivKlass team.
+          </p>
+          <SubmitButton type="button" disabled={submitting} onClick={retryInstitutionPayment} style={{ marginTop: 0 }}>
+            {submitting ? 'Starting payment…' : 'Pay now'}
+          </SubmitButton>
+          {error && <AuthError>{error}</AuthError>}
+          <Link to="/" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy, fontSize: 14 }}>
+            Back to home
+          </Link>
+        </div>
+      ) : sent ? (
         <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
           <span style={{ display: 'grid', placeItems: 'center', width: 64, height: 64, borderRadius: '50%', background: `${gold}33`, color: goldDeep }}>
             <Check className="h-8 w-8" />
           </span>
           <p style={{ fontSize: 15, color: muted, margin: 0, lineHeight: 1.55, maxWidth: 360 }}>
-            Thanks, {form.firstName.trim()}. Your request for{' '}
-            <strong style={{ color: navy }}>{details().school_name}</strong> is with the
-            ActivKlass team — we'll reach you at{' '}
-            <strong style={{ color: navy }}>{form.email.trim()}</strong> to set it up and make
-            you its admin. Your sign-in already exists, but you're signed out for now, so sign
-            in once you hear from us. Nothing to pay today — your quote comes with the setup.
+            Thanks — your payment for the school year is on file, and your request is with the
+            ActivKlass team. We'll reach you at the email you registered with to set it up and
+            make you its admin. Your sign-in already exists, but you're signed out for now, so
+            sign in once you hear from us.
           </p>
           <Link to="/" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy, fontSize: 14 }}>
             Back to home
@@ -806,21 +964,28 @@ export default function Register() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Estimate</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Due today</div>
                     <Estimate annual={estimateAnnual(form.teacherSeats, totalStudents)} />
                   </div>
                 </div>
-                <TrialLine />
+                <div
+                  className="flex items-center gap-2"
+                  style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 13, fontWeight: 700, color: '#1F8A5B' }}
+                >
+                  <Check className="h-4 w-4" />
+                  Refunded in full if we decline your request.
+                </div>
                 <div style={{ fontSize: 12, color: '#9AA6BD', marginTop: 10, lineHeight: 1.45 }}>
                   Teacher seats carry the AI generation and records; student seats are records only.
-                  Your final quote follows from these numbers and comes with your setup.
+                  Next you pay for these seats, for one school year — the ActivKlass team then sets
+                  up {details().school_name || 'your school'} and reviews the request.
                 </div>
               </div>
               <AuthNotice>
-                <strong>Schools are onboarded by the ActivKlass team.</strong> We will contact you
-                at {form.email.trim() || 'your email'} to set up {details().school_name || 'your school'} on
-                these seats and make your account its admin; you then issue every teacher and
-                student login.
+                <strong>Schools are onboarded by the ActivKlass team.</strong> After you pay, we will
+                contact you at {form.email.trim() || 'your email'} to set up{' '}
+                {details().school_name || 'your school'} on these seats and make your account its
+                admin; you then issue every teacher and student login.
               </AuthNotice>
             </>
           )}
@@ -840,9 +1005,9 @@ export default function Register() {
               {step < lastStep
                 ? 'Next'
                 : submitting
-                  ? (kind === 'institution' ? 'Sending…' : completing ? 'Finishing…' : 'Creating account…')
+                  ? (kind === 'institution' ? 'Starting payment…' : completing ? 'Finishing…' : 'Creating account…')
                   : kind === 'institution'
-                    ? 'Request access'
+                    ? 'Pay & request access'
                     : completing
                       ? 'Complete profile'
                       : 'Start free trial'}

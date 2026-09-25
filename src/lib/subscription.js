@@ -69,9 +69,25 @@ export function changePlan(ownerId, plan) {
  * is recomputed server-side from the stored seats; nothing is sent from
  * here. Returns `{ checkout_url, reference }` -- the caller sends the
  * browser to `checkout_url` and keeps `reference` to poll with below.
+ *
+ * `flow: 'institution_signup'` (T-82) sends the return trip to /register
+ * instead of /teacher/account -- an Institution sign-up pays before it has
+ * an Account page to return to. Only takes effect server-side when
+ * `ownerId` is actually a pending school; harmless to pass otherwise.
  */
-export function startCheckout(ownerId) {
-  return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST' })
+export function startCheckout(ownerId, { flow } = {}) {
+  return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST', body: flow ? { flow } : undefined })
+}
+
+/**
+ * T-82: the one write that turns a fresh Institution sign-up's own
+ * `subscription_requests` document into something checkout can charge --
+ * `schools` stays superadmin-only to write directly, so this is the
+ * Admin-SDK doorway. Idempotent: calling it twice for the same request
+ * returns the same school_id.
+ */
+export function createPendingSchool(requestId) {
+  return api('/api/subscription/institution/pending-school', { method: 'POST', body: { request_id: requestId } })
 }
 
 /**

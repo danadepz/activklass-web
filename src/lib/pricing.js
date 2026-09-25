@@ -37,8 +37,11 @@
  *   price as a school so nobody games the split; the school pays more only
  *   because it has more people.
  *
- * The register page shows these as an ESTIMATE; the ActivKlass team sends
- * the actual quote when they provision the school.
+ * The register page shows these numbers and, since T-82 (Option B,
+ * 2026-09-26), charges them: an Institution sign-up pays for the seats it
+ * picked here before the ActivKlass team ever reviews the request — not an
+ * estimate reconciled later. A solo teacher sees the same figure and pays it
+ * whenever they choose, from the Account page (T-68).
  */
 /** Every subscription starts with a free month; billing begins after it. */
 export const TRIAL_DAYS = 30
