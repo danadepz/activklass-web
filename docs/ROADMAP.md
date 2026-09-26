@@ -581,6 +581,54 @@ Still open at this altitude:
   updated the same session, `docs/08-subscriptions-and-groups.md` and `OPEN-QUESTIONS.md`
   Q8 (backend repo) still read as the backend-only pass and want a follow-up note once the
   browser walk closes this out.
+- `[x]` **T-82 reversed to Option C, same day (2026-09-26): confirm identity first, ask
+  for money second — the web half.** Option B's live 403 (every real Institution sign-up
+  failed) was made moot rather than fixed: `register.jsx`'s institution branch goes back to
+  writing only `subscription_requests` then the profile, the shape it had before T-82 —
+  `createPendingSchool`, `payForInstitution`, the checkout-return screens and the "Due
+  today / Refunded in full" seat-picker copy are all gone, restoring "First 30 days free —
+  nothing to pay today" and the original "Request access" button and confirmation screen.
+  The backend half (already landed, `activklass-backend` `333b094`…`4ba0bac`) now creates
+  `schools/{id}` and `subscriptions/{id}` at `status: 'approved_unpaid'` on approval, no
+  `trial_ends_at` — identity confirmed, no money moved. New here: `lib/schoolStatus.js`
+  gets `schoolApprovedUnpaid()` beside `schoolSuspended()`; `ProtectedRoute` and
+  `RoleHomeRedirect` get a fourth gate, same shape as temp-password/unverified/suspended,
+  sending anyone in such a school to a new `/pay-to-activate` screen instead of the real
+  dashboard; that screen resolves the school's own subscription, shows the seat estimate,
+  and reuses `POST /api/subscription/{id}/checkout` (the same endpoint and default return
+  trip — `/teacher/account?checkout_ref=…` — a solo teacher's Pay button already uses) to
+  start a real PayMongo test-mode checkout. `teacher/account.jsx` was **not** the reuse
+  target the original brief suggested: it is role-gated to `teacher` only and its Pay
+  button assumes `profile.id` is the subscription's own id, which 403s for an admin whose
+  subscription is keyed by their school's id instead — a dedicated screen was the
+  documented fallback, not a silent choice. Since every `GET /api/subscription/{id}`
+  reconciles a still-pending payment against PayMongo before answering (T-68's existing
+  self-healing), `/pay-to-activate` unlocks the dashboard the next time it (or anything
+  else) reads the subscription, whether or not the browser ever comes back carrying a
+  `checkout_ref` — which it structurally cannot, since an admin can never stay on
+  `/teacher/account`. *Verified:* `schoolStatus.test.js` (+4), a new
+  `ProtectedRoute.test.jsx` (10, the gate's first test file: both gates, the opt-out, the
+  superadmin exemption, checked before the roles check), a new `payToActivate.test.jsx` (5:
+  the Pay button and estimate for an admin, the "ask your administrator" copy for anyone
+  else, both immediate-bounce cases), `register.test.jsx`'s T-82 block rewritten to pin the
+  Option B machinery's *absence* instead of its presence (11 tests). `npm run test`
+  1329/1329, `npm run build` clean. **Browser, this session, against the live project:** a
+  fresh Institution sign-up (new school, new admin account) completed with the exact
+  pre-T-82 copy and no payment step; approved through the real `/superadmin/requests`
+  queue; signing in as the newly-promoted admin landed on `/pay-to-activate` (not
+  `/admin`) reading "T82 Option C Verify School is approved" with the correct seat
+  estimate (20 teachers × 2,400 students — ₱168,000, matching `pricing.js`); clicking **Pay
+  for this school year** reached a real `checkout.paymongo.com` session (stopped there on
+  purpose, per this project's standing note that completing a PayMongo test payment
+  through browser automation has been unreliable in past sessions). The Admin SDK read
+  confirmed `schools/{id}` carried `status` and `subscription_status` both
+  `'approved_unpaid'` and a `payments` doc existed for the checkout attempt; the school,
+  its subscription, the payment, the request and the test admin account (Firestore and
+  Firebase Auth) were all deleted afterward. **Noted, not fixed (out of this brief's
+  scope):** the superadmin Approve dialog's copy and the resulting welcome email still say
+  "30-day trial" / "first 30 days are free" for an Institution approval — stale from before
+  Option C, in `routes/superadmin/requests.jsx` (web) and the backend's approval email,
+  neither of which this brief touched.
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:

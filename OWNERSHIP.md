@@ -84,7 +84,15 @@ src/lib/remediationRecovery.js
 src/lib/quizPool.js      src/lib/quizFeedback.js
 src/lib/quizAttempts.js  src/lib/schoolDirectory.js
 src/lib/schedule.js       src/lib/validation.js
+src/lib/schoolStatus.js
 ```
+
+**`lib/schoolStatus.js`, added here 2026-09-26 (T-82 Option C build pane).** It was in no
+lane despite being read by `ProtectedRoute.jsx` (Shared) and `routes/suspended.jsx` /
+`routes/pay-to-activate.jsx` (also unowned — see Shared below) since 2026-08-30. A pure
+status-predicate module (`schoolSuspended`, `schoolApprovedUnpaid`) is a domain rule, not a
+page, so it lands here beside `schedule.js` and `validation.js` rather than with either
+screen that happens to read it.
 
 **`quizPool.js`, `quizFeedback.js` and `quizAttempts.js` exist twice.** Each has a TypeScript port
 in `activklass-mobile/src/lib/`, because the two apps have separate builds and
@@ -262,7 +270,7 @@ Announce before editing. Keep the change small.
 | `src/routes/teacher/_layout.jsx`, `src/routes/student/_layout.jsx` | nav shells |
 | `src/routes/index.jsx`, `login.jsx`, `register.jsx`, `pending-verification.jsx` | landing + auth — `pending-verification.jsx` added 2026-09-11 (T-53): it was in no lane; it is the hold screen the verification gate lets through and re-collects the same ID fields as `register.jsx`, through the same rule |
 | `src/routes/forgot-password.jsx`, `reset-password.jsx` | the two halves of a password reset — auth routing beside `login.jsx`, added 2026-09-11 (T-47) |
-| `src/components/ProtectedRoute.jsx`, `src/routes/change-password.jsx` | the temp-password gate and the one screen it lets through — auth routing, not presentation, so `src/components/**` in the UI/UX lane does not cover it |
+| `src/components/ProtectedRoute.jsx`, `src/routes/change-password.jsx`, `src/routes/suspended.jsx`, `src/routes/pay-to-activate.jsx` | the workflow gates and the screens they let through — auth routing, not presentation, so `src/components/**` in the UI/UX lane does not cover it. `suspended.jsx` (2026-08-30) and `pay-to-activate.jsx` (2026-09-26, T-82 Option C) were both in no lane; recorded here in the same commit that added the second one, rather than left for the next pane to rediscover |
 | `BACKLOG.md`, `OWNERSHIP.md` | every pane writes findings here |
 
 **Shared is not a lane, and nobody owns one of these.** A pane that does most
