@@ -19,6 +19,7 @@ const ForgotPassword = lazyRoute(() => import('@/routes/forgot-password'), { ful
 const ResetPassword = lazyRoute(() => import('@/routes/reset-password'), { full: true })
 const ForcedChangePassword = lazyRoute(() => import('@/routes/change-password'), { full: true })
 const PendingVerification = lazyRoute(() => import('@/routes/pending-verification'), { full: true })
+const PayToActivate = lazyRoute(() => import('@/routes/pay-to-activate'), { full: true })
 
 // ─── Student portal ──────────────────────────────────────────────────────────
 const StudentLayout       = lazyRoute(() => import('@/routes/student/_layout'), { full: true })
@@ -94,6 +95,14 @@ export default function App() {
           suspended back to /portal. */}
       <Route element={<ProtectedRoute allowSuspended />}>
         <Route path="/suspended" element={Suspended} />
+      </Route>
+
+      {/* An admin whose school was approved but has not paid for the year
+          yet (T-82, Option C: identity first, money second). Same opt-out
+          pattern; the screen itself bounces anyone not actually gated back
+          to /portal. */}
+      <Route element={<ProtectedRoute allowApprovedUnpaid />}>
+        <Route path="/pay-to-activate" element={PayToActivate} />
       </Route>
 
       {/* Teacher */}

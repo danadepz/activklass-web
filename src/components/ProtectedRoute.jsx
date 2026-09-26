@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
-import { schoolSuspended } from '../lib/schoolStatus'
+import { schoolApprovedUnpaid, schoolSuspended } from '../lib/schoolStatus'
 
 function FullScreenMessage({ children }) {
   return (
@@ -30,6 +30,7 @@ export default function ProtectedRoute({
   allowTempPassword = false,
   allowUnverified = false,
   allowSuspended = false,
+  allowApprovedUnpaid = false,
 }) {
   const { status, profile, school, errorDetail, isSuperAdmin } = useAuth()
 
@@ -70,6 +71,14 @@ export default function ProtectedRoute({
   if (!allowSuspended && schoolSuspended(school, isSuperAdmin)) {
     return <Navigate to="/suspended" replace />
   }
+  /* Fourth gate, same shape: a school a superadmin approved but that has not
+     yet paid for its year (T-82, Option C — confirm identity first, ask for
+     money second). Only /pay-to-activate opts out, for the same
+     redirect-loop reason as the other three. Workflow gate, not security —
+     firestore.rules do not care what this reads either. */
+  if (!allowApprovedUnpaid && schoolApprovedUnpaid(school, isSuperAdmin)) {
+    return <Navigate to="/pay-to-activate" replace />
+  }
   if (superAdmin && !isSuperAdmin) return <Navigate to="/portal" replace />
   if (roles && !roles.includes(profile.role)) return <Navigate to="/portal" replace />
   return <Outlet />
@@ -100,6 +109,7 @@ export function RoleHomeRedirect() {
   if (profile.is_temp_password) return <Navigate to="/change-password" replace />
   if (awaitingVerification(profile)) return <Navigate to="/pending-verification" replace />
   if (schoolSuspended(school, isSuperAdmin)) return <Navigate to="/suspended" replace />
+  if (schoolApprovedUnpaid(school, isSuperAdmin)) return <Navigate to="/pay-to-activate" replace />
   // Developers land in the ops console. Checked before role, since we hold a
   // normal role too — the claim is what distinguishes us.
   if (isSuperAdmin) return <Navigate to="/superadmin" replace />
