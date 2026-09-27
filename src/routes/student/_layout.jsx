@@ -76,9 +76,8 @@ function Brand() {
 }
 
 export default function StudentLayout() {
-  const { profile, logout } = useAuth()
+  const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
 
   const closeMenu = () => setMenuOpen(false)
@@ -163,8 +162,23 @@ export default function StudentLayout() {
             {/* Notification bell */}
             <StudentNotificationBell dark />
 
-            {/* Avatar + name */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Avatar + name — click through to Profile, where Sign out lives
+                at the bottom of the page (T-95, andecobs-121: matches the
+                teacher's account-card pattern instead of sitting in the chrome). */}
+            <NavLink
+              to="/student/profile"
+              aria-label="Profile & settings"
+              className="group transition duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '4px 10px 4px 4px',
+                borderRadius: 999,
+                textDecoration: 'none',
+                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              })}
+            >
               {profile.photo_url ? (
                 <img
                   src={profile.photo_url}
@@ -204,26 +218,7 @@ export default function StudentLayout() {
                   {profile.login_id ?? profile.email}
                 </div>
               </div>
-            </div>
-
-            {/* Sign out */}
-            <button
-              onClick={() => setShowLogoutConfirm(true)}
-              className="hidden md:block transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={{
-                padding: '7px 14px',
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: sans,
-                color: 'rgba(250,250,246,0.85)',
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.18)',
-                borderRadius: 8,
-                cursor: 'pointer',
-              }}
-            >
-              Sign out
-            </button>
+            </NavLink>
 
             {/* Hamburger */}
             <button
@@ -271,118 +266,23 @@ export default function StudentLayout() {
               </NavLink>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px' }}>
-              <div style={{ fontSize: 13, color: 'rgba(250,250,246,0.6)' }}>
-                {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
-              </div>
-            </div>
-            <button
-              onClick={() => { closeMenu(); setShowLogoutConfirm(true) }}
-              style={{
-                margin: '0 0',
-                padding: '11px 16px',
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: sans,
-                color: 'rgba(250,250,246,0.85)',
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.14)',
-                borderRadius: 10,
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
+            {/* Profile row doubles as the link to Profile & Settings, where
+                Sign out lives — same pattern as the desktop card above. */}
+            <NavLink
+              to="/student/profile"
+              onClick={closeMenu}
+              style={({ isActive }) => mobileNavLinkStyle(isActive)}
             >
-              Sign out
-            </button>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span>Profile &amp; Settings</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
+                </span>
+              </span>
+            </NavLink>
           </div>
         )}
       </header>
-
-      {/* Sign Out Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(14,23,51,0.55)',
-          backdropFilter: 'blur(3px)',
-          WebkitBackdropFilter: 'blur(3px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 24
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: 400,
-            background: '#FFFFFF',
-            borderRadius: 20,
-            boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)',
-            padding: '30px 28px',
-            textAlign: 'center'
-          }}>
-            <h3 style={{
-              ...serif,
-              fontSize: 22,
-              color: '#0A1733',
-              margin: '0 0 12px 0'
-            }}>
-              Sign Out Confirmation
-            </h3>
-            <p style={{
-              fontFamily: sans,
-              fontSize: 14,
-              color: '#6A7A95',
-              lineHeight: 1.5,
-              margin: '0 0 24px 0'
-            }}>
-              Are you sure you want to sign out of your ActivKlass account?
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => setShowLogoutConfirm(false)}
-                style={{
-                  flex: 1,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  fontFamily: sans,
-                  color: '#3A4A6B',
-                  background: '#FFFFFF',
-                  border: '1.5px solid rgba(14,42,92,0.14)',
-                  borderRadius: 12,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLogoutConfirm(false)
-                  logout()
-                }}
-                style={{
-                  flex: 1,
-                  padding: '12px 20px',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  fontFamily: sans,
-                  color: '#FAFAF6',
-                  background: '#C0392B',
-                  border: 'none',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  boxShadow: '0 3px 0 #922B21'
-                }}
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* MAIN CONTENT */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-9" style={{ flex: 1 }}>

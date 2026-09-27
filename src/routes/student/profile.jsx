@@ -6,8 +6,9 @@ import { useAuth } from '@/context/useAuth'
 import { ageFromBirthdate } from '@/lib/roster'
 import ParentalAccessPanel from '@/components/ParentalAccessPanel'
 import { useGuardianAccess } from '@/hooks/useGuardianAccess'
-import { navy, ink, muted, faint, red, line, serif } from '@/theme'
+import { navy, ink, muted, faint, red, line, serif, sansFamily as sans } from '@/theme'
 import ChangePassword from '@/components/ChangePassword'
+import SignOutButton from '@/components/SignOutButton'
 import { ACCEPT, fileToAvatarDataUrl } from '@/lib/avatar'
 
 function InfoCell({ label, value }) {
@@ -41,6 +42,34 @@ function Avatar({ profile, busy, open, onToggle }) {
       >
         {busy ? '…' : '📷'}
       </button>
+    </div>
+  )
+}
+
+/** Sign out, moved here from the portal header (T-95, andecobs-121) to match
+ *  the teacher's account page: one place to end the session, at the bottom of
+ *  the profile screen, not sitting in the chrome at every width. */
+function SignOutCard() {
+  return (
+    <div
+      style={{
+        background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: '18px 24px',
+        marginTop: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign out</h2>
+        <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
+          End your session on this device. You will be asked to confirm first.
+        </p>
+      </div>
+      <SignOutButton
+        style={{
+          padding: '9px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans,
+          color: '#FAFAF6', background: red, border: 'none', borderRadius: 10, cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      />
     </div>
   )
 }
@@ -238,6 +267,7 @@ export default function StudentProfile() {
       />
 
       <ChangePassword />
+      <SignOutCard />
     </div>
   )
 }
