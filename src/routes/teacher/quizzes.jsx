@@ -128,6 +128,12 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
     // still a checkbox rather than automatic, because banking writes to a
     // list the teacher owns and a silent write is the wrong surprise.
     save_to_bank: true,
+    // Free text the teacher types, forwarded to generateQuiz's own
+    // `instructions` argument (T-96, andecobs-122). Not the quiz's
+    // student-facing `instructions` field (that one lives on the quiz
+    // document itself, in blankQuiz() below and the editor at
+    // quizzes.$quizId.jsx) -- this shapes the draft only.
+    extra_context: '',
   }
   const [selectedClassId, setSelectedClassId] = useState(openedWithClassId)
   const [form, setForm] = useState(openedWithForm)
@@ -238,6 +244,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
         objectives: picked?.objectives ?? [],
         numQuestions: form.count,
         types: form.types,
+        instructions: form.extra_context,
         hints: {
           bloomsLevel: form.blooms_level,
           subject: selectedClassMeta?.subject,
@@ -433,6 +440,21 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             </div>
             <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0' }}>
               Essays are graded by you, not auto-marked.
+            </p>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Extra context for the AI (optional)</label>
+            <textarea
+              rows={2}
+              placeholder="e.g. Emphasize word problems, avoid trick questions"
+              value={form.extra_context}
+              onChange={(e) => setForm((f) => ({ ...f, extra_context: e.target.value }))}
+              style={{ ...fieldStyle, resize: 'vertical' }}
+            />
+            <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0', lineHeight: 1.45 }}>
+              Say what to focus on or leave out; the more specific, the closer the draft. This
+              shapes the draft only — it is not shown to students.
             </p>
           </div>
 
