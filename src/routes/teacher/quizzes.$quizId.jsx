@@ -2110,6 +2110,31 @@ export default function QuizBuilderPage() {
     }
   }
 
+  /**
+   * Reopen a closed quiz (T-98, maykel_64440-125). Closing flips one field, so
+   * this restores exactly that -- with one exception, decided under this
+   * card: a `closes_at` already behind us would leave the quiz "published"
+   * but still refused by `canStart` (lib/quizAttempts.js checks the date on
+   * its own, independent of status), so Reopen would look like it worked and
+   * change nothing a student can act on. A `closes_at` still ahead of now is
+   * left alone -- it is still doing its job. One write path: the header
+   * button below and the close toast's own "Reopen" action both call this.
+   */
+  async function reopenQuiz(previousStatus) {
+    try {
+      const stale = quiz.closes_at && Date.now() > new Date(quiz.closes_at).getTime()
+      await updateDoc(doc(db, 'quizzes', quizId), {
+        status: previousStatus,
+        ...(stale ? { closes_at: null } : null),
+        updated_at: serverTimestamp(),
+      })
+      refetch()
+      toast.success('Quiz reopened.')
+    } catch (err) {
+      toast.error(`Could not reopen the quiz: ${err.message}`)
+    }
+  }
+
   async function closeQuiz() {
     if (!(await confirmDialog({
       title: 'Close this quiz?',
@@ -2121,20 +2146,8 @@ export default function QuizBuilderPage() {
       const previous = quiz.status
       await updateDoc(doc(db, 'quizzes', quizId), { status: 'closed', updated_at: serverTimestamp() })
       refetch()
-      // Closing flips one field, so reopening restores exactly what was there.
       toast.success('Quiz closed. Students can no longer take it.', {
-        action: {
-          label: 'Reopen',
-          onClick: async () => {
-            try {
-              await updateDoc(doc(db, 'quizzes', quizId), { status: previous, updated_at: serverTimestamp() })
-              refetch()
-              toast.success('Quiz reopened.')
-            } catch (err) {
-              toast.error(`Could not reopen the quiz: ${err.message}`)
-            }
-          },
-        },
+        action: { label: 'Reopen', onClick: () => reopenQuiz(previous) },
       })
     } catch (err) {
       toast.error(`Could not close the quiz: ${err.message}`)
@@ -2183,6 +2196,16 @@ export default function QuizBuilderPage() {
             </button>
             <button onClick={closeQuiz} className="transition hover:brightness-105" style={btnGold}>
               Close quiz
+            </button>
+          </div>
+        )}
+        {/* The only door to this used to be the toast that appears for a few
+            seconds after Close quiz (T-98, maykel_64440-125) -- come back to
+            a closed quiz later and it was gone. Same handler, same write. */}
+        {quiz.status === 'closed' && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => reopenQuiz('published')} className="transition hover:brightness-105" style={btnGold}>
+              Reopen
             </button>
           </div>
         )}
