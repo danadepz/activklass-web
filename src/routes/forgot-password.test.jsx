@@ -67,10 +67,47 @@ describe('forgot password and an issued login (T-47)', () => {
     const html = renderToStaticMarkup(<ResetSentNotice email="skittles@gmail.com" />)
     // The sentence the tester would have read for an address no account signs in with.
     expect(html).not.toMatch(/If an account exists for/)
-    expect(html).toContain('If an account signs in with skittles@gmail.com')
+    expect(html).toContain('If skittles@gmail.com signs in here')
     expect(html).toContain('ask your teacher or your school admin')
     // Still says nothing about whether the email is registered (anti-enumeration).
     expect(html).not.toMatch(/no account|not found|not registered/i)
+  })
+})
+
+/* T-100 (maykel_64440-128): he typed an address that is not an account and
+   read "a password reset link is on its way" as confirmation, then waited
+   for mail that was never coming. The page was never wrong -- the backend
+   answers identically either way on purpose (the anti-enumeration promise
+   above) -- but the old copy put that sentence right after the condition
+   and never told a wrong-address reader what to do next. Two things are
+   pinned: the condition still leads (so the "link is on its way" clause
+   can never be read as unconditional), and a closing sentence now tells
+   that reader what "nothing arriving" means and what to do about it --
+   worded so it stays true, and gives away nothing, whether or not the
+   account exists. */
+describe('forgot password does not read as confirmation of a wrong address (T-100)', () => {
+  it('leads with the condition, not with the reassurance', () => {
+    const html = renderToStaticMarkup(<ResetSentNotice email="wrong@example.com" />)
+    const conditionAt = html.indexOf('signs in here')
+    const linkClauseAt = html.indexOf('the link is on its way')
+    expect(conditionAt).toBeGreaterThan(-1)
+    expect(linkClauseAt).toBeGreaterThan(-1)
+    expect(conditionAt).toBeLessThan(linkClauseAt)
+  })
+
+  it('closes the loop for a wrong address without saying so', () => {
+    const html = renderToStaticMarkup(<ResetSentNotice email="wrong@example.com" />)
+    expect(html).toMatch(/Nothing arriving in a few minutes usually means/)
+    expect(html).toMatch(/Try another, or ask your teacher or school admin/)
+    // True whether or not the account exists -- still no existence branch.
+    expect(html).not.toMatch(/no account|not found|not registered|doesn't exist|does not exist/i)
+  })
+
+  it('never branches the message on any server answer -- email is the only prop', () => {
+    expect(ResetSentNotice.length).toBe(1)
+    // No condition on anything but the email itself -- no `sent`/`exists`/
+    // response field ever reaches this component's own logic.
+    expect(ResetSentNotice.toString()).not.toMatch(/\?|&&|exists/i)
   })
 })
 

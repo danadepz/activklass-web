@@ -52,17 +52,26 @@ export function forgotPasswordProblem(value) {
 }
 
 /**
- * The success screen. "If an account *signs in with* that email" is true for
- * everyone -- an issued login signs in with its ID, so a personal email the
- * teacher recorded is not what any account signs in with -- and it still
- * confirms nothing about which emails are registered. The second sentence is
- * for the student who typed that personal email anyway.
+ * The success screen. "If {email} signs in here" is true for everyone --
+ * an issued login signs in with its ID, so a personal email the teacher
+ * recorded is not what any account signs in with -- and it still confirms
+ * nothing about which emails are registered. T-100 (maykel_64440-128): the
+ * old wording put "a password reset link is on its way" right after the
+ * condition and left the person who typed the wrong address with nothing
+ * to do but keep waiting for mail that would never come. The closing
+ * sentence below closes that loop -- it reads true whether or not the
+ * account exists, so it gives away nothing either.
  */
 export function ResetSentNotice({ email }) {
   return (
     <AuthNotice>
-      If an account signs in with {email}, a password reset link is on its way.
-      Check your inbox (and spam folder), then follow the link to choose a new password.
+      If {email} signs in here, the link is on its way — check your inbox and
+      spam folder.
+      <br />
+      <br />
+      Nothing arriving in a few minutes usually means that isn't the address
+      the account signs in with. Try another, or ask your teacher or school
+      admin to reset it for you.
       <br />
       <br />
       {ISSUED_LOGIN_NOTE}
