@@ -130,21 +130,23 @@ export default function UpNextPanel({ now: nowProp }) {
             ) : items.length === 0 ? (
               <p style={{ fontSize: 14, color: muted, margin: 0, textAlign: 'center', padding: '18px 0' }}>{EMPTY_TEXT}</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                {SECTIONS.map(([key, title]) => <Section key={key} title={title} items={buckets[key]} now={now} />)}
-                {SECTIONS.every(([key]) => buckets[key].length === 0) && (
-                  <p style={{ fontSize: 14, color: muted, margin: 0, textAlign: 'center', padding: '10px 0' }}>{EMPTY_TEXT}</p>
-                )}
-                {buckets.done.length > 0 && (
-                  <details data-section="Finished">
-                    <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Finished <span style={{ color: faint, fontWeight: 600 }}>· {buckets.done.length}</span>
-                    </summary>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                      {buckets.done.map((item) => <DeliverableRow key={`${item.source}:${item.id}`} item={item} now={now} />)}
-                    </div>
-                  </details>
-                )}
+              <div data-scroll-region="up-next-list" tabIndex={0} style={{ maxHeight: 480, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  {SECTIONS.map(([key, title]) => <Section key={key} title={title} items={buckets[key]} now={now} />)}
+                  {SECTIONS.every(([key]) => buckets[key].length === 0) && (
+                    <p style={{ fontSize: 14, color: muted, margin: 0, textAlign: 'center', padding: '10px 0' }}>{EMPTY_TEXT}</p>
+                  )}
+                  {buckets.done.length > 0 && (
+                    <details data-section="Finished">
+                      <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Finished <span style={{ color: faint, fontWeight: 600 }}>· {buckets.done.length}</span>
+                      </summary>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                        {buckets.done.map((item) => <DeliverableRow key={`${item.source}:${item.id}`} item={item} now={now} />)}
+                      </div>
+                    </details>
+                  )}
+                </div>
               </div>
             )}
           </>

@@ -94,6 +94,20 @@ describe('Up next -- list', () => {
     expect(html).toContain('data-section="Finished"')
   })
 
+  it('scrolls inside its own card instead of growing the page (T-97, andecobs-123)', () => {
+    state.data = { items, failed: [] }
+    const html = render()
+    const i = html.indexOf('data-scroll-region="up-next-list"')
+    expect(i).toBeGreaterThan(-1)
+    const tag = html.slice(html.lastIndexOf('<div', i), html.indexOf('>', i) + 1)
+    expect(tag).toMatch(/max-height:\s*480px/)
+    expect(tag).toMatch(/overflow-y:\s*auto/)
+    expect(tag).toMatch(/tabindex="0"/)
+    // The scroll region wraps the sections, not just one of them.
+    const scrollBlock = html.slice(i, html.indexOf('Finished') + 200)
+    expect(scrollBlock).toContain('data-section="Overdue"')
+  })
+
   it('names a class whose read failed instead of quietly showing less, and keeps the rest', () => {
     state.data = { items: items.slice(0, 2), failed: [{ classId: 'x', label: 'MATH10 · Mathematics 10' }] }
     const html = render()
