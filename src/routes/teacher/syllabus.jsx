@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { collection, deleteDoc, doc, getDocs, query, where, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -59,6 +60,46 @@ export function toDraftState(tree, source) {
       })),
     })),
   }
+}
+
+/**
+ * T-102 (triplecookiemonster-130): generating a syllabus with AI does not save
+ * it -- the draft lives in this screen's state until Save Syllabus runs, and
+ * nothing stopped a teacher from leaving with a full generated draft on
+ * screen and losing all of it silently. This is the wording for both the
+ * in-app exit guard and the "Back to Syllabus List" / Cancel buttons, so a
+ * teacher sees the same choice regardless of how she tried to leave.
+ */
+export const UNSAVED_DRAFT_LEAVE_PROMPT = {
+  title: "This draft isn't saved yet",
+  message: 'Leaving now discards the whole AI-generated draft — nothing has been written yet. Save it first, or discard it and leave.',
+  confirmLabel: 'Discard and leave',
+  cancelLabel: 'Keep editing',
+  tone: 'danger',
+}
+
+/**
+ * Whether an in-app click should be intercepted and confirmed before it
+ * navigates away, because an unsaved AI draft is on screen. Exported so the
+ * targeting is provable without a browser -- the capture-phase listener in
+ * `SyllabusIndexPage` builds this same shape of event.
+ *
+ * React Router's own `useBlocker` needs a data router and `main.jsx` mounts
+ * `<BrowserRouter>` (same constraint as `quizzes.$quizId.jsx`'s dirty-quiz
+ * guard), so in-app navigation is caught by intercepting the click instead.
+ */
+export function draftLeaveTarget({ isAiDraft, event, currentPathname }) {
+  if (!isAiDraft) return null
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return null
+  }
+  const anchor = event.target?.closest?.('a[href]')
+  if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return null
+  const href = anchor.getAttribute('href')
+  // In-app routes only: '//host' is another origin, and a link back to this
+  // same page is not leaving.
+  if (!href?.startsWith('/') || href.startsWith('//') || href === currentPathname) return null
+  return href
 }
 
 function emptyTopic() {
@@ -740,7 +781,7 @@ function linkedQuizNote(n) {
   return `${n} quiz${n === 1 ? ' is' : 'zes are'} linked to it. ${they} every question and every score already in the class record — ${it} just won't show under a topic on Scaffold Topics any more.`
 }
 
-function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, onSaved, onCancel }) {
+export function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, onSaved, onCancel }) {
   const [tree, setTree] = useState(initial)
   const [genModule, setGenModule] = useState(false)
   const [error, setError] = useState(null)
@@ -869,10 +910,22 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
           <h3 className="text-lg font-bold text-slate-800">Syllabus Details</h3>
           {isAiDraft && (
-            <p className="text-sm text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
-              ✨ AI-generated draft — review and edit below, then save. Competency codes are
-              suggestions: check each one against your own MELC copy before you save.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+              <p className="text-sm text-indigo-800">
+                <strong>Not saved yet</strong> — this AI-generated draft lives on this screen
+                only. Review it below and check competency codes against your own MELC copy,
+                then save.
+              </p>
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+                style={{ background: '#0E2A5C' }}
+              >
+                {saving ? 'Saving...' : 'Save Syllabus'}
+              </button>
+            </div>
           )}
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
@@ -1084,6 +1137,7 @@ function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, o
 export default function SyllabusIndexPage() {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [editingSyllabus, setEditingSyllabus] = useState(null)
   const [draft, setDraft] = useState(null)
   const [showGenerate, setShowGenerate] = useState(false)
@@ -1095,6 +1149,49 @@ export default function SyllabusIndexPage() {
   const { data: sqliteSyllabiData = [], isLoading: syllabiLoading, refetch } = useSyllabi()
 
   const [runDelete, deleting] = useAsyncAction(handleDelete)
+
+  // T-102: an unsaved AI draft is the only thing on this screen worth losing --
+  // a manually-added blank syllabus or an existing one opened for editing has
+  // nothing to warn about, so both guards below are armed by isAiDraft alone.
+  const isAiDraft = !!draft?.ai
+
+  // Tab close / refresh. The browser shows its own wording; assigning
+  // returnValue is what still arms it in Chrome.
+  useEffect(() => {
+    if (!isAiDraft) return
+    const warn = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [isAiDraft])
+
+  // In-app navigation -- the nav shell, a breadcrumb, any <Link> on the page.
+  // Capture phase, so this runs before the <Link> handler and can stop the
+  // navigation rather than undo it.
+  useEffect(() => {
+    if (!isAiDraft) return
+    const intercept = (e) => {
+      const href = draftLeaveTarget({ isAiDraft, event: e, currentPathname: window.location.pathname })
+      if (!href) return
+      e.preventDefault()
+      e.stopPropagation()
+      confirmDialog(UNSAVED_DRAFT_LEAVE_PROMPT).then((leave) => {
+        if (leave) navigate(href)
+      })
+    }
+    document.addEventListener('click', intercept, true)
+    return () => document.removeEventListener('click', intercept, true)
+  }, [isAiDraft, navigate])
+
+  // "Back to Syllabus List" and the editor's own Cancel both funnel through
+  // here, so leaving costs the same confirm no matter which button was clicked.
+  async function leaveEditor() {
+    if (isAiDraft && !(await confirmDialog(UNSAVED_DRAFT_LEAVE_PROMPT))) return
+    setEditingSyllabus(null)
+    setDraft(null)
+  }
 
   async function handleDelete(syllabusId) {
     if (!(await confirmDialog({
@@ -1140,10 +1237,7 @@ export default function SyllabusIndexPage() {
       <div>
         <div className="max-w-6xl mx-auto flex items-center justify-between mb-6">
           <button
-            onClick={() => {
-              setEditingSyllabus(null)
-              setDraft(null)
-            }}
+            onClick={leaveEditor}
             className="text-indigo-600 font-bold hover:underline flex items-center gap-1"
           >
             ← Back to Syllabus List
@@ -1152,7 +1246,7 @@ export default function SyllabusIndexPage() {
         <SyllabusEditor
           syllabusId={editingSyllabus.id}
           initial={{ ...initial, teacher_id: profile.id }}
-          isAiDraft={!!draft?.ai}
+          isAiDraft={isAiDraft}
           isNewDraft={!!draft}
           classes={classes ?? []}
           onSaved={() => {
@@ -1161,10 +1255,7 @@ export default function SyllabusIndexPage() {
             refetch()
             queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
           }}
-          onCancel={() => {
-            setEditingSyllabus(null)
-            setDraft(null)
-          }}
+          onCancel={leaveEditor}
         />
       </div>
     )
