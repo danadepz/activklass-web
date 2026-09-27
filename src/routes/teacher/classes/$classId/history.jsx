@@ -242,36 +242,42 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '26px 28px' }}>
-          {groups.map((g) => (
-            <div key={g.key} style={{ marginBottom: 24 }}>
-              <div className="mb-3.5 flex items-center gap-3">
-                <div style={{ ...serif, fontSize: 16, color: ink }}>{g.label}</div>
-                <div style={{ flex: 1, height: 1, background: 'rgba(14,42,92,0.08)' }} />
-              </div>
-              <div style={{ position: 'relative', paddingLeft: 28 }}>
-                <div style={{ position: 'absolute', left: 5, top: 6, bottom: 6, width: 2, background: 'rgba(14,42,92,0.08)', borderRadius: 1 }} />
-                {g.items.map((it, i) => {
-                  const k = KIND[it.kind] ?? KIND.config
-                  return (
-                    <div key={i} style={{ position: 'relative', paddingBottom: 18 }}>
-                      <span style={{ position: 'absolute', left: -28, top: 3, width: 11, height: 11, borderRadius: '50%', background: k.fg, boxShadow: `0 0 0 4px ${k.bg}` }} />
-                      <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
-                        <span style={{ ...mono, fontSize: 12, color: muted, fontWeight: 600 }}>{timeLabel(it.ts)}</span>
-                        <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 10, fontWeight: 800, color: k.fg, background: k.bg, border: `1px solid ${k.border}`, borderRadius: 999, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{k.tag}</span>
-                        <span style={{ fontSize: 12, color: faint }}>·</span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: ink }}>{it.actor}</span>
+          <div
+            data-scroll-region="class-logs"
+            tabIndex={0}
+            style={{ maxHeight: 560, overflowY: 'auto' }}
+          >
+            {groups.map((g) => (
+              <div key={g.key} style={{ marginBottom: 24 }}>
+                <div className="mb-3.5 flex items-center gap-3">
+                  <div style={{ ...serif, fontSize: 16, color: ink }}>{g.label}</div>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(14,42,92,0.08)' }} />
+                </div>
+                <div style={{ position: 'relative', paddingLeft: 28 }}>
+                  <div style={{ position: 'absolute', left: 5, top: 6, bottom: 6, width: 2, background: 'rgba(14,42,92,0.08)', borderRadius: 1 }} />
+                  {g.items.map((it, i) => {
+                    const k = KIND[it.kind] ?? KIND.config
+                    return (
+                      <div key={i} style={{ position: 'relative', paddingBottom: 18 }}>
+                        <span style={{ position: 'absolute', left: -28, top: 3, width: 11, height: 11, borderRadius: '50%', background: k.fg, boxShadow: `0 0 0 4px ${k.bg}` }} />
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
+                          <span style={{ ...mono, fontSize: 12, color: muted, fontWeight: 600 }}>{timeLabel(it.ts)}</span>
+                          <span style={{ display: 'inline-block', padding: '2px 9px', fontSize: 10, fontWeight: 800, color: k.fg, background: k.bg, border: `1px solid ${k.border}`, borderRadius: 999, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{k.tag}</span>
+                          <span style={{ fontSize: 12, color: faint }}>·</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: ink }}>{it.actor}</span>
+                        </div>
+                        <div style={{ fontSize: 14, color: ink, lineHeight: 1.4 }}>{it.summary}</div>
+                        {it.detail && <div style={{ fontSize: 12.5, color: muted, marginTop: 3 }}>{it.detail}</div>}
                       </div>
-                      <div style={{ fontSize: 14, color: ink, lineHeight: 1.4 }}>{it.summary}</div>
-                      {it.detail && <div style={{ fontSize: 12.5, color: muted, marginTop: 3 }}>{it.detail}</div>}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-          {shown.length === 0 && (
-            <div style={{ textAlign: 'center', color: faint, fontSize: 13, padding: '12px 0' }}>No {KIND[filter]?.tag.toLowerCase()} activity.</div>
-          )}
+            ))}
+            {shown.length === 0 && (
+              <div style={{ textAlign: 'center', color: faint, fontSize: 13, padding: '12px 0' }}>No {KIND[filter]?.tag.toLowerCase()} activity.</div>
+            )}
+          </div>
         </div>
       )}
     </div>
