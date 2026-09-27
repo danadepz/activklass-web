@@ -357,7 +357,11 @@ function UnarchiveButton({ onUnarchive }) {
 
 // ─── Delete confirmation modal ────────────────────────────────────────────────
 // 2026-06-20: Teacher must type the subject code exactly before deletion proceeds
-function DeleteConfirmModal({ cls, onClose, onDeleted }) {
+// T-101 (maykel_64440-129): most teachers reaching for Delete only want the
+// class out of the way, and never found Archive -- it does exactly that and
+// is reversible. Named here, above the type-to-confirm field, before the
+// irreversible path; Delete itself is unchanged.
+export function DeleteConfirmModal({ cls, onClose, onDeleted, onArchiveInstead }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Delete class', closeOnBackdrop: false })
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
@@ -390,6 +394,27 @@ function DeleteConfirmModal({ cls, onClose, onDeleted }) {
             <strong style={{ color: ink }}>{cls.section}</strong> and all its data.
             This action cannot be undone.
           </p>
+          <div
+            style={{
+              background: 'rgba(14,42,92,0.05)',
+              border: '1px solid rgba(14,42,92,0.14)',
+              borderRadius: 9,
+              padding: '10px 14px',
+              fontSize: 13,
+              color: ink,
+              lineHeight: 1.6,
+            }}
+          >
+            Just want it out of your list?{' '}
+            <button
+              type="button"
+              onClick={onArchiveInstead}
+              style={{ color: navy, fontWeight: 700, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Archive
+            </button>{' '}
+            keeps the roster and records and you can bring it back any time.
+          </div>
           <div
             style={{
               background: '#fef2f2',
@@ -840,6 +865,11 @@ export default function ClassesPage() {
           onDeleted={() => {
             queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
             setDeleteTarget(null)
+          }}
+          onArchiveInstead={() => {
+            const target = deleteTarget
+            setDeleteTarget(null)
+            handleArchive(target)
           }}
         />
       )}
