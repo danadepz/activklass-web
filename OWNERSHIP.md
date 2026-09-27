@@ -85,6 +85,7 @@ src/lib/quizPool.js      src/lib/quizFeedback.js
 src/lib/quizAttempts.js  src/lib/schoolDirectory.js
 src/lib/schedule.js       src/lib/validation.js
 src/lib/schoolStatus.js
+src/lib/attachments.js
 ```
 
 **`lib/schoolStatus.js`, added here 2026-09-26 (T-82 Option C build pane).** It was in no
@@ -132,6 +133,18 @@ in Class setup, which only calls it.
 panes have edited it since. A rule module every form imports is a concern, not a page, so
 it lands here beside `classForm.js`. A new rule is lane-local; changing what an existing
 rule accepts edits every form that imports it, so announce that the way Shared is announced.
+
+**`lib/attachments.js`, added 2026-09-28 (T-99 build pane).** It was in no lane at all --
+its own header comment claimed the logic lane, but the table never backed it up, the exact
+gap `lib/csv.js` had before it was corrected here in 2026-08-31. Every upload in the app
+(syllabus materials, class-task attachments, submissions, grade/attendance contest
+evidence) goes through its one `uploadAttachment`, called from Class setup, Syllabus,
+Student and this lane's own `classTasks.js` -- a domain rule reached from everywhere, not a
+page, so it lands here beside `schedule.js` and `validation.js` rather than with any one
+screen that happens to call it. T-99 added `composeDownloadName` and a Content-Disposition
+header on upload so a saved file's proposed name comes from what the person named their own
+file, not the storage path; a change to what that function accepts or returns touches every
+caller's downloads, so announce it the way a `validation.js` rule change is announced.
 
 ---
 
