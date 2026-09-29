@@ -1,82 +1,116 @@
 # ActivKlass — Web
 
-React teacher portal for [ActivKlass](https://github.com/rdgdepaz13-afk/activklass-backend), an AI-powered class record system for Philippine K-12 and college teachers.
+React web portal for **ActivKlass**, an AI-powered class record and scaffolded learning management system designed for Philippine K-12 and tertiary education.
 
-Built with React 19, Vite, Tailwind CSS v4, TanStack Query and React Router. Talks to the Flask API and to Firebase (Auth, Firestore, Storage) directly.
+🌐 **Live Deployment:** [https://activklass.vercel.app/](https://activklass.vercel.app/)  
+⚙️ **Cloud Run API:** [https://activklass-backend-59267706068.asia-southeast1.run.app](https://activklass-backend-59267706068.asia-southeast1.run.app/api/health)
 
-## Related repositories
+Built with **React 19**, **Vite**, **Tailwind CSS v4**, **TanStack Query**, and **React Router v7**. Connects directly to **Firebase** (Authentication, Cloud Firestore, Cloud Storage) for real-time operations, and communicates with the **Flask AI microservice** on Cloud Run for generative AI, predictive remediation analytics, and payment checkout.
 
-| Repo | Contains |
+---
+
+## 🔗 Related Repositories
+
+| Repository | Description |
 |---|---|
-| [activklass-backend](https://github.com/rdgdepaz13-afk/activklass-backend) | Flask API, AI services, Firebase rules/indexes, shared docs |
-| [activklass-web](https://github.com/rdgdepaz13-afk/activklass-web) | **this repo** — React teacher portal |
-| [activklass-mobile](https://github.com/rdgdepaz13-afk/activklass-mobile) | Expo student & parent app |
+| [activklass-backend](https://github.com/danadepz/activklass-backend) | Flask API, Google Gemini AI services, Random Forest risk model, Firebase rules/indexes, shared architecture docs |
+| [activklass-web](https://github.com/danadepz/activklass-web) | **This repo** — React teacher, student, school admin, and superadmin web portal |
+| [activklass-mobile](https://github.com/danadepz/activklass-mobile) | Expo React Native app for students and guardians |
 
-## Getting started
+---
+
+## ✨ Features
+
+- **🏫 Multi-Role Portal:** Dedicated interfaces for Teachers, Students, School Administrators, and Superadmins.
+- **📊 DepEd & CHED Gradebooks:** Flexible calculation supporting DepEd K-12 transmutation, CHED percentage, and CHED point grades (1.00–5.00) with weight rebalancing and score auditing.
+- **📅 Daily Attendance Tracking:** At-a-glance attendance marking with bulk updates and audit trails.
+- **📚 Syllabus & Course Builder:** Module and topic manager with rich study materials, external links, and PDF attachments.
+- **📝 Quiz Bank & Assessment Engine:** Interactive quiz builder supporting Multiple Choice, True/False, Short Answer, Matching, and Essays with automated objective scoring.
+- **🤖 AI Integrations (Google Gemini & scikit-learn):**
+  - AI Syllabus Draft Generator aligned with Philippine curriculum standards.
+  - Bloom's Taxonomy-mapped AI Quiz Generator.
+  - Predictive Early-Warning Remediation Risk Classifier.
+  - Automated Essay Grading with rubrics.
+- **💳 Subscription & PayMongo Gateway:** Support for Solo Teacher and School Institution subscriptions with PayMongo checkout (test mode for demonstrations).
+
+---
+
+## 🚀 Getting Started Locally
+
+### Prerequisites
+- Node.js 18+
+- npm 9+
+- Running backend instance (or pointing to Cloud Run)
+
+### Installation
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/danadepz/activklass-web.git
+cd activklass-web
+
+# 2. Install dependencies
 npm install
-cp .env.example .env.local   # then fill in the values below
+
+# 3. Configure environment variables
+cp .env.example .env.local
+# Edit .env.local and fill in your Firebase project credentials
+
+# 4. Start the development server
 npm run dev
 ```
 
-Runs at **http://localhost:5173**. The backend must be running separately — see the
-[backend README](https://github.com/rdgdepaz13-afk/activklass-backend#-getting-started).
+The app will run locally at **http://localhost:5173**.
 
-## Environment variables
+---
+
+## ⚙️ Environment Variables
 
 Copy `.env.example` to `.env.local`:
 
 | Variable | Description |
 |---|---|
-| `VITE_API_URL` | Flask API base URL (defaults to `http://localhost:5000`) |
-| `VITE_FIREBASE_API_KEY` | Firebase Web app config — Firebase Console → Project settings → General → Your apps |
-| `VITE_FIREBASE_AUTH_DOMAIN` | " |
-| `VITE_FIREBASE_PROJECT_ID` | " |
-| `VITE_FIREBASE_STORAGE_BUCKET` | " |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | " |
-| `VITE_FIREBASE_APP_ID` | " |
+| `VITE_FIREBASE_API_KEY` | Firebase Web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Authentication domain (e.g. `activklass1.firebaseapp.com`) |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID (e.g. `activklass1`) |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Storage bucket (e.g. `activklass1.firebasestorage.app`) |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Cloud Messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | Firebase Web App ID |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Firebase Analytics measurement ID |
+| `VITE_API_URL` | Flask API URL (leave blank in local dev to use Vite's `/api` proxy; set to Cloud Run URL in production) |
 
-`.env.local` is gitignored — never commit real config.
+---
 
-## Scripts
+## 🧪 Testing & Scripts
 
-| Command | Does |
+| Command | Action |
 |---|---|
-| `npm run dev` | Vite dev server with HMR |
-| `npm run build` | Production build to `dist/` |
-| `npm run preview` | Serve the production build locally |
-| `npm run lint` | ESLint — 41 pre-existing errors, mostly `no-unused-vars` |
-| `npm run test` | Vitest — 446 tests over the pure modules |
-| `npm run test:rules` | Runs the real `firestore.rules` against the emulator (needs Java) |
+| `npm run dev` | Starts the local Vite development server with HMR |
+| `npm run build` | Compiles the production build to `dist/` |
+| `npm run preview` | Previews the production build locally |
+| `npm test` | Runs the Vitest test suite (**523 unit/integration tests across 27 suites**) |
+| `npm run test:watch` | Runs Vitest in interactive watch mode |
+| `npm run test:rules` | Runs `firestore.rules` validation against the local Firebase emulator |
+| `npm run lint` | Runs ESLint |
 
-## Layout
+---
+
+## 📁 Project Structure
 
 ```
 src/
-├── routes/         # Route components (teacher portal pages)
-├── features/       # Feature modules
-├── components/     # Shared UI components & icons; ui/ is toasts + dialogs
-├── context/        # Auth context (useAuth)
-├── hooks/          # Shared Firestore reads (TanStack Query)
-├── theme.js        # Every colour + typography token
-└── lib/            # firebase.js (client init), api.js (fetch wrapper),
-                    # domain logic, and 18 *.test.js files
+├── routes/         # Page routes (teacher, student, admin, superadmin, auth)
+├── components/     # Reusable UI controls, cards, dialogs, and navigation
+├── context/        # Global state and authentication context (useAuth)
+├── hooks/          # React Query hooks for Firestore subscriptions and caching
+├── lib/            # Domain logic (grading calculations, validation, API client, Firebase init)
+├── features/       # Scoped feature packages
+└── theme.js        # Centralized theme tokens, colors, and typography
 ```
 
-## Docs
+---
 
-`CLAUDE.md` is the working brief for this repo. `OWNERSHIP.md` is required reading
-before editing anything, because several people work this checkout at once.
+## ☁️ Deployment
 
-| Doc | Answers |
-|---|---|
-| [docs/VISION.md](docs/VISION.md) | Why this exists and who it is for |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The layers, and the two data paths |
-| [docs/TECH-STACK.md](docs/TECH-STACK.md) | Every tool, why, and what was rejected |
-| [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Every Firestore path this client touches |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What phase we are in |
-| [docs/OPEN-QUESTIONS.md](docs/OPEN-QUESTIONS.md) | What has not been decided |
-
-The schema and API docs shared by all three repos live in
-[activklass-backend/docs](https://github.com/rdgdepaz13-afk/activklass-backend/tree/main/docs).
+- **Frontend:** Hosted on [Vercel](https://vercel.com) with automatic continuous deployment on push to `main`. SPA deep-links are managed via [`vercel.json`](vercel.json).
+- **Backend:** Containerized via Docker and deployed to **Google Cloud Run** in `asia-southeast1`.
