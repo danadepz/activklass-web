@@ -13,7 +13,6 @@
     "test:rules": "firebase emulators:exec --only firestore --project activklass-rules-test \"vitest run src/lib/firestoreRules.test.js\""
   },
   "dependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.1.2",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.101.0",
     "exceljs": "^4.4.0",
