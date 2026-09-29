@@ -2851,3 +2851,55 @@ files rather than trusting the row.
    the resolved roster. The card fixes the validator and the card's over state, and
    explicitly does not build her pick-who-to-add dialog. Card:
    `_tools/discord/tickets/_dispatch/T-92-class-holds-more-students-than-its-capacity.md`.
+
+## Tester tickets — 2026-09-28, Derick's four, maykel's four and Kristine's one (ticket pane)
+
+Nine tickets filed 2026-09-27, eight issues. Three turned out to be smaller than the ticket
+suggested because the capability already existed; one is a security property that must not be
+"fixed"; one was confirmed against live data as never-saved rather than lost.
+
+1. **The student's Sign out moves to the profile card** — suggestion · cosmetic, web,
+   `andecobs-121`. Derick asked to move the *teacher's* up to the navbar; the owner reversed it
+   in-thread, so the student side changes to match the teacher. `student/_layout.jsx` renders
+   Sign out at `:225`, `:295` and `:380` — likely one control at three breakpoints, and all
+   three must be accounted for. Card: `_dispatch/T-95-student-sign-out-moves-to-the-profile-card.md`.
+2. **No place to type extra context for an AI quiz** — suggestion · feature gap, web,
+   `andecobs-122`. Mostly wired already: `lib/ai.js:298,337` passes a free-text `instructions`
+   into `buildQuizNotes` (`:123`), and `quizzes.jsx:93` already holds it in state. Only the
+   input is missing. Not to be confused with `quizzes.$quizId.jsx`'s student-facing
+   `instructions`. Card: `_dispatch/T-96-no-place-to-type-extra-context-for-an-ai-quiz.md`.
+3. **Long lists grow the page instead of scrolling** — suggestion · cosmetic, web,
+   `andecobs-123` + `andecobs-124`. One issue, two tickets twenty minutes apart, two screens:
+   the student Dashboard's quizzes list and every Logs screen (his scope, not just the
+   teacher's). Two lanes, so announce or split.
+   Card: `_dispatch/T-97-long-lists-grow-the-page-instead-of-scrolling.md`.
+4. **A closed quiz can only be reopened from the close toast** — suggestion · feature gap, web,
+   `maykel_64440-125`. Reopening is already built and already safe:
+   `quizzes.$quizId.jsx:2122` closes by flipping one field, `:2124` says "reopening restores
+   exactly what was there", and `:2127-2132` puts a **Reopen** action on the success toast. The
+   toast is the only door. Card: `_dispatch/T-98-a-closed-quiz-can-only-be-reopened-from-a-toast.md`.
+5. **A module file saves under the storage's own name** — suggestion · cosmetic, web,
+   `maykel_64440-126`. `student/classes/$classId/index.jsx:197` does `window.open(att.url)`, so
+   the browser names the file from the storage path (`lib/attachments.js:47-48`); reports go
+   through `lib/csv.js:44-48` `saveBlob()`, which sets `a.download`. That is exactly the contrast
+   he noticed. Card: `_dispatch/T-99-module-file-saves-under-a-random-name.md`.
+6. **Forgot password looks like it accepted a wrong address** — not-a-bug as filed ·
+   **misleading**, web, `maykel_64440-128`. `forgot-password.jsx:86-88` and `:21-23` answer
+   identically for a known and an unknown address **on purpose**, so the page cannot be used to
+   probe which emails are registered. **His Expected must not be built** — an immediate error
+   restores account enumeration. The fix is copy: lead with the condition and tell someone who
+   typed the wrong address what to do. Card:
+   `_dispatch/T-100-forgot-password-looks-like-it-accepted-a-wrong-address.md`.
+7. **A deleted class cannot be recovered** — suggestion · not-a-bug as filed · feature gap, web,
+   `maykel_64440-129`. He asked for a Gmail-style Trash; **Archive already is that**, minus the
+   automatic purge (`classes/index.jsx:4`, the Archived tab at `:457`, with Unarchive — shipped
+   for T-71 slice 3). The real gap is that hard Delete (`:5,:324,:361-431`) is final and never
+   mentions Archive. Card: `_dispatch/T-101-a-deleted-class-cannot-be-recovered.md`.
+8. **An AI syllabus draft is lost without warning** — suggestion · not-a-bug as filed ·
+   **misleading**, web, `triplecookiemonster-130`. Checked read-only with the Admin SDK:
+   `josy@gmail.com` owns exactly one syllabus and it is not the missing one; no Grade 3 document
+   exists in the collection at all. Generating never persists — `syllabus.jsx:505`→`:519` keeps
+   the draft in state, `:766`→`:808` is the only write — and the app says so at `:553`, inside a
+   collapsed `<details>`. Nothing guards navigating away. Also noticed: syllabi carry no
+   `created_at`, so "I generated it on Sep 20" cannot be checked against the data.
+   Card: `_dispatch/T-102-ai-syllabus-draft-is-lost-without-warning.md`.
