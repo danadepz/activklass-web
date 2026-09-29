@@ -1,9 +1,25 @@
-# ActivKlass — Web
+<div align="center">
+  <img src="public/logo.png" alt="ActivKlass Logo" width="120" />
+  <h2>ActivKlass Web</h2>
+  <p>AI-Powered Class Record & Scaffolded Learning Management Portal</p>
 
-React web portal for **ActivKlass**, an AI-powered class record and scaffolded learning management system designed for Philippine K-12 and tertiary education.
+  <p>
+    <a href="https://activklass.vercel.app/"><img src="https://img.shields.io/badge/Live_Demo-activklass.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" /></a>
+    <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" /></a>
+    <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-6-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" /></a>
+    <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
+    <a href="https://firebase.google.com/"><img src="https://img.shields.io/badge/Firebase-Auth_%26_Firestore-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase" /></a>
+  </p>
+</div>
 
-🌐 **Live Deployment:** [https://activklass.vercel.app/](https://activklass.vercel.app/)  
-⚙️ **Cloud Run API:** [https://activklass-backend-59267706068.asia-southeast1.run.app](https://activklass-backend-59267706068.asia-southeast1.run.app/api/health)
+---
+
+## 📖 Overview
+
+**ActivKlass Web** is the full-featured web portal for the ActivKlass Learning Platform, designed specifically for Philippine K-12 and tertiary educators, students, and institutional administrators.
+
+- 🌐 **Live Web Application:** [https://activklass.vercel.app/](https://activklass.vercel.app/)
+- ⚙️ **Cloud Run API:** [https://activklass-backend-59267706068.asia-southeast1.run.app](https://activklass-backend-59267706068.asia-southeast1.run.app/api/health)
 
 Built with **React 19**, **Vite**, **Tailwind CSS v4**, **TanStack Query**, and **React Router v7**. Connects directly to **Firebase** (Authentication, Cloud Firestore, Cloud Storage) for real-time operations, and communicates with the **Flask AI microservice** on Cloud Run for generative AI, predictive remediation analytics, and payment checkout.
 
