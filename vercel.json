@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://activklass-backend-59267706068.asia-southeast1.run.app/api/$1" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }
