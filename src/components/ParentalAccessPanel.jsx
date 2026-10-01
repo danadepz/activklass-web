@@ -170,6 +170,7 @@ export default function ParentalAccessPanel({
   onRevoke,
   onGenerateCode,
   canManage = true,
+  isMinor = false,
   lockedReason = null,
   loading = false,
   busy = false,
@@ -220,15 +221,23 @@ export default function ParentalAccessPanel({
                 Sharing it is not what grants access: a redeemed code creates a
                 PENDING link with every scope false, and the student's approval
                 is the gate. So the code leads, and the settings that approval
-                will apply follow it rather than blocking it. */}
+                will apply follow it rather than blocking it.
+
+                T-105 (andecobs-137): this used to read `!canManage ? "you
+                don't need a link code" : ...`, hiding the code from every
+                minor outright. But guardian_codes' own create rule auto-
+                approves a minor's guardian on redeem (RA 10173) rather than
+                skipping the code -- a minor uses the SAME code, just without
+                the approval step. Hiding it left a minor with no way to ever
+                hand their code to a guardian (confirmed against a real
+                account: the code existed in Firestore the whole time, minted
+                on first view same as an adult's, just never shown). `canManage`
+                still gates approving/revoking/toggling scopes below -- a minor
+                still cannot do those -- it just no longer gates seeing the
+                code itself. */}
             <h3 style={heading}>Guardian link code</h3>
 
-            {!canManage ? (
-              <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, border: `1px dashed ${line}`, borderRadius: 12, padding: '16px', textAlign: 'center', margin: 0 }}>
-                You don&apos;t need a link code. Guardian access on your account is
-                arranged for you rather than by sharing a code.
-              </p>
-            ) : !showCode ? (
+            {!showCode ? (
               <div style={{ ...box, padding: '20px 18px' }}>
                 {/* The button stays, but not as a configuration gate — it is
                     there so a live credential is not sitting on screen for a
@@ -240,7 +249,7 @@ export default function ParentalAccessPanel({
                 <button
                   type="button"
                   onClick={() => { setRevealed(true); onGenerateCode?.() }}
-                  disabled={!canManage || busy}
+                  disabled={busy}
                   className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer' }}
                 >
@@ -271,9 +280,9 @@ export default function ParentalAccessPanel({
                   <CopyButton value={code} label="Copy code" copiedLabel="Copied" />
                 </div>
                 <p style={{ fontSize: 12.5, color: muted, margin: '12px auto 0', lineHeight: 1.5, maxWidth: 400 }}>
-                  Give this to your parent or guardian — they enter it in the ActivKlass
-                  mobile app to create their account. You still approve or decline every
-                  request it produces.
+                  {isMinor
+                    ? "Give this to your parent or guardian — they enter it in the ActivKlass mobile app to create their account. Because you're a minor, their request connects right away under RA 10173 — you don't need to approve it separately."
+                    : 'Give this to your parent or guardian — they enter it in the ActivKlass mobile app to create their account. You still approve or decline every request it produces.'}
                 </p>
               </div>
             )}

@@ -260,6 +260,11 @@ export default function StudentProfile() {
            the write. A minor sees the panel disabled, never hidden -- they
            still need to see who is watching. */
         canManage={canManage && access.canManage}
+        /* T-105: a minor still gets shown their own code (guardian_codes'
+           create rule auto-approves on redeem for them, RA 10173) -- `canManage`
+           above only gates approving/revoking/toggling scopes, not visibility.
+           This tells the panel which caption to use under the revealed code. */
+        isMinor={isAdult === false || consent?.is_minor === true}
         lockedReason={lockedReason}
         loading={isLoading || access.loading}
         busy={access.busy}
