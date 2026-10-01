@@ -2903,3 +2903,55 @@ suggested because the capability already existed; one is a security property tha
    collapsed `<details>`. Nothing guards navigating away. Also noticed: syllabi carry no
    `created_at`, so "I generated it on Sep 20" cannot be checked against the data.
    Card: `_dispatch/T-102-ai-syllabus-draft-is-lost-without-warning.md`.
+
+## Tester tickets — 2026-10-01, Derick's three and maykel's three (ticket pane)
+
+Six tickets from 2026-09-30, five issues. Four are in `activklass-mobile` and go to
+Antigravity via `_tools/discord/tickets/_mobile-handoff.md` (`-issue` / `-fix` format); one is
+web. Two of the six are passing test results.
+
+1. **A student's Profile shows no Connection Code, and offers no way to get one** — bug ·
+   blocks testing, web, `andecobs-137`. Confirmed with the Admin SDK: Carlo owns **zero**
+   `guardian_codes` documents against 11 in the project. `student/profile.jsx:178` only reads
+   via `useGuardianAccess`, and minting on view is deliberately avoided (`:254-255`, it would
+   re-mint on every look); `:176-177` says the mobile app is what writes them. So a student
+   whose code was never minted sees an empty card with no way forward — **and that is why
+   `maykel_64440-140` had nothing valid to redeem**. Owner picks mint-on-first-view or an
+   explicit button. Card: `_dispatch/T-105-student-profile-shows-no-connection-code.md`.
+2. **Mobile — quiz player crashes advancing past question 2** — bug · blocks testing,
+   `andecobs-136`. Cause **unconfirmed**: the stack frame names `quiz-player.tsx:705`, the Next
+   Question button, whose handler only advances an index; the error is React Navigation's
+   `NavigationContainer` while the app is expo-router. Hand-off block M1.
+3. **Mobile — redeem blames the connection for every unknown failure** — bug · misleading,
+   `maykel_64440-140`. `app/parent/dashboard.tsx:198-203` is a catch-all: known reasons throw
+   `GuardianCodeError` with their own text, so this was something else and the fallback
+   asserted the network. maykel checked his connection twice and stopped the 5.x chain on it.
+   Hand-off block M2.
+4. **Mobile — the assessment title is invisible in light mode** — bug · cosmetic (unreadable),
+   `andecobs-135`. Cause **unconfirmed**: no `text-white` in `app/student/class/[classId].tsx`,
+   and ink is themed through CSS variables, so it is a token not switching. Hand-off block M3.
+5. **Mobile — an announcement never shows an exact date and time** — suggestion · clarity,
+   `maykel_64440-139`, raised as a note on a passing test. Hand-off block M4.
+
+`maykel_64440-138` (teacher posts an announcement, web) is a passing test result with no issue.
+
+## Correction — 2026-10-01, T-105's diagnosis (ticket pane)
+
+The entry above for **T-105** states that Carlo owns zero `guardian_codes` documents,
+"confirmed with the Admin SDK". **That is wrong.** The query used `student_id`; the collection
+keys on `student_uid`. Carlo has had code `CRL7K2` since 2026-08-27 with an approved guardian
+link. Both queries were re-run side by side on 2026-10-01: `student_id` → 0, `student_uid` → 1.
+
+Consequences, all now corrected in the ledger, the card and the replies:
+
+- The choice the card put to the owner — mint on first view, or add a button — was moot.
+  `hooks/useGuardianAccess.js:57` has called `ensureMyGuardianCode()` unconditionally since
+  2026-08-21, so every student already gets a code on first view.
+- The real bug, found by the fixing pane rather than the card: `ParentalAccessPanel` hid the
+  whole "Guardian link code" block from any minor behind "You don't need a link code",
+  regardless of whether a code existed. A minor uses the same code as an adult, just without
+  the approval step, so this left any minor connecting a first or additional guardian unable
+  to see or share it. Fixed in `b533afb`, verified 2026-10-01.
+- The claimed causal link between `andecobs-137` and `maykel_64440-140` does not exist. Why
+  that redeem failed is unknown; the catch-all message discarded the reason, which is what
+  T-106 addresses.
