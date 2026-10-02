@@ -1,12 +1,16 @@
 import { useState } from 'react'
-import { NavLink, Link, Outlet, useParams } from 'react-router-dom'
+import { NavLink, Link, Outlet, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { classToForm, academicTerm } from '@/lib/classForm'
 import { formatSchedule } from '@/lib/schedule'
+import { deleteClassSection } from '@/lib/classes'
 import ClassFormModal from '@/features/classes/ClassFormModal'
-import { navy, ink, gold, goldDeep, muted, serif, mono, sansFamily as sans } from '@/theme'
+import { toast } from '@/components/ui/toast'
+import { confirmDialog } from '@/components/ui/dialogs'
+import { useAsyncAction } from '@/components/ui/useAsyncAction'
+import { navy, ink, gold, goldDeep, muted, red, serif, mono, sansFamily as sans } from '@/theme'
 
 // Sub-navbar shown at the top of every page inside a specific class.
 // Paths are relative to /teacher/classes/:classId. The Overview tab is the
@@ -55,10 +59,31 @@ function MetaChip({ icon, children, monoFace }) {
 
 export default function ClassLayout() {
   const { classId } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const base = `/teacher/classes/${classId}`
   const [showEdit, setShowEdit] = useState(false)
   const [warning, setWarning] = useState(null)
+  const [removeClass, removingClass] = useAsyncAction(deleteClass)
+
+  /* T-119: moved out of the Roster toolbar, beside Edit Class, where a
+     class-level destructive action belongs. Unchanged from before the move:
+     same confirmation, same typed "DELETE", same roster-only consequence. */
+  async function deleteClass() {
+    if (!(await confirmDialog({
+      title: 'Delete this class section?',
+      message: 'The roster list is lost. Student accounts are kept, and so is their work in other classes. This cannot be undone.',
+      confirmLabel: 'Delete section',
+      tone: 'danger',
+      typeToConfirm: 'DELETE',
+    }))) return
+    try {
+      await deleteClassSection(classId)
+      navigate('/teacher/classes')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
 
   const { data: clazz } = useQuery({
     queryKey: ['fs-class-meta', classId],
@@ -119,13 +144,23 @@ export default function ClassLayout() {
             </div>
           </div>
           {clazz && (
-            <button
-              onClick={() => setShowEdit(true)}
-              className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}
-            >
-              ✏️ Edit Class
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowEdit(true)}
+                className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}
+              >
+                ✏️ Edit Class
+              </button>
+              <button
+                onClick={removeClass}
+                disabled={removingClass}
+                className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] disabled:opacity-50"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.3)', borderRadius: 10, cursor: 'pointer' }}
+              >
+                {removingClass ? 'Deleting…' : '🗑 Delete Class'}
+              </button>
+            </div>
           )}
         </div>
 

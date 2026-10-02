@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { arrayRemove, arrayUnion, doc, getDoc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
-import { deleteClassSection } from '@/lib/classes'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
 import { emailError, nameError, yearLevelError, birthdateError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
@@ -20,7 +19,6 @@ import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red
 import { toast } from '@/components/ui/toast'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { SkeletonTable } from '@/components/ui/Skeleton'
-import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
 /* users/{uid}.status carries TWO meanings in this codebase, which is worth
@@ -442,8 +440,39 @@ function noMatchMessage(needle, { schoolIssued, school, loginExample }) {
   )
 }
 
+/* T-119: the first choice inside Add Student, and inside the identifier
+   field T-123 adds beneath it. Owner's wording, 2026-10-02 ("its bulk |
+   individual, not manual") -- the admin Users tab (T-113) builds the same
+   control from the same sketch; whoever lands second matches this one. */
+function SegmentedControl({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, overflow: 'hidden' }}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          style={{
+            flex: 1,
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: sans,
+            border: 'none',
+            cursor: 'pointer',
+            background: value === opt.value ? '#0E2A5C' : '#FFFFFF',
+            color: value === opt.value ? '#FAFAF6' : '#3A4A6B',
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* Add a registered student by ID (or email), or create a new manual student record. */
-function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, onClose, onDone }) {
+function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, onClose, onDone, onBulkUpload }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
   const { profile, school } = useAuth()
   /* Who may create an account, not who may enrol one. A teacher issued by a
@@ -455,6 +484,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
      endpoint still accepts any teacher who owns the class, so this is the UI
      telling one story, not a gate. */
   const schoolIssued = accountKind(profile) === 'school'
+  const [entryMode, setEntryMode] = useState('individual') // 'bulk' | 'individual' -- T-119
   const [tab, setTab] = useState('find') // 'find' | 'create' -- 'create' is solo-only
   const [error, setError] = useState(null)
   const fail = failWith(setError)
@@ -708,60 +738,150 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
 
-        {/* Tab switcher -- one tab is no choice, so a school-issued teacher
-            sees no switcher at all rather than a lone disabled-looking tab. */}
-        {!schoolIssued && (
-          <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
-            {tabBtn('find', 'Find Registered Student')}
-            {tabBtn('create', 'Create New Manually')}
-          </div>
-        )}
-
         {isFull && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             This class has reached its maximum of {maxStudents} students.
           </p>
         )}
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
 
-        {tab === 'find' ? (
+        {/* T-119: bulk upload is one of the two ways in, not a separate
+            top-level button. Picking Bulk hands off to the existing CSV
+            modal instead of rebuilding its UI here. */}
+        <SegmentedControl
+          options={[
+            { value: 'bulk', label: 'Bulk' },
+            { value: 'individual', label: 'Individual' },
+          ]}
+          value={entryMode}
+          onChange={setEntryMode}
+        />
+
+        {entryMode === 'bulk' ? (
           <div className="space-y-4">
-            <form onSubmit={lookup} className="flex gap-2">
-              <input
-                type="text"
-                required
-                placeholder="Student ID or LRN"
-                value={idInput}
-                onChange={(e) => setIdInput(e.target.value)}
-                className={`${inputCls} flex-1`}
-              />
+            <p className="text-sm text-slate-500">
+              Add many students at once from a CSV file. Rows are matched to accounts that already exist, by ID or LRN — this never creates an account.
+            </p>
+            <div className="flex flex-col gap-2">
               <button
-                type="submit"
-                disabled={busy}
-                className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-50"
+                type="button"
+                onClick={onBulkUpload}
+                className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110"
                 style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
               >
-                Find
+                Continue to bulk upload
               </button>
-            </form>
-            {student && (
-              <div className="border border-slate-200 rounded-lg p-4 space-y-4">
-                <p className="font-medium text-slate-800">
-                  {student.last_name}, {student.first_name}
-                  <span className="text-slate-400 font-normal"> · {student.login_id ?? student.email}</span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Tab switcher -- one tab is no choice, so a school-issued teacher
+                sees no switcher at all rather than a lone disabled-looking tab. */}
+            {!schoolIssued && (
+              <div style={{ display: 'flex', borderBottom: '1px solid rgba(14,42,92,0.1)' }}>
+                {tabBtn('find', 'Find Registered Student')}
+                {tabBtn('create', 'Create New')}
+              </div>
+            )}
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+            )}
+
+            {tab === 'find' ? (
+              <div className="space-y-4">
+                <form onSubmit={lookup} className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Student ID or LRN"
+                    value={idInput}
+                    onChange={(e) => setIdInput(e.target.value)}
+                    className={`${inputCls} flex-1`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110 disabled:opacity-50"
+                    style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+                  >
+                    Find
+                  </button>
+                </form>
+                {student && (
+                  <div className="border border-slate-200 rounded-lg p-4 space-y-4">
+                    <p className="font-medium text-slate-800">
+                      {student.last_name}, {student.first_name}
+                      <span className="text-slate-400 font-normal"> · {student.login_id ?? student.email}</span>
+                    </p>
+                    {renderRosterFields(findFields, setFindFields)}
+                    <div className="pt-2 flex flex-col gap-2">
+                      <button
+                        onClick={enroll}
+                        disabled={busy || isFull}
+                        className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
+                        style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
+                      >
+                        {busy ? 'Adding…' : 'Add to class'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {!student && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={createStudent} className="space-y-4">
+                <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  Creates the student's sign-in account and adds them to this class. They start on the password <code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code> — nothing is emailed, so pass it on yourself and have them change it.
                 </p>
-                {renderRosterFields(findFields, setFindFields)}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label style={labelStyle}>First name <span className="text-red-500">*</span></label>
+                    <input required className="ak-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={fieldStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Last name <span className="text-red-500">*</span></label>
+                    <input required className="ak-input" value={lastName} onChange={(e) => setLastName(e.target.value)} style={fieldStyle} />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Email <span className="text-red-500">*</span></label>
+                  <input required type="email" className="ak-input" placeholder="student@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={fieldStyle} />
+                </div>
+
+                {renderRosterFields(createFields, setCreateFields)}
+
                 <div className="pt-2 flex flex-col gap-2">
                   <button
-                    onClick={enroll}
+                    type="submit"
                     disabled={busy || isFull}
                     className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
                     style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
                   >
-                    {busy ? 'Adding…' : 'Add to class'}
+                    {busy ? 'Creating…' : 'Create'}
                   </button>
+                  <SlowHint show={busy} />
                   <button
                     type="button"
                     onClick={onClose}
@@ -770,59 +890,9 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                     Close
                   </button>
                 </div>
-              </div>
+              </form>
             )}
-            {!student && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
-              >
-                Close
-              </button>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={createStudent} className="space-y-4">
-            <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              Creates the student's sign-in account and adds them to this class. They start on the password <code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code> — nothing is emailed, so pass it on yourself and have them change it.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label style={labelStyle}>First name <span className="text-red-500">*</span></label>
-                <input required className="ak-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={fieldStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Last name <span className="text-red-500">*</span></label>
-                <input required className="ak-input" value={lastName} onChange={(e) => setLastName(e.target.value)} style={fieldStyle} />
-              </div>
-            </div>
-            <div>
-              <label style={labelStyle}>Email <span className="text-red-500">*</span></label>
-              <input required type="email" className="ak-input" placeholder="student@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={fieldStyle} />
-            </div>
-
-            {renderRosterFields(createFields, setCreateFields)}
-
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                type="submit"
-                disabled={busy || isFull}
-                className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50"
-                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
-              >
-                {busy ? 'Creating…' : 'Create'}
-              </button>
-              <SlowHint show={busy} />
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
-              >
-                Close
-              </button>
-            </div>
-          </form>
+          </>
         )}
       </div>
       </div>
@@ -1406,7 +1476,6 @@ const statusTone = (status) => (status === 'mastered' ? 'blue' : status === 'nee
 
 export default function ClassDetailPage() {
   const { classId } = useParams()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
   const [error, setError] = useState(null)
@@ -1445,24 +1514,6 @@ export default function ClassDetailPage() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['class-detail', classId] })
     setModal(null)
-  }
-
-  const [removeClass, removingClass] = useAsyncAction(deleteClass)
-
-  async function deleteClass() {
-    if (!(await confirmDialog({
-      title: 'Delete this class section?',
-      message: 'The roster list is lost. Student accounts are kept, and so is their work in other classes. This cannot be undone.',
-      confirmLabel: 'Delete section',
-      tone: 'danger',
-      typeToConfirm: 'DELETE',
-    }))) return
-    try {
-      await deleteClassSection(classId)
-      navigate('/teacher/classes')
-    } catch (err) {
-      fail(err.message)
-    }
   }
 
   /**
@@ -1692,24 +1743,10 @@ export default function ClassDetailPage() {
             </h3>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setModal('csv')}
-                className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-slate-50" style={{ borderColor: 'rgba(14,42,92,0.2)', color: '#0E2A5C' }}
-              >
-                Bulk Upload
-              </button>
-              <button
                 onClick={() => setModal('add')}
                 className="rounded-lg px-4 py-2 text-sm font-medium transition hover:brightness-110" style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
               >
                 Add Student
-              </button>
-              <button
-                onClick={removeClass}
-                disabled={removingClass}
-                title="Delete class"
-                className="rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm hover:bg-red-50 disabled:opacity-40"
-              >
-                {removingClass ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
@@ -1858,6 +1895,7 @@ export default function ClassDetailPage() {
           maxStudents={clazz.max_students ?? 0}
           onClose={() => setModal(null)}
           onDone={refresh}
+          onBulkUpload={() => setModal('csv')}
         />
       )}
       {modal === 'csv' && (
