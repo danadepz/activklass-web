@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { yearLevelError, semesterError, SEMESTERS } from '@/lib/validation'
+import { yearLevelError, semesterError, SEMESTERS, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
@@ -92,6 +92,31 @@ const MIN_STUDENTS = 1
 const MAX_STUDENTS = 300
 const MIN_UNITS = 0.5
 const MAX_UNITS = 12
+
+/* T-122 (triplecookiemonster-153): the grade/year a teacher may pick, keyed
+   by the Education Level select's own values (below). The owner's mapping
+   has four rungs -- Elementary, High School, Senior High, College -- but the
+   dropdown itself only offered three, so "Senior High" is added there too;
+   without it, Grades 11-12 would have no selectable Education Level at all
+   once High School is pinned to 7-10. Sliced out of GRADE_LEVELS / YEAR_LEVELS
+   (the roster's own Year field, T-22) so a picked value always passes
+   yearLevelError -- no second format to keep in sync. */
+export const GRADE_LEVEL_OPTIONS = {
+  Elementary: GRADE_LEVELS.slice(0, 6), // Grade 1 – Grade 6
+  'High School': GRADE_LEVELS.slice(6, 10), // Grade 7 – Grade 10
+  'Senior High': GRADE_LEVELS.slice(10, 12), // Grade 11 – Grade 12
+  College: YEAR_LEVELS, // 1st – 5th Year
+}
+
+/** The grade/year value to carry into `level` -- the one already picked, if
+    it still belongs there, else blank, so a College year cannot keep sitting
+    under Elementary just because the teacher switched levels after picking
+    one. Same shape as `routes/register.jsx`'s `chooseKind`, which drops a
+    Position the new registration path does not offer. */
+export function gradeLevelFor(level, currentGrade) {
+  const options = GRADE_LEVEL_OPTIONS[level] ?? []
+  return options.includes(currentGrade) ? currentGrade : ''
+}
 
 /* Rendered top-to-bottom, so the first entry carrying an error is the field
    worth scrolling to. */
@@ -275,6 +300,15 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   const invalidCount = FIELD_ORDER.filter((key) => errors[key]).length
 
+  // T-122: the options this level offers, plus the stored value itself when
+  // it predates this change (or this level's own list) and is not one of
+  // them -- kept and shown rather than silently dropped, same precedent as
+  // the roster's own Year field (`matchYearLevel` in `$classId/index.jsx`).
+  const gradeLevelOptions = GRADE_LEVEL_OPTIONS[educationLevel] ?? []
+  const gradeLevelOffList = form.grade_level && !gradeLevelOptions.includes(form.grade_level)
+    ? form.grade_level
+    : null
+
   /* Failures that are not tied to one field still render in the banner at the
      top of the form -- roughly 300 lines above the file picker and the Save
      button, inside a scroll container. A teacher at the bottom of the modal
@@ -300,11 +334,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   const handleEducationLevelChange = (level) => {
     setEducationLevel(level)
-    setForm((f) => ({ ...f, education_level: level }))
+    setForm((f) => ({ ...f, education_level: level, grade_level: gradeLevelFor(level, f.grade_level) }))
     // Units are only required for College, so the message stops applying the
     // moment the level changes.
     clearError('units')
     clearError('semester')
+    clearError('grade_level')
   }
 
   // Update schedule string helper
@@ -504,6 +539,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             >
               <option value="Elementary">Elementary</option>
               <option value="High School">High School</option>
+              <option value="Senior High">Senior High</option>
               <option value="College">College</option>
             </select>
           </label>
@@ -679,13 +715,19 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label className="flex flex-col col-span-1">
               <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem]">Grade / Year Level<Req /></span>
-              <input
-                required placeholder={educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'} value={form.grade_level} onChange={set('grade_level')}
+              <select
+                required value={form.grade_level} onChange={set('grade_level')}
                 data-field="grade_level"
                 aria-invalid={!!errors.grade_level}
                 aria-describedby={errors.grade_level ? 'err-grade_level' : undefined}
                 className={fieldCls(errors.grade_level)}
-              />
+              >
+                <option value="">{educationLevel === 'College' ? 'Select year' : 'Select grade'}</option>
+                {gradeLevelOffList && <option value={gradeLevelOffList}>{gradeLevelOffList}</option>}
+                {gradeLevelOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
               <FieldError id="err-grade_level" message={errors.grade_level} />
             </label>
             <label className="flex flex-col col-span-1">
