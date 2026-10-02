@@ -45,6 +45,7 @@ vi.mock('@/lib/firebase', () => ({ auth: {}, db: {} }))
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(),
   signInWithEmailAndPassword: vi.fn(),
+  deleteUser: vi.fn(),
 }))
 vi.mock('firebase/firestore', () => ({
   Timestamp: { fromDate: (d) => d },
@@ -62,7 +63,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
 }))
 
 import { PHONE_IN_USE_ERROR, phoneError } from '@/lib/validation'
-import Register, { WrongPathNudge, positionsFor, signedInAsSomeoneElse } from './register.jsx'
+import Register, { Progress, WrongPathNudge, positionsFor, signedInAsSomeoneElse } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -279,7 +280,7 @@ describe('T-88 — a phone number another account already uses', () => {
   })
 
   it('stops the submit on a yes, with that message and nothing else', () => {
-    expect(registerSource).toMatch(/if \(in_use\) \{ setError\(PHONE_IN_USE_ERROR\); return \}/)
+    expect(registerSource).toMatch(/if \(in_use\) \{[\s\S]*?setError\(PHONE_IN_USE_ERROR\)\s*\n\s*return\s*\n\s*\}/)
   })
 
   /* The neighbour that matters: a number nobody uses must still sail through.
@@ -348,7 +349,7 @@ describe('T-94 — the existing-account branch is settled before the phone check
   })
 
   it('still refuses with the same wording — the endpoint answers yes/no only, so a stranger’s number is caught the same as before', () => {
-    expect(registerSource).toMatch(/if \(in_use\) \{ setError\(PHONE_IN_USE_ERROR\); return \}/)
+    expect(registerSource).toMatch(/if \(in_use\) \{[\s\S]*?setError\(PHONE_IN_USE_ERROR\)\s*\n\s*return\s*\n\s*\}/)
   })
 })
 
@@ -408,5 +409,84 @@ describe('T-82 — Option C: the pending-school checkout is gone, sign-up is req
     } finally {
       searchState.current = ''
     }
+  })
+})
+
+/* T-118 (triplecookiemonster-146, Kristine 2026-10-02): a phone number
+   already on another account refused the registration AFTER
+   createUserWithEmailAndPassword had already made the Firebase account
+   (step 1), so the refusal left her genuinely signed in with no profile and
+   no clean way to retry — exactly the "half-registered completing" state
+   `:305-306`'s comment says the school-abbreviation check exists to avoid,
+   except nothing was undoing it for THIS check. Her suggested fix (drop the
+   "Signed in as…" notice and the Sign out link) would have removed the only
+   explanation of the state and the only way out of it — the real fix is to
+   undo the account this submit itself just created, never one a RETURNING
+   person is resuming.
+
+   `created` (set at `:328`, inside the `if (!auth.currentUser)` branch two
+   sections above) is already the exact flag that tells the two apart — it
+   is false whenever this is a returning person signing back into their own
+   half-made or finished account, so gating the delete on it is reusing the
+   distinction the file already draws, not inventing a new one.
+
+   Read off the source for the same reason the T-88/T-94 blocks above are:
+   this decision lives inside the async `createAccount` closure, six steps
+   into a form with no DOM test runner in this repo (vitest runs these files
+   under Node, not jsdom — `renderToStaticMarkup` cannot fire a submit
+   event). A looser source test (just checking `deleteUser` appears
+   somewhere) would not bite: it has to prove the call is gated on `created`
+   and runs nowhere a returning person's own session could reach it. */
+describe('T-118 — a phone-check refusal undoes the account this submit just created', () => {
+  const phoneFailAt = registerSource.indexOf('if (in_use) {')
+  const createdGuardAt = registerSource.indexOf('if (created) await deleteUser(auth.currentUser)')
+  const deleteAt = registerSource.indexOf('deleteUser(auth.currentUser)')
+  const setErrorAt = registerSource.indexOf('setError(PHONE_IN_USE_ERROR)')
+
+  it('deletes the account THIS submit just created before telling the person their number is taken', () => {
+    expect(createdGuardAt).toBeGreaterThan(-1)
+    expect(createdGuardAt).toBeGreaterThan(phoneFailAt)
+    expect(deleteAt).toBeGreaterThan(-1)
+    expect(deleteAt).toBeLessThan(setErrorAt)
+  })
+
+  /* The guard that keeps a returning person untouched: `deleteUser` appears
+     exactly once in the whole file, and only inside the `created` branch of
+     the phone-refusal path above — never in the existing-profile branch
+     (`:351-358`) that resumes a finished account, and never unconditionally. */
+  it('never deletes a returning person finishing their own half-made or finished registration', () => {
+    expect(registerSource.match(/deleteUser\(/g)).toHaveLength(1)
+    expect(registerSource).not.toMatch(/^\s*await deleteUser\(auth\.currentUser\)/m)
+  })
+
+  it('imports deleteUser from firebase/auth, the same module the rest of this file’s auth calls use', () => {
+    expect(registerSource).toMatch(/import \{[^}]*deleteUser[^}]*\} from 'firebase\/auth'/)
+  })
+})
+
+/* T-118's second defect, not reported by the tester: her screenshot read
+   "Step 6 of 3". The completing walk slices `steps` down to 3 entries once
+   the AuthContext notices the just-created account has no profile and flips
+   `completing` true (`:870`), but the local `step` counter was still sitting
+   wherever the full (un-sliced) flow had it — up to 6 for the individual
+   path — because that state change lands mid-submit, after the account was
+   created, independently of this component's own step tracking. `Progress`
+   is exported so the clamp is testable directly: no static render reaches
+   the auth-state race that produces the mismatch. */
+describe('T-118 — the step counter never exceeds its own total', () => {
+  const html = (props) => renderToStaticMarkup(<Progress {...props} />)
+  const steps = ['Account type', 'About you', 'Your school']
+
+  it('reads "Step 3 of 3", not "Step 6 of 3", when current has outrun a shorter steps array', () => {
+    const out = html({ steps, current: 6 })
+    expect(out).toContain('Step 3 of 3')
+    expect(out).not.toContain('Step 6 of 3')
+    // the label line must resolve too -- steps[current - 1] on the
+    // unclamped index would be undefined and render nothing
+    expect(out).toContain('Your school')
+  })
+
+  it('still reads the true step when current is within range -- the clamp must not always force the last step', () => {
+    expect(html({ steps, current: 2 })).toContain('Step 2 of 3')
   })
 })

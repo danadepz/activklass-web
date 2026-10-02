@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth'
 import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { api, ApiError } from '@/lib/api'
@@ -378,7 +378,16 @@ export default function Register() {
         body: { phone: form.phone.trim() },
         requireAuth: false,
       })
-      if (in_use) { setError(PHONE_IN_USE_ERROR); return }
+      if (in_use) {
+        // This submit's own createUserWithEmailAndPassword put the account
+        // there seconds ago (step 1 above) — undo it, or the person is left
+        // signed in with no profile and no way back to a clean retry. A
+        // returning person resuming their own half-made registration
+        // (`created` false) must never be deleted here.
+        if (created) await deleteUser(auth.currentUser)
+        setError(PHONE_IN_USE_ERROR)
+        return
+      }
     } catch (err) {
       if (!(err instanceof ApiError) || err.code !== 'unreachable') throw err
     }
@@ -991,18 +1000,27 @@ function SeatSlider({ id, label, value, onChange, tint, min, max, step }) {
   )
 }
 
-function Progress({ steps, current }) {
+// Exported so the clamp (T-118, "Step 6 of 3") is testable directly: the
+// mismatch it guards against comes from an async auth-state race no static
+// render reaches.
+export function Progress({ steps, current }) {
+  // `current` can outrun `steps` when the completing walk's auth state flips
+  // mid-submit (T-118): the local step counter keeps the full flow's
+  // position while the AuthContext switch to "not_registered" shrinks the
+  // array this renders against, moments apart. Clamp so the count shown is
+  // never past its own total, on either walk.
+  const shown = Math.min(current, steps.length)
   return (
-    <div aria-label={`Step ${current} of ${steps.length}`} style={{ marginTop: 20 }}>
+    <div aria-label={`Step ${shown} of ${steps.length}`} style={{ marginTop: 20 }}>
       <div className="flex items-center justify-between" style={{ fontSize: 12, color: muted, marginBottom: 8 }}>
-        <span style={{ fontWeight: 700, color: navy }}>{steps[current - 1]}</span>
-        <span>Step {current} of {steps.length}</span>
+        <span style={{ fontWeight: 700, color: navy }}>{steps[shown - 1]}</span>
+        <span>Step {shown} of {steps.length}</span>
       </div>
       <div className="flex items-center gap-1.5">
         {steps.map((label, i) => (
           <span
             key={label}
-            style={{ flex: 1, height: 5, borderRadius: 3, background: i < current ? gold : 'rgba(14,42,92,0.1)', transition: 'background 0.25s' }}
+            style={{ flex: 1, height: 5, borderRadius: 3, background: i < shown ? gold : 'rgba(14,42,92,0.1)', transition: 'background 0.25s' }}
           />
         ))}
       </div>
