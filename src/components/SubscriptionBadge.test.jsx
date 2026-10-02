@@ -41,6 +41,6 @@ describe('SubscriptionBox', () => {
   it('an ended trial, a paid plan and a school plan do not carry the trial line', () => {
     expect(show({ kind: 'expired', label: 'Trial ended', detail: 'Subscribe to keep the full features' })).not.toContain('No card needed')
     expect(show({ kind: 'active', label: 'Subscribed', detail: 'Plus plan' })).not.toContain('No card needed')
-    expect(show({ kind: 'school', label: 'School plan', detail: 'Covered by your school' }, { name: 'Tabor Hill College' })).not.toContain('No card needed')
+    expect(show({ kind: 'school', label: 'Institution subscription', detail: 'Covered by your school' }, { name: 'Tabor Hill College' })).not.toContain('No card needed')
   })
 })

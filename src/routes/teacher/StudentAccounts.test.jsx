@@ -263,9 +263,9 @@ describe('Subscription indicator', () => {
     expect(html).toContain('Free trial')
   })
 
-  it('school-issued: the school plan, with the school named', () => {
-    const html = show({ kind: 'school', label: 'School plan', detail: 'San Nicolas High School' })
-    expect(html).toContain('School plan')
+  it('school-issued: the institution subscription, with the school named', () => {
+    const html = show({ kind: 'school', label: 'Institution subscription', detail: 'San Nicolas High School' })
+    expect(html).toContain('Institution subscription')
     expect(html).toContain('San Nicolas High School')
   })
 

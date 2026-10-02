@@ -350,7 +350,7 @@ function SubscriptionCard() {
             <PlanType label={typeLabel(false)} />
             <p style={{ fontSize: 13.5, color: muted, margin: 0, lineHeight: 1.6 }}>
               {view.kind === 'none'
-                ? 'There is no subscription on this account, and no school plan covering it.'
+                ? 'There is no subscription on this account, and no institution subscription covering it.'
                 : `${view.label} — ${view.detail}. This plan is on your own account, not a school's.`}
             </p>
             {/* No subscriptions doc exists yet -- the self-registered solo

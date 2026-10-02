@@ -16,7 +16,7 @@ describe('toMillis', () => {
 })
 
 describe('describeSubscription', () => {
-  it('a school-issued teacher reads as the school plan, never locked', () => {
+  it('a school-issued teacher reads as an institution subscription, never locked', () => {
     const view = describeSubscription({
       profile: { school_id: 'pilot-school' },
       subscription: { type: 'institution', name: 'San Nicolas High School', plan: 'pilot', status: 'active' },

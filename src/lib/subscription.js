@@ -181,7 +181,7 @@ export function describeSubscription({ profile, subscription, now = Date.now() }
   if (profile?.school_id || sub?.type === 'institution') {
     return {
       kind: 'school',
-      label: 'School plan',
+      label: 'Institution subscription',
       detail: schoolName || 'Covered by your school',
       plan: sub?.plan ?? null,
       daysLeft: null,
