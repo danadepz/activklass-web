@@ -72,3 +72,30 @@ describe("T-95 — the teacher layout, the pattern being matched, is untouched",
     expect(accountLinks.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('T-110 (triplecookiemonster-141 item 6) — the header card mirrors the teacher side: initials and account id, not the name', () => {
+  /** The header's own profile card, not the mobile dropdown's separate row. */
+  function headerCardSlice() {
+    const start = layoutSrc.indexOf('to="/student/profile"')
+    const end = layoutSrc.indexOf('Hamburger', start)
+    return layoutSrc.slice(start, end)
+  }
+
+  it('no longer renders the student\'s name in the header card', () => {
+    expect(headerCardSlice()).not.toMatch(/profile\.first_name/)
+  })
+
+  it('still renders the initials and the account id', () => {
+    const card = headerCardSlice()
+    expect(card).toMatch(/\{initials\}/)
+    expect(card).toMatch(/profile\.login_id \?\? profile\.email/)
+  })
+
+  it('carries no ring colour -- students have no subscription of their own to show one for', () => {
+    // Unlike the teacher card, a student profile never resolves a kind from
+    // lib/subscription.js (useMySubscription gates on role === 'teacher'), so
+    // no SUBSCRIPTION_RING_COLOR map is wired in here -- inventing one would
+    // paint every student's avatar with whatever the fallback kind is.
+    expect(layoutSrc).not.toMatch(/SUBSCRIPTION_RING_COLOR/)
+  })
+})

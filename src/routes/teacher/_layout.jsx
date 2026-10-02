@@ -9,16 +9,20 @@ import { db } from '@/lib/firebase'
 import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { SubscriptionChip } from '@/components/SubscriptionBadge'
+import { useMySubscription } from '@/hooks/useMySubscription'
+import { SUBSCRIPTION_RING_COLOR } from '@/lib/subscription'
 
+// T-110 (triplecookiemonster-141 item 5): Announcement moved to the end,
+// after Reports -- "to the right of Report" is position, not spelling.
 const NAV_ITEMS = [
   { to: '/teacher', label: 'Dashboard', end: true },
   { to: '/teacher/classes', label: 'My Classes' },
   { to: '/teacher/students', label: 'Students' },
-  { to: '/teacher/announcements', label: 'Announcement' },
   { to: '/teacher/syllabus', label: 'Syllabus' },
   { to: '/teacher/quizzes', label: 'Quizzes' },
   { to: '/teacher/grading', label: 'Grade Config' },
   { to: '/teacher/reports', label: 'Reports' },
+  { to: '/teacher/announcements', label: 'Announcement' },
 ]
 
 function HamburgerIcon({ open }) {
@@ -79,6 +83,10 @@ export default function TeacherLayout() {
   const [notifOpen, setNotifOpen] = useState(false)
   const notifRef = useRef(null)
   const initials = `${profile.first_name?.[0] ?? ''}${profile.last_name?.[0] ?? ''}`.toUpperCase()
+  // T-110: the avatar ring colour, read only from lib/subscription.js's kind
+  // so it can never disagree with the chip or the dashboard box.
+  const { kind: subscriptionKind, isLoading: subscriptionLoading } = useMySubscription()
+  const ringColor = subscriptionLoading ? null : SUBSCRIPTION_RING_COLOR[subscriptionKind] ?? null
 
   const { data: classes } = useTeacherClasses()
 
@@ -401,7 +409,8 @@ export default function TeacherLayout() {
               )}
             </div>
 
-            {/* Avatar + name — name hidden on mobile. The card itself is the
+            {/* Avatar + account id only (T-110: the name and the plan pill
+                moved off this always-visible card). The card itself is the
                 Account button (there is no separate nav item for it). */}
             <NavLink
               to="/teacher/account"
@@ -431,18 +440,15 @@ export default function TeacherLayout() {
                   fontWeight: 800,
                   fontSize: 13,
                   flexShrink: 0,
+                  boxShadow: ringColor ? `0 0 0 2px ${ringColor}` : 'none',
                 }}
               >
                 {initials}
               </div>
               <div className="hidden xl:block" style={{ lineHeight: 1.2, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: cream, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.first_name} {profile.last_name}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: cream, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.login_id ?? profile.email}
                 </div>
-                <SubscriptionChip style={{ maxWidth: 130 }} />
               </div>
             </NavLink>
 

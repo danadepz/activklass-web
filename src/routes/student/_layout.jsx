@@ -162,9 +162,10 @@ export default function StudentLayout() {
             {/* Notification bell */}
             <StudentNotificationBell dark />
 
-            {/* Avatar + name — click through to Profile, where Sign out lives
-                at the bottom of the page (T-95, andecobs-121: matches the
-                teacher's account-card pattern instead of sitting in the chrome). */}
+            {/* Avatar + account id only (T-110) — click through to Profile,
+                where Sign out lives at the bottom of the page (T-95,
+                andecobs-121: matches the teacher's account-card pattern
+                instead of sitting in the chrome). */}
             <NavLink
               to="/student/profile"
               aria-label="Profile & settings"
@@ -211,10 +212,7 @@ export default function StudentLayout() {
                 </div>
               )}
               <div className="hidden md:block" style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: cream }}>
-                  {profile.first_name} {profile.last_name}
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(250,250,246,0.5)', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: cream, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {profile.login_id ?? profile.email}
                 </div>
               </div>

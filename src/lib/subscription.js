@@ -8,6 +8,7 @@
  * but not update it, and the server applies limits from its own plan table.
  */
 import { api } from './api'
+import { blue, gold, green, red } from '../theme'
 
 /**
  * Who a teacher belongs to -- 'school' | 'solo' | 'none'.
@@ -248,4 +249,18 @@ export function describeSubscription({ profile, subscription, now = Date.now() }
     daysLeft: null,
     locks: { quizBank: false, teacherGroups: false },
   }
+}
+
+/**
+ * Avatar-ring colour per kind (T-110, owner answer 2026-10-02: institution
+ * Blue, solo Green, trial Yellow, expired Red). Kept beside the kinds
+ * describeSubscription returns, not in the layout that draws the ring, so
+ * the ring and the label can never name two different plans for the same
+ * account. Four colours for the four kinds post-T-124 -- nothing to add.
+ */
+export const SUBSCRIPTION_RING_COLOR = {
+  school: blue,
+  active: green,
+  trial: gold,
+  expired: red,
 }
