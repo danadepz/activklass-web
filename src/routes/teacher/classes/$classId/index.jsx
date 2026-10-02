@@ -92,6 +92,29 @@ function rosterFieldsError(fields) {
   )
 }
 
+/* T-123: a student is identified by an ID Number OR an LRN on this form,
+   never both at once -- `identifierType` ('id' | 'lrn') says which, and this
+   is the one place that decides which stored field a typed value lands in.
+   `student_number` and `lrn` stay two separate fields in storage either way
+   (a student added by bulk upload may already hold both); the toggle only
+   changes which one THIS form reads from and writes to. */
+export function identifierKey(identifierType) {
+  return identifierType === 'lrn' ? 'lrn' : 'student_number'
+}
+
+/* Which identifier a form already has enough of to default its toggle to --
+   used after a lookup fills in an existing account's fields, so a student
+   recorded with only an LRN does not appear to have no identifier at all. */
+function identifierTypeFor(fields) {
+  return !fields.student_number && fields.lrn ? 'lrn' : 'id'
+}
+
+function identifierError(fields, identifierType) {
+  const key = identifierKey(identifierType)
+  if (fields[key]?.trim()) return ''
+  return key === 'lrn' ? 'LRN is required.' : 'ID Number is required.'
+}
+
 /* T-22: Year and Program used to be typed by hand on every roster form.
    Year is a closed list of seventeen values (yearLevelError above), so it is
    now a <select> showing only the half this class belongs to, pre-set to the
@@ -497,6 +520,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
   const [idInput, setIdInput] = useState('')
   const [student, setStudent] = useState(null)
   const [findFields, setFindFields] = useState(EMPTY_STUDENT_FIELDS)
+  const [findIdentifierType, setFindIdentifierType] = useState('id') // 'id' | 'lrn' -- T-123
 
   async function lookup(e) {
     e.preventDefault()
@@ -547,7 +571,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
         )
       } else {
         setStudent(found)
-        setFindFields({
+        const fields = {
           student_number: found.student_number ?? '',
           middle_name: found.middle_name ?? '',
           course: found.course ?? '',
@@ -556,7 +580,9 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
           enrollment_status: normalizeEnrollmentStatus(found.enrollment_status),
           lrn: found.lrn ?? '',
           birthdate: found.birthdate ?? '',
-        })
+        }
+        setFindFields(fields)
+        setFindIdentifierType(identifierTypeFor(fields))
       }
     } catch (err) {
       fail(err.message)
@@ -567,7 +593,8 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
 
   async function enroll() {
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
-    if (!findFields.student_number?.trim()) { fail('ID Number is required.'); return }
+    const idProblem = identifierError(findFields, findIdentifierType)
+    if (idProblem) { fail(idProblem); return }
     // Required here too: the account exists, but this is the teacher's one
     // pass over the record before the student is theirs (T-50).
     const fieldProblem = rosterFieldsError(findFields) || birthdateError(findFields.birthdate)
@@ -594,6 +621,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
   const [lastName, setLastName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [createFields, setCreateFields] = useState({ ...EMPTY_STUDENT_FIELDS, year_level: defaultYear })
+  const [createIdentifierType, setCreateIdentifierType] = useState('id') // 'id' | 'lrn' -- T-123
 
   async function createStudent(e) {
     e.preventDefault()
@@ -603,7 +631,8 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       emailError(newEmail) ||
       rosterFieldsError(createFields)
     if (problem) { fail(problem); return }
-    if (!createFields.student_number?.trim()) { fail('ID Number is required.'); return }
+    const idProblem = identifierError(createFields, createIdentifierType)
+    if (idProblem) { fail(idProblem); return }
     // The provision endpoint refuses the row without it (roster_utils.py);
     // checking here is so the teacher reads the reason beside the field.
     const birthdateProblem = birthdateError(createFields.birthdate)
@@ -679,18 +708,42 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
     </button>
   )
 
-  const renderRosterFields = (f, setF) => {
+  const renderRosterFields = (f, setF, identifierType, setIdentifierType) => {
     const handleSet = (key) => (e) => setF((prev) => ({ ...prev, [key]: e.target.value }))
+    const idKey = identifierKey(identifierType)
     return (
       <>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label style={labelStyle}>ID Number <span className="text-red-500">*</span></label>
-            <input required className="ak-input" placeholder="Student ID" value={f.student_number} onChange={handleSet('student_number')} style={fieldStyle} />
+        <div>
+          <label style={labelStyle}>Student identifier <span className="text-red-500">*</span></label>
+          <div style={{ marginBottom: 8 }}>
+            <SegmentedControl
+              options={[
+                { value: 'id', label: 'ID Number' },
+                { value: 'lrn', label: 'LRN' },
+              ]}
+              value={identifierType}
+              onChange={setIdentifierType}
+            />
           </div>
+          <input
+            required
+            className="ak-input"
+            placeholder={idKey === 'lrn' ? '12-digit LRN' : 'Student ID'}
+            value={f[idKey]}
+            onChange={handleSet(idKey)}
+            style={fieldStyle}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
             <input className="ak-input" value={f.middle_name} onChange={handleSet('middle_name')} style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Birthdate <span className="text-red-500">*</span></label>
+            <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+            <BirthdateHint />
           </div>
         </div>
 
@@ -715,18 +768,6 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
               <option key={value} value={value}>{label} ({value})</option>
             ))}
           </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label style={labelStyle}>LRN <span style={optHint}>(basic ed, opt)</span></label>
-            <input className="ak-input" placeholder="12-digit LRN" value={f.lrn} onChange={handleSet('lrn')} style={fieldStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>Birthdate <span className="text-red-500">*</span></label>
-            <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
-            <BirthdateHint />
-          </div>
         </div>
       </>
     )
@@ -820,7 +861,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                       {student.last_name}, {student.first_name}
                       <span className="text-slate-400 font-normal"> · {student.login_id ?? student.email}</span>
                     </p>
-                    {renderRosterFields(findFields, setFindFields)}
+                    {renderRosterFields(findFields, setFindFields, findIdentifierType, setFindIdentifierType)}
                     <div className="pt-2 flex flex-col gap-2">
                       <button
                         onClick={enroll}
@@ -870,7 +911,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                   <input required type="email" className="ak-input" placeholder="student@email.com" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={fieldStyle} />
                 </div>
 
-                {renderRosterFields(createFields, setCreateFields)}
+                {renderRosterFields(createFields, setCreateFields, createIdentifierType, setCreateIdentifierType)}
 
                 <div className="pt-2 flex flex-col gap-2">
                   <button
