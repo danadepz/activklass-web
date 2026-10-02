@@ -145,13 +145,31 @@ export function toMillis(value) {
  * a school-issued or absorbed teacher (school_id set, or the resolved
  * subscription is the institution's), a solo teacher on a paid plan, a
  * self-registered teacher still on the 30-day trial (subscription_status /
- * trial_ends_at on the profile, stamped by /register), and the legacy seeded
- * teacher with no subscription record at all.
+ * trial_ends_at on the profile, stamped by /register), and a subscription the
+ * backend or superadmin console suspended or cancelled.
  *
- *   kind:  'school' | 'active' | 'trial' | 'expired' | 'lapsed' | 'none'
- *   locks: what a trial may not use. Only a trial (running or ended) locks --
- *          a legacy teacher with no record keeps working, since nothing is
- *          sold to them yet and the pilot classes must not break.
+ *   kind:  'school' | 'active' | 'trial' | 'expired'
+ *   locks: what a trial may not use.
+ *
+ * T-124 (owner decision 2026-10-02, Option B): this used to return six kinds,
+ * two of which were not peers of the rest. `lapsed` (suspended/cancelled) now
+ * folds into `expired` -- both mean "you had access and it stopped", one
+ * label covers them, and the lock an ended trial already carried now applies
+ * here too: a suspended or cancelled subscriber loses the quiz bank and
+ * teacher groups the moment this ships. `none` was the function's fallback
+ * for "the legacy seeded teacher with no subscription record at all", and a
+ * fallback can only be deleted once nothing can still reach it -- so
+ * `scripts/backfill_subscription_none.py` (activklass-backend) first stamped
+ * `subscription_status: 'active'` onto every teacher who had no subscription
+ * record at all (13 accounts on the live project, 2026-10-02, reversible via
+ * the script's `--revert`). They now resolve through the `active` branch
+ * below with the same unlocked behaviour `none` always gave them -- and,
+ * because `active` is one of the kinds `useMySubscription` already counted as
+ * solo, those 13 accounts go from "neither school nor solo" to solo teachers
+ * who manage their own students, which they could not do before. The
+ * function's final `return` is defensive only: real data can no longer reach
+ * it after the backfill, and it deliberately does not default to `expired` --
+ * that would silently lock an account the backfill exists to keep unlocked.
  */
 export function describeSubscription({ profile, subscription, now = Date.now() }) {
   const sub = subscription ?? null
@@ -209,19 +227,23 @@ export function describeSubscription({ profile, subscription, now = Date.now() }
 
   if (status === 'suspended' || status === 'cancelled') {
     return {
-      kind: 'lapsed',
+      kind: 'expired',
       label: status === 'suspended' ? 'Subscription paused' : 'Subscription ended',
       detail: 'Contact ActivKlass to reactivate',
       plan: sub?.plan ?? null,
       daysLeft: null,
-      locks: { quizBank: false, teacherGroups: false },
+      locks: { quizBank: true, teacherGroups: true },
     }
   }
 
+  // Unreachable on real data since the 2026-10-02 backfill (see the doc
+  // comment above) -- every teacher now has a subscription_status. Mirrors
+  // `active`'s unlocked shape rather than defaulting to `expired`, which
+  // would lock an account purely because of a data gap.
   return {
-    kind: 'none',
-    label: 'No subscription',
-    detail: 'Individual account',
+    kind: 'active',
+    label: 'Subscribed',
+    detail: 'Individual plan',
     plan: null,
     daysLeft: null,
     locks: { quizBank: false, teacherGroups: false },

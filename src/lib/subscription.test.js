@@ -75,15 +75,22 @@ describe('describeSubscription', () => {
     expect(view.locks.teacherGroups).toBe(true)
   })
 
-  it('a legacy teacher with no record at all is not locked out of anything', () => {
+  it('T-124: a record-less account is unreachable on real data post-backfill, and the defensive fallback stays unlocked rather than defaulting to expired', () => {
     const view = describeSubscription({ profile: {}, subscription: null, now: NOW })
-    expect(view.kind).toBe('none')
+    expect(view.kind).toBe('active')
     expect(view.locks).toEqual({ quizBank: false, teacherGroups: false })
   })
 
-  it('suspended and cancelled read as lapsed', () => {
-    expect(describeSubscription({ profile: {}, subscription: { status: 'suspended' } }).label).toBe('Subscription paused')
-    expect(describeSubscription({ profile: {}, subscription: { status: 'cancelled' } }).label).toBe('Subscription ended')
+  it('T-124: suspended and cancelled fold into expired, with the same lock an ended trial already carries', () => {
+    const paused = describeSubscription({ profile: {}, subscription: { status: 'suspended' } })
+    expect(paused.kind).toBe('expired')
+    expect(paused.label).toBe('Subscription paused')
+    expect(paused.locks).toEqual({ quizBank: true, teacherGroups: true })
+
+    const ended = describeSubscription({ profile: {}, subscription: { status: 'cancelled' } })
+    expect(ended.kind).toBe('expired')
+    expect(ended.label).toBe('Subscription ended')
+    expect(ended.locks).toEqual({ quizBank: true, teacherGroups: true })
   })
 })
 

@@ -38,7 +38,9 @@ export function useMySubscription() {
   })
   const view = describeSubscription({ profile: profile ?? {}, subscription: data ?? null })
   // A solo subscriber (paid or on trial) manages their own students; a
-  // school-issued teacher's admin does that for them.
-  const isSolo = isTeacher && !profile?.school_id && ['active', 'trial', 'expired', 'lapsed'].includes(view.kind)
+  // school-issued teacher's admin does that for them. T-124 folded `lapsed`
+  // into `expired` and removed the `none` fallback (2026-10-02) -- every
+  // kind describeSubscription can still return is listed here.
+  const isSolo = isTeacher && !profile?.school_id && ['active', 'trial', 'expired'].includes(view.kind)
   return { ...view, isSolo, isLoading: isTeacher && isLoading, subscription: data ?? null }
 }
