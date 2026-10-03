@@ -630,6 +630,48 @@ Still open at this altitude:
   Option C, in `routes/superadmin/requests.jsx` (web) and the backend's approval email,
   neither of which this brief touched.
 
+- `[x]` **A school admin cannot create another admin — anywhere the system let them**
+  (2026-10-03, owner: "a school admin shouldn't be able to create another admin"). T-113
+  (2026-10-02) had already dropped the Admin option from the web console's create-user form,
+  per the owner's decision that day — but three other doors stayed open, found by tracing
+  every place `role: 'admin'` could still reach a write. (1) `BulkUpload`'s CSV `role`
+  column read straight off the row, independent of the form's own Teacher | Student choice,
+  and a row saying `admin` (with an email) still created one. (2) The Users table's own
+  re-role `<select>` on an *existing* teacher or student still listed Admin — promoting one
+  is the same account as minting one. (3) `POST /api/admin/users` and `/users/bulk`
+  (`app/api/admin.py`, **cross-repo**) still accepted `role: "admin"` directly, reachable
+  without either screen. All three trace back to one list, `CREATABLE_ROLES` — now
+  `['teacher', 'student']` on both sides of the repo boundary, with the web's re-role select
+  locking an existing admin's row to a read-only pill the same way a parent's already was,
+  and the backend naming the refusal plainly instead of falling through to "invalid role
+  'admin'". The deepest door was Firestore itself: `firestore.rules`' `isAdmin()` branch of
+  the `users/{uid}` update rule let an admin write *any* field on *any* profile, role
+  included, with no Flask endpoint in front of it — closing the other three without this
+  would still have left the Users table's write reachable by hand. `adminCannotGrantAdmin()`
+  now refuses a write that sets `role: 'admin'` unless the document was already one, leaving
+  every other admin edit (demoting, deactivating, editing any other field) untouched. The
+  only surviving way to become an admin is the superadmin's school-approval flow
+  (`api/superadmin.py`), through the Admin SDK, which bypasses the rules file entirely by
+  design. *Verified:* `npm run test:rules` 76/76 (+4, including an admin editing an ordinary
+  field on a teacher and on another admin to prove the block is role-scoped, not a blanket
+  lockout) — confirmed to bite by reverting the rule clause alone and watching both new
+  promotion tests fail, then restoring it and re-running green; `bulkUploadAdminRole.test.js`
+  (new, 3 tests) confirmed to bite the same way against `CREATABLE_ROLES`; `npm run test`
+  1461/1461; `npm run build` clean. Backend `tests/smoke_admin.py` (+3: admin creation
+  refused with a named reason rather than a generic "invalid role", no Auth account minted;
+  the same CSV-bypass row refused inside a bulk upload); the full backend smoke suite (16
+  files) re-run clean, no regressions. Browser, as the seeded demo admin (San Roque
+  National High School) against the live local project: filtering Users to **admin** showed
+  every other admin's row locked to a plain `ADMIN` pill with no dropdown (Reset password /
+  Deactivate only); a teacher's own role `<select>` (read via the accessibility tree, not
+  just a screenshot) listed only `teacher` and `student`; Add User → Individual showed only
+  **Teacher | Student** under the Bulk/Individual control, matching the form T-113 already
+  shipped. **Also checked, not touched:** T-120 (a9697d9, same day) — confirmed still
+  correct: all four `fail()` sites in `teacher/classes/$classId/index.jsx` route through
+  `failWith`, which no longer calls `toast.error`, `noDuplicateToast.test.js` passes with
+  its explicit toast-count assertion, and the one remaining `toast.error` in that file
+  (guardian removal) has no paired inline banner, so it is not a duplicate.
+
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
 ~~deployment and a real host~~ (**pulled forward 2026-09-14 — the defense requires a
