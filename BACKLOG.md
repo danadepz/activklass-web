@@ -2955,3 +2955,222 @@ Consequences, all now corrected in the ledger, the card and the replies:
 - The claimed causal link between `andecobs-137` and `maykel_64440-140` does not exist. Why
   that redeem failed is unknown; the catch-all message discarded the reason, which is what
   T-106 addresses.
+
+## Tester tickets — 2026-10-01, Kristine's two UI/wording lists (ticket pane)
+
+`triplecookiemonster-141` (Problem: UI, 9 items) and `triplecookiemonster-142` (Problem:
+Wording, 5 items), both filed 2026-10-01, with clarifying notes from dawn in both threads.
+Fourteen reported items became **eight issues, T-108 … T-115**, grouped by the lane that owns
+the files rather than by ticket — the items span Auth, Teacher, Admin and two Shared components,
+and panes working the same file would collide. All eight are `suggestion`; none is a defect.
+
+Two are deferred on purpose, and the reasons matter more than the items.
+
+1. **T-108 — four polish items on the Login screen and its brand panel.** `cosmetic`, web.
+   Tickets `-141` items 1 & 4 and `-142` items 2 & 3. The interesting one is item 4: the heading
+   renders `don't just <em style={{color: gold}}>record</em>.` with the full stop **outside** the
+   emphasis, so the word is gold and its period is not — which is exactly what she quoted,
+   `"record."`. `components/AuthLayout.jsx` renders that heading **twice** (`:211` light,
+   `:299` dark) and the perk bullets twice (`:220`, `:308`); a fix touching one leaves the other.
+   Card: `_tools/discord/tickets/_dispatch/T-108-auth-screen-polish.md`.
+
+2. **T-109 — drop Gender from sign-up, lock Position to Admin on the institution path.**
+   `design`, web. Ticket `-141` items 2 & 3. Gender is not just a field: it is written to the
+   profile at `routes/register.jsx:292-293`, and the comment at `:50-53` records that nothing
+   reads the stored value — which is what makes removal safe. Existing documents are left alone.
+   Position is already institution-only (`positionsFor()` at `:80-82`); what is missing is the
+   default and the lock. **Open question for the owner:** `WrongPathNudge` (`:895-901`) exists to
+   catch a teacher who picked the institution card by mistake (T-31, T-32) and can never fire
+   once Position is locked — retire it, or move the signal to step 1.
+   Card: `…/T-109-signup-remove-gender-lock-position.md`.
+
+3. **T-110 — Announcement moves to the end of the teacher navbar; the profile card sheds two
+   lines.** `design`, web. Ticket `-141` items 5 & 6. The Profile Card is the always-visible
+   top-right `NavLink` (`routes/teacher/_layout.jsx:420-447`), and *"display only the user's
+   initials and account id"* is a **removal**: the account id is already rendered at `:443`, so
+   what goes is the name at `:440` and the plan pill at `:445`. **Colours answered (2026-10-02):** `school` Blue,
+   `active` Green, `trial` Yellow, `expired` Red. `lapsed` and `none` get no ring — the owner
+   removed them from the mapping, so those two keep the circle's current neutral outline.
+   Card: `…/T-110-teacher-navbar-and-profile-card.md`.
+
+4. **T-111 — the app prints two names for one plan.** `cosmetic` + `design`, web. Ticket `-142`
+   item 4. `routes/teacher/account.jsx:321` and `:389` already say **"Institution subscription"**
+   — the term she is asking for — while `lib/subscription.js:165` labels the same `kind: 'school'`
+   **"School plan"**, which is what the dashboard box and the header pill render. Her two
+   screenshots show both for the same teacher. Also removes `<SubscriptionBox />` from
+   `routes/teacher/index.jsx:273` per dawn's *"only visible when the profile is clicked"*.
+   The `kind: 'school'` **value** must not be renamed — the rules and the backend read it.
+   Card: `…/T-111-institution-subscription-wording-and-placement.md`.
+
+5. **T-112 — middle name on the teacher profile; drop the Change password lock icon.**
+   `cosmetic`, web. Ticket `-141` items 8 & 9. `middle_name` is collected by sign-up, by the admin
+   create form and by bulk upload, and backfilled by `lib/roster.js:181-188` — the teacher's own
+   Account page is the one place that ignores it, and that page is an editable form, so the field
+   is added rather than a string printed. On item 9 Kristine is right **and the code comment is
+   wrong**: `components/ChangePassword.jsx:106` calls the chip *"matching the app-wide card
+   language"*, but every sibling card on that page has a bare heading. The comment goes with the
+   chip. Blast radius is four screens, including the forced change-password screen.
+   Card: `…/T-112-middle-name-and-change-password-icon.md`.
+
+6. **T-113 — Admin → Users: one "Add user" flow, bulk-or-individual then the role.** `design`,
+   web; the largest of the fourteen. Ticket `-141` item 7, specified by a hand-drawn sketch.
+   Today `routes/admin/UsersTab.jsx:705-711` renders `BulkUpload` and `CreateUserForm` as
+   independent siblings, so the bulk-or-individual choice is made by which card you scroll to.
+   **Answered (2026-10-02):** admin creation is removed entirely — consistent with
+   `routes/register.jsx:74-79`, which records that a school admin is only ever made when the team
+   approves a school request, so the Users tab was offering a role nothing else creates this way.
+   The `role === 'admin'` branches go with it. Order is bulk-or-individual, then teacher-or-student,
+   and the no-default-role safety at `:156-158` must survive. One question remains with Kristine:
+   what the boxed "Institution" label should say.
+   Card: `…/T-113-admin-add-user-flow.md`.
+
+7. **T-114 — replace the login disclaimer with "Create Account", parents to a QR code.**
+   **Deferred by the owner**, who said in-thread *"currently building the mobile for it, don't
+   build anything yet for this"*. Recorded here because the sequencing is the point: the wording
+   half cannot ship alone. `routes/login.jsx:294-305` carries the only sentence on the web that
+   tells a parent their account is made in the mobile app, and her mockup replaces the whole block
+   with one link into a sign-up flow that has no parent path. Shipping half strands guardians —
+   the path T-105 and T-106 were both about.
+   Card: `…/T-114-login-disclaimer-and-parent-qr.md`.
+
+8. **T-115 — "System Admin" instead of "Super Admin".** **Deferred: there is nothing to change.**
+   Ticket `-142` item 5, asked *"for any reference"*. Searched all three repos — **no
+   user-visible "Super Admin" exists anywhere.** Every hit is an identifier, a code comment or a
+   document, and where a role *is* labelled to a person it already reads "System Administrator"
+   (`routes/admin/duplicates.test.js:107`). Three of those identifiers must never be renamed:
+   `token.claims.superadmin` is a live Firebase custom claim granted on the production project,
+   `/superadmin` is a live route, and role values are read by `firestore.rules`. The card exists
+   so nobody takes "any reference" literally with a find-and-replace. Waiting on Kristine to say
+   where she saw it.
+   Card: `…/T-115-system-admin-wording.md`.
+
+**Worth knowing about the evidence.** The ticket watcher dropped 12 of the 15 screenshots on
+these two tickets: Discord serves every pasted image as `image.png`, and the watcher's
+`<message-id>_<filename>` scheme collapsed them all to one path while still rendering a link per
+attachment — so the tickets looked complete. Fixed and all 15 recovered the same day. Three of
+the cards above (T-110, T-111, T-112) were corrected after the screenshots came back, each in a
+way that changed the work: an addition that was really a removal, a "single source" that was
+really two, and a display that was really a form field.
+
+## Tester tickets — 2026-10-02, maykel on mobile and Kristine on Classes (ticket pane)
+
+Thirteen new tickets plus three more items on `triplecookiemonster-142`, triaged into
+**T-116 … T-123** (142's new items joined the existing T-109, same file). Two tickets raise
+nothing: `maykel_64440-145` is empty, and `triplecookiemonster-147` was a 10-item batch the owner
+asked Kristine to split — she refiled each item as `148`–`157`, which carry the issues.
+
+1. **Submitting a quiz crashes the mobile dev build, and the navigation error is a decoy** —
+   `bug · blocks testing`, **development builds only**, mobile, `maykel_64440-143`. The message is
+   *"Couldn't find a navigation context"*, the same as M1/T-104, and it is not a navigation
+   problem. maykel's full stack shows `react-native-css-interop`'s `printUpgradeWarning` building
+   its message by stringifying the component's props; `stringify` walks them with
+   `Object.entries`, which **invokes getters**, and expo-router's default navigation context is
+   made of getters that throw (`NavigationStateContext.js:43`). A styling warning surfaces as a
+   navigation error. Every call site is behind `process.env.NODE_ENV !== "production"`
+   (`render-component.js:33, 44, 79, 92, 104`), so the standalone APK cannot reach it — maykel is
+   on the Metro dev server. The *real* defect the warning reported, a component adding a CSS
+   variable after first render, is still unfixed. Card:
+   `_tools/discord/tickets/_dispatch/T-116-quiz-submit-crash-is-a-css-interop-warning.md`.
+
+2. **Changing your password on mobile never asks for the current one** —
+   `bug · wrong behaviour (account security)`, mobile, `maykel_64440-144`.
+   `app/parent/change-pass.tsx:61` and `app/student/change-pass.tsx:61` both call
+   `updatePassword()` with no reauthentication. The screen was built for the **forced** first-login
+   change (`:64-67` clears `is_temp_password`), where not asking is correct; it is being reused for
+   the voluntary change from Profile, where it is not. Also: `updatePassword` without reauth should
+   be throwing `auth/requires-recent-login` on older sessions, and the placeholder says *"Minimum 6
+   characters"* while `passwordError()` enforces web's 8-plus-complexity rule
+   (`src/lib/validation.test.ts:59-72`) — the validation is right, the hint is wrong. Card:
+   `…/T-117-mobile-change-password-never-asks-for-the-current-one.md`.
+
+3. **A taken phone number strands you signed in with no account** — `bug · misleading`, web,
+   `triplecookiemonster-146`. `routes/register.jsx:327` creates the Firebase account; the
+   phone-in-use check at `:375-382` then fails and returns, leaving a real account with no profile.
+   The file already knows this is the hazard — `:305-306` runs the school-abbreviation check before
+   account creation *"so it cannot strand anyone in the half-registered completing state"*, and
+   `:333-335` admits *"A run that failed at step 2 or 3 left the account behind."* The check cannot
+   simply move up (`:359-374`, T-94: only the existing-account branch can tell a returning person's
+   own number from a stranger's), so the fix is to delete the just-created account on that failure.
+   Her suggested fix — remove the "Signed in as…" notice and the Sign out link — would remove the
+   only explanation and the only exit. Her screenshot also shows **"Step 6 of 3"** (`:996-999`),
+   which she did not report. Card: `…/T-118-signup-strands-a-half-made-account.md`.
+
+4. **A red "Delete" in the Roster toolbar deletes the whole class** — `suggestion · misleading`,
+   web, `triplecookiemonster-148`, `-149`, `-150`.
+   `routes/teacher/classes/$classId/index.jsx:1693-1713` puts *Bulk Upload · Add Student · Delete*
+   in the **Roster** header, and the red one-word Delete is `onClick={removeClass}` — the whole
+   class, with every module and record. Its only disambiguation is `title="Delete class"`, which
+   never shows on touch. Moves beside Edit Class and becomes "Delete Class"; Bulk Upload folds into
+   the Add Student modal. **Unconfirmed and to check first:** whether `removeClass` confirms at all.
+   Card: `…/T-119-roster-toolbar-delete-and-bulk-upload.md`.
+
+5. **The same validation error is shown twice, inline and as a toast** — `suggestion · cosmetic`,
+   systemic, web, `triplecookiemonster-151`. She is reporting a pattern, not one duplicate: *"This
+   also applies to other items na naay pop-up warnings like this."* The card deliberately names no
+   line — which layer to cut depends on whether one shared helper raises both, which has to be
+   looked at rather than guessed from a screenshot. Card:
+   `…/T-120-validation-error-shown-twice.md`.
+
+6. **Add Student: an internal address on screen, and three pieces of copy** —
+   `suggestion · cosmetic`, web, `triplecookiemonster-152`, `-155`, `-156`, `-157`.
+   `:753` falls back to the synthetic `…@activklass.internal` address, which receives no mail, where
+   a teacher expects contact details. `:432` and the Birthdate helper are straight rewords. **`:788`
+   is the one that can go wrong:** her replacement drops *"nothing is emailed, so pass it on
+   yourself"*, which she intends to move to the success message — shorten it first and teachers
+   will believe students are emailed their password. Either both or neither. `:431`'s school-admin
+   wording is T-91's fix and must not be touched. Card:
+   `…/T-121-add-student-wording-and-clutter.md`.
+
+7. **Grade / Year Level should be a dropdown that follows Education Level** —
+   `suggestion · feature gap`, web, `triplecookiemonster-153`.
+   `features/classes/ClassFormModal.jsx:683` **already** varies the placeholder by education level
+   (`educationLevel === 'College' ? 'e.g. 3rd' : 'e.g. Grade 3'`), so this extends a decision the
+   file has made rather than introducing one. It would also delete the *"Enter a level like…"*
+   validation entirely — the very message T-120 is about. **Mapping answered by the owner (2026-10-02):** Elementary
+   Grades 1-6, High school 7-10, Senior high 11-12, College 1st-5th year — each level's dropdown
+   holding only its own grades. Card:
+   `…/T-122-grade-year-level-dropdown-from-education-level.md`.
+
+8. **A student should be identified by an ID Number or an LRN, not asked for both** —
+   `suggestion · misleading`, web, `triplecookiemonster-154`. **Needs the owner before building,
+   and this card does not assume the tester is right about the fix.** An LRN is a national DepEd
+   learner reference a student keeps across schools; a student number is the school's own, and
+   ActivKlass stores both (`routes/admin/BulkUpload.jsx:35`). If they are not actually alternatives,
+   a toggle loses data — the answer may be labelling which is used for what. Same sketch as T-113,
+   so whichever lands second matches the first. Card:
+   `…/T-123-student-identifier-id-or-lrn-not-both.md`.
+
+**Also folded in:** `triplecookiemonster-142` gained items 6, 7 and 8 — all strings in
+`routes/register.jsx` (`:602` drop "— add it", `:483` the individual-path subtitle, `:624` relabel
+"Private or public" to "School type"). They joined **T-109**, which already owns that file, rather
+than opening a second issue that would collide on it.
+
+## Owner request — 2026-10-02: remove the `lapsed` and `none` subscription states
+
+**T-124**, `owner request · design`, web (+ backend if the underlying statuses go too). No tester
+ticket behind it — it came out of T-110, where four avatar-ring colours were given for six
+subscription kinds and the owner chose to remove the two leftovers rather than colour them.
+
+**It is not a two-line deletion, and the card says why.** `lib/subscription.js:151` declares
+`school · active · trial · expired · lapsed · none`, and the two in question are not peers of the
+other four:
+
+- **`lapsed`** (`:210-219`) is a real branch triggered by `status === 'suspended' || 'cancelled'`,
+  statuses the backend and superadmin console write. Removing the `kind` does not stop a
+  subscription being cancelled; it removes the app's name for it.
+- **`none`** (`:221-227`) is the function's **final `return`** — the fallback for every teacher
+  nothing else matched. A fallback cannot be deleted, only redirected. `:151-154` names who lands
+  there: the legacy seeded teacher, kept working deliberately because *"nothing is sold to them yet
+  and the pilot classes must not break."*
+
+**The locks are the trap.** `lapsed` and `none` both carry
+`locks: { quizBank: false, teacherGroups: false }`; `expired` and `trial` carry `true`. Folding
+either into `expired` silently removes the quiz bank and teacher groups from those accounts.
+`hooks/useMySubscription.js:42` also reads `lapsed` when deciding who is a solo teacher.
+
+**Two options, owner to pick:** (A) `lapsed` only — fold `suspended`/`cancelled` into `expired`,
+accept the lock change, keep `none` as the fallback; shippable alone and recommended. (B) both —
+which requires a one-off backfill giving every record-less teacher a real subscription record
+*before* the fallback can change. Writing `expired` into the fallback instead is the one outcome
+`:151-154` exists to prevent. Card:
+`_tools/discord/tickets/_dispatch/T-124-remove-lapsed-and-none-subscription-states.md`.
