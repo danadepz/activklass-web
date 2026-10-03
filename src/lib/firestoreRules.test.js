@@ -34,6 +34,8 @@ const RULES_PATH = fileURLToPath(
 const STUDENT = 'student-1'
 const OTHER_STUDENT = 'student-2'
 const TEACHER = 'teacher-1'
+const ADMIN = 'admin-1'
+const OTHER_ADMIN = 'admin-2'
 
 let testEnv
 
@@ -303,6 +305,53 @@ describe('users · what a student may write about their own password', () => {
   it('does not let a student touch a classmate’s password state', async () => {
     await assertFails(
       updateDoc(doc(ctx(STUDENT), 'users', OTHER_STUDENT), { is_temp_password: false }),
+    )
+  })
+})
+
+/**
+ * A school admin cannot create another admin (2026-10-03). Before this, the
+ * `isAdmin()` branch of the update rule let an admin write ANY field on ANY
+ * profile, role included — the re-role dropdown on the admin console's Users
+ * table (Firestore-direct, no Flask endpoint in front of it) could promote
+ * any teacher or student straight to 'admin'. That is the exact account the
+ * owner ruled out of the create-user form and the bulk CSV on 2026-10-02
+ * ("creating an admin wont happen anymore, only teacher and student now") —
+ * closing the create path while leaving this one open would not have closed
+ * anything.
+ */
+describe('users · a school admin cannot promote anyone to admin', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D' })
+      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', first_name: 'B', last_name: 'E' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R' })
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T' })
+    })
+  })
+
+  it('refuses promoting a teacher to admin', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(ADMIN), 'users', TEACHER), { role: 'admin' }),
+    )
+  })
+
+  it('refuses promoting a student to admin', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(ADMIN), 'users', STUDENT), { role: 'admin' }),
+    )
+  })
+
+  it('still lets an admin edit an ordinary field on that teacher', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(ADMIN), 'users', TEACHER), { department: 'Science' }),
+    )
+  })
+
+  it('still lets an admin edit a field on another existing admin, role unchanged', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(ADMIN), 'users', OTHER_ADMIN), { status: 'inactive' }),
     )
   })
 })

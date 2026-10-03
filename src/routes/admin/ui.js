@@ -5,7 +5,15 @@ export const ROLES = ['admin', 'teacher', 'student', 'parent']
 // What the console may CREATE (and re-role someone into). Parents are absent
 // deliberately: a parent registers themselves and claims a student's
 // invitation code -- the school does not issue or manage their account.
-export const CREATABLE_ROLES = ['admin', 'teacher', 'student']
+// Admin is absent too (2026-10-03, owner: "a school admin shouldn't be able
+// to create another admin") -- both for a brand-new account (T-113 already
+// dropped it from CreateUserForm; CREATABLE_ROLES is what let BulkUpload's
+// CSV `role` column and UserRow's re-role <select> still offer it) and for
+// turning an *existing* teacher or student into one. The only way to become
+// an admin is the superadmin's school-approval flow. The backend
+// (app/api/admin.py, cross-repo) and firestore.rules both enforce this too
+// -- this list is the UI half, not the only one.
+export const CREATABLE_ROLES = ['teacher', 'student']
 export const MIN_PASSWORD = 8
 
 export const card = { background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }

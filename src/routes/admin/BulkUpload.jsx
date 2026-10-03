@@ -67,11 +67,17 @@ const ROW_SPEC = {
  *  Per the manuscript (Fig. 49-50): Grade 12 & below carry a 12-digit LRN
  *  alongside their student number; college learners have the number only, so
  *  a row without an LRN needs six digits in the student number instead. */
-function rowProblem(row, prefix) {
+export function rowProblem(row, prefix) {
   if (!row.first_name || !row.last_name) return 'missing name'
   if (row.password && row.password.length < MIN_PASSWORD) return 'password too short'
   if (!CREATABLE_ROLES.includes(row.role)) {
-    return row.role === 'parent' ? 'parents self-register' : `bad role '${row.role}'`
+    if (row.role === 'parent') return 'parents self-register'
+    // Admin is excluded from CREATABLE_ROLES on purpose (2026-10-03, owner:
+    // "a school admin shouldn't be able to create another admin") -- a
+    // `role` column saying 'admin' used to reach a dedicated branch below
+    // that only asked for an email. It is refused here instead, the same as
+    // any other role this screen does not hand out.
+    return row.role === 'admin' ? 'admin accounts are not created here' : `bad role '${row.role}'`
   }
   if (row.role === 'student') {
     if (!row.student_number) return 'missing student_number'
@@ -84,25 +90,23 @@ function rowProblem(row, prefix) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(row.birthdate)) return 'birthdate must be YYYY-MM-DD'
   }
   if (row.role === 'teacher' && !row.employee_number) return 'missing employee_number'
-  if (row.role === 'admin') {
-    if (!row.email) return 'admin rows need an email'
-  } else {
-    // Teachers and students always sign in with the issued login; an email
-    // on their row is a personal contact address, not a login.
-    const personal = row.personal_email || row.email
-    if (personal && emailError(personal)) return 'personal_email is not an email'
-    if (!prefix) return 'no login prefix set'
-    if (row.role === 'teacher' && !issuedLoginId(prefix, row.employee_number)) {
-      return 'employee number needs 6 digits'
-    }
+  // Teachers and students always sign in with the issued login; an email on
+  // their row is a personal contact address, not a login.
+  const personal = row.personal_email || row.email
+  if (personal && emailError(personal)) return 'personal_email is not an email'
+  if (!prefix) return 'no login prefix set'
+  if (row.role === 'teacher' && !issuedLoginId(prefix, row.employee_number)) {
+    return 'employee number needs 6 digits'
   }
   return ''
 }
 
-/** The login this row will get: issued from the prefix, except admins, who
- *  sign in with their real email. */
-function rowLogin(row, prefix) {
-  if (row.role === 'admin') return row.email
+/** The login this row will get, issued from the prefix. A row whose `role`
+ *  column is not 'teacher' or 'student' (admin included) has no issued
+ *  login to preview -- rowProblem refuses it before it can be created, so
+ *  this is display-only for the table, not a path to one. */
+export function rowLogin(row, prefix) {
+  if (!CREATABLE_ROLES.includes(row.role)) return undefined
   return issuedLoginId(prefix, row.role === 'student'
     ? (row.lrn || row.student_number)
     : row.employee_number)
@@ -168,10 +172,14 @@ function rowDuplicate(row, index, rows, users) {
  * inbox, like sample.maria@gmail.com — is stored on the profile for password
  * recovery, because not everyone has a school email; it is never the login.
  *
- * A `role` column in the file can still independently say 'admin' — that is
- * `rowProblem`'s own check below, pre-existing and unrelated to this
- * screen's own role choice; T-113 only removes admin as a thing *this* form
- * asks for.
+ * A `role` column in the file can still independently say 'teacher' or
+ * 'student' to override this screen's own choice (one teacher re-using a
+ * mixed roster file, say) — but not 'admin': that used to slip through as a
+ * CSV-only bypass of the create form's own rule (T-113 removed the Admin
+ * option from the form, not from this column), closed 2026-10-03 alongside
+ * the re-role dropdown on the Users table and firestore.rules itself. A
+ * `role: 'admin'` row is refused the same as any other role this screen does
+ * not hand out — see `rowProblem` below.
  */
 export default function BulkUpload({ role, onDone, settings, users }) {
   const prefix = settings?.school?.login_prefix ?? ''

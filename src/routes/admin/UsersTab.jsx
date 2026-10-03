@@ -568,6 +568,11 @@ function UserRow({ user, isSelf, onChanged }) {
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
   const isParent = user.role === 'parent'
+  // Another admin's role is locked the same way a parent's is (2026-10-03):
+  // CREATABLE_ROLES no longer lists 'admin', so the <select> below has
+  // nowhere to put one, and re-roling an existing admin down is not this
+  // card's job -- the only thing being closed is minting a NEW one.
+  const isOtherAdmin = !isSelf && user.role === 'admin'
   const idNumber = idNumberOf(user)
   const tint = ROLE_TINT[user.role] ?? ROLE_TINT.student
 
@@ -660,8 +665,12 @@ function UserRow({ user, isSelf, onChanged }) {
 
       <td style={{ padding: '12px 14px' }}>
         {/* Parents keep a fixed role: their account exists through their
-            student's invitation link, and re-roling would orphan it. */}
-        {isSelf || isParent ? (
+            student's invitation link, and re-roling would orphan it. Another
+            admin's role is fixed here too: this console creates teachers and
+            students only, and that same rule applies to re-roling someone
+            into 'admin' -- firestore.rules refuses the write server-side
+            either way, this just keeps the control from offering it. */}
+        {isSelf || isParent || isOtherAdmin ? (
           <Pill tint={tint}>{user.role}</Pill>
         ) : (
           <select value={user.role ?? 'student'} onChange={changeRole} disabled={!!busy}
