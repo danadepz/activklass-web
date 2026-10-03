@@ -162,7 +162,7 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to your ActivKlass account.">
+    <AuthLayout title="Welcome!" subtitle="Sign in to your ActivKlass account.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {!settingPassword && (
           <DevQuickLogin
@@ -175,7 +175,7 @@ export default function Login() {
         {notice && <AuthNotice>{notice}</AuthNotice>}
 
         <div>
-          <label htmlFor="login-email" style={authLabelStyle}>Email or login ID</label>
+          <label htmlFor="login-email" style={authLabelStyle}>Email/Login ID</label>
           <input
             id="login-email"
             className="ak-input"

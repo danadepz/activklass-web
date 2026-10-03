@@ -208,7 +208,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
               </div>
 
               <h2 style={{ ...serif, fontSize: 'clamp(36px, 3.6vw, 48px)', lineHeight: 1.02, letterSpacing: '-0.025em', margin: '0 0 32px', color: ink, textWrap: 'balance' }}>
-                Class records that don't just <em style={{ fontStyle: 'italic', color: goldDeep }}>record</em>.
+                Class records that don't just <em style={{ fontStyle: 'italic', color: goldDeep }}>record.</em>
               </h2>
 
               <div className="flex flex-col gap-4">
@@ -217,7 +217,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
                     <span style={{ width: 26, height: 26, borderRadius: '50%', background: gold, color: navy, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
                       <Check className="h-3.5 w-3.5" />
                     </span>
-                    <span style={{ fontSize: 16, color: inkMuted, lineHeight: 1.45 }}>{perk}</span>
+                    <span style={{ fontSize: 15, color: inkMuted, lineHeight: 1.45 }}>{perk}</span>
                   </div>
                 ))}
               </div>
@@ -296,7 +296,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
           </div>
 
           <h2 style={{ ...serif, fontSize: 'clamp(44px, 5vw, 62px)', lineHeight: 1.0, letterSpacing: '-0.025em', margin: '0 0 40px', textWrap: 'balance' }}>
-            Class records that don't just <em style={{ fontStyle: 'italic', color: gold }}>record</em>.
+            Class records that don't just <em style={{ fontStyle: 'italic', color: gold }}>record.</em>
           </h2>
 
           <div className="flex flex-col gap-5">
@@ -305,7 +305,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
                 <span style={{ width: 28, height: 28, borderRadius: '50%', background: gold, color: navy, display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1 }}>
                   <Check className="h-3.5 w-3.5" />
                 </span>
-                <span style={{ fontSize: 18, color: 'rgba(250,250,246,0.88)', lineHeight: 1.45 }}>{perk}</span>
+                <span style={{ fontSize: 16, color: 'rgba(250,250,246,0.88)', lineHeight: 1.45 }}>{perk}</span>
               </div>
             ))}
           </div>
