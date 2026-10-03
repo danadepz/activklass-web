@@ -286,21 +286,19 @@ export default function Login() {
             : settingPassword ? 'Set password and continue' : 'Sign in'}
         </SubmitButton>
 
-        {/* Registration is teacher-only here: students and admins get their
-            accounts from the school, and a parent's account is made in the
-            mobile app (with the link code from their child's Profile), not
-            on the web — so the invite below names who web sign-up is for,
-            and a second line points parents to the app instead. */}
+        {/* T-114: registration used to be explained in two lines here — one
+            naming the teacher path, one routing a parent to the mobile app
+            instead, because a parent's account is made there (with the link
+            code from their child's Profile), never on the web. That second
+            line is now redundant: /register itself offers a Parent card
+            (step 1) that leads straight to the install QR, so this link no
+            longer needs to cover for a sign-up form with no parent path. */}
         {!settingPassword && (
           <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
-            A teacher signing up on your own?{' '}
+            New here?{' '}
             <Link to="/register" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Create an account
+              Create Account
             </Link>
-            <br />
-            A parent or guardian? Create your account in the ActivKlass mobile app with the
-            link code from your child&rsquo;s Profile, then sign in here or there with the
-            same email and password.
           </div>
         )}
       </form>

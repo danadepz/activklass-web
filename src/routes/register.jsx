@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import QRCode from 'qrcode'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword } from 'firebase/auth'
@@ -30,9 +31,18 @@ import AuthLayout, {
   AuthNotice,
 } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
-import { navy, gold, goldDeep, muted, blue, blueText } from '@/theme'
-import { BookOpen, Users, Check } from '@/components/icons'
+import { navy, gold, goldDeep, muted, blue, blueText, violet, violetDeep } from '@/theme'
+import { BookOpen, Users, ShieldCheck, Check } from '@/components/icons'
 import { ID_TYPES } from '@/routes/pending-verification'
+
+// T-114 (triplecookiemonster-142): where the sign-up chooser's Parent card
+// leads. The app itself ships as a standalone APK on GitHub Releases, not
+// an app-store listing (TESTER_APK_AND_MIRRORING_GUIDE.txt) -- a tester
+// path, not a parent path, which is why this stays demo-only (owner's call,
+// 2026-10-03) until a real store listing exists. Per the same decision this
+// points at the release PAGE, not the raw .apk, and at `/releases/latest`
+// rather than a pinned tag, so the link never goes stale as new builds ship.
+const MOBILE_APP_RELEASE_URL = 'https://github.com/danadepz/activklass-mobile/releases/latest'
 
 const FRIENDLY_ERRORS = {
   // Only ever reached once signing in with the same password has also been
@@ -471,20 +481,25 @@ export default function Register() {
     setStep('sent')
   }
 
+  const gettingApp = step === 'qr'
   const title = completing
     ? 'One more step'
     : sent
       ? 'Request sent'
-      : 'Create your ActivKlass account'
+      : gettingApp
+        ? 'Get the ActivKlass app'
+        : 'Create your ActivKlass account'
   const subtitle = completing
     ? 'Complete your profile to finish setting up your account.'
     : sent
       ? null
-      : choosing
-        ? 'Who is this account for?'
-        : kind === 'institution'
-          ? 'Create your account, tell us about your school, and we set it up with you.'
-          : 'Set up your teacher account and start managing your classes.'
+      : gettingApp
+        ? 'Parent and guardian accounts are made in the mobile app.'
+        : choosing
+          ? 'Who is this account for?'
+          : kind === 'institution'
+            ? 'Create your account, tell us about your school, and we set it up with you.'
+            : 'Set up your teacher account and start managing your classes.'
 
   return (
     <AuthLayout
@@ -531,8 +546,21 @@ export default function Register() {
               heading="Institution"
               body="Set up your school’s subscription — you’ll be its admin and issue every teacher’s and student’s login"
             />
+            {/* T-114: a parent's account is made in the mobile app, never on
+                the web, so this card does not join the stepped form below —
+                it jumps straight to the install QR, in the same click that
+                selects it. No web account is ever created through it. */}
+            <ChoiceCard
+              selected={kind === 'parent'}
+              onClick={() => { setKind('parent'); setStep('qr') }}
+              icon={ShieldCheck}
+              tint={violet}
+              tintText={violetDeep}
+              heading="Parent"
+              body="Get the ActivKlass mobile app — your account is made there, with the link code from your child’s Profile"
+            />
           </div>
-          <SubmitButton type="button" disabled={!kind} onClick={() => setStep(2)}>
+          <SubmitButton type="button" disabled={!kind || kind === 'parent'} onClick={() => setStep(2)}>
             Continue
           </SubmitButton>
 
@@ -544,6 +572,8 @@ export default function Register() {
           </div>
           <Progress steps={steps} current={1} />
         </div>
+      ) : gettingApp ? (
+        <ParentAppQr onBack={() => setStep(1)} />
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {completing && (
@@ -1040,5 +1070,68 @@ function ChoiceCard({ selected, onClick, icon: Icon, tint, tintText, heading, bo
         <span style={{ fontSize: 13, color: muted, lineHeight: 1.4 }}>{body}</span>
       </span>
     </button>
+  )
+}
+
+// T-114: where the Parent card on step 1 lands. Nothing here ever touches
+// Firebase or writes a profile -- a parent's account is made in the mobile
+// app, with the link code from their child's Profile, never on the web. The
+// QR is generated client-side from MOBILE_APP_RELEASE_URL (qrcode package,
+// no network call) and the same URL is printed as plain text underneath --
+// a tester mirroring this screen through scrcpy is looking at the phone
+// that would be scanning it, so it cannot scan itself.
+function ParentAppQr({ onBack }) {
+  const [svg, setSvg] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    QRCode.toString(MOBILE_APP_RELEASE_URL, { type: 'svg', margin: 1, width: 220, color: { dark: navy, light: '#FFFFFF' } })
+      .then((markup) => { if (!cancelled) setSvg(markup) })
+      .catch(() => {}) // the plain-text link below still works if this fails
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
+      <AuthNotice>
+        Your account is made in the app, not here. Scan the code below, install
+        ActivKlass, and sign up there with the link code from your child’s Profile.
+      </AuthNotice>
+      <div
+        role="img"
+        aria-label="QR code linking to the ActivKlass mobile app on GitHub Releases"
+        style={{ width: 220, height: 220, display: 'grid', placeItems: 'center' }}
+      >
+        {svg
+          ? <span dangerouslySetInnerHTML={{ __html: svg }} />
+          : <span style={{ color: muted, fontSize: 13 }}>Loading…</span>}
+      </div>
+      <p style={{ fontSize: 13, color: muted, lineHeight: 1.5, maxWidth: 320, margin: 0 }}>
+        Can’t scan it? Open this address on your phone instead:
+        <br />
+        <a
+          href={MOBILE_APP_RELEASE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: navy, fontWeight: 700, wordBreak: 'break-all' }}
+        >
+          {MOBILE_APP_RELEASE_URL}
+        </a>
+      </p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="transition hover:opacity-70"
+        style={{ fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}
+      >
+        ← Back
+      </button>
+      <div style={{ textAlign: 'center', fontSize: 14, color: muted }}>
+        Already have an account?{' '}
+        <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
+          Sign in
+        </Link>
+      </div>
+    </div>
   )
 }

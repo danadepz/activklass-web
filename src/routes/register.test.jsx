@@ -532,3 +532,80 @@ describe('T-118 — the step counter never exceeds its own total', () => {
     expect(html({ steps, current: 2 })).toContain('Step 2 of 3')
   })
 })
+
+/* T-114 (triplecookiemonster-142, Kristine 2026-10-01; unblocked 2026-10-03
+   once the owner answered the two questions the card was waiting on — the
+   QR points at the GitHub release PAGE, not the raw .apk, and at
+   `/releases/latest` rather than a pinned tag; and this stays demo-only, not
+   built for real guardians, since a GitHub APK sits behind an
+   unknown-sources warning a real parent should never see).
+
+   The old login.jsx disclaimer carried two lines: a teacher invite, and a
+   second line routing a parent to the mobile app because there was nowhere
+   on the web for them to go. That second line is gone from login.jsx (see
+   login.test.jsx) because /register now HAS somewhere for a parent to go —
+   a third chooser card that leads straight to an install QR, never into the
+   stepped sign-up form a teacher walks. "Never creates a web account" is
+   structural, not a validation rule: the Parent card's onClick is a
+   different function from chooseKind (which is what feeds the stepped
+   form), and ParentAppQr renders no <form>, no Firebase import, nothing an
+   account could be made from.
+
+   Read off the source for the same reason every other deep-state block in
+   this file is: reaching step 'qr' needs a click this file's static renders
+   cannot simulate (no DOM here -- vitest runs under Node, not jsdom). What
+   IS reachable by a static render -- the card itself, at step 1 -- is
+   checked by render instead of by source, same as the Institution and
+   Individual cards above it. */
+describe('T-114 — a Parent card leads straight to the mobile-app install QR, never a web account', () => {
+  it('the Parent card is offered at step 1, saying the account is made in the app', () => {
+    const html = step1()
+    expect(html).toContain('Parent')
+    expect(html).toMatch(/Get the ActivKlass mobile app/)
+    expect(html).toMatch(/your child.s Profile/)
+  })
+
+  it('clicking Parent jumps straight to the QR step -- no Continue click needed, no chooseKind call', () => {
+    expect(registerSource).toMatch(/onClick=\{\(\) => \{ setKind\('parent'\); setStep\('qr'\) \}\}/)
+    // chooseKind is what feeds the stepped teacher form (:next, position
+    // seeding, "Continue" to step 2) -- the Parent card must never call it.
+    const parentCardAt = registerSource.indexOf("heading=\"Parent\"")
+    const cardStart = registerSource.lastIndexOf('<ChoiceCard', parentCardAt)
+    const cardEnd = registerSource.indexOf('/>', parentCardAt)
+    const parentCard = registerSource.slice(cardStart, cardEnd)
+    expect(parentCard).not.toMatch(/chooseKind/)
+  })
+
+  it('step "qr" renders the install screen before the stepped form is ever reached', () => {
+    const gettingAppAt = registerSource.indexOf('gettingApp ? (')
+    const formAt = registerSource.indexOf('<form onSubmit={handleSubmit}')
+    expect(gettingAppAt).toBeGreaterThan(-1)
+    expect(formAt).toBeGreaterThan(-1)
+    expect(gettingAppAt).toBeLessThan(formAt)
+    expect(registerSource).toMatch(/const gettingApp = step === 'qr'/)
+  })
+
+  it('the install screen writes nothing -- no form, no Firebase call, no input', () => {
+    const at = registerSource.indexOf('function ParentAppQr(')
+    const end = registerSource.indexOf('\n}\n', at)
+    const body = registerSource.slice(at, end)
+    expect(body).not.toMatch(/<form/)
+    expect(body).not.toMatch(/<input/)
+    expect(body).not.toMatch(/createUserWithEmailAndPassword|setDoc|addDoc/)
+  })
+
+  it('points at the release PAGE on /releases/latest, per the owner’s decision -- not the raw .apk, not a pinned tag', () => {
+    expect(registerSource).toMatch(
+      /MOBILE_APP_RELEASE_URL = 'https:\/\/github\.com\/danadepz\/activklass-mobile\/releases\/latest'/,
+    )
+    expect(registerSource).not.toMatch(/releases\/download/)
+    expect(registerSource).not.toMatch(/releases\/tag\/v1\.0\.0-demo/)
+  })
+
+  it('prints the URL as readable text, not only as the QR -- a tester mirroring the screen cannot scan it', () => {
+    const at = registerSource.indexOf('function ParentAppQr(')
+    const end = registerSource.indexOf('\n}\n', at)
+    const body = registerSource.slice(at, end)
+    expect(body).toMatch(/\{MOBILE_APP_RELEASE_URL\}/)
+  })
+})

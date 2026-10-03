@@ -2,12 +2,17 @@
  * T-66 (triplecookiemonster-85): a parent holding their child's link code
  * came to the web sign-in page looking for where to make an account and found
  * only "A teacher signing up on your own? Create an account". Guardian sign-up
- * is the mobile app by design (ParentOnMobile, App.jsx), so the fix is not a
- * web form -- it is a line under the teacher invite that says where to go.
+ * is the mobile app by design (ParentOnMobile, App.jsx), so the original fix
+ * was not a web form -- it was a line under the teacher invite that said
+ * where to go.
  *
- * Pinned: the parent line is on the signed-out page, names the mobile app and
- * the link code, and does not turn into a web sign-up link (the one thing the
- * card said must not be built).
+ * T-114 (triplecookiemonster-142) folded that two-line disclaimer into one
+ * "Create Account" link, because /register itself now offers a Parent card
+ * (step 1) that leads straight to the mobile-app install QR -- the one place
+ * that used to carry the parent instructions, "second line" and all. What
+ * this file still pins: the single link still goes signed-out teachers (and
+ * now parents) to /register, and -- same rule as before, same reason -- it
+ * is still never a web sign-up link for a parent or guardian directly.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
@@ -36,17 +41,17 @@ describe('T-66 — the sign-in page tells a parent where their account is made',
   const html = renderToStaticMarkup(<Login />)
   const page = text(html)
 
-  it('still invites a teacher to register on the web', () => {
-    expect(page).toContain('A teacher signing up on your own? Create an account')
+  it('invites anyone signed out -- teacher or parent -- to one Create Account link', () => {
+    expect(page).toContain('New here? Create Account')
     expect(html).toMatch(/href="\/register"/)
   })
 
-  it('has a parent line naming the mobile app and the link code from the child', () => {
-    expect(page).toMatch(/A parent or guardian\? Create your account in the ActivKlass mobile app with the link code from your child's Profile/)
-    expect(page).toMatch(/same email and password/)
+  it('no longer carries the old two-line disclaimer -- that instruction now lives behind the Parent card on /register', () => {
+    expect(page).not.toMatch(/A teacher signing up on your own/)
+    expect(page).not.toMatch(/A parent or guardian\? Create your account in the ActivKlass mobile app/)
   })
 
-  it('does not send a parent to a web sign-up (guardians register in the app)', () => {
+  it('still never sends a parent straight to a web sign-up -- there is exactly one link, and it is /register', () => {
     expect(html).not.toMatch(/href="[^"]*(parent|guardian)[^"]*"/i)
     expect(html.match(/href="\/register[^"]*"/g) ?? []).toEqual(['href="/register"'])
   })
