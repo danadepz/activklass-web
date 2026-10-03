@@ -230,29 +230,32 @@ const TODAY_ISO = new Date().toISOString().slice(0, 10)
 /* Shared roster field inputs (ID Number, Middle Name, Course, Year, Remarks,
    enrollment status, LRN, birthdate). Last/first name come from the account. */
 /**
- * Show a failure in the banner AND as a toast.
+ * Show a failure in the banner.
  *
- * This file has the most fail() sites in the codebase and three scroll
- * containers, and none of it toasted. Each banner renders at the top of its
- * modal while the button that triggers it sits below the fields, so a teacher
- * could press Add, watch the button return to its idle label, and never see
- * the reason -- it rendered somewhere they had already scrolled past.
+ * Toasted too, until T-120 (triplecookiemonster-151): a teacher pressed Add,
+ * got told why in the banner above the fields, and read the identical
+ * sentence again a second later in a toast -- redundant, and Kristine's
+ * instinct to keep only the inline one ("mas better tong isa na within the
+ * field lang") is the owner's call, not this file's.
  *
- * That is the shape behind two walkthrough reports: "cannot add a student
- * manually" and "can find a registered student but cannot add them". The
- * refusals were firing. They were not where anyone was looking.
+ * The toast existed for a real reason and removing it brings that reason
+ * back rather than resolving it: this file has the most fail() sites in the
+ * codebase and three scroll containers, each banner renders at the top of
+ * its modal while the button that triggers it sits below the fields, and on
+ * a short viewport a teacher who scrolled down to press Add could see the
+ * button return to its idle label without ever seeing why (two 2026-08
+ * walkthrough reports -- "cannot add a student manually", "can find a
+ * registered student but cannot add them" -- were exactly this). Noted here
+ * rather than quietly re-solved with a bigger change nobody asked for; if
+ * that gap reopens in practice, it is a new card, not a reason to keep
+ * reporting every refusal twice in the meantime.
  *
- * Toasting rather than moving the banner is deliberate. Relocating it only
- * moves the assumption about what fits on screen, and that assumption breaks
- * again the next time someone adds a field. A toast is viewport-independent
- * and stays correct without anyone reasoning about layout.
- *
- * null clears the banner without toasting: that is a reset, not a failure.
+ * null clears the banner without anything to show: that is a reset, not a
+ * failure.
  */
-function failWith(setError) {
+export function failWith(setError) {
   return (message) => {
     setError(message)
-    if (message) toast.error(message)
   }
 }
 
