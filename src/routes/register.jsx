@@ -47,15 +47,11 @@ const FRIENDLY_ERRORS = {
 // ids never look like this, so it cannot collide with a real directory entry.
 const NEW_SCHOOL = '__add_new_school__'
 
-// Gender, not pronouns: the list used to read He / She / Others, which is
-// the pronoun wearing the wrong label (T-51). Custom reveals a text box for
-// whatever the person wants to write, kept optional. Nothing in the product
-// reads the stored value yet, so the values changed with the labels.
-const GENDERS = [
-  { value: 'female', label: 'Female' },
-  { value: 'male', label: 'Male' },
-  { value: 'custom', label: 'Custom' },
-]
+// T-109: Gender was collected here but nothing in the product ever read the
+// stored value (T-51 had already fixed the list itself — He/She/Others, the
+// pronoun wearing the wrong label — before this card dropped the field
+// outright). Removed along with its write; existing profiles that already
+// carry `gender` / `gender_custom` are untouched.
 const SCHOOL_TYPES = [
   { value: 'private', label: 'Private school' },
   { value: 'public', label: 'Public school' },
@@ -66,17 +62,14 @@ const POSITIONS = [
   { value: 'dean', label: 'Dean' },
   { value: 'admin', label: 'Admin' },
 ]
-// The institution path exists to set the school up, and whoever walks it
-// becomes its admin. Anyone below these is probably a teacher who picked the
-// wrong card on step 1 (T-31, T-32) — the Position field says so, gently.
-const LEADERSHIP_POSITIONS = new Set(['program_chair', 'dean', 'admin'])
 
 // Which positions a path offers. A school admin is only ever made by the
 // ActivKlass team when a school request is approved — a self-registered
 // account is always a teacher, and the rules refuse 'admin' — so on the
 // individual path "Admin" would record a position nothing reads and
 // contradict what the account is (T-52). The institution path keeps all
-// four: that is where the nudge above needs them. Exported for the test.
+// four, though T-109 locks the rendered field to 'admin' there — see the
+// Position field in step 3 below. Exported for the test.
 export function positionsFor(kind) {
   return kind === 'institution' ? POSITIONS : POSITIONS.filter((p) => p.value !== 'admin')
 }
@@ -145,9 +138,16 @@ export default function Register() {
   const [kind, setKind] = useState(completing ? 'individual' : preset)
   // Switching cards drops a position the new path does not offer, so Back
   // to the chooser and over to Individual cannot carry "Admin" through.
+  // Institution locks to Admin outright (T-109) — whoever sets a school up
+  // is its admin, so there is nothing to ask.
   function chooseKind(next) {
     setKind(next)
-    setForm((f) => (positionsFor(next).some((p) => p.value === f.position) ? f : { ...f, position: '' }))
+    setForm((f) => ({
+      ...f,
+      position: next === 'institution'
+        ? 'admin'
+        : (positionsFor(next).some((p) => p.value === f.position) ? f.position : ''),
+    }))
   }
   // 1 = chooser, 2…N = the steps in STEPS[kind], 'sent' = request confirmed.
   const [step, setStep] = useState(completing || preset ? 2 : 1)
@@ -156,8 +156,6 @@ export default function Register() {
     firstName: '',
     middleName: '',
     lastName: '',
-    gender: '',
-    genderCustom: '',
     phone: '',
     schoolId: '',
     newSchoolName: '',
@@ -165,7 +163,7 @@ export default function Register() {
     campus: '',
     schoolType: '',
     calendar: '',
-    position: '',
+    position: preset === 'institution' ? 'admin' : '',
     email: '',
     password: '',
     confirm: '',
@@ -219,7 +217,6 @@ export default function Register() {
         nameError(form.firstName, { label: 'First name' }) ||
         nameError(form.middleName, { label: 'Middle name', required: false }) ||
         nameError(form.lastName, { label: 'Last name' }) ||
-        (form.gender ? '' : 'Select your gender.') ||
         phoneError(form.phone)
       )
     }
@@ -289,8 +286,6 @@ export default function Register() {
       first_name: form.firstName.trim(),
       ...(form.middleName.trim() && { middle_name: form.middleName.trim() }),
       last_name: form.lastName.trim(),
-      gender: form.gender,
-      ...(form.gender === 'custom' && form.genderCustom.trim() && { gender_custom: form.genderCustom.trim() }),
       phone: form.phone.trim(),
       school_name: addingSchool ? form.newSchoolName.trim() : (school?.name ?? ''),
       school_type: form.schoolType,
@@ -489,7 +484,7 @@ export default function Register() {
         ? 'Who is this account for?'
         : kind === 'institution'
           ? 'Create your account, tell us about your school, and we set it up with you.'
-          : 'For teachers signing up on their own. Start managing your class records in minutes.'
+          : 'Set up your teacher account and start managing your classes.'
 
   return (
     <AuthLayout
@@ -582,19 +577,6 @@ export default function Register() {
                   <input id="reg-phone" className="ak-input" type="tel" required autoComplete="tel" placeholder="0917 123 4567" value={form.phone} onChange={set('phone')} style={authInputStyle} />
                 </Field>
               </div>
-              <div className="grid gap-3.5 md:grid-cols-2">
-                <Field id="reg-gender" label="Gender">
-                  <select id="reg-gender" className="ak-input" required value={form.gender} onChange={set('gender')} style={selectStyle(form.gender)}>
-                    <option value="" disabled>Select</option>
-                    {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-                  </select>
-                </Field>
-                {form.gender === 'custom' && (
-                  <Field id="reg-gender-custom" label="Your gender" hint="optional">
-                    <input id="reg-gender-custom" className="ak-input" maxLength={40} placeholder="In your own words" value={form.genderCustom} onChange={set('genderCustom')} style={authInputStyle} />
-                  </Field>
-                )}
-              </div>
             </>
           )}
 
@@ -608,7 +590,7 @@ export default function Register() {
                   {schools.map((s) => (
                     <option key={s.id} value={s.id}>{s.name} ({s.abbreviation})</option>
                   ))}
-                  <option value={NEW_SCHOOL}>My school isn’t listed — add it</option>
+                  <option value={NEW_SCHOOL}>My school isn’t listed</option>
                 </select>
                 {addingSchool && (
                   <div className="grid gap-3.5 md:grid-cols-[1fr_140px]" style={{ marginTop: 12 }}>
@@ -630,7 +612,7 @@ export default function Register() {
                 <Field id="reg-campus" label="Campus" hint="optional">
                   <input id="reg-campus" className="ak-input" maxLength={80} placeholder="Main campus" value={form.campus} onChange={set('campus')} style={authInputStyle} />
                 </Field>
-                <Field id="reg-school-type" label="Private or public">
+                <Field id="reg-school-type" label="School type">
                   <select id="reg-school-type" className="ak-input" required value={form.schoolType} onChange={set('schoolType')} style={selectStyle(form.schoolType)}>
                     <option value="" disabled>Select</option>
                     {SCHOOL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -645,11 +627,21 @@ export default function Register() {
                   </select>
                 </Field>
                 <Field id="reg-position" label="Position">
-                  <select id="reg-position" className="ak-input" required value={form.position} onChange={set('position')} style={selectStyle(form.position)}>
-                    <option value="" disabled>Select</option>
-                    {positionsFor(kind).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
-                  <WrongPathNudge kind={kind} position={form.position} />
+                  {kind === 'institution' ? (
+                    <>
+                      <select id="reg-position" className="ak-input" disabled value="admin" style={selectStyle(true)}>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
+                        Whoever sets up a school’s subscription is its admin.
+                      </p>
+                    </>
+                  ) : (
+                    <select id="reg-position" className="ak-input" required value={form.position} onChange={set('position')} style={selectStyle(form.position)}>
+                      <option value="" disabled>Select</option>
+                      {positionsFor(kind).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
+                  )}
                 </Field>
               </div>
             </>
@@ -896,18 +888,6 @@ export function signedInAsSomeoneElse(sessionEmail, formEmail) {
   const typed = String(formEmail ?? '').trim().toLowerCase()
   if (!session || session === typed) return ''
   return `You’re signed in as ${session}. Sign out to create a different account.`
-}
-
-// Exported so the rule itself can be tested: the nudge renders three steps
-// into a flow no static render reaches, and the person who needs it (T-31,
-// T-32) is the one who never gets that far on purpose.
-export function WrongPathNudge({ kind, position }) {
-  if (kind !== 'institution' || !position || LEADERSHIP_POSITIONS.has(position)) return null
-  return (
-    <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
-      Just here to teach? Individual is the faster path — go back a step.
-    </p>
-  )
 }
 
 // A link-shaped Sign out that sits inside a sentence. Signing out leaves the

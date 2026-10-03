@@ -13,12 +13,10 @@
  * Static markup, the house pattern (PendingSchoolRequestNotice.test.jsx is
  * the model). Step 1 is the initial state, so no interaction is needed.
  *
- * The Faculty nudge on the school step is the same complaint caught later in
- * the walk, and it is covered below. It used to be unreachable from a test —
- * gated on `step` and `form.position`, three steps in, on a predicate that
- * was module-private — so it was lifted into `WrongPathNudge` and the rule is
- * asserted directly, the way PendingSchoolRequestNotice was lifted out of the
- * teacher dashboard for exactly this reason.
+ * The Faculty nudge that used to live on the school step (`WrongPathNudge`)
+ * was retired by T-109: locking Position to Admin on the institution path
+ * means the signal it watched for can never fire again, and the owner chose
+ * retirement over relocating it to step 1. See the T-109 block below.
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -63,7 +61,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
 }))
 
 import { PHONE_IN_USE_ERROR, phoneError } from '@/lib/validation'
-import Register, { Progress, WrongPathNudge, positionsFor, signedInAsSomeoneElse } from './register.jsx'
+import Register, { Progress, positionsFor, signedInAsSomeoneElse } from './register.jsx'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -89,40 +87,6 @@ describe('/register step 1 — choosing a path', () => {
      this is the assertion that should stop it. */
   it('no longer offers the Institution card as the place for a school’s staff', () => {
     expect(step1()).not.toContain('A school and its staff')
-  })
-})
-
-/* The second half of the same complaint: someone who picked Institution and
-   then tells the form they are Faculty is on the wrong path, and step 3 says
-   so before they reach the seats. The rule is "not leadership", not "is
-   faculty" — a position nobody has thought of yet has to nudge too. */
-describe('the Faculty nudge on the school step', () => {
-  const nudge = (props) => renderToStaticMarkup(<WrongPathNudge {...props} />)
-  const SENTENCE = 'Just here to teach? Individual is the faster path'
-
-  it('tells a faculty member on the institution path that Individual is faster', () => {
-    expect(nudge({ kind: 'institution', position: 'faculty' })).toContain(SENTENCE)
-  })
-
-  it('nudges any position that is not one of the three leadership ones', () => {
-    expect(nudge({ kind: 'institution', position: 'registrar' })).toContain(SENTENCE)
-  })
-
-  it('stays quiet for the positions the institution path is actually for', () => {
-    for (const position of ['program_chair', 'dean', 'admin']) {
-      expect(nudge({ kind: 'institution', position })).toBe('')
-    }
-  })
-
-  it('stays quiet before a position is chosen', () => {
-    expect(nudge({ kind: 'institution', position: '' })).toBe('')
-  })
-
-  /* Step 3 renders on both paths, so the kind has to be part of the rule:
-     a solo teacher is already where they should be. */
-  it('stays quiet on the individual path, faculty or not', () => {
-    expect(nudge({ kind: 'individual', position: 'faculty' })).toBe('')
-    expect(nudge({ kind: 'individual', position: 'dean' })).toBe('')
   })
 })
 
@@ -181,9 +145,10 @@ describe('registering while another account is signed in', () => {
 })
 
 /* T-51 (maykel_64440-65): step 2 asks for a middle name (optional, like every
-   student form does) and lists genders, not pronouns. Rendered through the
-   institution preset because that is the one static route to step 2; the
-   fields are the same on both paths. */
+   student form does). Rendered through the institution preset because that
+   is the one static route to step 2; the fields are the same on both paths.
+   T-109 (triplecookiemonster-141 item 2) removed Gender from this step
+   entirely — nothing in the product ever read the stored value. */
 describe('/register step 2 — about you', () => {
   const step2 = () => {
     searchState.current = 'type=institution'
@@ -198,23 +163,19 @@ describe('/register step 2 — about you', () => {
     expect(html.indexOf('reg-middle')).toBeLessThan(html.indexOf('reg-last'))
   })
 
-  it('offers Female / Male / Custom, not pronouns', () => {
+  it('no longer asks for Gender at all', () => {
     const html = step2()
-    for (const label of ['Female', 'Male', 'Custom']) expect(html).toContain(`>${label}</option>`)
-    for (const label of ['He', 'She', 'Others']) expect(html).not.toContain(`>${label}</option>`)
-  })
-
-  /* The Custom text box is revealed on choosing Custom, which a static render
-     cannot do; what it can pin is that the box is not shown before then. */
-  it('keeps the custom gender box hidden until Custom is chosen', () => {
-    expect(step2()).not.toContain('reg-gender-custom')
+    expect(html).not.toContain('reg-gender')
+    expect(html).not.toContain('reg-gender-custom')
+    for (const label of ['Female', 'Male', 'Custom']) expect(html).not.toContain(`>${label}</option>`)
   })
 })
 
 /* T-52 (maykel_64440-66): "Admin" was offered as a Position on the individual
    path, where a self-registered account can only ever be a teacher. The list
-   is now per path; the institution path keeps all four because the Faculty
-   nudge above is decided against them. */
+   is per path; the institution path's four values are unchanged even though
+   T-109 locks the rendered field there to 'admin' — positionsFor still backs
+   the individual path's open select. */
 describe('the Position list, per path', () => {
   const labels = (kind) => positionsFor(kind).map((p) => p.label)
 
@@ -234,6 +195,87 @@ describe('the Position list, per path', () => {
 
   it('leaves the stored values alone', () => {
     expect(positionsFor('institution').map((p) => p.value)).toEqual(['faculty', 'program_chair', 'dean', 'admin'])
+  })
+})
+
+/* T-109 (triplecookiemonster-141 items 2 & 3; triplecookiemonster-142 items
+   6-8, Kristine, 2026-10-01/02). Gender is removed from sign-up outright —
+   nothing in the product ever read the stored value (the comment this card
+   found at the old GENDERS declaration said so plainly). Position locks to
+   Admin on the institution path: whoever sets a school up is its admin, so
+   there is nothing to ask, and the WrongPathNudge signal above is retired
+   rather than relocated (owner's call, 2026-10-03) — locking the field is
+   itself the signal now; a teacher who picks Institution by mistake sees
+   only "Admin" offered and nothing else.
+
+   The Position lock is pinned on its SUBMITTED value, not just that the
+   rendered select carries `disabled`: Position is at step 3, and reaching
+   step 3 needs two Next clicks this file's static renders cannot simulate
+   (the institution preset only reaches step 2, the same limit `WrongPathNudge`
+   existed to work around before it was extracted). Read off the source
+   instead, the way the T-88/T-94/T-82 blocks below do for the same reason —
+   and prove the value, not the attribute: the institution branch has no
+   `onChange` at all (nothing could ever change it away from 'admin'), only
+   one `<option>` exists to select, and BOTH places that decide `kind` ever
+   becomes 'institution' — the initial render from `?type=institution` and
+   clicking the Institution card — seed `position` to 'admin' in the same
+   motion. Together these leave no path to a submission with a position other
+   than 'admin' once the institution card is chosen. */
+describe('T-109 — Gender is gone; Position locks to Admin on the institution path', () => {
+  it('writes no gender or gender_custom to the profile, and the field is gone from the markup', () => {
+    const detailsAt = registerSource.indexOf('function details()')
+    const detailsEnd = registerSource.indexOf('\n  }\n', detailsAt)
+    const details = registerSource.slice(detailsAt, detailsEnd)
+    // The comment above the removed GENDERS list explicitly says existing
+    // profiles keep their stored gender/gender_custom untouched -- so the
+    // absence is checked in the WRITE (details()) and the MARKUP, not the
+    // whole file, which still (rightly) mentions both keys in that comment.
+    expect(details).not.toMatch(/\bgender\b\s*:/)
+    expect(details).not.toMatch(/gender_custom/)
+    expect(registerSource).not.toMatch(/reg-gender/)
+    expect(registerSource).not.toMatch(/\bGENDERS\s*=/)
+  })
+
+  it('seeds Position to admin the moment the institution path is entered by URL', () => {
+    expect(registerSource).toMatch(/position: preset === 'institution' \? 'admin' : ''/)
+  })
+
+  it('seeds Position to admin the moment Institution is chosen from the chooser', () => {
+    expect(registerSource).toMatch(/position: next === 'institution'\s*\n\s*\?\s*'admin'/)
+  })
+
+  it('renders the institution Position field disabled, with admin as the only selectable value and no handler to change it', () => {
+    const fieldAt = registerSource.indexOf('<Field id="reg-position"')
+    const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
+    const field = registerSource.slice(fieldAt, fieldEnd)
+    expect(field).toMatch(/kind === 'institution'/)
+    expect(field).toMatch(/<select id="reg-position"[^>]*\bdisabled\b[^>]*value="admin"/)
+    expect(field).not.toMatch(/<select id="reg-position"[^>]*\bdisabled\b[^>]*onChange/)
+    // exactly one option inside the disabled branch -- admin, and nothing else
+    const disabledBranch = field.slice(0, field.indexOf(') : ('))
+    expect(disabledBranch.match(/<option/g)).toHaveLength(1)
+    expect(disabledBranch).toContain('<option value="admin">Admin</option>')
+  })
+
+  it('leaves the individual path open and still refuses to offer Admin', () => {
+    const fieldAt = registerSource.indexOf('<Field id="reg-position"')
+    const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
+    const field = registerSource.slice(fieldAt, fieldEnd)
+    const individualBranch = field.slice(field.indexOf(') : ('))
+    expect(individualBranch).toMatch(/value={form\.position} onChange={set\('position'\)}/)
+    expect(individualBranch).toMatch(/positionsFor\(kind\)/)
+  })
+
+  it('the three wording fixes land exactly where Kristine found them', () => {
+    expect(registerSource).toContain('My school isn’t listed</option>')
+    expect(registerSource).not.toContain('My school isn’t listed — add it')
+    expect(registerSource).toContain('label="School type"')
+    expect(registerSource).not.toContain('label="Private or public"')
+    expect(registerSource).toContain('Set up your teacher account and start managing your classes.')
+  })
+
+  it('leaves the institution subtitle alone -- only the individual one was reported', () => {
+    expect(registerSource).toContain('Create your account, tell us about your school, and we set it up with you.')
   })
 })
 
