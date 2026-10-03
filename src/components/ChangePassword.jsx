@@ -103,22 +103,13 @@ export default function ChangePassword({ compact = false }) {
 
   return (
     <form onSubmit={submit} style={card}>
-      {/* Icon-chip heading, matching the app-wide card language. */}
-      <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
-        <span
-          aria-hidden="true"
-          style={{ width: compact ? 38 : 44, height: compact ? 38 : 44, borderRadius: 12, background: 'rgba(14,42,92,0.07)', border: `1px solid ${line}`, display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: compact ? 17 : 20 }}
-        >
-          🔒
-        </span>
-        <div>
-          <h2 style={{ ...serif, fontSize: compact ? 18 : 20, color: ink, margin: 0 }}>
-            Change password
-          </h2>
-          <p style={{ fontSize: 13, color: muted, margin: '3px 0 0' }}>
-            Your current password is required to confirm it is you. {PASSWORD_RULE}
-          </p>
-        </div>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ ...serif, fontSize: compact ? 18 : 20, color: ink, margin: 0 }}>
+          Change password
+        </h2>
+        <p style={{ fontSize: 13, color: muted, margin: '3px 0 0' }}>
+          Your current password is required to confirm it is you. {PASSWORD_RULE}
+        </p>
       </div>
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>

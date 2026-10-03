@@ -9,6 +9,7 @@ import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
 import { changePlan, confirmCheckout, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout, toMillis } from '@/lib/subscription'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
+import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
@@ -66,6 +67,30 @@ function Meter({ label, used, total, over }) {
 /* ── Update Profile ─────────────────────────────────────────────── */
 
 /**
+ * What Save profile writes, or the error to show instead -- pulled out of
+ * the submit handler so it can be tested without rendering (T-112): the
+ * trap in a form-save test is asserting the input renders rather than that
+ * the typed value reaches the write, so this pure function IS the write.
+ * middle_name is optional and nulled (not omitted) when blank, so clearing
+ * an existing middle name on save actually clears it rather than leaving
+ * the old value in place.
+ */
+export function profileUpdatePayload(form) {
+  if (!form.first_name.trim() || !form.last_name.trim()) {
+    return { error: 'First and last name are required.' }
+  }
+  const middleNameMsg = nameError(form.middle_name, { label: 'Middle name', required: false })
+  if (middleNameMsg) return { error: middleNameMsg }
+  return {
+    fields: {
+      first_name: form.first_name.trim(),
+      middle_name: form.middle_name.trim() || null,
+      last_name: form.last_name.trim(),
+    },
+  }
+}
+
+/**
  * Name, sign-in, and -- for a teacher who registered on their own -- the ID
  * number they registered with (T-49). The number was checked by a person at
  * approval and is display only: it sits beside the email, greyed, and never
@@ -75,6 +100,7 @@ export function ProfileCard() {
   const { profile, refreshProfile } = useAuth()
   const [form, setForm] = useState({
     first_name: profile.first_name ?? '',
+    middle_name: profile.middle_name ?? '',
     last_name: profile.last_name ?? '',
   })
   const [msg, setMsg] = useState('')
@@ -95,10 +121,11 @@ export function ProfileCard() {
 
   function submit(e) {
     e.preventDefault()
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setMsg(''); setErr('First and last name are required.'); return
+    const result = profileUpdatePayload(form)
+    if (result.error) {
+      setMsg(''); setErr(result.error); return
     }
-    mut.mutate({ first_name: form.first_name.trim(), last_name: form.last_name.trim() })
+    mut.mutate(result.fields)
   }
 
   return (
@@ -115,6 +142,11 @@ export function ProfileCard() {
           First name
           <input style={{ ...field, marginTop: 6 }} value={form.first_name}
                  onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} />
+        </label>
+        <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+          Middle name <span style={{ color: muted, fontWeight: 400 }}>(optional)</span>
+          <input style={{ ...field, marginTop: 6 }} value={form.middle_name}
+                 onChange={(e) => setForm((f) => ({ ...f, middle_name: e.target.value }))} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
           Last name
