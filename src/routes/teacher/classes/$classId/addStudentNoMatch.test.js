@@ -75,9 +75,13 @@ const solo = (needle, loginExample = '') =>
 const issued = (needle, loginExample = '') =>
   noMatchMessage(needle, { schoolIssued: true, school: SCHOOL, loginExample })
 
-/* The two sentences that shipped before this fix. Reproduced verbatim on
-   purpose: they must still be reachable, unchanged, for every other input. */
-const OLD_SOLO = 'No student account matches that ID. Use "Create New Manually" to add them yourself.'
+/* The two sentences every other input must still get, word for word. OLD_SOLO
+   was reworded by T-121 (triplecookiemonster-155, 2026-10-02) to drop the
+   false "matches" and to say "Create New" rather than "Create New Manually"
+   -- the tab T-119 renamed the same day -- but the guarantee this describes
+   (every shape but a login tail gets the SAME sentence, unchanged by what was
+   typed) is exactly as true of the new wording as the old. */
+const OLD_SOLO = 'No student account found for this ID. Try again or select "Create New."'
 const OLD_ISSUED =
   'No student account matches that ID. Ask your school admin (registrar@sanroque.edu.ph) ' +
   'to create the account, then add the student here.'
@@ -123,10 +127,10 @@ describe('the message a login tail gets (T-44)', () => {
 })
 
 describe('both kinds of teacher keep advice they can act on (T-44)', () => {
-  it('a solo subscriber is still offered Create New Manually', () => {
+  it('a solo subscriber is still offered Create New', () => {
     // Without this the new message is a dead end for a student who genuinely
     // has no account yet.
-    expect(solo('231525')).toContain('Create New Manually')
+    expect(solo('231525')).toContain('Create New')
   })
 
   it('a school-issued teacher is sent to their admin, never told to create it', () => {
@@ -135,7 +139,7 @@ describe('both kinds of teacher keep advice they can act on (T-44)', () => {
     const msg = issued('231525', 'srnhs-231525')
     expect(msg).toContain('ask your school admin')
     expect(msg).toContain('registrar@sanroque.edu.ph')
-    expect(msg, 'a school-issued teacher was told to create the account').not.toContain('Create New Manually')
+    expect(msg, 'a school-issued teacher was told to create the account').not.toContain('Create New')
   })
 
   it('names no admin address when the school has not published one', () => {

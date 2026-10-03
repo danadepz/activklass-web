@@ -115,6 +115,15 @@ function identifierError(fields, identifierType) {
   return key === 'lrn' ? 'LRN is required.' : 'ID Number is required.'
 }
 
+/* T-121 (triplecookiemonster-152): `login_id ?? email` surfaces the synthetic
+   ...@activklass.internal address whenever a student has no login_id --
+   invented only so Firebase Auth can key a login-ID account, and it
+   receives no mail. A teacher reading it here would reasonably expect
+   contact details. Show their ID number instead, or nothing. */
+export function displayIdentifier(acct) {
+  return acct.student_number || acct.lrn || ''
+}
+
 /* T-22: Year and Program used to be typed by hand on every roster form.
    Year is a closed list of seventeen values (yearLevelError above), so it is
    now a <select> showing only the half this class belongs to, pre-set to the
@@ -450,12 +459,15 @@ function noMatchMessage(needle, { schoolIssued, school, loginExample }) {
   if (!BARE_ID_DIGITS.test(needle)) {
     return schoolIssued
       ? `No student account matches that ID. Ask your school admin${adminSuffix(school)} to create the account, then add the student here.`
-      : 'No student account matches that ID. Use "Create New Manually" to add them yourself.'
+      // T-121 (triplecookiemonster-155): Kristine's wording, verbatim -- the
+      // tab name is "Create New" now (T-119 dropped "Manually" once
+      // "Individual" already said that), so the quote follows the rename.
+      : 'No student account found for this ID. Try again or select "Create New."'
   }
   const fromLogin = loginExample ? `a login like ${loginExample}` : 'a login ID'
   const noAccountYet = schoolIssued
     ? `ask your school admin${adminSuffix(school)} to create the account`
-    : 'use "Create New Manually" to add them yourself'
+    : 'use "Create New" to add them yourself'
   return (
     `No student matches ${needle} exactly. If that came from ${fromLogin}, it is only the tail of their ` +
     `ID number — search the full number instead, shown under their name on the Students list, or add ` +
@@ -742,8 +754,12 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
           </div>
           <div>
             <label style={labelStyle}>Birthdate <span className="text-red-500">*</span></label>
+            {/* T-121 (triplecookiemonster-157): the visible helper under this
+                field is gone -- Birthdate is already marked required, so it
+                said nothing a teacher didn't already know. The roster's own
+                tooltip on an existing student missing one (:title below)
+                is a different thing and stays. */}
             <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
-            <BirthdateHint />
           </div>
         </div>
 
@@ -859,7 +875,9 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                   <div className="border border-slate-200 rounded-lg p-4 space-y-4">
                     <p className="font-medium text-slate-800">
                       {student.last_name}, {student.first_name}
-                      <span className="text-slate-400 font-normal"> · {student.login_id ?? student.email}</span>
+                      {displayIdentifier(student) && (
+                        <span className="text-slate-400 font-normal"> · {displayIdentifier(student)}</span>
+                      )}
                     </p>
                     {renderRosterFields(findFields, setFindFields, findIdentifierType, setFindIdentifierType)}
                     <div className="pt-2 flex flex-col gap-2">
@@ -894,7 +912,11 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
             ) : (
               <form onSubmit={createStudent} className="space-y-4">
                 <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                  Creates the student's sign-in account and adds them to this class. They start on the password <code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code> — nothing is emailed, so pass it on yourself and have them change it.
+                  {/* T-121 (triplecookiemonster-156): shortened only because
+                      the hand-it-over instruction this used to carry now
+                      lives in announceLogins()'s post-create success
+                      message instead -- either both change, or neither. */}
+                  Creates the student's account and adds them to this class. A temporary password (<code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code>) will be assigned.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1419,7 +1441,9 @@ export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onD
                     <span style={{ color: ink }}>
                       {m.account.last_name}, {m.account.first_name}
                       {kept ? ` ${kept}` : saving ? ` ${m.middle_name.trim()}` : ''}
-                      <span style={{ color: faint }}> · {m.account.login_id ?? m.account.email}</span>
+                      {displayIdentifier(m.account) && (
+                        <span style={{ color: faint }}> · {displayIdentifier(m.account)}</span>
+                      )}
                       {saving && <span style={{ color: faint }}> · middle name will be saved</span>}
                     </span>
                     <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
@@ -1857,7 +1881,12 @@ export default function ClassDetailPage() {
                         {s.last_name}, {s.first_name}
                         {s.middle_name ? ` ${s.middle_name}` : ''}
                       </p>
-                      <p className="text-xs text-slate-400">{s.email}</p>
+                      {/* T-121 (triplecookiemonster-152): this used to print
+                          {s.email} bare, which could be the synthetic
+                          ...@activklass.internal address -- invented only so
+                          Firebase Auth can key a login-ID account, and it
+                          receives no mail. The ID No. column already shows
+                          the identifier, so nothing is shown here instead. */}
                       {/* T-50: a student without a birthdate cannot set up
                           guardian access, and their profile tells them to ask
                           their teacher. Opens Edit, where the field is. */}
