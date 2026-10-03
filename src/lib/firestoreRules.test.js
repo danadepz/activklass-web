@@ -987,3 +987,72 @@ describe('task_submissions · the student hands in their own, the class reads', 
     await assertFails(deleteDoc(doc(ctx(OTHER_STUDENT), 'task_submissions', `task-pub_${OTHER_STUDENT}`)))
   })
 })
+
+/* T-125 (2026-10-03): the admin-creation closure (T-113 follow-up, commit
+ * b9f9a9f) wrapped every isAdmin() guardian check in adminCannotGrantAdmin(),
+ * which reads request.resource.data.role. On a delete request.resource is
+ * null, so the read crashes → PERMISSION_DENIED. Guardian documents have no
+ * role field anyway — the guard belongs only on users/{uid}, where role lives.
+ * Fix: plain isAdmin() on all four guardian call sites. These tests pin that
+ * the regression is gone and that the admin-escalation block on users is
+ * still intact. */
+describe('T-125 — admin guardian access restored; role-escalation block untouched', () => {
+  const GUARDIAN = 'guardian-1'
+  const LINK_ID = `${STUDENT}_${GUARDIAN}`
+  const CODE = 'abc123'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin' })
+      await setDoc(doc(db, 'guardian_codes', CODE), {
+        student_uid: STUDENT,
+        is_minor: true,
+      })
+      await setDoc(doc(db, 'guardian_links', LINK_ID), {
+        student_uid: STUDENT,
+        guardian_uid: GUARDIAN,
+        status: 'approved',
+        is_minor: true,
+        scopes: { can_view_grades: true, can_view_quiz_scores: true, can_view_attendance: true, can_view_analytics: true },
+      })
+    })
+  })
+
+  it('an admin can read a guardian link (was broken by T-125)', async () => {
+    await assertSucceeds(getDoc(doc(ctx(ADMIN), 'guardian_links', LINK_ID)))
+  })
+
+  it('an admin can update a guardian link — e.g. revoke a guardian (was broken by T-125)', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'guardian_links', LINK_ID), {
+      status: 'approved',
+      scopes: { can_view_grades: false, can_view_quiz_scores: false, can_view_attendance: false, can_view_analytics: false },
+    }))
+  })
+
+  it('an admin can delete a guardian link — full revocation (was broken by T-125)', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(ADMIN), 'guardian_links', LINK_ID)))
+  })
+
+  it('an admin can delete a guardian code — rotation (was broken by T-125)', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(ADMIN), 'guardian_codes', CODE)))
+  })
+
+  /* The admin-escalation block on users/{uid} must be unchanged — writing
+   * role:'admin' onto a non-admin must still be denied. This is the most
+   * important regression check: the fix must not open that door. */
+  it('an admin still cannot escalate another user to admin on users/{uid}', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R' })
+    })
+    await assertFails(
+      updateDoc(doc(ctx(ADMIN), 'users', TEACHER), { role: 'admin' })
+    )
+  })
+
+  it('an admin can still edit non-role fields on a user document', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(ADMIN), 'users', TEACHER), { first_name: 'Updated' })
+    )
+  })
+})
