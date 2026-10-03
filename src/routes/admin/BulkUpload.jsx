@@ -7,12 +7,10 @@ import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
-import { CREATABLE_ROLES, MIN_PASSWORD, card, btnPrimary, btnGhost, th } from './ui'
+import { CREATABLE_ROLES, MIN_PASSWORD, btnPrimary, btnGhost, th } from './ui'
 import { accountsNamed, accountWithEmail, accountWithLogin, accountName, describeAccount } from './duplicates'
 import { summarizeFailures } from './bulkFailures'
 import Notice from './Notice'
-import CardHead from './CardHead'
-import RolePicker from './RolePicker'
 
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
@@ -40,11 +38,6 @@ const TEMPLATES = {
               'personal_email', 'password'],
   },
 }
-
-// Admins are not bulk-uploaded: an admin row needs a real inbox, and there are
-// never enough of them to be worth a spreadsheet. A `role` column can still
-// carry one.
-const BULK_ROLES = ['teacher', 'student']
 
 /* What a row needs, per role. This lived in the card's subtitle as one 130-word
    paragraph covering both roles at once — most of a screen of prose before the
@@ -160,21 +153,28 @@ function rowDuplicate(row, index, rows, users) {
 /**
  * Bulk Upload Teachers / Bulk Upload Students.
  *
- * One component for both: the CSV is identical apart from the role, so a
- * default role is chosen here and a per-row `role` column overrides it. Two
- * near-identical screens would drift.
+ * One component for both: the CSV is identical apart from the role, so the
+ * caller passes which one this upload is for and a per-row `role` column can
+ * still override it. Two near-identical screens would drift.
+ *
+ * `role` is chosen one level up, by AddUserSection's Teacher | Student
+ * control (T-113) — this component no longer picks its own, and is not
+ * mounted until a role is set, same as before. The caller remounts it (keyed
+ * by role) when the admin switches roles, so a file parsed under the old
+ * role does not carry over.
  *
  * Teacher and student rows always get their login issued from the school's
  * prefix (see the Login prefix card). A `personal_email` column — their own
  * inbox, like sample.maria@gmail.com — is stored on the profile for password
  * recovery, because not everyone has a school email; it is never the login.
+ *
+ * A `role` column in the file can still independently say 'admin' — that is
+ * `rowProblem`'s own check below, pre-existing and unrelated to this
+ * screen's own role choice; T-113 only removes admin as a thing *this* form
+ * asks for.
  */
-export default function BulkUpload({ onDone, settings, users }) {
+export default function BulkUpload({ role, onDone, settings, users }) {
   const prefix = settings?.school?.login_prefix ?? ''
-  // The role rows get when the file carries no `role` column. No preselected
-  // role, same as the manual form: picking one is deliberate, and the
-  // template download follows whatever is picked.
-  const [uploadRole, setUploadRole] = useState('')
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
@@ -235,7 +235,7 @@ export default function BulkUpload({ onDone, settings, users }) {
         header.forEach((h, i) => {
           if (known.has(h)) row[h] = (cells[i] ?? '').trim()
         })
-        if (!row.role) row.role = uploadRole
+        if (!row.role) row.role = role
         return row
       })
       setRows(mapped)
@@ -273,7 +273,7 @@ export default function BulkUpload({ onDone, settings, users }) {
       const res = await bulkCreateUsers(rows.map(({ grade, ...r }) => ({
         ...r,
         ...(grade ? { year_level: grade } : {}),
-        role: r.role || uploadRole,
+        role: r.role || role,
       })))
       setResult(res)
       if (res.summary.created) onDone()
@@ -292,7 +292,7 @@ export default function BulkUpload({ onDone, settings, users }) {
     // An .xlsx rather than a CSV because the headers are bold, UPPERCASE and
     // sized to their text, which CSV cannot carry; the uploader reads .xlsx
     // back directly.
-    const template = TEMPLATES[uploadRole]
+    const template = TEMPLATES[role]
     if (!template || preparing) return
     // The spreadsheet writer is only fetched on the first download, so that
     // click can sit for a second or two with nothing on screen moving — the
@@ -300,7 +300,7 @@ export default function BulkUpload({ onDone, settings, users }) {
     setPreparing(true)
     try {
       await downloadXlsx(
-        stampedName(`${uploadRole}-upload-template`).replace(/\.csv$/, '.xlsx'),
+        stampedName(`${role}-upload-template`).replace(/\.csv$/, '.xlsx'),
         template.columns,
       )
     } catch {
@@ -311,106 +311,73 @@ export default function BulkUpload({ onDone, settings, users }) {
   }
 
   return (
-    <div style={{ ...card, padding: 22 }}>
-      <CardHead
-        icon="📄"
-        tint="rgba(245,197,24,0.15)"
-        title="Bulk upload"
-        sub="Creates accounts from a spreadsheet — .xlsx or CSV. Pick a role, fill in the template it hands you, and upload it back."
-        style={{ marginBottom: 18 }}
-      />
+    <div>
+      {/* No own heading or role picker here any more -- AddUserSection asks
+          Bulk | Individual, then Teacher | Student, and this component is
+          not mounted until a role is chosen, so what follows is already
+          role-shaped. */}
+      <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, maxWidth: 640, margin: '0 0 16px' }}>
+        Creates accounts from a spreadsheet — .xlsx or CSV. Fill in the template below and upload it back.
+      </p>
 
-      {/* Role first, as in Add a user. The template's columns and the meaning
-          of every row follow it, and the rules below are half the reading when
-          only the picked role's are shown. */}
-      <div style={{ maxWidth: 360, margin: '0 auto' }}>
-        <RolePicker
-          value={uploadRole}
-          options={BULK_ROLES}
-          onChange={(r) => {
-            // Switching roles switches templates, so a file parsed under the
-            // old role no longer means what it says.
-            setUploadRole(r)
-            setRows([])
-            setFileName('')
-            setResult(null)
-            setParseError('')
-          }}
-        />
-      </div>
-
-      {!uploadRole && (
-        <p style={{
-          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
-          maxWidth: 440, textAlign: 'center',
+      <dl style={{
+        display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr)',
+        columnGap: 16, rowGap: 9, margin: 0, padding: '15px 17px',
+        fontSize: 13, background: 'rgba(14,42,92,0.025)',
+        border: `1px solid ${line}`, borderRadius: 12,
+      }}>
+        <div style={{
+          gridColumn: '1 / -1', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: muted, marginBottom: 2,
         }}>
-          Pick one and this card lists what that role&apos;s rows need, and hands you a template
-          with exactly those columns.
-        </p>
-      )}
+          What a {role} row needs
+        </div>
+        {ROW_SPEC[role].map(([columns, rule]) => (
+          <Fragment key={columns}>
+            <dt style={{ ...mono, fontSize: 12, color: ink, lineHeight: 1.5 }}>{columns}</dt>
+            <dd style={{ margin: 0, color: muted, lineHeight: 1.5 }}>{rule}</dd>
+          </Fragment>
+        ))}
+      </dl>
 
-      {uploadRole && (
-        <>
-          <dl style={{
-            display: 'grid', gridTemplateColumns: 'max-content minmax(0,1fr)',
-            columnGap: 16, rowGap: 9, margin: '18px 0 0', padding: '15px 17px',
-            fontSize: 13, background: 'rgba(14,42,92,0.025)',
-            border: `1px solid ${line}`, borderRadius: 12,
-          }}>
-            <div style={{
-              gridColumn: '1 / -1', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-              textTransform: 'uppercase', color: muted, marginBottom: 2,
-            }}>
-              What a {uploadRole} row needs
-            </div>
-            {ROW_SPEC[uploadRole].map(([columns, rule]) => (
-              <Fragment key={columns}>
-                <dt style={{ ...mono, fontSize: 12, color: ink, lineHeight: 1.5 }}>{columns}</dt>
-                <dd style={{ margin: 0, color: muted, lineHeight: 1.5 }}>{rule}</dd>
-              </Fragment>
-            ))}
-          </dl>
+      <p style={{ fontSize: 12.5, color: prefix ? faint : red, margin: '10px 2px 0', lineHeight: 1.55 }}>
+        {prefix
+          ? <>
+              Logins are issued as <code style={{ ...mono, fontSize: 12 }}>{prefix}-789012</code> — your
+              school&apos;s prefix and the last six digits of the{' '}
+              {role === 'student' ? 'LRN, or of the student number for college rows' : 'employee ID'}.
+              A <code style={{ ...mono, fontSize: 12 }}>role</code> column in the file overrides the
+              role above, row by row, so one file can mix teachers and students.
+            </>
+          : <>No login prefix is set for your school yet — set it in the Login prefix card above,
+              or these rows have nothing to issue a login from.</>}
+      </p>
 
-          <p style={{ fontSize: 12.5, color: prefix ? faint : red, margin: '10px 2px 0', lineHeight: 1.55 }}>
-            {prefix
-              ? <>
-                  Logins are issued as <code style={{ ...mono, fontSize: 12 }}>{prefix}-789012</code> — your
-                  school&apos;s prefix and the last six digits of the{' '}
-                  {uploadRole === 'student' ? 'LRN, or of the student number for college rows' : 'employee ID'}.
-                  A <code style={{ ...mono, fontSize: 12 }}>role</code> column in the file overrides the
-                  role above, row by row, so one file can mix teachers and students.
-                </>
-              : <>No login prefix is set for your school yet — set it in the Login prefix card above,
-                  or these rows have nothing to issue a login from.</>}
-          </p>
-
-          {/* Same size on purpose — colour alone tells them apart: navy for the
-              action this card exists for, outlined for the helper beside it. */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
-            <label style={{ ...btnPrimary, display: 'inline-block' }}>
-              📂 Choose file…
-              <input type="file"
-                     accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                     onChange={onFile}
-                     style={{ display: 'none' }} />
-            </label>
-            <button type="button"
-                    style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10,
-                             display: 'inline-flex', alignItems: 'center', gap: 8,
-                             opacity: preparing ? 0.55 : 1, cursor: preparing ? 'default' : 'pointer' }}
-                    disabled={preparing}
-                    onClick={downloadTemplate}>
-              <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
-              {preparing ? 'Preparing…' : 'Download template'}
-            </button>
-            {fileName && (
-              <span style={{ ...mono, fontSize: 12, color: faint }}>
-                {fileName} · {rows.length} row{rows.length === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-        </>
-      )}
+      {/* Same size on purpose — colour alone tells them apart: navy for the
+          action this card exists for, outlined for the helper beside it. */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+        <label style={{ ...btnPrimary, display: 'inline-block' }}>
+          📂 Choose file…
+          <input type="file"
+                 accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                 onChange={onFile}
+                 style={{ display: 'none' }} />
+        </label>
+        <button type="button"
+                style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10,
+                         display: 'inline-flex', alignItems: 'center', gap: 8,
+                         opacity: preparing ? 0.55 : 1, cursor: preparing ? 'default' : 'pointer' }}
+                disabled={preparing}
+                onClick={downloadTemplate}>
+          <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
+          {preparing ? 'Preparing…' : 'Download template'}
+        </button>
+        {fileName && (
+          <span style={{ ...mono, fontSize: 12, color: faint }}>
+            {fileName} · {rows.length} row{rows.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
 
       {parseError && <div style={{ marginTop: 14 }}><Notice>{parseError}</Notice></div>}
 

@@ -4,23 +4,26 @@ import { CREATABLE_ROLES } from './ui'
 const SLIDE = '260ms cubic-bezier(0.4, 0, 0.2, 1)'
 
 /**
- * The question the admin console asks first — Add a user and Bulk upload both
- * open on it — as a segmented control. The pill slides across to the role you
- * picked instead of blinking out and reappearing under it: everything below it
- * swaps wholesale on a change, and with nothing connecting the two the card
- * read as having rearranged itself. `options` drives both the columns and the slide distance rather than
- * a hardcoded 3, because the bulk card offers two roles where Add a user
- * offers three.
+ * A generic two/three-way segmented control, as a radiogroup. The pill slides
+ * across to the option you picked instead of blinking out and reappearing
+ * under it: everything below it swaps wholesale on a change, and with
+ * nothing connecting the two the card read as having rearranged itself.
+ * `options` drives both the columns and the slide distance.
+ *
+ * Despite the name this is no longer only the role question: Add User
+ * (T-113) stacks two of these — `Bulk | Individual` first, `Teacher |
+ * Student` second — and `ariaLabel` is how each gets named for screen
+ * readers instead of both reading as "Role".
  *
  * Fills the width it is given: the pill travels in percentages, so the caller
  * sizes and places it.
  */
-export default function RolePicker({ value, onChange, options = CREATABLE_ROLES }) {
+export default function RolePicker({ value, onChange, options = CREATABLE_ROLES, ariaLabel = 'Role' }) {
   const index = options.indexOf(value)
   return (
     <div
       role="radiogroup"
-      aria-label="Role"
+      aria-label={ariaLabel}
       style={{
         position: 'relative', display: 'grid', padding: 4,
         gridTemplateColumns: `repeat(${options.length}, 1fr)`,

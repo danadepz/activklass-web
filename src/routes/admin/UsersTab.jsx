@@ -152,12 +152,15 @@ function splitPair(text) {
   return [head.trim(), rest.join('-').trim()]
 }
 
-function CreateUserForm({ onCreated, settings, users }) {
-  // No default role: 'teacher' meant an admin who never touched the picker
-  // silently created a teacher, which is the most privileged non-admin role
-  // here. Picking one is now deliberate, and nothing else renders until it is.
+function CreateUserForm({ onCreated, settings, users, role }) {
+  // No default role: an admin who never touched either segmented control in
+  // AddUserSection could not reach this form at all -- there is nothing here
+  // that silently picks a role on their behalf. Admin creation is gone
+  // outright (owner, 2026-10-02: "creating an admin wont happen anymore,
+  // only teacher and student now"), so `role` is always 'teacher' or
+  // 'student' by the time this component mounts.
   const blank = {
-    role: '', firstName: '', middleName: '', lastName: '', email: '', password: '',
+    firstName: '', middleName: '', lastName: '', password: '',
     level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
     birthdate: '', employeeNumber: '', department: '', personalEmail: '',
   }
@@ -166,14 +169,11 @@ function CreateUserForm({ onCreated, settings, users }) {
   const [done, setDone] = useState('')
 
   const prefix = settings?.school?.login_prefix ?? ''
-  const role = form.role
   // Grade 12 & below sign in by the last six digits of their LRN; college
   // learners carry no LRN (manuscript Fig. 49-50) so theirs come from the
   // student number. Teachers use their employee ID.
   const isG12 = form.level === 'g12'
-  const idSource = role === 'student'
-    ? (isG12 ? form.lrn : form.studentNumber)
-    : role === 'teacher' ? form.employeeNumber : ''
+  const idSource = role === 'student' ? (isG12 ? form.lrn : form.studentNumber) : form.employeeNumber
   const loginPreview = issuedLoginId(prefix, idSource)
 
   const mut = useMutation({
@@ -200,15 +200,13 @@ function CreateUserForm({ onCreated, settings, users }) {
   async function submit(e) {
     e.preventDefault()
     setDone('')
-    if (!role) return setError('Pick a role for this user.')
     const problem =
       nameError(form.firstName, { label: 'First name' }) ||
       nameError(form.middleName, { label: 'Middle name', required: false }) ||
       nameError(form.lastName, { label: 'Last name' }) ||
-      (role === 'admin' ? emailError(form.email) : '') ||
       // A contact address on file, not the sign-in — optional, but has to be
       // an email when given.
-      (role !== 'admin' && form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
+      (form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
       (role === 'student'
         ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
           (isG12
@@ -229,7 +227,7 @@ function CreateUserForm({ onCreated, settings, users }) {
       // Blank falls back to the default; is_temp_password gates either way.
       tempPasswordError(form.password, { required: false })
     if (problem) return setError(problem)
-    if (role !== 'admin' && !prefix) {
+    if (!prefix) {
       return setError('Set your school’s login prefix above first — it is what their sign-in login is issued from.')
     }
 
@@ -241,7 +239,7 @@ function CreateUserForm({ onCreated, settings, users }) {
     // Cleared before the dialog, not after it: the previous attempt's message
     // otherwise sits behind the question, answering something else.
     setError('')
-    const typedEmail = (role === 'admin' ? form.email : form.personalEmail).trim()
+    const typedEmail = form.personalEmail.trim()
     const taken = accountWithEmail(users, typedEmail)
     if (taken) {
       return setError(
@@ -258,7 +256,7 @@ function CreateUserForm({ onCreated, settings, users }) {
        is the thing the admin will be reading out afterwards. */
     const twins = accountsNamed(users, form.firstName, form.lastName)
     const who = `${form.firstName.trim()} ${form.lastName.trim()}`
-    const signsIn = role === 'admin' ? typedEmail : loginPreview
+    const signsIn = loginPreview
     const ok = await confirmDialog(twins.length
       ? {
         title: `${who} is already on file`,
@@ -273,17 +271,17 @@ function CreateUserForm({ onCreated, settings, users }) {
     if (!ok) return
 
     mut.mutate({
-      // Admins need a real inbox (password recovery goes there); teacher and
-      // student logins are issued server-side from the school's prefix.
-      email: role === 'admin' ? form.email : '',
+      // Teacher and student logins are issued server-side from the school's
+      // prefix -- never a real inbox, which is what an admin account would
+      // have needed. There is no admin path here any more to need one.
+      email: '',
       password: form.password,
       role,
       firstName: form.firstName,
       lastName: form.lastName,
       extra: {
         ...(form.middleName.trim() ? { middle_name: form.middleName.trim() } : {}),
-        ...(role !== 'admin' && form.personalEmail.trim()
-          ? { personal_email: form.personalEmail.trim() } : {}),
+        ...(form.personalEmail.trim() ? { personal_email: form.personalEmail.trim() } : {}),
         ...(role === 'student' ? (() => {
           const [a, b] = splitPair(isG12 ? form.gradeSection : form.courseYear)
           return {
@@ -306,39 +304,14 @@ function CreateUserForm({ onCreated, settings, users }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   return (
-    <form onSubmit={submit} style={{ ...card, padding: 22 }}>
-      <CardHead
-        icon="👤"
-        tint="rgba(14,42,92,0.07)"
-        title="Add a user"
-        sub="Pick the role first — the form follows. Creates the sign-in account and the profile together. Parents are not added here — they register themselves and claim their student's invitation code."
-        style={{ marginBottom: 18 }}
-      />
-
-      {/* One question first, then the form. Every field below is role-shaped —
-          a student is asked for an LRN, a teacher for an employee ID, an admin
-          for an inbox — so showing them all up front showed most admins fields
-          that did not apply to the account they were making. No visible label
-          over it: the three words are the label, and `aria-label` on the
-          radiogroup keeps it named for screen readers. */}
-      <div style={{ maxWidth: 360, margin: '0 auto' }}>
-        <RolePicker
-          value={role}
-          onChange={(r) => { setError(''); setDone(''); setForm((f) => ({ ...f, role: r })) }}
-        />
-      </div>
-
-      {!role && (
-        <p style={{
-          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
-          maxWidth: 420, textAlign: 'center',
-        }}>
-          Pick one and the rest of the form appears, asking for what that kind of account needs and nothing else.
-        </p>
-      )}
-
-      {role && (<>
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', marginTop: 14 }}>
+    <form onSubmit={submit}>
+      {/* No own heading or role picker here any more -- AddUserSection asks
+          both questions (Bulk | Individual, then Teacher | Student) and does
+          not mount this form until a role is chosen, so every field below is
+          already role-shaped: a student is asked for an LRN, a teacher for
+          an employee ID, nothing for an inbox (admin accounts are no longer
+          made from this screen at all). */}
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
         <label style={labelStyle}>
           First name
           <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
@@ -351,13 +324,6 @@ function CreateUserForm({ onCreated, settings, users }) {
           Last name
           <input style={{ ...field, marginTop: 6 }} value={form.lastName} onChange={set('lastName')} />
         </label>
-
-        {role === 'admin' && (
-          <label style={labelStyle}>
-            Email
-            <input style={{ ...field, marginTop: 6 }} type="email" value={form.email} onChange={set('email')} />
-          </label>
-        )}
 
         {role === 'student' && (
           <>
@@ -424,14 +390,12 @@ function CreateUserForm({ onCreated, settings, users }) {
           </>
         )}
 
-        {(role === 'teacher' || role === 'student') && (
-          <label style={labelStyle}
-                 title="Recorded here or nowhere -- the account owner cannot add one themselves. Not their sign-in: teacher and student logins are issued from the school prefix, so getting them back in is a reset from this page, with or without this address.">
-            Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — a contact address, not their sign-in)</span>
-            <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
-                   onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
-          </label>
-        )}
+        <label style={labelStyle}
+               title="Recorded here or nowhere -- the account owner cannot add one themselves. Not their sign-in: teacher and student logins are issued from the school prefix, so getting them back in is a reset from this page, with or without this address.">
+          Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — a contact address, not their sign-in)</span>
+          <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
+                 onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
+        </label>
 
         <label style={labelStyle}>
           Temporary password <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
@@ -446,32 +410,30 @@ function CreateUserForm({ onCreated, settings, users }) {
         </label>
       </div>
 
-      {(role === 'teacher' || role === 'student') && (
-        loginPreview ? (
-          /* The one line the admin must carry away from this form — the exact
-             string this person types to sign in (NOT their full ID number,
-             which is the mistake this callout exists to prevent). */
-          <div style={{
-            marginTop: 14, padding: '12px 16px', borderRadius: 10,
-            background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.18)',
-            display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
-          }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: ink }}>They will sign in as</span>
-            <strong style={{ ...mono, fontSize: 19, fontWeight: 800, color: navy, letterSpacing: '0.03em' }}>
-              {loginPreview}
-            </strong>
-            <span style={{ fontSize: 12.5, color: faint }}>
-              — this exact form, not the full {role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee number'}
-            </span>
-          </div>
-        ) : (
-          <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
-            {prefix
-              ? `Their login will be ${prefix}-<last 6 digits of their ${
-                  role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee ID'}>`
-              : 'No login prefix is set for your school yet — set it in the card above.'}
-          </p>
-        )
+      {loginPreview ? (
+        /* The one line the admin must carry away from this form — the exact
+           string this person types to sign in (NOT their full ID number,
+           which is the mistake this callout exists to prevent). */
+        <div style={{
+          marginTop: 14, padding: '12px 16px', borderRadius: 10,
+          background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.18)',
+          display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: ink }}>They will sign in as</span>
+          <strong style={{ ...mono, fontSize: 19, fontWeight: 800, color: navy, letterSpacing: '0.03em' }}>
+            {loginPreview}
+          </strong>
+          <span style={{ fontSize: 12.5, color: faint }}>
+            — this exact form, not the full {role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee number'}
+          </span>
+        </div>
+      ) : (
+        <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
+          {prefix
+            ? `Their login will be ${prefix}-<last 6 digits of their ${
+                role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee ID'}>`
+            : 'No login prefix is set for your school yet — set it in the card above.'}
+        </p>
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
@@ -485,11 +447,10 @@ function CreateUserForm({ onCreated, settings, users }) {
           <span style={{ fontSize: 12.5, color: faint }}>Setting up the account — this takes a few seconds.</span>
         )}
       </div>
-      </>)}
 
-      {/* Outside the role gate on purpose: a successful create empties the form
-          back to the role step, and the line naming the login and the password
-          they were given has to survive that. */}
+      {/* A successful create empties the per-person fields but keeps the
+          role AddUserSection chose -- adding several of the same kind in a
+          row does not need the segmented controls touched again. */}
       {(error || done) && (
         <div style={{ marginTop: 14 }}>
           <Notice>{error}</Notice>
@@ -497,6 +458,91 @@ function CreateUserForm({ onCreated, settings, users }) {
         </div>
       )}
     </form>
+  )
+}
+
+/* ─────────────────────────── add user ─────────────────────────── */
+
+// The two ways to add people, and who they are -- both asked in order, and
+// neither defaulted (T-113, triplecookiemonster-141 item 7, Kristine's
+// hand-drawn sketch: a single "Add User" heading over a Bulk | Individual
+// control, then a Teacher | Student control, nothing below until both are
+// set). Admin accounts are no longer created from this screen at all --
+// owner, 2026-10-02: "creating an admin wont happen anymore, only teacher
+// and student now" -- existing admins are untouched; only the ability to
+// mint a new one here is gone.
+const ADD_USER_MODES = ['bulk', 'individual']
+const ADD_USER_ROLES = ['teacher', 'student']
+
+export function AddUserSection({ onCreated, settings, users }) {
+  const [mode, setMode] = useState('')
+  const [role, setRole] = useState('')
+
+  return (
+    <section style={{ ...card, padding: 22 }}>
+      <CardHead
+        icon="👤"
+        tint="rgba(14,42,92,0.07)"
+        title="Add User"
+        sub="Create one account at a time, or upload a spreadsheet for many at once. Parents are not added here — they register themselves and claim their student's invitation code."
+        style={{ marginBottom: 18 }}
+      />
+
+      {/* Bulk | Individual first, then Teacher | Student -- the owner's
+          confirmed order. No visible labels over either: the two words are
+          the label, and `ariaLabel` keeps each one named for screen readers
+          instead of both reading as "Role". */}
+      <div style={{ display: 'grid', gap: 10, maxWidth: 360, margin: '0 auto' }}>
+        <RolePicker
+          value={mode}
+          options={ADD_USER_MODES}
+          ariaLabel="Add by"
+          onChange={(m) => setMode(m)}
+        />
+        {mode && (
+          <RolePicker
+            value={role}
+            options={ADD_USER_ROLES}
+            ariaLabel="Role"
+            onChange={(r) => setRole(r)}
+          />
+        )}
+      </div>
+
+      {!mode && (
+        <p style={{
+          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
+          maxWidth: 420, textAlign: 'center',
+        }}>
+          Pick Bulk or Individual first, then who you&apos;re adding — the right form appears once both are set.
+        </p>
+      )}
+      {mode && !role && (
+        <p style={{
+          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
+          maxWidth: 420, textAlign: 'center',
+        }}>
+          Pick a role and the rest appears, asking for what that kind of account needs and nothing else.
+        </p>
+      )}
+
+      {/* Switching role inside Bulk remounts the uploader (key={role}), the
+          same clean-slate the old per-card picker gave it -- a file parsed
+          under the old role stops meaning what it says. Switching role
+          inside Individual does not remount CreateUserForm: the original
+          form kept whatever name/etc. was already typed when its own picker
+          changed role, and this keeps that. */}
+      {mode === 'bulk' && role && (
+        <div style={{ marginTop: 18 }}>
+          <BulkUpload key={role} role={role} onDone={onCreated} settings={settings} users={users} />
+        </div>
+      )}
+      {mode === 'individual' && role && (
+        <div style={{ marginTop: 18 }}>
+          <CreateUserForm role={role} onCreated={onCreated} settings={settings} users={users} />
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -706,8 +752,7 @@ export default function UsersTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <LoginPrefixCard settings={settings} pending={schoolPending} error={schoolError}
                        onRetry={refetchSchool} onSaved={refreshSchool} />
-      <BulkUpload onDone={refresh} settings={settings} users={users} />
-      <CreateUserForm onCreated={refresh} settings={settings} users={users} />
+      <AddUserSection onCreated={refresh} settings={settings} users={users} />
 
       <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
