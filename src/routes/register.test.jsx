@@ -609,3 +609,66 @@ describe('T-114 — a Parent card leads straight to the mobile-app install QR, n
     expect(body).toMatch(/\{MOBILE_APP_RELEASE_URL\}/)
   })
 })
+
+/* T-127 (maykel_64440-162, ticket pane card 2026-10-04): registration that
+   failed anywhere after step 1 showed one sentence -- "Your account was
+   created, but we could not finish setting it up. Try again with the same
+   email address and password." -- for every possible cause, with nothing on
+   screen maykel could quote back. console.error already logged the real
+   err.code/err pair for a developer (d9bb830), so the gap this card closes
+   is narrower than "nothing was logged anywhere": a TESTER had nothing
+   readable. `reference` (err.code, or 'unknown' when the thrown value
+   carries none -- a plain Error, say) is appended to both generic branches
+   so the next report names something instead of nothing, without ever
+   putting the exception's own message or stack on screen.
+
+   Read off the source for the same reason every other async-catch block in
+   this file is: no DOM test runner here (vitest runs under Node, not
+   jsdom), so a thrown error six steps into the form cannot be driven by a
+   render. */
+describe('T-127 — the catch-all gives a tester something to quote, and keeps logging the rest', () => {
+  const tryAt = registerSource.indexOf('await createAccount()')
+  const catchAt = registerSource.indexOf('} catch (err) {', tryAt)
+  const consoleAt = registerSource.indexOf(
+    "console.error('[register] could not finish the account:', err.code ?? '', err)",
+    catchAt,
+  )
+  const referenceAt = registerSource.indexOf("const reference = err.code || 'unknown'", catchAt)
+  const setErrorAt = registerSource.indexOf('setError(', referenceAt)
+  const finallyAt = registerSource.indexOf('finally', catchAt)
+
+  it('logs the real err.code/err pair before ever building the on-screen message', () => {
+    expect(catchAt).toBeGreaterThan(tryAt)
+    expect(consoleAt).toBeGreaterThan(catchAt)
+    expect(referenceAt).toBeGreaterThan(consoleAt)
+    expect(setErrorAt).toBeGreaterThan(referenceAt)
+  })
+
+  it('falls back to a plain "unknown" reference when the thrown value carries no .code', () => {
+    expect(registerSource).toMatch(/const reference = err\.code \|\| 'unknown'/)
+  })
+
+  it('appends that reference to BOTH generic branches, not just one', () => {
+    const block = registerSource.slice(referenceAt, finallyAt)
+    expect(block).toMatch(
+      /Your account was created, but we could not finish setting it up\. Try again with the same email address and password\. \(Reference: \$\{reference\}\)/,
+    )
+    expect(block).toMatch(
+      /We could not create your account\. Check your connection and try again\. \(Reference: \$\{reference\}\)/,
+    )
+  })
+
+  it('never puts the exception’s own message or stack into that string', () => {
+    const block = registerSource.slice(catchAt, finallyAt)
+    expect(block).not.toMatch(/err\.message/)
+    expect(block).not.toMatch(/err\.stack/)
+    expect(block).not.toMatch(/\$\{err\}/)
+  })
+
+  it('still lets FRIENDLY_ERRORS short-circuit the generic branches for a mapped code', () => {
+    // email-already-in-use, weak-password and invalid-email keep their own
+    // specific, already-actionable sentences -- untouched by this card.
+    const block = registerSource.slice(catchAt, finallyAt)
+    expect(block).toMatch(/FRIENDLY_ERRORS\[err\.code\] \?\?/)
+  })
+})

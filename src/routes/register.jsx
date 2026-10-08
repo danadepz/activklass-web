@@ -273,13 +273,18 @@ export default function Register() {
       // Raw exception text is not a message anyone should have to read, and
       // once step 1 has run the account exists: whatever failed after it, the
       // way back in is the SAME email and password, which now finishes the
-      // half-made account instead of being refused as taken.
+      // half-made account instead of being refused as taken. console.error
+      // already put the real error where a developer can read it; what was
+      // missing was anything a TESTER could read (T-127) — maykel saw this
+      // sentence and had nothing to report back beyond it. `reference` gives
+      // him something to quote without showing the exception itself.
       console.error('[register] could not finish the account:', err.code ?? '', err)
+      const reference = err.code || 'unknown'
       setError(
         FRIENDLY_ERRORS[err.code] ??
           (auth.currentUser
-            ? 'Your account was created, but we could not finish setting it up. Try again with the same email address and password.'
-            : 'We could not create your account. Check your connection and try again.'),
+            ? `Your account was created, but we could not finish setting it up. Try again with the same email address and password. (Reference: ${reference})`
+            : `We could not create your account. Check your connection and try again. (Reference: ${reference})`),
       )
     } finally {
       setSubmitting(false)
