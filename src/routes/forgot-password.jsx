@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import AuthLayout, { SubmitButton, AuthError, AuthNotice } from '@/components/AuthLayout'
+import { alertDialog } from '@/components/ui/dialogs'
+import AuthLayout, { SubmitButton, AuthError } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { emailError } from '@/lib/validation'
 import { navy } from '@/theme'
@@ -25,64 +26,56 @@ import { navy } from '@/theme'
  * It can only ever help an account that signs in with an email. A school- or
  * teacher-issued login (`snhs-123456`, see lib/logins.js) is stored behind an
  * internal address with no inbox, so no link can reach it; the way back in
- * for those is the teacher's or admin's Reset password. A student on one of
- * those logins landed here with nowhere to type it and, had she typed the
- * personal email her teacher entered, would have read "a reset link is on its
- * way" for a link that never comes (T-47). So the page says so up front, says
- * it again instead of "enter a valid email" when what was typed has no `@`,
- * and the success screen no longer promises an inbox to an issued account.
+ * for those is the teacher's or admin's Reset password (T-47 is what this
+ * page used to spend a standing paragraph warning about). T-131 moved that
+ * warning off the page itself and into the one place it is actually read --
+ * the confirmation popup shown right after Send reset link, which is also
+ * where "nothing arriving" gets a next step (T-100). The form no longer
+ * blocks a typed login ID either: the backend already no-ops safely for
+ * anything without an `@` (same anti-enumeration answer either way), so this
+ * page lets every submission through to the one honest message instead of
+ * guessing from the shape of what was typed.
  */
 
-/** The one sentence that tells an issued login where its reset really is. */
-export const ISSUED_LOGIN_NOTE =
-  'Signed in with a login ID like snhs-123456? Those accounts have no inbox, so no ' +
-  'link can be sent — ask your teacher or your school admin to reset your password.'
-
 /**
- * What stops the submit, or '' to send. Text without an `@` is a login ID
- * (or nothing an account could be), and "enter a valid email address" is the
- * wrong answer to that: the person has no email to enter. Say where their
- * reset actually is instead. Anything with an `@` is judged by the shared
- * email rule as before.
+ * What stops the submit, or '' to send. Only an empty field or a malformed
+ * email (one with an `@` that still is not one) blocks here -- a typed login
+ * ID has no `@` and is let through, because the popup after submit already
+ * covers that case for every reader, not just the ones this check happens to
+ * catch.
  */
 export function forgotPasswordProblem(value) {
   const text = String(value ?? '').trim()
-  if (text && !text.includes('@')) return ISSUED_LOGIN_NOTE
+  if (!text) return 'Email is required.'
+  if (!text.includes('@')) return ''
   return emailError(text)
 }
 
 /**
- * The success screen. "If {email} signs in here" is true for everyone --
- * an issued login signs in with its ID, so a personal email the teacher
- * recorded is not what any account signs in with -- and it still confirms
- * nothing about which emails are registered. T-100 (maykel_64440-128): the
- * old wording put "a password reset link is on its way" right after the
- * condition and left the person who typed the wrong address with nothing
- * to do but keep waiting for mail that would never come. The closing
- * sentence below closes that loop -- it reads true whether or not the
- * account exists, so it gives away nothing either.
+ * The confirmation popup's message, after Send reset link. Three things in
+ * order, and none of them ever branch on whether the account exists (the
+ * anti-enumeration promise `POST /api/auth/forgot-password` already makes):
+ * the condition leads (T-100 -- "if X signs in here" before "the link is on
+ * its way", so the sentence can never be read as unconditional), then what
+ * nothing arriving actually means, then the way in for an issued login
+ * (T-47 -- still names "teacher" and "school admin", still says there is no
+ * inbox, never a vendor name).
  */
-export function ResetSentNotice({ email }) {
+export function resetRequestedMessage(email) {
   return (
-    <AuthNotice>
-      If {email} signs in here, the link is on its way — check your inbox and
-      spam folder.
-      <br />
-      <br />
-      Nothing arriving in a few minutes usually means that isn't the address
-      the account signs in with. Try another, or ask your teacher or school
-      admin to reset it for you.
-      <br />
-      <br />
-      {ISSUED_LOGIN_NOTE}
-    </AuthNotice>
+    `If ${email} signs in here, the link is on its way — check your inbox ` +
+    `and spam folder.\n\nNothing arriving in a few minutes usually means ` +
+    `that isn't the address this account signs in with. Try another, or ` +
+    `ask your teacher or your school admin to reset it for you.\n\nSigning ` +
+    `in with a login ID instead, like sample-123456 -- those have no inbox ` +
+    `behind them, so your teacher or your school admin is the only way ` +
+    `back in.`
   )
 }
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState(null)
-  const [sent, setSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e) {
@@ -97,7 +90,8 @@ export default function ForgotPassword() {
       // anti-enumeration promise above). A thrown ApiError means the request
       // never reached the server at all (network down, Flask not running).
       await api('/api/auth/forgot-password', { method: 'POST', body: { email: email.trim() }, requireAuth: false })
-      setSent(true)
+      await alertDialog({ title: 'Check your inbox', message: resetRequestedMessage(email.trim()) })
+      setEmail('')
     } catch (err) {
       setError(err.message || 'Could not send a reset link. Check your connection and try again.')
     } finally {
@@ -110,53 +104,35 @@ export default function ForgotPassword() {
       title="Reset your password"
       subtitle="Enter the email you sign in with and we'll send you a link to set a new password."
     >
-      {sent ? (
-        <div className="flex flex-col gap-5">
-          <ResetSentNotice email={email.trim()} />
-          <div style={{ textAlign: 'center', fontSize: 14, color: '#6A7A95' }}>
-            <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Back to sign in
-            </Link>
-          </div>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+        {error && <AuthError>{error}</AuthError>}
+
+        <div>
+          <label htmlFor="forgot-email" style={authLabelStyle}>Email</label>
+          <input
+            id="forgot-email"
+            className="ak-input"
+            type="email"
+            required
+            autoComplete="email"
+            autoFocus
+            placeholder="e.g. sample.maria@gmail.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={authInputStyle}
+          />
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-          {error && <AuthError>{error}</AuthError>}
 
-          <div>
-            <label htmlFor="forgot-email" style={authLabelStyle}>Email</label>
-            <input
-              id="forgot-email"
-              className="ak-input"
-              type="email"
-              required
-              autoComplete="email"
-              autoFocus
-              placeholder="you@school.edu.ph"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={authInputStyle}
-            />
-            {error !== ISSUED_LOGIN_NOTE && (
-              // Read before anything is typed; hidden while the banner above says the same thing.
-              <p style={{ fontSize: 13, color: '#6A7A95', margin: '8px 0 0', lineHeight: 1.5 }}>
-                {ISSUED_LOGIN_NOTE}
-              </p>
-            )}
-          </div>
+        <SubmitButton type="submit" disabled={submitting} aria-busy={submitting}>
+          {submitting ? 'Sending…' : 'Send reset link'}
+        </SubmitButton>
 
-          <SubmitButton type="submit" disabled={submitting} aria-busy={submitting}>
-            {submitting ? 'Sending…' : 'Send reset link'}
-          </SubmitButton>
-
-          <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
-            Remembered it?{' '}
-            <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Back to sign in
-            </Link>
-          </div>
-        </form>
-      )}
+        <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
+          <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
+            Back to sign in
+          </Link>
+        </div>
+      </form>
     </AuthLayout>
   )
 }
