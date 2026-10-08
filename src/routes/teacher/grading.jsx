@@ -239,8 +239,8 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
   if (mode === 'deped_k12') {
     return (
       <p style={{ fontSize: 12.5, color: muted, margin: '14px 0 0' }}>
-        DepEd K-12 passes at <strong style={{ color: ink }}>75</strong> on the transmuted grade
-        (DepEd Order No. 8, s. 2015), so there is no passing score to set.
+        Passing score is fixed at <strong style={{ color: ink }}>75</strong> following DepEd guidelines
+        (Order No. 8, s. 2015), so there is no passing score to set.
       </p>
     )
   }
@@ -595,7 +595,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   const busy = save.isPending || applyPreset.isPending
 
   return (
-    <div className="max-w-4xl pb-12">
+    <div className="max-w-4xl mx-auto pb-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
@@ -662,7 +662,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Target Classes</h3>
         <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
-          Select which classes to apply this configuration to on save.
+          Choose the classes that will use these grading settings.
         </p>
         <div className="flex flex-wrap gap-3 max-h-40 overflow-y-auto border border-slate-100 p-3 rounded-xl">
           {classes.length === 0 ? (
@@ -700,8 +700,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Grading Type</h3>
         <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px', maxWidth: 620 }}>
-          DepEd K-12 transmutes the weighted grade per DepEd Order No. 8, s. 2015; CHED modes report raw
-          percentages or the 1.0–5.0 point scale.
+          Choose a grading system based on your institution's standards (DepEd K-12 uses transmutation tables; CHED uses raw percentages or a 1.0–5.0 scale).
         </p>
         <div className="flex flex-wrap gap-3">
           {GRADING_MODES.map((m) => {
