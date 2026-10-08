@@ -183,7 +183,6 @@ export default function Login() {
             required
             disabled={settingPassword}
             autoComplete="username"
-            placeholder="you@school.edu.ph or snhs-123456"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={{ ...authInputStyle, opacity: settingPassword ? 0.6 : 1 }}
@@ -295,9 +294,8 @@ export default function Login() {
             longer needs to cover for a sign-up form with no parent path. */}
         {!settingPassword && (
           <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
-            New here?{' '}
             <Link to="/register" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Create Account
+              Create an Account
             </Link>
           </div>
         )}

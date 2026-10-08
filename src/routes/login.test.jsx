@@ -41,8 +41,9 @@ describe('T-66 — the sign-in page tells a parent where their account is made',
   const html = renderToStaticMarkup(<Login />)
   const page = text(html)
 
-  it('invites anyone signed out -- teacher or parent -- to one Create Account link', () => {
-    expect(page).toContain('New here? Create Account')
+  it('invites anyone signed out -- teacher or parent -- to Create an Account (T-130: dropped "New here?")', () => {
+    expect(page).toContain('Create an Account')
+    expect(page).not.toContain('New here?')
     expect(html).toMatch(/href="\/register"/)
   })
 

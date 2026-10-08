@@ -63,10 +63,11 @@ describe('T-108 — the "record." period, smaller bullets, and two login labels'
     expect(loginSource).not.toMatch(/Email or login ID/)
   })
 
-  /* The placeholder is the only thing on the page that tells a student their
-     login id (not just an email) is accepted here -- the card is explicit
-     this must survive the relabel untouched. */
-  it('leaves the login-id placeholder alone', () => {
-    expect(loginSource).toContain('you@school.edu.ph or snhs-123456')
+  /* T-130 (andecobs-173, decided 2026-10-08): the long sample placeholder
+     ("you@school.edu.ph or snhs-123456") that T-108 preserved was overridden
+     by the owner in favor of a clean field whose label ("Email/Login ID")
+     already provides the signal that non-email login IDs are accepted. */
+  it('no longer carries the sample-credentials placeholder (T-130)', () => {
+    expect(loginSource).not.toContain('you@school.edu.ph or snhs-123456')
   })
 })
