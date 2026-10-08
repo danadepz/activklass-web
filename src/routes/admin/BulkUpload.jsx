@@ -51,7 +51,7 @@ const ROW_SPEC = {
     ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
-    ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
+    ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. Students can also add or update it later from their profile. Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
     ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
   ],
   teacher: [

@@ -59,3 +59,20 @@ describe('T-67 — the student Profile does not say a school manages the account
     expect(text).toMatch(/Your birthdate is not on file[^.]*\. Ask your teacher to add it to your record\./)
   })
 })
+
+describe('T-139 — student profile recovery email', () => {
+  it('renders a recovery email field clearly labelled for recovery, not sign-in', () => {
+    profile = { ...base, login_id: 'snhs-123456' }
+    const markup = renderToStaticMarkup(<StudentProfile />)
+    expect(markup).toContain('Password recovery email')
+    expect(markup).toContain('Used to reset your password if you ever forget it')
+    expect(markup).toContain('You will still sign in with your login ID')
+    expect(markup).toContain('snhs-123456')
+  })
+
+  it('renders with existing personal_email value from profile', () => {
+    profile = { ...base, personal_email: 'student@example.com' }
+    const markup = renderToStaticMarkup(<StudentProfile />)
+    expect(markup).toContain('value="student@example.com"')
+  })
+})

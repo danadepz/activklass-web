@@ -126,12 +126,38 @@ export default function StudentProfile() {
     }
   }
 
-  /* The photo is the ONLY field a student may change. Name, student number,
-     LRN, course, year level and birthdate are registrar data -- a student
-     editing their own birthdate could flip themselves to "of legal age" and
-     unlock the guardian-access panel below, so the edit form was removed
-     rather than trimmed. Teachers maintain these fields from the class roster.
-     firestore.rules is what actually enforces this; the UI just stops asking. */
+  // --- Personal email (password recovery, T-139) ---
+  const [personalEmail, setPersonalEmail] = useState(profile.personal_email ?? '')
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailStatus, setEmailStatus] = useState(null)
+
+  async function handleSaveEmail(e) {
+    e?.preventDefault()
+    setEmailStatus(null)
+    const trimmed = (personalEmail ?? '').trim()
+    if (trimmed && !trimmed.includes('@')) {
+      setEmailStatus({ error: 'Please enter a valid email address.' })
+      return
+    }
+    setEmailSaving(true)
+    try {
+      await updateDoc(doc(db, 'users', profile.id), { personal_email: trimmed || null })
+      await refreshProfile()
+      setEmailStatus({ success: 'Password recovery email saved.' })
+    } catch (err) {
+      setEmailStatus({ error: err.message || 'Could not save the recovery email.' })
+    } finally {
+      setEmailSaving(false)
+    }
+  }
+
+  /* The photo and password recovery email are the ONLY fields a student may
+     change (T-139). Name, student number, LRN, course, year level and birthdate
+     are registrar data -- a student editing their own birthdate could flip
+     themselves to "of legal age" and unlock the guardian-access panel below,
+     so the edit form was removed rather than trimmed. Teachers maintain these
+     fields from the class roster. firestore.rules is what actually enforces
+     this; the UI just stops asking. */
 
   // --- Consent (unchanged) ---
   const { data: consent, isLoading } = useQuery({
@@ -236,9 +262,69 @@ export default function StudentProfile() {
           <InfoCell label="Age" value={age == null ? '—' : `${age} ${isAdult ? '(of legal age)' : '(minor)'}`} />
         </div>
 
+        {/* Password recovery email (T-139) */}
+        <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${line}` }}>
+          <form onSubmit={handleSaveEmail}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 520 }}>
+              <label htmlFor="recovery-email" style={{ fontSize: 13, fontWeight: 700, color: ink, fontFamily: sans }}>
+                Password recovery email
+              </label>
+              <p style={{ fontSize: 12.5, color: muted, margin: 0, lineHeight: 1.4 }}>
+                Used to reset your password if you ever forget it. You will still sign in with your login ID ({profile.login_id ?? profile.email}).
+              </p>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <input
+                  id="recovery-email"
+                  type="email"
+                  placeholder="e.g. sample.student@gmail.com"
+                  value={personalEmail}
+                  onChange={(e) => {
+                    setPersonalEmail(e.target.value)
+                    if (emailStatus) setEmailStatus(null)
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    fontSize: 14,
+                    fontFamily: sans,
+                    color: ink,
+                    background: '#FFFFFF',
+                    border: `1.5px solid ${line}`,
+                    borderRadius: 10,
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={emailSaving}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 13.5,
+                    fontWeight: 700,
+                    fontFamily: sans,
+                    color: '#FAFAF6',
+                    background: navy,
+                    border: 'none',
+                    borderRadius: 10,
+                    cursor: emailSaving ? 'wait' : 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  {emailSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              {emailStatus?.error && (
+                <p role="alert" style={{ fontSize: 12.5, color: red, margin: '4px 0 0' }}>{emailStatus.error}</p>
+              )}
+              {emailStatus?.success && (
+                <p role="status" style={{ fontSize: 12.5, color: '#27AE60', margin: '4px 0 0', fontWeight: 600 }}>{emailStatus.success}</p>
+              )}
+            </div>
+          </form>
+        </div>
+
         <p style={{ fontSize: 12, color: faint, margin: '14px 0 0' }}>
           Your name and these details were set up for you. Ask your teacher
-          to correct anything that is wrong. Your profile photo is yours to change.
+          to correct anything that is wrong. Your profile photo and password recovery email are yours to change.
         </p>
       </section>
 
