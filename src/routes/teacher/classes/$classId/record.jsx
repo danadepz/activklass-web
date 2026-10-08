@@ -31,6 +31,7 @@ import { finishedAttempts } from '@/lib/quizAttempts'
 import { ArrowRight, Check, Clock, Plus, X } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
+import { toast } from '@/components/ui/toast'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -331,31 +332,6 @@ function RecordGrid({ classId, record, refetch }) {
     return s ? s.last_name : ''
   }
 
-  /* Per-student scores for this period, one column per assessment, so a
-     figure in the sheet can be checked against the cell it came from. The
-     cross-class Reports export is one row per class -- no encoded score can
-     be verified from it. Saved values only: an unsaved edit is not a record. */
-  function exportCsv() {
-    const header = ['Student']
-    for (const component of byComponent) {
-      for (const a of component.assessments) header.push(`${a.title} (/${fmt(a.total_points)})`)
-      header.push(`${component.name} % (${fmt(component.weight_percent)}%)`)
-    }
-    header.push('Override', `${record.period.name} grade`)
-    const rows = record.students.map((student) => {
-      const grade = record.grades[student.student_id]
-      const row = [`${student.last_name}, ${student.first_name}`]
-      for (const component of byComponent) {
-        for (const a of component.assessments) row.push(cellText(record.scores[a.id]?.[student.student_id]))
-        row.push(fmt(grade?.components?.[component.id]))
-      }
-      row.push(grade?.override != null ? fmt(grade.override) : '', fmt(grade?.grade))
-      return row
-    })
-    const slug = String(record.period.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    downloadCsv(stampedName(`record-${slug || 'period'}`), [header, ...rows])
-  }
-
   async function saveAll() {
     setSaving(true)
     setError(null)
@@ -489,30 +465,6 @@ function RecordGrid({ classId, record, refetch }) {
     }
   }
 
-  async function toggleLock() {
-    const ask = locked
-      ? {
-          title: 'Unlock this period?',
-          message: 'Scores, assessments and overrides become editable again.',
-          confirmLabel: 'Unlock',
-        }
-      : {
-          title: 'Lock this period?',
-          message: 'Scores, assessments and overrides become read-only until you unlock it again.',
-          confirmLabel: 'Lock period',
-        }
-    if (!(await confirmDialog(ask))) return
-    try {
-      const periods = record.periods.map((p) =>
-        p.id === record.period.id ? { ...p, locked: !locked } : p,
-      )
-      await updateDoc(doc(db, 'gradebooks', classId), { periods })
-      refetch()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   return (
     <>
       {record.students.length > 0 && (
@@ -532,18 +484,6 @@ function RecordGrid({ classId, record, refetch }) {
           <strong style={{ color: ink }}>X</strong> for excused, or leave blank.
         </p>
         <div className="flex flex-wrap gap-2.5">
-          <button
-            onClick={exportCsv}
-            disabled={record.students.length === 0}
-            title="Download this period's saved scores, one row per student"
-            className="transition hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={btnGhostSm}
-          >
-            Export CSV
-          </button>
-          <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : { ...btnGhostSm, color: muted }}>
-            {locked ? '🔒 Unlock period' : 'Lock period'}
-          </button>
           {!locked && (
             <>
               <button onClick={() => setShowAdd(true)} className="transition hover:brightness-105" style={btnGhostSm}>
@@ -595,29 +535,47 @@ function RecordGrid({ classId, record, refetch }) {
             <tr>
               {byComponent.flatMap((component) => [
                 ...component.assessments.map((a) => (
-                  <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: muted, minWidth: 84 }}>
-                    <div className="flex items-center justify-center gap-1">
+                  <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: muted, minWidth: 128 }}>
+                    <div className="flex items-start justify-center gap-1.5">
                       {/* Marks a column the teacher did not type: its scores
                           come from quiz attempts and are re-posted from the
                           quiz's results tab, not edited to stay correct. */}
                       {a.source_quiz_id && (
-                        <span title={`Posted from the quiz "${a.title}"`} style={{ color: blueText, flexShrink: 0 }} aria-label="From a quiz">◆</span>
+                        <span title={`Posted from the quiz "${a.title}"`} style={{ color: blueText, flexShrink: 0, marginTop: 1 }} aria-label="From a quiz">◆</span>
                       )}
                       {/* A column a published task created (Modules tab).
                           Scores are still typed here; the marker says where
                           the column came from and that it is reproducible. */}
                       {a.source_task_id && (
-                        <span title={`Created by the task "${a.title}" on the Modules tab`} style={{ color: goldDeep, flexShrink: 0 }} aria-label="From a task">◇</span>
+                        <span title={`Created by the task "${a.title}" on the Modules tab`} style={{ color: goldDeep, flexShrink: 0, marginTop: 1 }} aria-label="From a task">◇</span>
                       )}
-                      <span title={a.title} style={{ ...mono, maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</span>
+                      {/* T-142 (triplecookiemonster-192.1): used to truncate at
+                          ~8 characters (maxWidth 96, nowrap, ellipsis) while the
+                          Student column sat mostly empty a few pixels away. The
+                          column itself now has the room (minWidth 128 above) and
+                          the title wraps instead of cutting off -- Student is
+                          untouched, so a long name there still doesn't truncate. */}
+                      <span title={a.title} style={{ ...mono, maxWidth: 108, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }}>{a.title}</span>
                       {!locked && (
+                        // T-142 (triplecookiemonster-192.2): was a bare "×" in
+                        // faint grey, easy to miss and easy to misclick. Red and
+                        // boxed now, as asked -- what it does is unchanged: it
+                        // already asks the teacher to type DELETE first
+                        // (confirmDialog above), so this was a visibility
+                        // problem, not a missing-confirmation one.
                         <button
                           onClick={() => removeAssessment(a)}
                           disabled={removingAssessment}
                           title="Delete assessment"
                           aria-label={`Delete ${a.title}`}
-                          className="disabled:opacity-40"
-                          style={{ color: faint, background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
+                          className="transition hover:brightness-105 disabled:opacity-40"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0, width: 20, height: 20, marginTop: 1,
+                            color: red, background: 'rgba(192,57,43,0.1)',
+                            border: '1.5px solid rgba(192,57,43,0.4)', borderRadius: 6,
+                            cursor: 'pointer', lineHeight: 1, fontSize: 13, fontWeight: 800,
+                          }}
                         >
                           ×
                         </button>
@@ -1269,6 +1227,62 @@ export default function ClassRecordPage() {
         (() => {
           const activePeriodId = tab && tab !== 'summary' ? tab : bundle.periods[0]?.id
           const record = buildPeriodRecord(bundle, activePeriodId)
+          const locked = record.period.locked
+
+          /* T-142 (triplecookiemonster-193): these two used to live in
+             RecordGrid's own toolbar, crowded in with + Add assessment and
+             Save. Lifted here so they sit on the row that already holds
+             Summary -- hidden on the Summary tab itself, same as before
+             (RecordGrid, and so these buttons, never rendered there). */
+          function exportCsv() {
+            const byComponent = record.components.map((component) => ({
+              ...component,
+              assessments: record.assessments.filter((a) => a.component_id === component.id),
+            }))
+            const header = ['Student']
+            for (const component of byComponent) {
+              for (const a of component.assessments) header.push(`${a.title} (/${fmt(a.total_points)})`)
+              header.push(`${component.name} % (${fmt(component.weight_percent)}%)`)
+            }
+            header.push('Override', `${record.period.name} grade`)
+            const rows = record.students.map((student) => {
+              const grade = record.grades[student.student_id]
+              const row = [`${student.last_name}, ${student.first_name}`]
+              for (const component of byComponent) {
+                for (const a of component.assessments) row.push(cellText(record.scores[a.id]?.[student.student_id]))
+                row.push(fmt(grade?.components?.[component.id]))
+              }
+              row.push(grade?.override != null ? fmt(grade.override) : '', fmt(grade?.grade))
+              return row
+            })
+            const slug = String(record.period.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+            downloadCsv(stampedName(`record-${slug || 'period'}`), [header, ...rows])
+          }
+
+          async function toggleLock() {
+            const ask = locked
+              ? {
+                  title: 'Unlock this period?',
+                  message: 'Scores, assessments and overrides become editable again.',
+                  confirmLabel: 'Unlock',
+                }
+              : {
+                  title: 'Lock this period?',
+                  message: 'Scores, assessments and overrides become read-only until you unlock it again.',
+                  confirmLabel: 'Lock period',
+                }
+            if (!(await confirmDialog(ask))) return
+            try {
+              const periods = bundle.periods.map((p) =>
+                p.id === record.period.id ? { ...p, locked: !locked } : p,
+              )
+              await updateDoc(doc(db, 'gradebooks', classId), { periods })
+              refetch()
+            } catch (err) {
+              toast.error('Could not change the lock on this period. Check your connection and try again.')
+            }
+          }
+
           return (
             <>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 20 }}>
@@ -1281,9 +1295,35 @@ export default function ClassRecordPage() {
                     {p.locked ? ' 🔒' : ''}
                   </button>
                 ))}
-                <button onClick={() => setTab('summary')} style={{ ...pillStyle(tab === 'summary'), marginLeft: 'auto' }}>
-                  Summary
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5" style={{ marginLeft: 'auto' }}>
+                  {tab !== 'summary' && (
+                    <>
+                      <button
+                        onClick={exportCsv}
+                        disabled={record.students.length === 0}
+                        title="Download this period's saved scores, one row per student"
+                        className="transition hover:brightness-105 disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={btnGhostSm}
+                      >
+                        Export CSV
+                      </button>
+                      {/* T-142 (triplecookiemonster-194): unlocked used to render
+                          muted grey, which read as disabled when it is just the
+                          common state -- same navy ghost look as Export CSV now;
+                          locked keeps its own gold "active" look, unchanged. */}
+                      <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : btnGhostSm}>
+                        {locked ? '🔒 Unlock period' : 'Lock period'}
+                      </button>
+                    </>
+                  )}
+                  {/* T-142 (triplecookiemonster-194): same navy ghost look when
+                      not the active view, instead of the grey a toggle-pill
+                      reads as disabled; the gold highlight when selected is
+                      unchanged. */}
+                  <button onClick={() => setTab('summary')} style={tab === 'summary' ? pillStyle(true) : { ...btnGhostSm, borderRadius: 999 }}>
+                    Summary
+                  </button>
+                </div>
               </div>
               {tab === 'summary' ? (
                 <SummaryView summary={buildSummary(bundle)} />
