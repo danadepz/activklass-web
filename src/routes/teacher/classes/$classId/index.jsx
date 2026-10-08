@@ -1837,14 +1837,19 @@ export default function ClassDetailPage() {
               <option value="needs_remediation">Needs Remediation</option>
               <option value="mastered">Mastered</option>
             </select>
-            <select
-              value={rosterSort}
-              onChange={(e) => setRosterSort(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
-            >
-              <option value="az">A → Z</option>
-              <option value="za">Z → A</option>
-            </select>
+            {/* T-134 (triplecookiemonster-176, -177): label and option text
+                only -- rosterSort's values (az/za) and behaviour are unchanged. */}
+            <label className="flex items-center gap-1.5 text-sm text-slate-500">
+              Sort by:
+              <select
+                value={rosterSort}
+                onChange={(e) => setRosterSort(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
+              >
+                <option value="az">Alphabetical</option>
+                <option value="za">Z → A</option>
+              </select>
+            </label>
           </div>
         </div>
         {students.length === 0 ? (

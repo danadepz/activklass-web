@@ -3174,3 +3174,164 @@ which requires a one-off backfill giving every record-less teacher a real subscr
 *before* the fallback can change. Writing `expired` into the fallback instead is the one outcome
 `:151-154` exists to prevent. Card:
 `_tools/discord/tickets/_dispatch/T-124-remove-lapsed-and-none-subscription-states.md`.
+
+## Tester tickets — 2026-10-04, thirty tickets from all three testers (ticket pane)
+
+Tickets **158–187**, filed 2026-10-03 by maykel (5), Derick (13) and Kristine (12), triaged into
+**T-126 … T-137**. The great majority is sign-up and teacher-side polish; three are defects, and
+one of those is the most serious thing the board has carried.
+
+1. **Every school admin sees every user on the platform** — `bug · wrong data`, web + backend,
+   `maykel_64440-160`. He registered a new institution, paid, signed in, and found **369 users**
+   before adding anybody. Open at both layers: `hooks/useAdminUsers.js:15` is
+   `getDocs(collection(db, 'users'))` with **no `where`** (its docstring says "Every user in the
+   system" — working as written, and what was written is wrong once a second school exists), and
+   `firestore.rules` allows `isAdmin()` to read *any* `users/{uid}` with **no school test**. The
+   write side is open too: the same block lets an admin edit any field on any user, constrained
+   only by `adminCannotGrantAdmin()`. So a school admin can read and change another school's
+   people. Card: `_tools/discord/tickets/_dispatch/T-126-every-admin-sees-every-user.md`.
+
+2. **Registration dies with a catch-all that throws the reason away** — `bug · blocks testing` +
+   `misleading`, web, `maykel_64440-162`. *"Your account was created, but we could not finish
+   setting it up."* `routes/register.jsx:271-281` wraps all of `createAccount()` in one try/catch
+   and shows that for anything failing after the account exists. **Cause deliberately unconfirmed**
+   — the message discards it. Same anti-pattern as T-106. Note he *did* get an account created and
+   paid around the same time (see item 1), so this is a path through registration, not all of it.
+   Card: `…/T-127-registration-cannot-finish-setting-up.md`.
+
+3. **Paying still returns the tester to localhost** — `bug · blocks testing`, backend + deploy
+   config, `maykel_64440-159`. Looks like T-80 returning; it is not. That fix is intact and
+   correct: `frontend_links.py` prefers `X-Forwarded-Host`, falls back to `Origin`, then
+   `FRONTEND_URL`, and checks every candidate against an allowlist that is an open-redirect guard.
+   The app is now served from **Vercel**, and `.vercel.app` is in none of the three places it needs
+   to be — not `frontend_links.py:42`, not `vite.config.js:28`, and `.env:18` still reads
+   `http://localhost:5173`. The resolver correctly refuses an unknown host and falls through.
+   Working as designed, against a deployment the design predates.
+   Card: `…/T-128-paymongo-return-lands-on-localhost-again.md`.
+
+4. **Sign-up screen: Title Case, fewer helper paragraphs, four layout fixes** —
+   `suggestion · cosmetic`, web, ten tickets (`maykel_64440-158` items 1–3, `andecobs-163`, `-164`,
+   `-165`, `-166`, `-168`, `-169`, `-170`, `-172`, `-174`). One card because ten panes in
+   `register.jsx` would spend longer on conflicts than on changes. The only item a user really
+   feels is `-174`: the form jumps vertically between steps (his attachment is a screen recording).
+   **maykel asks to remove Position entirely, which partly undoes T-109 two days later** — compatible,
+   but the owner should confirm, and `position: 'admin'` must still be submitted.
+   Card: `…/T-129-signup-screen-wording-and-layout.md`.
+
+5. **Login screen: two requests that undo work shipped this week** — `suggestion · cosmetic`, web,
+   `andecobs-171`, `-173`. Removing *"New here?"* is harmless (T-114 wording, three days old).
+   **Removing the `you@school.edu.ph or snhs-123456` placeholder is contested**: T-108's card
+   protected that exact string in writing four days ago, because the `snhs-123456` half is the only
+   signal a student has that the field accepts a login ID — which is what **T-01** (`blocks testing`)
+   was. Derick's "they are not new users" holds for a returning teacher, not for a first-time
+   student. Owner's call; the card offers keep / shorten / remove-and-compensate.
+   Card: `…/T-130-login-screen-two-reversals.md`.
+
+6. **Forgot password: shorter copy, one explainer that is load-bearing** — `suggestion · cosmetic`,
+   web, `maykel_64440-158` item 6, `andecobs-175`. The login-ID paragraph exists because such an
+   account **has no inbox** — delete it and a student sits on a form that can never help them.
+   Make it conditional or one line, not absent. Derick's confirmation-popup idea is the better half
+   of the ticket and is where maykel's rewrite belongs. Card: `…/T-131-forgot-password-copy.md`.
+
+7. **The product headline is challenged** — `suggestion · cosmetic`, web, `andecobs-167`. Derick
+   says the app is a Class Management System, not a class record, and that *"this was already
+   corrected before"*. **No such correction exists in the ledger** — the only issue touching that
+   sentence is T-108, which moved its full stop. Either he is remembering a conversation that never
+   became a ticket, or something reverted a change; the reply asks which, and the answer matters
+   more than the copy. Owner decision. Card: `…/T-132-class-records-product-framing.md`.
+
+8. **Admin account screen wording** — `suggestion · cosmetic`, web, `maykel_64440-161`. Title Case
+   plus two helper texts removed. One of them explains why the password field is pre-filled with
+   `pass1234`; **T-121 moved that same information into the success message rather than deleting
+   it**, and this card asks for the same treatment. Card: `…/T-133-admin-account-wording.md`.
+
+9. **My Classes: four labels, and one removal that would strand data** — `suggestion · cosmetic`,
+   web, `triplecookiemonster-176`–`-180`. **`-178` asks to remove the Archived tab**;
+   `routes/teacher/classes/index.jsx:541-542` records that **T-71** added it so last year's classes
+   stay reachable, so removing the tab while archiving exists makes those classes invisible with no
+   way back. Her reasoning argues for removing *archiving*, not the tab. Also `-180` asks for a
+   running trial card in **red**, which is the colour T-110 shipped this week for *expired*.
+   Card: `…/T-134-my-classes-labels-and-the-archived-tab.md`.
+
+10. **Remove the dashboard date chip** — `suggestion · cosmetic`, web, `triplecookiemonster-181`.
+    `routes/teacher/index.jsx:275`. T-111 already took `SubscriptionBox` out of that same group, so
+    check the row still balances. Card: `…/T-135-dashboard-date-chip.md`.
+
+11. **Students page: four rewordings and an action-bar redesign** — `suggestion · cosmetic`, web,
+    `triplecookiemonster-182`–`-186`. `-184` is the teacher-side twin of **T-119**: one Add Student
+    button whose modal offers Bulk or Individual, plus a Download Template option. Match T-119's
+    control rather than inventing a second. Card:
+    `…/T-136-students-page-labels-and-action-layout.md`.
+
+12. **Explain Performance and Risk in a tooltip** — `suggestion · feature gap`, web,
+    `triplecookiemonster-187`. A good ask, with one trap: she supplies thresholds (High 50%+,
+    Medium 35–49%, Low under 35%) that **nobody has verified against `useClassRisk.js`**. Shipping
+    them unchecked would make the tooltip misleading in the strict sense. The code wins over the
+    ticket. Card: `…/T-137-performance-risk-tooltip.md`.
+
+**A pattern worth naming.** Five of these twelve ask to undo or override something that landed in
+the previous four days — T-108's placeholder, T-108's headline, T-109's Position field, T-114's
+"New here?", T-71's Archived tab. None of the testers can see that history, which is exactly why
+the cards carry it. Three of the five are genuine owner decisions rather than edits.
+
+## Tester tickets — 2026-10-08, eighteen from Kristine (ticket pane)
+
+Tickets **188–205**, all Kristine, filed 2026-10-05 across the signed-out panel and five teacher
+screens. Triaged into **T-140 … T-144**, grouped by screen — sixteen of the eighteen are wording or
+layout, and splitting them would put four panes in adjacent files.
+
+1. **The class tabs' explanatory subheaders become tooltips, or go** — `suggestion · cosmetic`, web,
+   `triplecookiemonster-190`, `-191`, `-195`, `-196`, `-197`. Five tickets, one design decision: the
+   paragraph under each tab heading goes, and where it is worth keeping it becomes an **ⓘ tooltip**
+   on the heading's right (her `-190` attachment is captioned *"tooltip placement reference"*).
+   Deliberately one card sharing one control with **T-137**, which is adding the same thing to the
+   Performance tab.
+
+   **`191` must not be built as written.** She asks to delete the two-line block under *Class
+   Record* because the weights are already in the table — true of the first line, since the table
+   headers repeat `Written Works (30%)` and the rest exactly. The second line is not an instruction:
+   `record.jsx:1230-1231` is a live readout that also reports *"Not posted: &lt;quiz names&gt;"*,
+   *"N posted just now"*, *"N kept as typed"*. She saw it idle. Delete it and a teacher loses the
+   only place the system says an auto-post happened, or silently skipped a quiz. One fact in the
+   half that does go is also not duplicated anywhere — *"transmuted per DepEd Order No. 8, s. 2015"*.
+   Card: `_tools/discord/tickets/_dispatch/T-140-class-tab-subheaders-become-tooltips.md`.
+
+2. **Reword the sign-up bullets, and replace both privacy statements with one link** —
+   `suggestion · cosmetic`, web, `triplecookiemonster-188`, `-189`. **Together these strip every
+   privacy statement from the signed-out screens.** `189` replaces the `RA 10173 / Privacy-first by
+   design` chip with a **Privacy Policy** link and deletes the *"Protected under the Philippine Data
+   Privacy Act of 2012"* footer; `188` supplies two replacement bullets for three, the third being
+   *"RA 10173 parental-consent privacy, built in"*. **Her own ticket says the policy page is still to
+   be written**, so as filed the app would spend a week saying nothing about privacy with a 404
+   where the policy used to be — on a product handling minors' data under RA 10173. The card
+   sequences it: reword now, remove the statements only when the page is live, and ask what becomes
+   of the third bullet rather than inferring it from a count. Every element exists **twice**, once
+   per `AuthLayout` variant — the trap T-108 already hit on this file. Card:
+   `…/T-141-signed-out-panel-perks-and-privacy-statements.md`.
+
+3. **Class Record: unreadable activity titles, an invisible delete, a crowded toolbar** —
+   `suggestion · cosmetic`, web, `triplecookiemonster-192`, `-193`, `-194`. The assessment title
+   truncates at eight characters (`Quiz 1 - Biol…`) while the Student column sits half empty beside
+   it; **Summary** and **Lock period** render grey while their neighbours are navy, which is
+   inconsistency rather than a disabled state. The part worth more than the layout: the `x` that
+   deletes an assessment column is tiny and grey, and the card asks the pane to **check whether it
+   confirms before deleting scores** and report that rather than quietly fixing it. Card:
+   `…/T-142-class-record-table-and-toolbar.md`.
+
+4. **The four Quizzes empty states, written out instead of generated** — `suggestion · cosmetic`,
+   web, `triplecookiemonster-198`–`-201`. **The four sentences do not exist to be edited:**
+   `quizzes.jsx:1416-1419` builds every tab's empty state from one template,
+   `` `Nothing ${FILTER_LABELS[filter]} — ${FILTER_HINTS[filter]}.` `` — which reads like a generated
+   sentence, and is presumably why she filed four tickets rather than one. The work is replacing a
+   template with written copy. Card: `…/T-143-quizzes-empty-states.md`.
+
+5. **Grade Config: centre the layout, and three rewrites** — `suggestion · cosmetic`, web,
+   `triplecookiemonster-202`–`-205`. **`205` is not a reword but a claim about behaviour:**
+   *"Passing score is fixed at 75 following DepEd guidelines."* `grading.jsx:254` renders a
+   **Passing score** field and nobody has checked whether it is editable. If it is, the copy would
+   assert a constraint the system does not enforce. Reading that field is the card's first task.
+   `204` is the same shape at lower risk — its CHED description needs checking against the grading
+   systems actually offered. Card: `…/T-144-grade-config-layout-and-copy.md`.
+
+**One small thing worth recording:** `195` names the wrong screen in its text (*Class Record*) while
+its screenshot shows **Attendance**. The card goes by the screenshot, as the desk's rule says.

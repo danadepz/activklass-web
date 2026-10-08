@@ -16,6 +16,7 @@ import { deleteClassSection } from '@/lib/classes'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
+import { useMySubscription } from '@/hooks/useMySubscription'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonCards } from '@/components/ui/Skeleton'
@@ -482,6 +483,21 @@ export default function ClassesPage() {
   const archivedCount = (classes ?? []).filter((c) => c.archived_at).length
   const activeCount = (classes ?? []).length - archivedCount
 
+  // T-134 (triplecookiemonster-178): the tab button itself disappears once
+  // archivedCount hits 0 (below), which would otherwise strand a teacher who
+  // unarchived the last class while still looking at that now-buttonless tab.
+  useEffect(() => {
+    if (archivedCount === 0 && tab === 'archived') setTab('active')
+  }, [archivedCount, tab])
+
+  // T-134 (triplecookiemonster-180): a running-trial teacher sees this card
+  // here (dashboard half left for the Syllabus lane, which owns
+  // teacher/index.jsx -- not built here). `view.detail` for a trial is
+  // always "<n> day(s) left" or the literal "Trial" (lib/subscription.js);
+  // either way the sole word this reworks is "left" -> "remaining".
+  const subView = useMySubscription()
+  const trialDetail = subView.kind === 'trial' ? subView.detail.replace(/left$/, 'remaining') : null
+
   // 2026-06-20: Persist chosen badge colour to Firestore
   async function handleColorChange(cls, color) {
     try {
@@ -581,16 +597,37 @@ export default function ClassesPage() {
           <h1 className="text-[clamp(30px,4vw,40px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
             My Classes
           </h1>
-          <p style={{ fontSize: 15, color: muted, margin: 0 }}>Create class sections and manage student rosters.</p>
+          <p style={{ fontSize: 15, color: muted, margin: 0 }}>Manage your classes and student rosters.</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
-          style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}, 0 10px 24px -12px rgba(14,42,92,0.5)` }}
-        >
-          <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy, fontSize: 14, lineHeight: 1 }}>+</span>
-          New Class
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* T-134 (triplecookiemonster-180): "Free trial · N days remaining /
+              Upgrade anytime in Account." in amber with bolder type, not red
+              (decided 2026-10-08 unanimous: red is reserved for expired per T-110). */}
+          {trialDetail && (
+            <div
+              className="flex items-center gap-2.5"
+              style={{ padding: '10px 16px', borderRadius: 11, background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.45)' }}
+            >
+              <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: goldDeep, flexShrink: 0 }} />
+              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: goldDeep, letterSpacing: '0.01em' }}>
+                  Free trial · {trialDetail}
+                </span>
+                <span style={{ fontSize: 11.5, color: goldDeep, opacity: 0.9 }}>
+                  Upgrade anytime in <Link to="/teacher/account" style={{ color: goldDeep, fontWeight: 700, textDecoration: 'underline' }}>Account</Link>.
+                </span>
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+            style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}, 0 10px 24px -12px rgba(14,42,92,0.5)` }}
+          >
+            <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy, fontSize: 14, lineHeight: 1 }}>+</span>
+            New Class
+          </button>
+        </div>
       </div>
 
       {warning && (
@@ -607,11 +644,16 @@ export default function ClassesPage() {
 
       {/* T-71: Active / Archived -- an archived class is otherwise reachable
           only through the Archive toast's own Undo, which is gone the moment
-          the page reloads. */}
+          the page reloads.
+          T-134 (triplecookiemonster-178, option C, decided 2026-10-08): the
+          tab itself must stay -- it's the only route back to a class once
+          archived -- but it's hidden when there's nothing archived to show.
+          Automatic archiving (what both testers actually wanted) is a
+          separate feature, not built here. */}
       <div className="flex items-center gap-1" style={{ marginTop: 20, borderBottom: `1px solid ${line}` }}>
         {[
           { key: 'active', label: `Active${activeCount ? ` (${activeCount})` : ''}` },
-          { key: 'archived', label: `Archived${archivedCount ? ` (${archivedCount})` : ''}` },
+          ...(archivedCount > 0 ? [{ key: 'archived', label: `Archived (${archivedCount})` }] : []),
         ].map((t) => (
           <button
             key={t.key}
