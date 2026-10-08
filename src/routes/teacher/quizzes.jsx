@@ -45,6 +45,14 @@ const FILTER_LABELS = {
   ...Object.fromEntries(LIFECYCLE_TABS.map((t) => [t.id, t.label])),
 }
 const FILTER_HINTS = Object.fromEntries(LIFECYCLE_TABS.map((t) => [t.id, t.hint]))
+// T-143 (triplecookiemonster-198..201): one written sentence per tab, not a
+// generated "Nothing <label> — <hint>." template.
+export const FILTER_EMPTY_STATES = {
+  ongoing: 'No quizzes are open for students right now.',
+  scheduled: 'No scheduled quizzes yet.',
+  draft: 'No draft quizzes yet.',
+  past: 'No closed or completed quizzes yet.',
+}
 
 const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
 const fieldStyle = {
@@ -1414,9 +1422,7 @@ export default function QuizzesIndexPage() {
           {filteredQuizzes.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
               <p className="text-slate-500">
-                {filter === 'all'
-                  ? 'No quizzes yet.'
-                  : `Nothing ${FILTER_LABELS[filter].toLowerCase()} — ${FILTER_HINTS[filter].toLowerCase()}.`}
+                {filter === 'all' ? 'No quizzes yet.' : FILTER_EMPTY_STATES[filter]}
               </p>
             </div>
           ) : (
