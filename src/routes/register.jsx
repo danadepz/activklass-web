@@ -189,6 +189,16 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  // T-129 (andecobs-170): a seat count typed into a number input, not dragged
+  // on a slider. Typing stays free-form (so "3" can still become "300"
+  // without the field snapping back to the floor after every keystroke);
+  // the floor/cap the slider used to enforce physically is instead clamped
+  // on blur, in `clampSeat` below.
+  const setSeat = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const clampSeat = (key, min, max) => () => setForm((f) => {
+    const n = Number(f[key])
+    return { ...f, [key]: Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min }
+  })
   // Signing out from this page ends the other session and nothing else: the
   // form keeps every step, and the message that asked for it goes away.
   function signOutHere() {
@@ -252,7 +262,10 @@ export default function Register() {
     if (n === 5 && kind === 'individual') {
       return verificationIdError(form.idNumber, form.idType) || linkError(form.idLink, { label: 'The link to your ID' })
     }
-    return '' // seats: the sliders cannot hold an invalid value
+    // seats: the number inputs' own min/max attributes block a form
+    // submit (Next or the final step) on an out-of-range value natively,
+    // same floors and caps the sliders enforced physically before T-129
+    return ''
   }
 
   function back() {
@@ -597,18 +610,18 @@ export default function Register() {
           {step === 2 && (
             <>
               <div className="grid gap-3.5 md:grid-cols-2">
-                <Field id="reg-first" label="First name">
+                <Field id="reg-first" label="First Name">
                   <input id="reg-first" className="ak-input" required autoComplete="given-name" placeholder="Juan" value={form.firstName} onChange={set('firstName')} style={authInputStyle} />
                 </Field>
-                <Field id="reg-middle" label="Middle name" hint="optional">
+                <Field id="reg-middle" label="Middle Name" hint="optional">
                   <input id="reg-middle" className="ak-input" autoComplete="additional-name" placeholder="Santos" value={form.middleName} onChange={set('middleName')} style={authInputStyle} />
                 </Field>
               </div>
               <div className="grid gap-3.5 md:grid-cols-2">
-                <Field id="reg-last" label="Last name">
+                <Field id="reg-last" label="Last Name">
                   <input id="reg-last" className="ak-input" required autoComplete="family-name" placeholder="Dela Cruz" value={form.lastName} onChange={set('lastName')} style={authInputStyle} />
                 </Field>
-                <Field id="reg-phone" label="Phone number">
+                <Field id="reg-phone" label="Phone Number">
                   <input id="reg-phone" className="ak-input" type="tel" required autoComplete="tel" placeholder="0917 123 4567" value={form.phone} onChange={set('phone')} style={authInputStyle} />
                 </Field>
               </div>
@@ -625,21 +638,16 @@ export default function Register() {
                   {schools.map((s) => (
                     <option key={s.id} value={s.id}>{s.name} ({s.abbreviation})</option>
                   ))}
-                  <option value={NEW_SCHOOL}>My school isn’t listed</option>
+                  <option value={NEW_SCHOOL}>Others</option>
                 </select>
                 {addingSchool && (
                   <div className="grid gap-3.5 md:grid-cols-[1fr_140px]" style={{ marginTop: 12 }}>
                     <Field id="reg-school-name" label="Full name of school">
-                      <input id="reg-school-name" className="ak-input" required maxLength={120} placeholder="University of Cebu-Banilad" value={form.newSchoolName} onChange={set('newSchoolName')} style={authInputStyle} />
+                      <input id="reg-school-name" className="ak-input" required maxLength={120} placeholder="Name of your School" value={form.newSchoolName} onChange={set('newSchoolName')} style={authInputStyle} />
                     </Field>
                     <Field id="reg-school-abbr" label="Abbreviation">
                       <input id="reg-school-abbr" className="ak-input" required maxLength={12} placeholder="UCB" value={form.newSchoolAbbr} onChange={set('newSchoolAbbr')} style={{ ...authInputStyle, textTransform: 'uppercase' }} />
                     </Field>
-                    <p className="md:col-span-2" style={{ fontSize: 12, color: '#9AA6BD', margin: 0, lineHeight: 1.5 }}>
-                      Write the full official name without abbreviations, plus the short form
-                      colleagues know it by. Both will appear in this list for the next person
-                      from your school.
-                    </p>
                   </div>
                 )}
               </Field>
@@ -647,37 +655,36 @@ export default function Register() {
                 <Field id="reg-campus" label="Campus" hint="optional">
                   <input id="reg-campus" className="ak-input" maxLength={80} placeholder="Main campus" value={form.campus} onChange={set('campus')} style={authInputStyle} />
                 </Field>
-                <Field id="reg-school-type" label="School type">
+                <Field id="reg-school-type" label="School Type">
                   <select id="reg-school-type" className="ak-input" required value={form.schoolType} onChange={set('schoolType')} style={selectStyle(form.schoolType)}>
                     <option value="" disabled>Select</option>
                     {SCHOOL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </Field>
               </div>
-              <div className="grid gap-3.5 md:grid-cols-2">
-                <Field id="reg-calendar" label="Academic calendar">
+              <div className={kind === 'institution' ? '' : 'grid gap-3.5 md:grid-cols-2'}>
+                <Field id="reg-calendar" label="Academic Calendar">
                   <select id="reg-calendar" className="ak-input" required value={form.calendar} onChange={set('calendar')} style={selectStyle(form.calendar)}>
                     <option value="" disabled>Select</option>
                     {CALENDARS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </Field>
-                <Field id="reg-position" label="Position">
-                  {kind === 'institution' ? (
-                    <>
-                      <select id="reg-position" className="ak-input" disabled value="admin" style={selectStyle(true)}>
-                        <option value="admin">Admin</option>
-                      </select>
-                      <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
-                        Whoever sets up a school’s subscription is its admin.
-                      </p>
-                    </>
-                  ) : (
+                {/* T-129 (maykel_64440-158, andecobs-164): the institution path's
+                    Position field used to render here, locked to Admin and
+                    disabled (T-109) -- the owner's decision on 2026-10-08 was to
+                    drop the field outright rather than keep showing a value
+                    nobody can change. `position: 'admin'` is still submitted;
+                    chooseKind() and the ?type=institution preset both seed it
+                    the moment the institution path is entered, with no UI path
+                    that could ever set it to anything else. */}
+                {kind !== 'institution' && (
+                  <Field id="reg-position" label="Position">
                     <select id="reg-position" className="ak-input" required value={form.position} onChange={set('position')} style={selectStyle(form.position)}>
                       <option value="" disabled>Select</option>
                       {positionsFor(kind).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
-                  )}
-                </Field>
+                  </Field>
+                )}
               </div>
             </>
           )}
@@ -685,7 +692,7 @@ export default function Register() {
           {step === 4 && (
             <>
               <Field id="reg-email" label="Email">
-                <input id="reg-email" className="ak-input" type="email" required autoComplete="email" placeholder="you@school.edu.ph" value={form.email} onChange={set('email')} style={authInputStyle} />
+                <input id="reg-email" className="ak-input" type="email" required autoComplete="email" placeholder="Email Address" value={form.email} onChange={set('email')} style={authInputStyle} />
               </Field>
               <div className="grid gap-3.5 md:grid-cols-2">
                 <Field id="reg-password" label="Password">
@@ -714,21 +721,25 @@ export default function Register() {
                     {pwScore > 0 && <span style={{ fontWeight: 700, color: pwStrength }}>{PW_LABELS[pwScore]}</span>}
                   </div>
                 </Field>
-                <Field id="reg-confirm" label="Confirm password">
-                  <input
-                    id="reg-confirm"
-                    className="ak-input"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    placeholder="Type it again"
-                    value={form.confirm}
-                    onChange={set('confirm')}
-                    style={{
-                      ...authInputStyle,
-                      ...(form.confirm && { borderColor: form.confirm === form.password ? '#1F8A5B' : '#E0794B' }),
-                    }}
-                  />
+                <Field id="reg-confirm" label="Confirm Password">
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      id="reg-confirm"
+                      className="ak-input"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      placeholder="Type it again"
+                      value={form.confirm}
+                      onChange={set('confirm')}
+                      style={{
+                        ...authInputStyle,
+                        paddingRight: 46,
+                        ...(form.confirm && { borderColor: form.confirm === form.password ? '#1F8A5B' : '#E0794B' }),
+                      }}
+                    />
+                    <EyeToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
+                  </div>
                   {form.confirm && (
                     form.confirm === form.password ? (
                       <div className="flex items-center gap-1.5" style={{ fontSize: 12, fontWeight: 700, color: '#1F8A5B', marginTop: 8 }}>
@@ -745,12 +756,12 @@ export default function Register() {
 
           {step === 6 && kind === 'individual' && (
             <>
-              <SeatSlider
+              <SeatNumberInput
                 id="reg-solo-students"
                 label="Students you handle"
                 value={form.soloStudents}
-                onChange={set('soloStudents')}
-                tint={blue}
+                onChange={setSeat('soloStudents')}
+                onBlur={clampSeat('soloStudents', SEATS.perTeacher.min, SEATS.perTeacher.max)}
                 {...SEATS.perTeacher}
               />
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
@@ -814,20 +825,20 @@ export default function Register() {
 
           {step === 5 && kind === 'institution' && (
             <>
-              <SeatSlider
+              <SeatNumberInput
                 id="reg-teacher-seats"
                 label="Teachers"
                 value={form.teacherSeats}
-                onChange={set('teacherSeats')}
-                tint={blue}
+                onChange={setSeat('teacherSeats')}
+                onBlur={clampSeat('teacherSeats', SEATS.teachers.min, SEATS.teachers.max)}
                 {...SEATS.teachers}
               />
-              <SeatSlider
+              <SeatNumberInput
                 id="reg-students-per-teacher"
-                label="Students per teacher"
+                label="Students Per Teacher"
                 value={form.studentsPerTeacher}
-                onChange={set('studentsPerTeacher')}
-                tint={gold}
+                onChange={setSeat('studentsPerTeacher')}
+                onBlur={clampSeat('studentsPerTeacher', SEATS.perTeacher.min, SEATS.perTeacher.max)}
                 {...SEATS.perTeacher}
               />
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
@@ -897,10 +908,6 @@ export default function Register() {
                   Sign in
                 </Link>
               </div>
-              <p style={{ fontSize: 12.5, color: '#9AA6BD', margin: 0, lineHeight: 1.5 }}>
-                A student? Your account is set up by your school or teacher — no sign-up
-                needed. Just sign in with the login they gave you.
-              </p>
             </div>
           )}
           <Progress steps={completing ? steps.slice(0, 3) : steps} current={step} />
@@ -980,36 +987,28 @@ function TrialLine() {
   )
 }
 
-function SeatSlider({ id, label, value, onChange, tint, min, max, step }) {
-  const pct = ((value - min) / (max - min)) * 100
+// T-129 (andecobs-170): a number input, not a slider -- same floor and cap
+// (`min`/`max`), enforced on blur by the caller's `onBlur` (see `clampSeat`)
+// rather than here, so this stays a plain controlled input.
+function SeatNumberInput({ id, label, value, onChange, onBlur, min, max, step }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between" style={{ marginBottom: 8 }}>
-        <label htmlFor={id} style={{ ...authLabelStyle, marginBottom: 0 }}>{label}</label>
-        <span style={{ fontSize: 20, fontWeight: 700, color: navy, fontVariantNumeric: 'tabular-nums' }}>
-          {Number(value).toLocaleString()}
-        </span>
-      </div>
+      <label htmlFor={id} style={{ ...authLabelStyle, marginBottom: 8 }}>{label}</label>
       <input
         id={id}
-        type="range"
+        type="number"
+        inputMode="numeric"
         min={min}
         max={max}
         step={step}
         value={value}
         onChange={onChange}
-        style={{
-          width: '100%',
-          accentColor: tint,
-          background: `linear-gradient(to right, ${tint} ${pct}%, rgba(14,42,92,0.1) ${pct}%)`,
-          height: 6,
-          borderRadius: 3,
-          cursor: 'pointer',
-        }}
+        onBlur={onBlur}
+        style={{ ...authInputStyle, fontSize: 20, fontWeight: 700, color: navy, fontVariantNumeric: 'tabular-nums' }}
       />
       <div className="flex justify-between" style={{ fontSize: 12, color: '#9AA6BD', marginTop: 6 }}>
         <span>{min.toLocaleString()} minimum</span>
-        <span>{max.toLocaleString()}</span>
+        <span>{max.toLocaleString()} maximum</span>
       </div>
     </div>
   )

@@ -156,9 +156,11 @@ describe('/register step 2 — about you', () => {
   }
 
   it('asks for an optional middle name between first and last', () => {
+    // T-129 (maykel_64440-158): Title Case landed on this label among others
+    // -- "Middle Name", not "Middle name".
     const html = step2()
-    expect(html).toContain('Middle name')
-    expect(html).toMatch(/Middle name<span[^>]*> \(optional\)/)
+    expect(html).toContain('Middle Name')
+    expect(html).toMatch(/Middle Name<span[^>]*> \(optional\)/)
     expect(html.indexOf('reg-first')).toBeLessThan(html.indexOf('reg-middle'))
     expect(html.indexOf('reg-middle')).toBeLessThan(html.indexOf('reg-last'))
   })
@@ -244,32 +246,44 @@ describe('T-109 — Gender is gone; Position locks to Admin on the institution p
     expect(registerSource).toMatch(/position: next === 'institution'\s*\n\s*\?\s*'admin'/)
   })
 
-  it('renders the institution Position field disabled, with admin as the only selectable value and no handler to change it', () => {
+  /* Superseded 2026-10-08 by T-129 (maykel_64440-158, andecobs-164): the
+     owner's decision moved from locking the institution Position field
+     (disabled, Admin the only option) to dropping it from the screen
+     outright -- the next two tests below this one now pin that removal
+     instead of the lock. Kept pinned here: `position` is still seeded to
+     'admin' the moment the institution path is entered (by URL or by
+     picking the card), which is what actually keeps a bad value out of
+     the write -- see the two tests directly above this block. */
+  it('the individual path still offers an open Position select, backed by positionsFor(kind)', () => {
     const fieldAt = registerSource.indexOf('<Field id="reg-position"')
     const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
     const field = registerSource.slice(fieldAt, fieldEnd)
-    expect(field).toMatch(/kind === 'institution'/)
-    expect(field).toMatch(/<select id="reg-position"[^>]*\bdisabled\b[^>]*value="admin"/)
-    expect(field).not.toMatch(/<select id="reg-position"[^>]*\bdisabled\b[^>]*onChange/)
-    // exactly one option inside the disabled branch -- admin, and nothing else
-    const disabledBranch = field.slice(0, field.indexOf(') : ('))
-    expect(disabledBranch.match(/<option/g)).toHaveLength(1)
-    expect(disabledBranch).toContain('<option value="admin">Admin</option>')
+    expect(field).toMatch(/value={form\.position} onChange={set\('position'\)}/)
+    expect(field).toMatch(/positionsFor\(kind\)/)
   })
 
-  it('leaves the individual path open and still refuses to offer Admin', () => {
+  it('T-129: the institution path no longer renders a Position field at all -- not locked, gone', () => {
+    // Exactly one <Field id="reg-position"> in the whole file (the
+    // individual-path one tested above), and it is guarded so it never
+    // renders for kind === 'institution'.
+    expect(registerSource.match(/<Field id="reg-position"/g)).toHaveLength(1)
     const fieldAt = registerSource.indexOf('<Field id="reg-position"')
-    const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
-    const field = registerSource.slice(fieldAt, fieldEnd)
-    const individualBranch = field.slice(field.indexOf(') : ('))
-    expect(individualBranch).toMatch(/value={form\.position} onChange={set\('position'\)}/)
-    expect(individualBranch).toMatch(/positionsFor\(kind\)/)
+    const calendarFieldEnd = registerSource.indexOf('</Field>', registerSource.indexOf('<Field id="reg-calendar"'))
+    const between = registerSource.slice(calendarFieldEnd, fieldAt)
+    expect(between).toMatch(/\{kind !== 'institution' && \(/)
+    // the disabled, locked-to-Admin select and its helper text are gone
+    expect(registerSource).not.toMatch(/<select id="reg-position"[^>]*\bdisabled\b/)
+    expect(registerSource).not.toMatch(/Whoever sets up a school.s subscription is its admin\./)
   })
 
   it('the three wording fixes land exactly where Kristine found them', () => {
-    expect(registerSource).toContain('My school isn’t listed</option>')
-    expect(registerSource).not.toContain('My school isn’t listed — add it')
-    expect(registerSource).toContain('label="School type"')
+    // T-129 (andecobs-165, decided 2026-10-08) replaced "My school isn't
+    // listed" with "Others" -- the string this test pinned three days ago.
+    expect(registerSource).toContain('<option value={NEW_SCHOOL}>Others</option>')
+    expect(registerSource).not.toContain('My school isn’t listed')
+    // T-129 Title Case also moved this label from "School type" to
+    // "School Type".
+    expect(registerSource).toContain('label="School Type"')
     expect(registerSource).not.toContain('label="Private or public"')
     expect(registerSource).toContain('Set up your teacher account and start managing your classes.')
   })
@@ -670,5 +684,134 @@ describe('T-127 — the catch-all gives a tester something to quote, and keeps l
     // specific, already-actionable sentences -- untouched by this card.
     const block = registerSource.slice(catchAt, finallyAt)
     expect(block).toMatch(/FRIENDLY_ERRORS\[err\.code\] \?\?/)
+  })
+})
+
+/* T-129 (maykel_64440-158 items 1-3, andecobs-163, -164, -165, -166, -168,
+   -169, -170, -172, -174; decided 2026-10-08). Ten tester tickets on one
+   screen, one file: Title Case on eight labels, three helper paragraphs cut,
+   three sample values made generic, Confirm Password gets the eye toggle
+   Password already had, the three seat sliders become number inputs with
+   the same floor and cap, and the step-to-step height jump (AuthLayout.jsx,
+   not this file, verified in the browser) gets a steady minimum instead of
+   chasing each step's own content. Position's removal is its own block
+   above, next to the T-109 tests it supersedes.
+
+   Steps 3-5 are unreachable by a static render the same way the T-109/T-88
+   blocks above found them to be (no DOM test runner, and these steps need
+   Next clicks this file cannot simulate) -- those labels are read off the
+   source. Step 2 is reachable through the institution preset, so that half
+   is driven through an actual render. */
+describe('T-129 — Title Case on the field labels', () => {
+  const render = () => {
+    searchState.current = 'type=institution'
+    try { return renderToStaticMarkup(<Register />) } finally { searchState.current = '' }
+  }
+
+  it('step 2, reachable by a static render: First Name, Last Name, Phone Number', () => {
+    const html = render()
+    expect(html).toContain('First Name')
+    expect(html).toContain('Last Name')
+    expect(html).toContain('Phone Number')
+    expect(html).not.toContain('First name')
+    expect(html).not.toContain('Last name')
+    expect(html).not.toContain('Phone number')
+  })
+
+  it('steps 3 and 4, read off the source: School Type, Academic Calendar, Confirm Password', () => {
+    expect(registerSource).toContain('label="School Type"')
+    expect(registerSource).toContain('label="Academic Calendar"')
+    expect(registerSource).toContain('label="Confirm Password"')
+    expect(registerSource).not.toContain('label="School type"')
+    expect(registerSource).not.toContain('label="Academic calendar"')
+    expect(registerSource).not.toContain('label="Confirm password"')
+  })
+
+  it('the institution seat field: Students Per Teacher, not "Students per teacher"', () => {
+    expect(registerSource).toContain('label="Students Per Teacher"')
+    expect(registerSource).not.toContain('label="Students per teacher"')
+  })
+})
+
+describe('T-129 — three helper paragraphs removed; field-level rule hints kept', () => {
+  it('drops "A student? Your account is set up..." from the bottom of the form', () => {
+    expect(registerSource).not.toMatch(/A student\? Your account is set up by your school or teacher/)
+  })
+
+  it('drops the "write the full official name" paragraph under a new school’s name and abbreviation', () => {
+    expect(registerSource).not.toMatch(/Write the full official name without abbreviations/)
+  })
+
+  it('keeps the password-rule hint -- the ask was about explanatory prose, not validation help', () => {
+    expect(registerSource).toContain('At least 6 characters.')
+  })
+})
+
+describe('T-129 — generic sample values', () => {
+  it('the sign-up email sample reads exactly "Email Address", not a fake address', () => {
+    expect(registerSource).toContain('placeholder="Email Address"')
+    expect(registerSource).not.toContain('you@school.edu.ph')
+  })
+
+  it('the new-school name sample reads "Name of your School", not a real school', () => {
+    expect(registerSource).toContain('placeholder="Name of your School"')
+    expect(registerSource).not.toContain('University of Cebu')
+  })
+})
+
+describe('T-129 — Confirm Password gets the eye toggle Password already had', () => {
+  it('wraps the confirm input in its own relative container with an EyeToggle sharing showPassword', () => {
+    const fieldAt = registerSource.indexOf('<Field id="reg-confirm"')
+    const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
+    const field = registerSource.slice(fieldAt, fieldEnd)
+    expect(field).toMatch(/style=\{\{ position: 'relative' \}\}/)
+    expect(field).toMatch(/<EyeToggle shown={showPassword} onToggle={\(\) => setShowPassword\(\(s\) => !s\)} \/>/)
+  })
+})
+
+describe('T-129 (andecobs-170) — the seat sliders become number inputs, same floor and cap', () => {
+  it('replaces every SeatSlider call site with SeatNumberInput, and the slider component is gone', () => {
+    expect(registerSource).not.toMatch(/<SeatSlider\b/)
+    expect(registerSource).not.toMatch(/function SeatSlider\(/)
+    expect(registerSource.match(/<SeatNumberInput\b/g)).toHaveLength(3)
+  })
+
+  it('SeatNumberInput is a real number input carrying the min/max/step the slider took', () => {
+    const at = registerSource.indexOf('function SeatNumberInput(')
+    const end = registerSource.indexOf('\n}\n', at)
+    const body = registerSource.slice(at, end)
+    expect(body).toMatch(/type="number"/)
+    expect(body).toMatch(/min=\{min\}/)
+    expect(body).toMatch(/max=\{max\}/)
+    expect(body).toMatch(/step=\{step\}/)
+  })
+
+  it('types freely (onChange is a plain pass-through) and clamps to the floor/cap only on blur', () => {
+    // Clamping on every keystroke would stop "3" from ever becoming "300" --
+    // it would snap back to the floor the instant it dipped below it. The
+    // slider enforced its floor/cap physically; the number input enforces
+    // the same floor/cap on blur instead, after the person is done typing.
+    expect(registerSource).toMatch(/const setSeat = \(key\) => \(e\) => setForm\(\(f\) => \(\{ \.\.\.f, \[key\]: e\.target\.value \}\)\)/)
+    expect(registerSource).toMatch(/onBlur=\{clampSeat\('teacherSeats', SEATS\.teachers\.min, SEATS\.teachers\.max\)\}/)
+    expect(registerSource).toMatch(/onBlur=\{clampSeat\('studentsPerTeacher', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
+    expect(registerSource).toMatch(/onBlur=\{clampSeat\('soloStudents', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
+  })
+
+  it('the clamp math itself holds the same floor and cap the sliders enforced, in both directions and for a non-numeric value', () => {
+    // Pulled out of the source and run directly, rather than re-deriving
+    // the formula by eye, so a change to the math -- not just its presence
+    // -- turns this red.
+    const at = registerSource.indexOf('const clampSeat = (key, min, max) => () => setForm((f) => {')
+    expect(at).toBeGreaterThan(-1)
+    const body = registerSource.slice(at, registerSource.indexOf('})', at))
+    expect(body).toContain('Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min')
+    const clamp = (value, min, max) => {
+      const n = Number(value)
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min
+    }
+    expect(clamp(3, 20, 500)).toBe(20) // below the teacher-seats floor
+    expect(clamp(9999, 20, 500)).toBe(500) // above the teacher-seats cap
+    expect(clamp('', 20, 500)).toBe(20) // not a number -- falls to the floor
+    expect(clamp(250, 20, 500)).toBe(250) // already in range -- untouched
   })
 })

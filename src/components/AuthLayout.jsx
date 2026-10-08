@@ -187,7 +187,19 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
 
         <div
           className="relative grid w-full overflow-hidden lg:grid-cols-2"
-          style={{ maxWidth: 1480, minHeight: 'min(760px, calc(100vh - 64px))', background: '#FFFFFF', borderRadius: 28, boxShadow: '0 40px 80px -30px rgba(0,0,0,0.55)', animation: 'ak-swap 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
+          // T-129 (andecobs-174): the register form's right column recenters
+          // every time a step's content gets taller or shorter than the
+          // last one, which reads as the whole card jumping up and down.
+          // 1140px holds that height steady instead of chasing each step's
+          // own content -- measured live, not guessed: the Institution
+          // seats step (two number inputs, the subscription summary, the
+          // "schools are onboarded by..." notice) renders at 1089px at a
+          // standard desktop width, the tallest of every reachable step on
+          // either path, with ~50px of headroom on top for a validation
+          // message. A first pass here picked 860px by eye and undershot
+          // the real number by over 200px -- still shorter than this step,
+          // so the jump it was meant to fix was still there, just smaller.
+          style={{ maxWidth: 1480, minHeight: 'min(1140px, calc(100vh - 64px))', background: '#FFFFFF', borderRadius: 28, boxShadow: '0 40px 80px -30px rgba(0,0,0,0.55)', animation: 'ak-swap 0.4s cubic-bezier(0.22,1,0.36,1) both' }}
         >
           {/* LEFT half — brand + value prop, on cream. Desktop only. */}
           <section
@@ -243,7 +255,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
                 </Link>
               </div>
 
-              <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(30px, 6vw, 40px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink, textAlign: 'center', textWrap: 'balance' }}>
+              <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(32px, 6.5vw, 44px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink, textAlign: 'center', textWrap: 'balance' }}>
                 {title}
               </h1>
               {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 28px', lineHeight: 1.5, textAlign: 'center' }}>{subtitle}</p>}
@@ -333,7 +345,11 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
 
           {/* heading + form animate in together on each route swap */}
           <div style={{ animation: 'ak-swap 0.4s cubic-bezier(0.22,1,0.36,1) both' }}>
-            <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(30px, 6vw, 40px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
+            {/* T-129 / andecobs-172 ("Welcome!" undersized against the
+                inputs below): bumped from clamp(30px, 6vw, 40px). This is
+                login.jsx's own title -- the "card" variant above has its
+                own copy of this same h1 and got the same bump. */}
+            <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(32px, 6.5vw, 44px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
               {title}
             </h1>
             {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 32px', lineHeight: 1.5 }}>{subtitle}</p>}
