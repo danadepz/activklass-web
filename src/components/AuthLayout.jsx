@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, Eye, EyeOff, AlertCircle, ArrowRight } from './icons'
-import { ink, navy, gold, goldDeep, inkMuted, muted, cream, serifAlt as serif, mono, sansFamily as sans } from '@/theme'
+import { ink, navy, gold, goldDeep, inkMuted, muted, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
+import Modal from '@/components/ui/Modal'
 
 /* ------------------------------------------------------------------ *
  * AuthLayout — two-panel shell for Login / Register.
@@ -17,10 +19,15 @@ import { ink, navy, gold, goldDeep, inkMuted, muted, cream, serifAlt as serif, m
  * the .ak-input / .ak-primary helpers live in index.html / index.css.
  * ------------------------------------------------------------------ */
 
+// T-141 (triplecookiemonster-188, decided 2026-10-08): reworded to Kristine's
+// exact wording. The third bullet ("RA 10173 parental-consent privacy, built
+// in") is dropped outright, per the owner -- she supplied wording for two of
+// the three and didn't say what became of the third, so the card asked rather
+// than guessed; privacy is still represented on this panel by the Privacy
+// Policy link below (PrivacyPolicyModal), not by a perk bullet.
 const PERKS = [
-  'Computed, lockable DepEd & CHED gradebooks',
-  'AI risk prediction and remediation you control',
-  'RA 10173 parental-consent privacy, built in',
+  'Configurable DepEd & CHED gradebooks',
+  'AI-powered insights for student support',
 ]
 
 // --- shared form primitives (imported by Login / Register) ---------------
@@ -127,6 +134,123 @@ export function AuthNotice({ children }) {
   )
 }
 
+// T-141 (triplecookiemonster-189 attachment 1): replaces the "🔒 RA 10173 /
+// Privacy-first by design" chip on both panel variants. The card's own
+// blocker was that a real Privacy Policy page does not exist yet, and a link
+// to a 404 is worse than the chip it would replace -- a popup sidesteps that
+// without waiting on a page or a route: the policy exists the moment this
+// ships, not whenever a page gets built around it.
+function PrivacyPolicyLink({ onOpen, dark = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      style={{
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        margin: 0,
+        cursor: 'pointer',
+        fontFamily: sans,
+        fontSize: 13,
+        fontWeight: 700,
+        textDecoration: 'underline',
+        color: dark ? 'rgba(250,250,246,0.85)' : navy,
+      }}
+    >
+      Privacy Policy
+    </button>
+  )
+}
+
+// The policy itself. Written for this project directly -- nothing like it
+// existed anywhere in either repo to adapt (checked before writing this).
+// Plain language over legal boilerplate, same voice as the rest of the app;
+// still covers what RA 10173 asks a policy to say: what is collected, why,
+// the consent basis (including for a minor student, where a guardian's own
+// consent is what the law is asking for), how it is protected, what rights
+// a person has over their own data, and what is NOT built yet rather than
+// a claim that it is -- `docs/OPEN-QUESTIONS.md` §8 is explicit that a
+// self-service erasure path does not exist, so this does not promise one.
+function PrivacyPolicyModal({ open, onClose }) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Privacy Policy"
+      subtitle="How ActivKlass collects, uses and protects your information under RA 10173."
+      size="lg"
+    >
+      <div className="flex flex-col" style={{ gap: 18 }}>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>About this policy</h4>
+          <p style={{ margin: 0 }}>
+            ActivKlass is a capstone project built for DepEd and CHED classrooms, currently in
+            its pilot phase — the people using it today are real teachers, students and school
+            staff trying a system that is still being built. This policy applies to that pilot
+            the same way it would to a finished product.
+          </p>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>What we collect</h4>
+          <ul style={{ margin: 0, paddingLeft: 20 }}>
+            <li>Account details: your name, email address or login ID, phone number, and the school you're affiliated with.</li>
+            <li>Class records: grades, attendance, quiz and assignment scores, and the syllabus content a teacher creates.</li>
+            <li>AI-assisted features: when a teacher generates a quiz, a syllabus, or a risk prediction, the content involved (a topic, a student's grade history) is sent to the AI service behind that feature, and the result is saved into your class records.</li>
+            <li>Guardian records: for a student account, whether a parent or guardian has given consent, and the link between a guardian account and the student they're responsible for.</li>
+          </ul>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Why we collect it</h4>
+          <p style={{ margin: 0 }}>
+            To run the class record and gradebook system you're using: computing grades,
+            tracking attendance, generating and grading quizzes, predicting which students may
+            need extra support, and connecting guardians to the students they're responsible for.
+          </p>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Consent, including for a minor</h4>
+          <p style={{ margin: 0 }}>
+            Many students using ActivKlass are minors. Where RA 10173 asks for a parent or
+            guardian's consent before a minor's data is processed, that consent is recorded
+            before a guardian account is linked to a student. A school or teacher that creates a
+            student account is responsible for having the authorization their own enrollment
+            process requires.
+          </p>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>How it's protected</h4>
+          <p style={{ margin: 0 }}>
+            Your data is stored with the cloud infrastructure ActivKlass's hosting depends on,
+            behind sign-in and access rules that limit who can read or change it — a teacher can
+            only see the students in their own classes, for example, never every student on the
+            platform.
+          </p>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Your rights</h4>
+          <p style={{ margin: 0 }}>
+            Under RA 10173 you have the right to be informed about what's collected, to access
+            your own data, to have it corrected if it's wrong, and to object to or withdraw
+            consent for certain uses. A fully self-service way to delete an account does not
+            exist yet — until it does, a deletion request is handled by hand. Reach the
+            ActivKlass team through the support channel you already use for this pilot to
+            exercise any of these.
+          </p>
+        </section>
+        <section>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Changes to this policy</h4>
+          <p style={{ margin: 0 }}>
+            This is a pilot system under active development, so this policy will change as the
+            product does.
+          </p>
+        </section>
+      </div>
+    </Modal>
+  )
+}
+
 // --- internal bits -------------------------------------------------------
 
 export function BrandMark({ size = 32, onNavy = false }) {
@@ -167,6 +291,12 @@ export function BrandMark({ size = 32, onNavy = false }) {
 // --- shell ---------------------------------------------------------------
 
 export default function AuthLayout({ title, subtitle, titleSize, variant, children }) {
+  // T-141: one popup, shared by whichever variant renders below -- the
+  // trigger differs (the chip each variant used to show its own copy of),
+  // the modal does not.
+  const [policyOpen, setPolicyOpen] = useState(false)
+  const policyModal = <PrivacyPolicyModal open={policyOpen} onClose={() => setPolicyOpen(false)} />
+
   // variant="card": the whole screen is the brand navy, and ONE white
   // rounded container sits in the middle, split in two — the brand / value
   // pitch on its left half, the heading + form on its right half. The
@@ -234,11 +364,10 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
                 ))}
               </div>
 
-              <div className="flex items-center gap-2.5" style={{ fontSize: 13, color: muted, marginTop: 40 }}>
-                <span style={{ ...mono, fontSize: 13, background: 'rgba(14,42,92,0.06)', padding: '5px 10px', borderRadius: 6, color: navy }}>
-                  🔒 RA 10173
-                </span>
-                <span>Privacy-first by design</span>
+              {/* T-141 (triplecookiemonster-189): replaces the "🔒 RA 10173 /
+                  Privacy-first by design" chip. */}
+              <div style={{ marginTop: 40 }}>
+                <PrivacyPolicyLink onOpen={() => setPolicyOpen(true)} />
               </div>
             </div>
           </section>
@@ -261,14 +390,9 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
               {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 28px', lineHeight: 1.5, textAlign: 'center' }}>{subtitle}</p>}
 
               {children}
-
-              <div style={{ textAlign: 'center', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 12, color: '#9AA6BD', lineHeight: 1.5 }}>
-                Protected under the Philippine Data Privacy Act of 2012.
-                <br />
-                Your data is never shared without consent.
-              </div>
             </div>
           </main>
+          {policyModal}
         </div>
       </div>
     )
@@ -323,12 +447,11 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
           </div>
         </div>
 
-        {/* footer note */}
-        <div className="relative flex items-center gap-2.5" style={{ fontSize: 13, color: 'rgba(250,250,246,0.55)' }}>
-          <span style={{ ...mono, fontSize: 13, background: 'rgba(255,255,255,0.08)', padding: '5px 10px', borderRadius: 6, color: 'rgba(250,250,246,0.7)' }}>
-            🔒 RA 10173
-          </span>
-          <span>Privacy-first by design</span>
+        {/* T-141: same replacement as the "card" variant above -- the chip
+            becomes a popup trigger instead of the Privacy Policy page this
+            card's own blocker says does not exist yet. */}
+        <div className="relative">
+          <PrivacyPolicyLink onOpen={() => setPolicyOpen(true)} dark />
         </div>
       </aside>
 
@@ -355,15 +478,10 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
             {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 32px', lineHeight: 1.5 }}>{subtitle}</p>}
 
             {children}
-
-            <div style={{ textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 12, color: '#9AA6BD', lineHeight: 1.5 }}>
-              Protected under the Philippine Data Privacy Act of 2012.
-              <br />
-              Your data is never shared without consent.
-            </div>
           </div>
         </div>
       </main>
+      {policyModal}
     </div>
   )
 }
