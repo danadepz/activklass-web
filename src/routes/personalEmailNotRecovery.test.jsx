@@ -97,13 +97,10 @@ describe('T-90 · the admin call sites carry the same correction', () => {
   const usersTab = readFileSync(fileURLToPath(new URL('./admin/UsersTab.jsx', import.meta.url)), 'utf8')
   const bulkUpload = readFileSync(fileURLToPath(new URL('./admin/BulkUpload.jsx', import.meta.url)), 'utf8')
 
-  it("Add-user's Personal email label is a contact address, with no recovery claim beside it", () => {
-    expect(usersTab).toContain('recommended — a contact address, not their sign-in')
-    // the label and the tooltip that sits on the same <label>; the only other
-    // "password recovery" left in this file is a code comment about an ADMIN
-    // account, whose email really is the sign-in and really does get the link.
-    const at = usersTab.indexOf('Personal email <span')
-    expect(at, 'the Personal email label moved — re-point this slice').toBeGreaterThan(-1)
+  it("Add-user's Personal Email label has no recovery claim beside it (T-133)", () => {
+    expect(usersTab).not.toContain('recommended — a contact address, not their sign-in')
+    const at = usersTab.indexOf('Personal Email')
+    expect(at, 'the Personal Email label moved — re-point this slice').toBeGreaterThan(-1)
     expect(usersTab.slice(at - 600, at + 300)).not.toMatch(RECOVERY_CLAIM)
   })
 

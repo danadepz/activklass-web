@@ -313,15 +313,15 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           made from this screen at all). */}
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
         <label style={labelStyle}>
-          First name
+          First Name
           <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
         </label>
         <label style={labelStyle}>
-          Middle name <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+          Middle Name <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} value={form.middleName} onChange={set('middleName')} />
         </label>
         <label style={labelStyle}>
-          Last name
+          Last Name
           <input style={{ ...field, marginTop: 6 }} value={form.lastName} onChange={set('lastName')} />
         </label>
 
@@ -378,7 +378,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
         {role === 'teacher' && (
           <>
             <label style={labelStyle}>
-              Employee number
+              Employee Number
               <input style={{ ...field, marginTop: 6 }} value={form.employeeNumber}
                      onChange={set('employeeNumber')} placeholder="e.g. T-2024-018" />
             </label>
@@ -390,23 +390,16 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           </>
         )}
 
-        <label style={labelStyle}
-               title="Recorded here or nowhere -- the account owner cannot add one themselves. Not their sign-in: teacher and student logins are issued from the school prefix, so getting them back in is a reset from this page, with or without this address.">
-          Personal email <span style={{ color: faint, fontWeight: 400 }}>(recommended — a contact address, not their sign-in)</span>
+        <label style={labelStyle}>
+          Personal Email
           <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
                  onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
         </label>
 
         <label style={labelStyle}>
-          Temporary password <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+          Temporary Password <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
                  onChange={set('password')} placeholder={`defaults to ${DEFAULT_PASSWORD}`} />
-          {/* Only a length rule guards this field, deliberately -- but a form
-              that takes “12345678” without a word looks like a form with no rule
-              at all, which is how it gets reported. Say where the bound is. */}
-          <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-            Temporary on purpose — they will be asked to choose a new password the first time they sign in.
-          </span>
         </label>
       </div>
 
@@ -438,7 +431,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
         <button type="submit" style={btnPrimary} disabled={mut.isPending}>
-          {mut.isPending ? 'Creating…' : `Create ${role}`}
+          {mut.isPending ? 'Creating…' : `Create ${role === 'student' ? 'Student' : 'Teacher'}`}
         </button>
         {/* Ten seconds is normal here: making a sign-in account is several
             round trips to the identity service. Without a word about it, the

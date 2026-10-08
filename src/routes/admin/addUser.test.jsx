@@ -87,8 +87,8 @@ describe('Add User (T-113) -- nothing renders until both controls are set', () =
 
   it('renders the individual form once Individual + Teacher are both set', () => {
     const html = render({ mode: 'individual', role: 'teacher' })
-    expect(html).toContain('First name')
-    expect(html).toContain('Employee number')
+    expect(html).toContain('First Name')
+    expect(html).toContain('Employee Number')
     expect(html).not.toContain('Choose file')
   })
 
