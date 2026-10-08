@@ -10,6 +10,7 @@ import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
 import { MetricCard, Panel } from '@/components/ui/Card'
 import PredictedRisk from '@/components/PredictedRisk'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import InfoTooltip from './InfoTooltip'
 
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(2).replace(/\.00$/, '')
@@ -145,8 +146,18 @@ export default function PerformancePage() {
   if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
 
   const header = (
-    <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+    <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
       Performance
+      <InfoTooltip label="How Performance and Risk are calculated">
+        Performance (the figures on this tab) is computed from this class's own record, for the
+        grading period selected above — nothing from other classes or other periods.
+        <br /><br />
+        Risk is a separate projection, from attendance (its level and its recent trend), quiz
+        performance (level and trend), missing or unsubmitted work, and the student's grade. A
+        student is flagged only once the model's estimated likelihood reaches 50% — there is no
+        separate medium or low tier, just flagged or not, with the likelihood shown for anyone
+        flagged.
+      </InfoTooltip>
     </h1>
   )
 
