@@ -13,8 +13,15 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ classes: [], subscription: { kind: 'active', label: 'Subscribed', detail: 'Individual plan' } }))
+const state = vi.hoisted(() => ({
+  classes: [],
+  school: null,
+  subscription: { kind: 'active', label: 'Subscribed', detail: 'Individual plan' },
+}))
 
+vi.mock('@/context/useAuth', () => ({
+  useAuth: () => ({ profile: { id: 'T1', role: 'teacher' }, school: state.school }),
+}))
 vi.mock('@/hooks/useTeacherClasses', () => ({
   useTeacherClasses: () => ({ data: state.classes, isLoading: false }),
 }))

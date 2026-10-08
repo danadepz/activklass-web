@@ -24,8 +24,8 @@ export function fetchSchoolSettings() {
  * Sets the school's full name and its abbreviation — the abbreviation,
  * lowercased, is the login prefix. Never rewrites existing accounts.
  */
-export function saveSchoolSettings({ name, prefix }) {
-  return api('/api/admin/school', { method: 'PUT', body: { name, prefix } })
+export function saveSchoolSettings({ name, prefix, term_dates }) {
+  return api('/api/admin/school', { method: 'PUT', body: { name, prefix, term_dates } })
 }
 
 /** Creates the Auth account and the users/{uid} profile together. */

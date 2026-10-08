@@ -140,6 +140,130 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
   )
 }
 
+/* ─────────────────────────── term dates ─────────────────────────── */
+
+/**
+ * T-138: Per-school term dates for automatic class archiving.
+ *
+ * Covers:
+ *  - School year end (K-12 classes, where semester is null)
+ *  - 1st Semester end (College classes)
+ *  - 2nd Semester end (College classes)
+ *  - Midyear / Summer end (College classes)
+ *
+ * Classes past their term end date archive automatically to keep teachers'
+ * active classes uncluttered. A school with no dates set simply continues
+ * manual archiving without warnings.
+ */
+function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }) {
+  const school = settings?.school
+  const savedDates = school?.term_dates ?? {}
+
+  const [dates, setDates] = useState(null)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+
+  const mut = useMutation({
+    mutationFn: (term_dates) => saveSchoolSettings({
+      name: school?.name,
+      prefix: school?.login_prefix,
+      term_dates,
+    }),
+    onSuccess: () => {
+      setDates(null)
+      setError('')
+      setDone('Saved. Classes past their term date will archive automatically.')
+      onSaved()
+    },
+    onError: (e) => { setError(e.message); setDone('') },
+  })
+
+  const currentDates = dates ?? savedDates
+
+  function updateField(key, val) {
+    setDone('')
+    setDates((prev) => ({ ...(prev ?? savedDates), [key]: val }))
+  }
+
+  function submit(e) {
+    e.preventDefault()
+    setDone('')
+    setError('')
+    mut.mutate(currentDates)
+  }
+
+  return (
+    <form onSubmit={submit} style={{ ...card, padding: 22 }}>
+      <CardHead
+        icon="📅"
+        tint="rgba(31,138,91,0.12)"
+        title="Term end dates & automatic archiving"
+        sub={
+          loadError ? 'Your school’s details could not be loaded, so term dates cannot be shown yet.'
+            : pending ? 'Checking term dates…'
+            : school ? 'Set when each term ends so completed classes archive automatically. Classes still in use with recent activity are kept active. If left blank, classes remain active until manually archived.'
+            : 'This admin account is not linked to a school yet, so term dates cannot be set.'
+        }
+        style={{ marginBottom: school || loadError ? 16 : 0 }}
+      />
+
+      {loadError && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
+        </div>
+      )}
+      {school && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, alignItems: 'end' }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            School year end (K-12)
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.school_year_end ?? ''}
+              onChange={(e) => updateField('school_year_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            1st Semester end
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.first_sem_end ?? ''}
+              onChange={(e) => updateField('first_sem_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            2nd Semester end
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.second_sem_end ?? ''}
+              onChange={(e) => updateField('second_sem_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Midyear / Summer end
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.summer_end ?? ''}
+              onChange={(e) => updateField('summer_end', e.target.value)}
+            />
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, gridColumn: '1 / -1', marginTop: 4 }}>
+            <button type="submit" style={btnPrimary} disabled={mut.isPending}>
+              {mut.isPending ? 'Saving…' : 'Save term dates'}
+            </button>
+            <Notice>{error}</Notice>
+            <Notice tone="ok">{done}</Notice>
+          </div>
+        </div>
+      )}
+    </form>
+  )
+}
+
 /* ─────────────────────────── create user ─────────────────────────── */
 
 const labelStyle = { fontSize: 13, fontWeight: 600, color: ink }
@@ -754,6 +878,8 @@ export default function UsersTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <LoginPrefixCard settings={settings} pending={schoolPending} error={schoolError}
                        onRetry={refetchSchool} onSaved={refreshSchool} />
+      <TermDatesCard settings={settings} pending={schoolPending} error={schoolError}
+                     onRetry={refetchSchool} onSaved={refreshSchool} />
       <AddUserSection onCreated={refresh} settings={settings} users={users} />
 
       <section style={{ ...card, overflow: 'hidden' }}>

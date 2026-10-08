@@ -12,7 +12,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm, academicTerm } from '@/lib/classForm'
-import { deleteClassSection } from '@/lib/classes'
+import { deleteClassSection, shouldAutoArchive } from '@/lib/classes'
+import { useAuth } from '@/context/useAuth'
 import ClassFormModal from '@/features/classes/ClassFormModal'
 import { navy, navyDeep, gold, goldDeep, ink, muted, faint, line, sansFamily as sans, serif, mono } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
@@ -483,6 +484,31 @@ export default function ClassesPage() {
   const archivedCount = (classes ?? []).filter((c) => c.archived_at).length
   const activeCount = (classes ?? []).length - archivedCount
 
+  const { school } = useAuth()
+  const termDates = school?.term_dates
+
+  // T-138: Automatically archive classes whose term has passed per school term dates.
+  // Runs client-side on load for signed-in teachers. Classes past their term
+  // archive themselves so the teacher's active view stays uncluttered, unless
+  // they have activity after the term end date.
+  useEffect(() => {
+    if (!classes?.length || !termDates) return
+    const toArchive = classes.filter((c) => shouldAutoArchive(c, termDates))
+    if (!toArchive.length) return
+
+    toArchive.forEach(async (cls) => {
+      try {
+        await updateDoc(doc(db, 'classes', cls.id), {
+          archived_at: serverTimestamp(),
+          auto_archived: true,
+        })
+        queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
+      } catch (err) {
+        console.warn(`[autoArchive] Failed to archive ${cls.id}:`, err)
+      }
+    })
+  }, [classes, termDates, queryClient])
+
   // T-134 (triplecookiemonster-178): the tab button itself disappears once
   // archivedCount hits 0 (below), which would otherwise strand a teacher who
   // unarchived the last class while still looking at that now-buttonless tab.
@@ -528,7 +554,7 @@ export default function ClassesPage() {
           label: 'Undo',
           onClick: async () => {
             try {
-              await updateDoc(doc(db, 'classes', cls.id), { archived_at: null })
+              await updateDoc(doc(db, 'classes', cls.id), { archived_at: null, unarchived_at: serverTimestamp() })
               queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
               toast.success(`"${cls.section}" is back in your class list.`)
             } catch (err) {
@@ -544,9 +570,10 @@ export default function ClassesPage() {
 
   // T-71: the same clear the Archive toast's own Undo already uses -- a
   // single nullable field, so this puts the class back exactly as it was.
+  // Sets unarchived_at so auto-archiving does not immediately re-archive it.
   async function handleUnarchive(cls) {
     try {
-      await updateDoc(doc(db, 'classes', cls.id), { archived_at: null })
+      await updateDoc(doc(db, 'classes', cls.id), { archived_at: null, unarchived_at: serverTimestamp() })
       queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
       toast.success(`"${cls.section}" is back in your class list.`)
     } catch (err) {
