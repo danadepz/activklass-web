@@ -32,7 +32,7 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts, { AccountRow, BulkCreate, signInConfirm, resetCopy, rowProblem, REQUIRED } from './StudentAccounts.jsx'
+import StudentAccounts, { AccountRow, AddStudentModal, BulkCreate, signInConfirm, resetCopy, rowProblem, REQUIRED } from './StudentAccounts.jsx'
 import StudentsPage from './students.jsx'
 import { SubscriptionChip, SubscriptionBox } from '@/components/SubscriptionBadge.jsx'
 
@@ -47,54 +47,77 @@ function render(el) {
   )
 }
 
+/* T-136 (triplecookiemonster-184): the always-open create form is gone --
+   one Add Student button opens a modal offering Bulk | Individual, matching
+   T-119's control. The card's two forms (ManualCreate via the Individual
+   tab, BulkCreate via the Bulk tab) are unchanged underneath, so they are
+   pinned directly through AddStudentModal rather than through a click the
+   static-markup harness cannot simulate. */
 describe('Student accounts tab', () => {
-  it('always shows the form, with the three buttons, and derives the level from a school class', () => {
+  it('shows only the Add Student button and the search bar -- no inline form, no second action', () => {
     state.classes = [HS]
     const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
+    expect(html).toContain('Add Student')
+    expect(html).toContain('Search by name or login')
+    expect(html).not.toContain('Into class')
+    expect(html).not.toContain('Download template')
+    expect(html).not.toContain('Create accounts from a file')
+    // Only one button renders at the top level -- the trigger, not a form.
+    expect((html.match(/<button/g) ?? []).length).toBe(1)
+  })
+
+  it('with no accounts yet, points at the Add Student button instead of a form that is no longer there', () => {
+    const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
+    expect(html).toContain('No student accounts yet')
+    expect(html).toContain('click Add Student above')
+    expect(html).not.toContain('with the form above')
+  })
+
+  it("Add Student's modal offers Bulk | Individual, defaulting to Individual, and derives the level from a school class", () => {
+    const html = render(<AddStudentModal classes={[HS]} prefix="ucb" onClose={() => {}} onDone={() => {}} />)
+    expect(html).toContain('Add Student')
+    expect(html).toContain('>Bulk<')
+    expect(html).toContain('>Individual<')
     expect(html).toContain('Into class')
     expect(html).toContain('MATH10 · Rizal')
     expect(html).toContain('High School · Grade 10 · Rizal')
     expect(html).toContain('the login comes from the LRN')
     expect(html).toContain('>LRN<')
     expect(html).toContain('Add student')
-    expect(html).toContain('Download template')
-    expect(html).toContain('Create accounts from a file')
     // the pattern line, before any digits are typed
     expect(html).toContain('ucb-&lt;last 6 digits of their LRN&gt;')
     expect(html).not.toContain('Level') // no level dropdown: the class decides
-    expect(html).toContain('0 accounts')
+    // Download template and the file path live in Bulk now, not here.
+    expect(html).not.toContain('Download template')
   })
 
   it('a College class hides the LRN field and takes the login from the student number', () => {
-    const html = render(<StudentAccounts classes={[COLLEGE]} rows={[]} />)
+    const html = render(<AddStudentModal classes={[COLLEGE]} prefix="ucb" onClose={() => {}} onDone={() => {}} />)
     expect(html).toContain('College · 2nd · BSIT-2A')
     expect(html).toContain('no LRN is asked for; the login comes from the student number')
     expect(html).not.toContain('>LRN<')
     expect(html).toContain('ucb-&lt;last 6 digits of their student number&gt;')
   })
 
-  it('with no class yet the form stays on screen and points to My Classes', () => {
-    const html = render(<StudentAccounts classes={[]} rows={[]} />)
+  it('with no class yet the Individual form stays on screen and points to My Classes', () => {
+    const html = render(<AddStudentModal classes={[]} prefix="ucb" onClose={() => {}} onDone={() => {}} />)
     expect(html).toContain('No class yet')
     expect(html).toContain('href="/teacher/classes"')
     expect(html).toContain('Add student')
     expect(html).toContain('First name')
-    expect(html).toContain('No student accounts yet')
   })
 
   it('without a school prefix the email becomes the login', () => {
-    state.profile = { ...state.profile, teaching_school_id: '' }
-    const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
+    const html = render(<AddStudentModal classes={[HS]} prefix="" onClose={() => {}} onDone={() => {}} />)
     expect(html).toContain('becomes their login')
     expect(html).toContain('No school abbreviation is on your account')
-    state.profile = { ...state.profile, teaching_school_id: 'ucb' }
   })
 
-  it('counts one account per student, not per class row', () => {
+  it('counts nothing on the card any more -- the account total moved off the removed header', () => {
     const rows = [{ studentId: 's1', classId: 'c-hs' }, { studentId: 's1', classId: 'c-col' }, { studentId: 's2', classId: 'c-hs' }]
     const html = render(<StudentAccounts classes={[HS, COLLEGE]} rows={rows} />)
-    expect(html).toContain('2 accounts')
     expect(html).toContain('Loading accounts')
+    expect(html).not.toContain('accounts</span>')
   })
 })
 
@@ -182,6 +205,9 @@ describe('Create accounts from a file', () => {
     expect(html).toMatch(/<input[^>]*class="peer sr-only"/)
     expect(html).toContain('No file chosen')
     expect(html).toContain('Create accounts')
+    // T-136 (triplecookiemonster-184): Download template moved into the
+    // bulk branch, beside the file it's meant to be filled out and reuploaded as.
+    expect(html).toContain('Download template')
   })
 })
 
@@ -193,7 +219,7 @@ describe('Birthdate is required to create a student (T-50)', () => {
 
   it('the Add-one form says under Birthdate what it is needed for', () => {
     state.classes = [HS]
-    const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
+    const html = render(<AddStudentModal classes={[HS]} prefix="ucb" onClose={() => {}} onDone={() => {}} />)
     expect(html).toContain('Needed before the student can set up guardian access.')
   })
   it('a file must carry the birthdate column, and the Columns line says so', () => {
@@ -220,21 +246,24 @@ describe('Birthdate is required to create a student (T-50)', () => {
 })
 
 describe('Students page', () => {
-  it('a solo subscriber gets the Directory / Student accounts tabs, on the Directory first', () => {
+  // T-136: 182 shortens the Directory subtitle, 183 shortens the Accounts
+  // tab label, 186 shortens the per-class footnote.
+  it('a solo subscriber gets the Directory / Accounts tabs, on the Directory first', () => {
     state.classes = [HS]
     state.rows = [{ studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal', configured: false }]
     state.sub = { ...state.sub, isSolo: true }
     const html = render(<StudentsPage />)
     expect(html).toContain('📋 Directory')
-    expect(html).toContain('🪪 Student accounts')
+    expect(html).toContain('🪪 Accounts')
     expect(html).toContain('Dela Cruz, Juan')
-    expect(html).toContain('Every student across your classes')
+    expect(html).toContain('Create and manage student accounts.')
+    expect(html).toContain('Students in multiple classes appear once per class. Grades and risk are calculated per class.')
   })
 
   it('a school-issued teacher sees no tabs at all', () => {
     state.sub = { ...state.sub, kind: 'school', isSolo: false }
     const html = render(<StudentsPage />)
-    expect(html).not.toContain('Student accounts')
+    expect(html).not.toContain('🪪 Accounts')
     expect(html).toContain('Dela Cruz, Juan')
     state.sub = { ...state.sub, kind: 'active', isSolo: true }
   })
@@ -242,7 +271,7 @@ describe('Students page', () => {
   it('with no classes a solo teacher still gets the tabs and the empty state', () => {
     state.classes = []
     const html = render(<StudentsPage />)
-    expect(html).toContain('🪪 Student accounts')
+    expect(html).toContain('🪪 Accounts')
     expect(html).toContain('No classes yet')
   })
 })

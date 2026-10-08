@@ -45,16 +45,19 @@ vi.mock('@/lib/xlsx', () => ({ downloadXlsx: vi.fn(), readXlsxRows: vi.fn() }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import StudentAccounts from './teacher/StudentAccounts.jsx'
+import { AddStudentModal } from './teacher/StudentAccounts.jsx'
 
 const HS = { id: 'c-hs', education_level: 'High School', grade_level: 'Grade 10', section: 'Rizal', subject_code: 'MATH10', student_ids: [] }
 
+/* T-136 moved the Individual form (and the Personal email field this ticket
+   is about) off the always-open card and into Add Student's modal -- same
+   markup, now reached through AddStudentModal instead of the card directly. */
 function renderWithPrefix(prefix) {
   state.profile = { ...state.profile, teaching_school_id: prefix }
   try {
     return renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter><StudentAccounts classes={[HS]} rows={[]} /></MemoryRouter>
+        <MemoryRouter><AddStudentModal classes={[HS]} prefix={prefix} onClose={() => {}} onDone={() => {}} /></MemoryRouter>
       </QueryClientProvider>,
     )
   } finally {

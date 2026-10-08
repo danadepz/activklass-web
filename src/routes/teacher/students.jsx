@@ -160,7 +160,8 @@ export default function StudentsPage() {
         <p style={{ fontSize: 15, color: muted, margin: 0 }}>
           {tab === 'accounts'
             ? 'Issue your students’ logins, reset a password, or deactivate anyone who leaves.'
-            : 'Every student across your classes, in one place. Highest risk is listed first; click a column heading to sort another way.'}
+            // T-136 (triplecookiemonster-182): shorter wording, Kristine's text verbatim.
+            : 'Create and manage student accounts.'}
         </p>
       </div>
     </div>
@@ -170,7 +171,9 @@ export default function StudentsPage() {
      second tab. A school-issued teacher sees the directory alone. */
   const tabs = isSolo && (
     <div className="flex border-b border-slate-200" style={{ marginBottom: 18 }}>
-      {[['directory', '📋 Directory'], ['accounts', '🪪 Student accounts']].map(([id, label]) => (
+      {/* T-136 (triplecookiemonster-183): "Student accounts" shortened to
+          "Accounts" -- the tab's own panel still says what the tab is for. */}
+      {[['directory', '📋 Directory'], ['accounts', '🪪 Accounts']].map(([id, label]) => (
         <button
           key={id}
           type="button"
@@ -382,12 +385,13 @@ export default function StudentsPage() {
         )}
       </div>
 
+      {/* T-136 (triplecookiemonster-186): shorter, but keeps both facts --
+          a student in several classes is not a duplicate, and a class's grade
+          and risk are each computed on its own. The risk-band breakdown that
+          used to sit here moved into nothing; nobody asked for it kept, and
+          every number it quoted is already on the Risk filter chips above. */}
       <p style={{ fontSize: 12.5, color: faint, margin: '16px 2px 0', maxWidth: 720 }}>
-        A student in more than one of your classes appears once per class, since grades and risk are
-        each computed within a class, not blended across them. Risk is the model's own likelihood
-        score — attendance, quiz trend and missing work alongside the grade — banded as High (50%+),
-        Medium (35–49%) and Low (under 35%); the model itself flags high risk at 50%, so "High" here
-        always agrees with it.
+        Students in multiple classes appear once per class. Grades and risk are calculated per class.
       </p>
 
       {list.some((r) => r.riskTraining?.real_data === false) && (

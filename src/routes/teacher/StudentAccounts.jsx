@@ -29,6 +29,7 @@ import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { tempPasswordError, MIN_PASSWORD, nameError, lrnError, idNumberError, emailError, birthdateError, BIRTHDATE_HINT } from '@/lib/validation'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
+import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { navy, navyDeep, ink, muted, faint, green, red, goldDeep, line, serif, mono, sansFamily as sans } from '@/theme'
 
 /* birthdate moved from OPTIONAL to REQUIRED on 2026-09-11 (T-50): the
@@ -132,7 +133,7 @@ const optional = <span style={{ color: faint, fontWeight: 400 }}>(optional)</spa
  * no LRN, so theirs come from the student number. Same rules as
  * admin/UsersTab.jsx, all from lib/validation.
  */
-function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
+function ManualCreate({ classes, prefix, onDone }) {
   const blank = {
     classId: classes[0]?.id ?? '', firstName: '', middleName: '', lastName: '',
     studentNumber: '', lrn: '', birthdate: '', personalEmail: '',
@@ -141,22 +142,6 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
-  const [preparing, setPreparing] = useState(false)
-
-  /* The spreadsheet writer is only fetched on the first download, so that
-     click can sit for a second or two with nothing on screen moving. Without
-     this the button looked dead and a second click handed over two files. */
-  async function onDownloadTemplate() {
-    if (preparing) return
-    setPreparing(true)
-    try {
-      await downloadTemplate()
-    } catch {
-      setError('The template could not be prepared. Try that again in a moment.')
-    } finally {
-      setPreparing(false)
-    }
-  }
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   // The class decides the level: the teacher picked Elementary / High School /
@@ -305,16 +290,13 @@ function ManualCreate({ classes, prefix, onDone, fileOpen, onToggleFile }) {
             : 'No school abbreviation is on your account, so the personal email becomes the login.'}
         </p>
       )}
+      {/* T-136 (triplecookiemonster-184): Download template and Create
+          accounts from a file used to sit here too -- they are the Bulk
+          branch of Add Student now (download moved into BulkCreate itself,
+          and "a file" IS the Bulk tab), so only the submit stays. */}
       <div className="flex flex-wrap items-center gap-2.5" style={{ marginTop: 12 }}>
         <button type="submit" style={{ ...btnPrimary, opacity: busy ? 0.5 : 1 }} disabled={busy}>
           {busy ? 'Adding…' : 'Add student'}
-        </button>
-        <button type="button" style={{ ...btnGhost, opacity: preparing ? 0.55 : 1 }} disabled={preparing}
-                onClick={onDownloadTemplate} title="An .xlsx with the columns filled in below, headers only">
-          {preparing ? 'Preparing…' : 'Download template'}
-        </button>
-        <button type="button" style={{ ...btnGhost, ...(fileOpen ? { background: 'rgba(14,42,92,0.08)' } : {}) }} onClick={onToggleFile}>
-          {fileOpen ? 'Hide file upload' : 'Create accounts from a file'}
         </button>
       </div>
       {error && <p style={{ fontSize: 13, color: red, margin: '10px 0 0' }}>{error}</p>}
@@ -332,6 +314,22 @@ export function BulkCreate({ classes, prefix, onDone }) {
   const [parseError, setParseError] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [preparing, setPreparing] = useState(false)
+
+  /* The spreadsheet writer is only fetched on the first download, so that
+     click can sit for a second or two with nothing on screen moving. Without
+     this the button looked dead and a second click handed over two files. */
+  async function onDownloadTemplate() {
+    if (preparing) return
+    setPreparing(true)
+    try {
+      await downloadTemplate()
+    } catch {
+      setParseError('The template could not be prepared. Try that again in a moment.')
+    } finally {
+      setPreparing(false)
+    }
+  }
 
   async function onFile(e) {
     const file = e.target.files?.[0]
@@ -397,6 +395,14 @@ export function BulkCreate({ classes, prefix, onDone }) {
          The class page's "Bulk Upload Roster" only matches students who
          already have one -- a tester read the two as the same thing. */}
       <h4 style={{ ...serif, fontSize: 16, color: ink, margin: '0 0 10px' }}>Create accounts from a file</h4>
+      {/* T-136 (triplecookiemonster-184): Download template lives in the
+          bulk branch now -- it only ever mattered to someone about to pick a
+          file, so it moved to sit beside that choice instead of the
+          single-student form. */}
+      <button type="button" style={{ ...btnGhost, opacity: preparing ? 0.55 : 1, marginBottom: 12 }} disabled={preparing}
+              onClick={onDownloadTemplate} title="An .xlsx with the columns this upload reads, headers only">
+        {preparing ? 'Preparing…' : 'Download template'}
+      </button>
       <div className="flex flex-wrap items-end gap-3">
         <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: muted }}>
           Into class
@@ -505,6 +511,88 @@ export function BulkCreate({ classes, prefix, onDone }) {
         </div>
         )
       })()}
+    </div>
+  )
+}
+
+/* ── Add Student ──────────────────────────────────────────────────────── */
+
+/* T-136 (triplecookiemonster-184): the teacher-side twin of T-119's own
+   Add Student control on the class roster -- same two words, same look,
+   so a teacher reads one "Bulk | Individual" across the app rather than
+   learning it twice. Each lane keeps its own copy (see $classId/index.jsx
+   and admin/UsersTab.jsx); there is no shared component to import. */
+function SegmentedControl({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, overflow: 'hidden' }}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          style={{
+            flex: 1,
+            padding: '8px 14px',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: sans,
+            border: 'none',
+            cursor: 'pointer',
+            background: value === opt.value ? navy : '#FFFFFF',
+            color: value === opt.value ? '#FAFAF6' : '#3A4A6B',
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The single door into account creation (T-136, triplecookiemonster-184):
+ * one Add Student button on the card now opens this, offering Bulk or
+ * Individual -- the two forms that used to sit permanently on the page,
+ * unchanged underneath. Neither tab closes the modal on success, so a
+ * teacher can add several students in a row the way the always-open form
+ * used to allow; Close is explicit.
+ */
+export function AddStudentModal({ classes, prefix, onClose, onDone }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Add a student', closeOnBackdrop: false })
+  const [entryMode, setEntryMode] = useState('individual')
+
+  return (
+    <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
+      <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
+        <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
+          <h3 className="text-lg font-semibold text-slate-800">Add Student</h3>
+
+          <SegmentedControl
+            options={[
+              { value: 'bulk', label: 'Bulk' },
+              { value: 'individual', label: 'Individual' },
+            ]}
+            value={entryMode}
+            onChange={setEntryMode}
+          />
+
+          {entryMode === 'bulk' ? (
+            classes.length
+              ? <BulkCreate classes={classes} prefix={prefix} onDone={onDone} />
+              : <p style={{ padding: '18px 0 0', fontSize: 13, color: muted, margin: 0 }}>Create a class first, then upload students into it.</p>
+          ) : (
+            <ManualCreate classes={classes} prefix={prefix} onDone={onDone} />
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -623,8 +711,11 @@ export function AccountRow({ user, classes, onChanged }) {
         {/* "sign-in off", not "inactive": the list has to say the same thing
             the confirm said, and "inactive" reads as paused in a class. */}
         <Pill fg={active ? green : red} bg={active ? 'rgba(31,138,91,0.10)' : 'rgba(192,57,43,0.08)'}>{active ? 'active' : 'sign-in off'}</Pill>
+        {/* T-136 (triplecookiemonster-185): "starting password" renamed --
+            this is the state before the student has ever signed in, not a
+            description of what the password looks like. */}
         {user.is_temp_password && (
-          <div style={{ marginTop: 5 }}><Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">starting password</Pill></div>
+          <div style={{ marginTop: 5 }}><Pill fg={goldDeep} bg="rgba(245,197,24,0.16)">First login pending</Pill></div>
         )}
         {/* T-50: made before birthdate was required, so guardian access is
             locked for them until it is added. The field lives on the class
@@ -663,9 +754,9 @@ export function AccountRow({ user, classes, onChanged }) {
 export default function StudentAccounts({ classes, rows }) {
   const { profile } = useAuth()
   const qc = useQueryClient()
-  // Its own tab on the Students page now, so the list is always open.
-  // The form is always there; the file upload unfolds under it on demand.
-  const [fileOpen, setFileOpen] = useState(false)
+  // T-136: the always-open create form is gone -- one Add Student button
+  // opens it as a modal instead (triplecookiemonster-184).
+  const [addOpen, setAddOpen] = useState(false)
   const [search, setSearch] = useState('')
 
   // The directory can hold one student several times (once per class); the
@@ -697,58 +788,49 @@ export default function StudentAccounts({ classes, rows }) {
 
   return (
     <div style={panel}>
+      {/* T-136 (triplecookiemonster-184): the always-open create form is
+          gone; one Add Student button, right of the search bar, is the only
+          action here now. Its modal offers Bulk | Individual (T-119's
+          control) and both forms underneath are unchanged. */}
       <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '16px 22px' }}>
-        <div>
-          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Student accounts</h3>
-          <p style={{ fontSize: 12.5, color: muted, margin: '3px 0 0', maxWidth: 640 }}>
-            On your own subscription you issue your students' logins, reset their passwords and deactivate
-            anyone who leaves — there is no school admin in between.
-            {prefix && <> Logins start with <span style={mono}>{prefix}-</span>.</>}
-          </p>
-        </div>
-        <span style={{ ...mono, fontSize: 12, color: faint }}>{ids.length} account{ids.length === 1 ? '' : 's'}</span>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or login…"
+          className="ak-input"
+          style={{ flex: '1 1 220px', maxWidth: 320, padding: '9px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10 }}
+        />
+        <button type="button" style={btnPrimary} onClick={() => setAddOpen(true)}>Add Student</button>
       </div>
 
-      <ManualCreate classes={classes ?? []} prefix={prefix} onDone={refresh} fileOpen={fileOpen} onToggleFile={() => setFileOpen((v) => !v)} />
-      {fileOpen && (classes?.length
-        ? <BulkCreate classes={classes} prefix={prefix} onDone={refresh} />
-        : <p style={{ padding: '0 22px 16px', fontSize: 13, color: muted, margin: 0 }}>Create a class first, then upload students into it.</p>)}
-
-      {ids.length === 0 ? (
-        <p style={{ padding: '0 22px 18px', fontSize: 13, color: muted, margin: 0 }}>
-          No student accounts yet — add one with the form above, or download the template and upload a whole class at once.
-        </p>
-      ) : (
-        <div style={{ borderTop: `1px solid ${line}` }}>
-          <div style={{ padding: '12px 22px' }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or login…"
-              className="ak-input"
-              style={{ width: '100%', maxWidth: 320, padding: '9px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10 }}
-            />
+      <div style={{ borderTop: `1px solid ${line}` }}>
+        {ids.length === 0 ? (
+          <p style={{ padding: '18px 22px', fontSize: 13, color: muted, margin: 0 }}>
+            No student accounts yet — click Add Student above to create one, or upload a whole class at once.
+          </p>
+        ) : isLoading ? (
+          <p style={{ padding: '18px 22px', fontSize: 13, color: faint, margin: 0 }}>Loading accounts…</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+              <thead>
+                <tr style={{ background: 'rgba(14,42,92,0.02)' }}>
+                  <th style={th}>Student</th><th style={th}>Classes</th><th style={th}>Sign-in</th><th style={th}>Status</th><th style={{ ...th, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((u) => <AccountRow key={u.id} user={u} classes={classes} onChanged={refresh} />)}
+                {shown.length === 0 && (
+                  <tr><td colSpan={5} style={{ ...td, color: faint, textAlign: 'center' }}>No accounts match.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          {isLoading ? (
-            <p style={{ padding: '0 22px 16px', fontSize: 13, color: faint, margin: 0 }}>Loading accounts…</p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-                <thead>
-                  <tr style={{ background: 'rgba(14,42,92,0.02)' }}>
-                    <th style={th}>Student</th><th style={th}>Classes</th><th style={th}>Sign-in</th><th style={th}>Status</th><th style={{ ...th, textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((u) => <AccountRow key={u.id} user={u} classes={classes} onChanged={refresh} />)}
-                  {shown.length === 0 && (
-                    <tr><td colSpan={5} style={{ ...td, color: faint, textAlign: 'center' }}>No accounts match.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        )}
+      </div>
+
+      {addOpen && (
+        <AddStudentModal classes={classes ?? []} prefix={prefix} onClose={() => setAddOpen(false)} onDone={refresh} />
       )}
     </div>
   )
