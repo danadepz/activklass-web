@@ -25,6 +25,9 @@ export default defineConfig({
     },
     // VS Code port forwarding serves from *.devtunnels.ms; without this Vite
     // rejects the Host header and the page renders "Blocked request".
-    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com'],
+    // activklass.vercel.app is the deployed host (mirrors the backend's
+    // frontend_links.py allowlist, T-128) -- add a custom domain here too
+    // if one ever replaces it.
+    allowedHosts: ['.devtunnels.ms', '.trycloudflare.com', 'activklass.vercel.app'],
   },
 })
