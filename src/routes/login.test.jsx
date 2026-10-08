@@ -56,4 +56,8 @@ describe('T-66 — the sign-in page tells a parent where their account is made',
     expect(html).not.toMatch(/href="[^"]*(parent|guardian)[^"]*"/i)
     expect(html.match(/href="\/register[^"]*"/g) ?? []).toEqual(['href="/register"'])
   })
+
+  it('renders a clean, helpful placeholder for the Email/Login ID input', () => {
+    expect(html).toContain('placeholder="Enter your email or login ID"')
+  })
 })

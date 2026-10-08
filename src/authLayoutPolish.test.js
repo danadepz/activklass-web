@@ -63,11 +63,12 @@ describe('T-108 — the "record." period, smaller bullets, and two login labels'
     expect(loginSource).not.toMatch(/Email or login ID/)
   })
 
-  /* T-130 (andecobs-173, decided 2026-10-08): the long sample placeholder
+  /* T-130 (andecobs-173, updated 2026-10-08): the long sample placeholder
      ("you@school.edu.ph or snhs-123456") that T-108 preserved was overridden
-     by the owner in favor of a clean field whose label ("Email/Login ID")
-     already provides the signal that non-email login IDs are accepted. */
-  it('no longer carries the sample-credentials placeholder (T-130)', () => {
+     by the owner in favor of a clean, generic placeholder matching the password
+     field ("Enter your email or login ID"). */
+  it('carries a clean, generic placeholder without sample credentials (T-130)', () => {
     expect(loginSource).not.toContain('you@school.edu.ph or snhs-123456')
+    expect(loginSource).toContain('placeholder="Enter your email or login ID"')
   })
 })

@@ -183,6 +183,7 @@ export default function Login() {
             required
             disabled={settingPassword}
             autoComplete="username"
+            placeholder="Enter your email or login ID"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             style={{ ...authInputStyle, opacity: settingPassword ? 0.6 : 1 }}
