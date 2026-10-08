@@ -1,19 +1,26 @@
 /**
- * Every user in the system, for the admin console.
+ * Every user at the admin's OWN school, for the admin console.
  *
  * Owned by the logic lane (see OWNERSHIP.md). Reads and writes Firestore
- * directly: firestore.rules grants isAdmin() read on any users/{uid} and update
- * on any profile, so listing, deactivating and re-roling need no endpoint.
- * Only account creation and password reset do -- see lib/admin.js.
+ * directly: firestore.rules grants isAdmin() read/update on a users/{uid}
+ * profile only when its school_id matches the caller's own (T-126 --
+ * `isAdmin()` alone used to open every user on the platform to any admin of
+ * any school). The query below must carry the same filter the rule proves,
+ * or an unscoped `getDocs(collection(db, 'users'))` is refused outright --
+ * Firestore denies a whole list request it cannot statically prove matches
+ * the rule for every possible result, the same reason roster reads chunk at
+ * `IN_CHUNK` in lib/roster.js. Listing, deactivating and re-roling need no
+ * endpoint; only account creation and password reset do -- see lib/admin.js.
  */
 import { useQuery } from '@tanstack/react-query'
-import { collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export const adminUsersKey = ['fs-admin-users']
 
-export async function fetchAllUsers() {
-  const snap = await getDocs(collection(db, 'users'))
+export async function fetchAllUsers(schoolId) {
+  if (!schoolId) return []
+  const snap = await getDocs(query(collection(db, 'users'), where('school_id', '==', schoolId)))
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .sort((a, b) => {
@@ -22,11 +29,12 @@ export async function fetchAllUsers() {
     })
 }
 
-export function useAdminUsers(options = {}) {
+export function useAdminUsers(schoolId, options = {}) {
   return useQuery({
     ...options,
-    queryKey: adminUsersKey,
-    queryFn: fetchAllUsers,
+    queryKey: [...adminUsersKey, schoolId],
+    queryFn: () => fetchAllUsers(schoolId),
+    enabled: Boolean(schoolId),
   })
 }
 

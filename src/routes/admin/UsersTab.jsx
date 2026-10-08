@@ -729,7 +729,7 @@ function UserRow({ user, isSelf, onChanged }) {
 export default function UsersTab() {
   const { profile } = useAuth()
   const qc = useQueryClient()
-  const { data: users = [], isLoading, isError, error } = useAdminUsers()
+  const { data: users = [], isLoading, isError, error } = useAdminUsers(profile.school_id)
   const {
     data: settings, isPending: schoolPending, error: schoolError, refetch: refetchSchool,
   } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })

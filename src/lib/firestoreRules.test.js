@@ -19,7 +19,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   assertFails,
   assertSucceeds,
@@ -324,10 +324,10 @@ describe('users · a school admin cannot promote anyone to admin', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (admin) => {
       const db = admin.firestore()
-      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D' })
-      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', first_name: 'B', last_name: 'E' })
-      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R' })
-      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', first_name: 'B', last_name: 'E', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T', school_id: 'school-1' })
     })
   })
 
@@ -353,6 +353,71 @@ describe('users · a school admin cannot promote anyone to admin', () => {
     await assertSucceeds(
       updateDoc(doc(ctx(ADMIN), 'users', OTHER_ADMIN), { status: 'inactive' }),
     )
+  })
+})
+
+/**
+ * T-126: a school admin sees and edits only their OWN school's users, never
+ * every account on the platform. A tester who registered a brand-new
+ * institution found 369 existing users before adding anybody -- `isAdmin()`
+ * alone opened every users/{uid} document to any admin of any school. Fixed
+ * by comparing school_id between the caller and the target profile.
+ */
+describe('users · a school admin sees only their own school (T-126)', () => {
+  const FOREIGN_ADMIN = 'admin-3'
+  const FOREIGN_TEACHER_U = 'teacher-9'
+  const FOREIGN_STUDENT = 'student-8'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_ADMIN), { role: 'admin', first_name: 'F', last_name: 'A', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER_U), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', FOREIGN_STUDENT), { role: 'student', first_name: 'F', last_name: 'S', school_id: 'school-2' })
+    })
+  })
+
+  it('lets an admin read a student at their own school', async () => {
+    await assertSucceeds(getDoc(doc(ctx(ADMIN), 'users', STUDENT)))
+  })
+
+  it('refuses an admin reading a student at a different school', async () => {
+    // Not a teacher target: any signed-in user may read a TEACHER profile by
+    // design (docs/06 §2.B, unrelated to this fix) -- a student profile has
+    // no such exemption, so it isolates the school_id check this card adds.
+    await assertFails(getDoc(doc(ctx(ADMIN), 'users', FOREIGN_STUDENT)))
+  })
+
+  it('refuses an admin reading an admin at a different school', async () => {
+    await assertFails(getDoc(doc(ctx(ADMIN), 'users', FOREIGN_ADMIN)))
+  })
+
+  it('refuses an admin editing a profile at a different school', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(ADMIN), 'users', FOREIGN_TEACHER_U), { department: 'Science' }),
+    )
+  })
+
+  it('refuses an admin deactivating a profile at a different school', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(ADMIN), 'users', FOREIGN_TEACHER_U), { status: 'inactive' }),
+    )
+  })
+
+  it('refuses an unscoped listing of every user on the platform', async () => {
+    // Mirrors fetchAllUsers in hooks/useAdminUsers.js before the fix: no
+    // where('school_id', ...) at all. Firestore refuses the whole query
+    // outright when it cannot prove every possible result matches the rule.
+    await assertFails(getDocs(collection(ctx(ADMIN), 'users')))
+  })
+
+  it('lets a school-scoped listing through and returns only that school', async () => {
+    const snap = await getDocs(query(collection(ctx(ADMIN), 'users'), where('school_id', '==', 'school-1')))
+    const ids = snap.docs.map((d) => d.id).sort()
+    expect(ids).toEqual([ADMIN, STUDENT, TEACHER].sort())
   })
 })
 
@@ -1004,7 +1069,10 @@ describe('T-125 — admin guardian access restored; role-escalation block untouc
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (admin) => {
       const db = admin.firestore()
-      await setDoc(doc(db, 'users', ADMIN), { role: 'admin' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      // Overrides seedRoles()'s school_id-less TEACHER so the "edit a
+      // non-role field" check below has a same-school target (T-126).
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
       await setDoc(doc(db, 'guardian_codes', CODE), {
         student_uid: STUDENT,
         is_minor: true,
