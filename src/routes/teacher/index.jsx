@@ -249,8 +249,6 @@ export default function TeacherDashboard() {
   const hasClasses = list.length > 0
   const needsAttention = !isLoading && emptyRosters.length > 0
 
-  const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-
   const thStyle = { padding: '11px 16px', fontSize: 12, fontWeight: 600, color: muted, textAlign: 'left', whiteSpace: 'nowrap' }
   const tdStyle = { padding: '14px 16px', fontSize: 14, color: '#3A4A6B', whiteSpace: 'nowrap' }
 
@@ -258,7 +256,7 @@ export default function TeacherDashboard() {
     <div>
       <PendingSchoolRequestNotice profile={profile} />
 
-      {/* Header — welcome + date chip + primary action */}
+      {/* Header — welcome + primary action */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p style={{ fontSize: 13, fontWeight: 600, color: muted, margin: '0 0 2px' }}>Welcome back!</p>
@@ -267,13 +265,6 @@ export default function TeacherDashboard() {
           </h1>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-          {/* T-111: the plan now lives only on the Account page, behind the
-              profile click -- it used to also show here on the dashboard
-              header under a different label than the Account page used for
-              the same plan, the wording split this card closed. */}
-          <span className="hidden sm:inline-flex items-center gap-2" style={{ ...mono, padding: '9px 14px', fontSize: 12.5, color: '#3A4A6B', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 10 }}>
-            📅 {today}
-          </span>
           <Link
             to="/teacher/classes"
             className="inline-flex items-center gap-2 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
