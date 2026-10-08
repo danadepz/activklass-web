@@ -35,6 +35,7 @@ import { SkeletonList } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { resolveSyllabus } from './classSyllabus'
+import InfoTooltip from './InfoTooltip'
 
 const PASS = 75 // an attempt at/above this % counts as mastered for that student
 
@@ -795,12 +796,13 @@ export default function ScaffoldTopicsPage() {
   const header = (
     <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+        <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
           Scaffold Topics
+          <InfoTooltip label="What this tab is for">
+            Per-topic mastery across the class, computed from quiz attempts on syllabus-linked
+            quizzes. Weak topics get a one-click remediation quiz.
+          </InfoTooltip>
         </h1>
-        <p style={{ fontSize: 13.5, color: muted, margin: 0, maxWidth: 640 }}>
-          Per-topic mastery across the class, computed from quiz attempts on syllabus-linked quizzes. Weak topics get a one-click remediation quiz.
-        </p>
       </div>
     </div>
   )
@@ -816,7 +818,7 @@ export default function ScaffoldTopicsPage() {
   const focusName = focusId ? data.nameById?.[focusId] : null
   const allRows = data.rows
   const rows = focusName ? allRows.filter((r) => (r.affectedIds ?? []).includes(focusId)) : allRows
-  const { topicCount, linkedQuizzes } = data
+  const { linkedQuizzes } = data
   const focusBanner = focusName && (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 12, padding: '10px 14px' }}>
       <span style={{ fontSize: 13.5, color: ink }}>
@@ -845,13 +847,9 @@ export default function ScaffoldTopicsPage() {
       <div>
         {header}
         <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40 }}>
-          <p style={{ color: muted, margin: '0 0 6px' }}>No topic mastery to show yet.</p>
+          <p style={{ color: muted, margin: '0 0 6px' }}>No topic mastery yet.</p>
           <p style={{ fontSize: 13, color: faint, margin: 0, maxWidth: 520, marginInline: 'auto', lineHeight: 1.5 }}>
-            {topicCount === 0
-              ? 'Build a syllabus first, then generate quizzes from its topics so attempts can be mapped to topics.'
-              : linkedQuizzes === 0
-                ? 'Generate quizzes from syllabus topics (Quizzes → Generate with AI) so their attempts map to topics here.'
-                : 'No graded quiz submissions yet for syllabus-linked quizzes. Mastery appears once students submit.'}
+            Create a syllabus and generate quizzes linked to its topics to see mastery here.
           </p>
           <Link to="/teacher/quizzes" className="mt-4 inline-flex transition hover:brightness-110" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
             Go to Quizzes
@@ -865,12 +863,13 @@ export default function ScaffoldTopicsPage() {
     <div>
       <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+          <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
             Scaffold Topics
+            <InfoTooltip label="What this tab is for">
+              Per-topic mastery across the class, computed from quiz attempts on syllabus-linked
+              quizzes. Weak topics get a one-click remediation quiz.
+            </InfoTooltip>
           </h1>
-          <p style={{ fontSize: 13.5, color: muted, margin: 0, maxWidth: 640 }}>
-            Per-topic mastery across the class, computed from quiz attempts on syllabus-linked quizzes.
-          </p>
         </div>
         <div className="inline-flex items-center gap-2.5" style={{ padding: '10px 14px', background: 'rgba(63,169,245,0.08)', border: '1.5px solid rgba(63,169,245,0.3)', borderRadius: 11 }}>
           <span style={{ color: blueText, display: 'inline-flex' }}><Sparkles className="h-3.5 w-3.5" /></span>

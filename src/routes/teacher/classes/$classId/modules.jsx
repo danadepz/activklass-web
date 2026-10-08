@@ -39,6 +39,7 @@ import {
 } from '@/lib/validation'
 import { RESOURCE_META, quizzesForTopic } from '@/routes/student/scaffolding'
 import { resolveSyllabus } from './classSyllabus'
+import InfoTooltip from './InfoTooltip'
 import Markdown from '@/components/Markdown'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -821,12 +822,13 @@ export default function ModulesPage() {
   const header = (
     <div className="mb-[22px] flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+        <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
           Modules
+          <InfoTooltip label="What this tab is for">
+            Manage the learning content for this class. Add activities, assignments, and exams to
+            each sub-module. Edit learning materials on the Syllabus page.
+          </InfoTooltip>
         </h1>
-        <p style={{ fontSize: 13.5, color: muted, margin: 0, maxWidth: 640 }}>
-          What this class sees on its Modules tab. Add an activity, assignment or paper exam under any sub-module; materials are edited on the Syllabus page.
-        </p>
       </div>
       <Link to="/teacher/syllabus" style={{ ...smallBtn, textDecoration: 'none', padding: '8px 14px' }}>Open Syllabus page</Link>
     </div>

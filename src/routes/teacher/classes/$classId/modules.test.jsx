@@ -100,6 +100,17 @@ describe('the tree', () => {
     expect(html.split('+ Add').length - 1).toBe(3)
   })
 
+  // T-140 (triplecookiemonster-190): the old subheader paragraph is gone,
+  // reworded into the shared ⓘ tooltip (present in the markup even closed).
+  it('carries the reworded explanation in the ⓘ tooltip, not a subheader paragraph', () => {
+    const html = render()
+    expect(html).not.toContain('What this class sees on its Modules tab.')
+    expect(html).toContain('Manage the learning content for this class.')
+    expect(html).toContain('Add activities, assignments, and exams to')
+    expect(html).toContain('each sub-module. Edit learning materials on the Syllabus page.')
+    expect(html).toMatch(/role="tooltip"/)
+  })
+
   it('shows a linked quiz under its sub-module with the window chip', () => {
     state.quizzes = [
       { id: 'q1', title: 'Method quiz', class_ids: ['C1'], topic_id: 't1', status: 'published', opens_at: '2026-09-14T08:00', closes_at: '2026-09-19T23:59' },

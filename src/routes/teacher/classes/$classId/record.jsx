@@ -35,6 +35,7 @@ import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import InfoTooltip from './InfoTooltip'
 
 // --- shared modal + button styling ----------------------------------------
 const overlayStyle = {
@@ -1218,9 +1219,13 @@ export default function ClassRecordPage() {
   }
   if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
 
-  const subline =
-    bundle.components.map((c) => `${c.name} ${fmt(c.weight_percent)}%`).join(' · ') +
-    (bundle.mode === 'deped_k12' ? ' · transmuted per DepEd Order No. 8, s. 2015' : '')
+  // T-140 (triplecookiemonster-191): the weights used to repeat here too, but
+  // the table's own component headers already show them (`{name} ({weight}%)`
+  // below) -- only the transmutation note was not duplicated anywhere else,
+  // so that's what moved into the tooltip; the rest of the old subline is gone.
+  const transmutationNote = bundle.mode === 'deped_k12'
+    ? 'Grades on this record are transmuted per DepEd Order No. 8, s. 2015.'
+    : null
 
   // T-87: the sweep note is appended onto the auto-post's own status line
   // rather than shown in a toast -- the teacher did not press anything to
@@ -1234,10 +1239,12 @@ export default function ClassRecordPage() {
 
   return (
     <div>
-      <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
+      <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: bundle.configured ? '0 0 6px' : '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
         Class Record
+        {bundle.configured && transmutationNote && (
+          <InfoTooltip label="How this record is graded">{transmutationNote}</InfoTooltip>
+        )}
       </h1>
-      {bundle.configured && <p style={{ fontSize: 13.5, color: muted, margin: '0 0 6px' }}>{subline}</p>}
       {bundle.configured && (
         <p role="status" style={{ fontSize: 12, color: statusIsWarning ? goldDeep : faint, margin: '0 0 22px', lineHeight: 1.5 }}>
           {autoPost.status === 'posting' || sweep.status === 'sweeping' ? 'Posting quiz scores…' : statusLine}

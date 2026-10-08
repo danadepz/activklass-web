@@ -722,11 +722,6 @@ export default function AttendancePage() {
           <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
             Attendance
           </h1>
-          <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
-            {view === 'day'
-              ? 'Track and record daily student attendance for the selected date.'
-              : 'Every day this class met, on one sheet. Marking is done on the By day tab.'}
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1" style={{ background: 'rgba(14,42,92,0.05)', borderRadius: 999, padding: 3 }}>

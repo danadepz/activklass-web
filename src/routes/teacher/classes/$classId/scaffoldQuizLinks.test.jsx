@@ -157,7 +157,8 @@ beforeEach(() => {
 describe('T-83 — Scaffold Topics quiz links keep the teacher signed in', () => {
   it('#108: "Go to Quizzes" in the empty state opens a URL the teacher routes serve', () => {
     const html = render({ ...base, topicCount: 2, linkedQuizzes: 1 })
-    expect(html).toContain('No topic mastery to show yet.')
+    // T-140 (triplecookiemonster-197): reworded to Kristine's wording.
+    expect(html).toContain('No topic mastery yet.')
 
     const go = [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*Go to Quizzes\s*<\/a>/g)].map((m) => m[1])
     expect(go).toEqual(['/teacher/quizzes'])
@@ -171,6 +172,16 @@ describe('T-83 — Scaffold Topics quiz links keep the teacher signed in', () =>
     const open = [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*open in quiz editor\s*<\/a>/g)].map((m) => m[1])
     expect(open).toEqual(['/teacher/quizzes/Q9'])
     expect(served(open[0])).toBe(true)
+  })
+
+  // T-140 (triplecookiemonster-196): the populated view's subheader paragraph
+  // is gone, reworded into the shared ⓘ tooltip.
+  it('T-140: carries the reworded explanation in the ⓘ tooltip, not a subheader paragraph', () => {
+    const html = render({ ...base, rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1 })
+    expect(html).not.toMatch(/<p[^>]*>\s*Per-topic mastery across the class/)
+    expect(html).toContain('Per-topic mastery across the class, computed from quiz attempts on syllabus-linked')
+    expect(html).toContain('quizzes. Weak topics get a one-click remediation quiz.')
+    expect(html).toMatch(/role="tooltip"/)
   })
 
   it('offers no link at all that the catch-all would bounce to the landing page', () => {
