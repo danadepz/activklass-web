@@ -385,22 +385,20 @@ export default function StudentsPage() {
         )}
       </div>
 
-      {/* T-136 (triplecookiemonster-186): shorter, but keeps both facts --
-          a student in several classes is not a duplicate, and a class's grade
-          and risk are each computed on its own. The risk-band breakdown that
-          used to sit here moved into nothing; nobody asked for it kept, and
-          every number it quoted is already on the Risk filter chips above. */}
+      {/* T-136 (triplecookiemonster-186) shortened this to two facts; T-148
+          (andecobs-213) is a plain-English pass over those same two facts --
+          no bands, no headings, nothing longer than what it replaces. */}
       <p style={{ fontSize: 12.5, color: faint, margin: '16px 2px 0', maxWidth: 720 }}>
-        Students in multiple classes appear once per class. Grades and risk are calculated per class.
+        A student in multiple classes appears once per class, each with its own grade and risk.
       </p>
 
       {list.some((r) => r.riskTraining?.real_data === false) && (
         <p style={{ fontSize: 12.5, color: faint, margin: '10px 2px 0', maxWidth: 720 }}>
           <strong style={{ color: goldDeep }}>† Not trained on real class data.</strong>{' '}
           {list.find((r) => r.riskTraining?.real_data === false)?.riskTraining?.summary
-            ?? 'These scores come from a model trained on generated student trajectories, not on '
-             + 'real ActivKlass history — no term has finished yet. Treat a score as a prompt to '
-             + 'look at the student now, not as evidence about how they will finish.'}
+            ?? "These scores come from a model trained on simulated data, not real students — "
+             + "no term has finished yet. Treat a score as a reason to check in, not a "
+             + "prediction of how they'll end up."}
         </p>
       )}
       </>

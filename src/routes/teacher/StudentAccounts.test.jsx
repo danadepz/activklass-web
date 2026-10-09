@@ -257,7 +257,8 @@ describe('Students page', () => {
     expect(html).toContain('🪪 Accounts')
     expect(html).toContain('Dela Cruz, Juan')
     expect(html).toContain('Create and manage student accounts.')
-    expect(html).toContain('Students in multiple classes appear once per class. Grades and risk are calculated per class.')
+    // T-148 (andecobs-213): plain-English pass, no bands, nothing longer.
+    expect(html).toContain('A student in multiple classes appears once per class, each with its own grade and risk.')
   })
 
   it('a school-issued teacher sees no tabs at all', () => {
@@ -306,6 +307,23 @@ describe('Students page', () => {
 
     const src = readFileSync(fileURLToPath(new URL('./students.jsx', import.meta.url)), 'utf8')
     expect(src).toMatch(/\$\{r\.firstName\} \$\{r\.lastName\} \$\{r\.lrn \?\? ''\}/)
+  })
+
+  /* T-148 (andecobs-213): the dagger note on an unscored-model class gets the
+     same plain-English pass, still shorter than the pre-T-136 paragraph it
+     replaced and with no jargon ("trajectories", "ActivKlass history") left
+     in the fallback text. */
+  it('the "not trained on real data" note reads in plain English', () => {
+    state.rows = [{
+      studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal',
+      configured: false, riskTraining: { real_data: false },
+    }]
+    const html = render(<StudentsPage />)
+    expect(html).toContain('Not trained on real class data.')
+    expect(html).toContain("Treat a score as a reason to check in, not a")
+    expect(html).not.toContain('trajectories')
+    expect(html).not.toContain('ActivKlass history')
+    state.rows = [{ studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal', configured: false }]
   })
 })
 
