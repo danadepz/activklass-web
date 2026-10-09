@@ -253,8 +253,8 @@ describe('Students page', () => {
     state.rows = [{ studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal', configured: false }]
     state.sub = { ...state.sub, isSolo: true }
     const html = render(<StudentsPage />)
-    expect(html).toContain('📋 Directory')
-    expect(html).toContain('🪪 Accounts')
+    expect(html).toContain('Directory')
+    expect(html).toContain('Accounts')
     expect(html).toContain('Dela Cruz, Juan')
     expect(html).toContain('Create and manage student accounts.')
     // T-148 (andecobs-213): plain-English pass, no bands, nothing longer.
@@ -264,7 +264,7 @@ describe('Students page', () => {
   it('a school-issued teacher sees no tabs at all', () => {
     state.sub = { ...state.sub, kind: 'school', isSolo: false }
     const html = render(<StudentsPage />)
-    expect(html).not.toContain('🪪 Accounts')
+    expect(html).not.toContain('>Accounts<')
     expect(html).toContain('Dela Cruz, Juan')
     state.sub = { ...state.sub, kind: 'active', isSolo: true }
   })
@@ -272,7 +272,7 @@ describe('Students page', () => {
   it('with no classes a solo teacher still gets the tabs and the empty state', () => {
     state.classes = []
     const html = render(<StudentsPage />)
-    expect(html).toContain('🪪 Accounts')
+    expect(html).toContain('>Accounts<')
     expect(html).toContain('No classes yet')
   })
 

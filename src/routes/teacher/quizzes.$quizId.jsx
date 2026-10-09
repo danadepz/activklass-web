@@ -5,7 +5,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, up
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
-import { ArrowRight, Sparkles } from '@/components/icons'
+import { ArrowRight, Sparkles, BookOpen } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
@@ -1587,7 +1587,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             <span style={{ color: gold }}>+</span> Add question
           </button>
           <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
-            📚 Import from Bank
+            <BookOpen className="h-3.5 w-3.5" /> Import from Bank
           </button>
           <button onClick={removeDraft} disabled={removingDraft} className="transition hover:brightness-105 disabled:opacity-50" style={btnDanger}>
             {removingDraft ? 'Deleting…' : 'Delete draft'}
@@ -1722,7 +1722,7 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
                             : 'text-slate-600 hover:bg-slate-50'
                         }`}
                       >
-                        <span>📚</span>
+                        <BookOpen className="h-3 w-3 flex-shrink-0" />
                         <span className="truncate text-xs">{s.title}</span>
                       </button>
                       {s.modules?.length > 0 && (

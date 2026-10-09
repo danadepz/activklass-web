@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/toast'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { navy, ink, gold, goldDeep, muted, red, serif, mono, sansFamily as sans } from '@/theme'
+import { BookOpen, CalendarCheck, Clock, Edit, Trash } from '@/components/icons'
 
 // Sub-navbar shown at the top of every page inside a specific class.
 // Paths are relative to /teacher/classes/:classId. The Overview tab is the
@@ -35,7 +36,7 @@ function classBadge(c) {
 }
 
 /** Small meta chip under the class title — one fact per chip. */
-function MetaChip({ icon, children, monoFace }) {
+function MetaChip({ icon: Icon, children, monoFace }) {
   return (
     <span
       className="inline-flex items-center gap-1.5"
@@ -51,7 +52,7 @@ function MetaChip({ icon, children, monoFace }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {icon && <span aria-hidden="true">{icon}</span>}
+      {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
       {children}
     </span>
   )
@@ -134,10 +135,10 @@ export default function ClassLayout() {
               </h1>
               {clazz && (
                 <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 9 }}>
-                  {clazz.subject && <MetaChip icon="📘">{clazz.subject}</MetaChip>}
-                  {academicTerm(clazz) && <MetaChip icon="🗓" monoFace>{academicTerm(clazz)}</MetaChip>}
+                  {clazz.subject && <MetaChip icon={BookOpen}>{clazz.subject}</MetaChip>}
+                  {academicTerm(clazz) && <MetaChip icon={CalendarCheck} monoFace>{academicTerm(clazz)}</MetaChip>}
                   {scheduleChips.map((s) => (
-                    <MetaChip key={s} icon="🕑" monoFace>{s}</MetaChip>
+                    <MetaChip key={s} icon={Clock} monoFace>{s}</MetaChip>
                   ))}
                 </div>
               )}
@@ -150,7 +151,7 @@ export default function ClassLayout() {
                 className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}
               >
-                ✏️ Edit Class
+                <Edit className="h-3.5 w-3.5" /> Edit Class
               </button>
               <button
                 onClick={removeClass}
@@ -158,7 +159,7 @@ export default function ClassLayout() {
                 className="shrink-0 transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] disabled:opacity-50"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: red, background: '#FFFFFF', border: '1.5px solid rgba(192,57,43,0.3)', borderRadius: 10, cursor: 'pointer' }}
               >
-                {removingClass ? 'Deleting…' : '🗑 Delete Class'}
+                {removingClass ? 'Deleting…' : <><Trash className="h-3.5 w-3.5" /> Delete Class</>}
               </button>
             </div>
           )}

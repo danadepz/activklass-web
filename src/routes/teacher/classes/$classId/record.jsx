@@ -28,7 +28,7 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
-import { ArrowRight, Check, Clock, Plus, X } from '@/components/icons'
+import { ArrowRight, Check, Clock, Plus, X, Lock } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -699,7 +699,7 @@ function SummaryView({ summary }) {
             <th style={{ ...thHead, textAlign: 'left' }}>Student</th>
             {summary.periods.map((p) => (
               <th key={p.id} style={{ ...thHead, textAlign: 'center' }}>
-                {p.name} {p.locked && <span title="Locked">🔒</span>}
+                {p.name} {p.locked && <Lock title="Locked" className="h-3 w-3 inline-block" />}
                 <span style={{ ...mono, display: 'block', fontWeight: 600, color: faint, marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>{fmt(p.weight_percent)}%</span>
               </th>
             ))}
@@ -1292,7 +1292,7 @@ export default function ClassRecordPage() {
                 {bundle.periods.map((p) => (
                   <button key={p.id} onClick={() => setTab(p.id)} style={pillStyle(tab !== 'summary' && p.id === record.period.id)}>
                     {p.name}
-                    {p.locked ? ' 🔒' : ''}
+                    {p.locked && <Lock aria-hidden className="h-3 w-3 inline-block ml-1 -mb-0.5" />}
                   </button>
                 ))}
                 <div className="flex flex-wrap items-center gap-2.5" style={{ marginLeft: 'auto' }}>
@@ -1312,7 +1312,7 @@ export default function ClassRecordPage() {
                           common state -- same navy ghost look as Export CSV now;
                           locked keeps its own gold "active" look, unchanged. */}
                       <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : btnGhostSm}>
-                        {locked ? '🔒 Unlock period' : 'Lock period'}
+                        {locked ? <><Lock aria-hidden className="h-3.5 w-3.5 inline-block mr-1 -mb-0.5" /> Unlock period</> : 'Lock period'}
                       </button>
                     </>
                   )}

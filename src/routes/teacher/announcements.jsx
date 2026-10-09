@@ -8,6 +8,7 @@ import { navy, line, sansUiFamily as sans, cream } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { SkeletonList } from '@/components/ui/Skeleton'
+import { Megaphone } from '@/components/icons'
 import { ANNOUNCEMENT_MAX, announcementError } from '@/lib/validation'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
@@ -51,7 +52,7 @@ function ExpiryBadge({ iso }) {
 function EmptyState({ filtered }) {
   return (
     <div style={{ textAlign: 'center', padding: '64px 32px', color: '#9AA6BD' }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>📢</div>
+      <Megaphone aria-hidden style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#C7CEDC' }} />
       <div style={{ fontWeight: 700, fontSize: 16, color: '#6A7A95', marginBottom: 8 }}>
         {filtered ? 'No announcements in this category' : 'No announcements yet'}
       </div>
@@ -112,8 +113,8 @@ function AnnouncementCard({ item, onDelete, deleting }) {
               {item.title}
             </div>
             {(item.class_id == null || item.broadcast_id) && (
-              <div style={{ fontSize: 11, color: '#6A7A95', marginTop: 3 }}>
-                📣 All classes
+              <div style={{ fontSize: 11, color: '#6A7A95', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Megaphone aria-hidden className="h-3 w-3" /> All classes
               </div>
             )}
           </div>
@@ -424,7 +425,7 @@ export default function AnnouncementsPage() {
                 value={form.class_id}
                 onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}
               >
-                <option value="">📣 All my classes (Global)</option>
+                <option value="">All my classes (Global)</option>
                 {classes.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.subject_code ? `${c.subject_code} — ` : ''}{c.section || c.subject || c.id}
@@ -489,6 +490,9 @@ export default function AnnouncementsPage() {
             type="submit"
             disabled={createMut.isPending}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
               background: navy,
               color: cream,
               border: 'none',
@@ -504,7 +508,7 @@ export default function AnnouncementsPage() {
             onMouseEnter={e => { if (!createMut.isPending) e.currentTarget.style.transform = 'translateY(-1px)' }}
             onMouseLeave={e => e.currentTarget.style.transform = 'none'}
           >
-            {createMut.isPending ? 'Posting…' : '📢 Post Announcement'}
+            {createMut.isPending ? 'Posting…' : <><Megaphone aria-hidden className="h-4 w-4" /> Post Announcement</>}
           </button>
         </form>
       </div>

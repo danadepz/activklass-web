@@ -173,7 +173,7 @@ export default function StudentsPage() {
     <div className="flex border-b border-slate-200" style={{ marginBottom: 18 }}>
       {/* T-136 (triplecookiemonster-183): "Student accounts" shortened to
           "Accounts" -- the tab's own panel still says what the tab is for. */}
-      {[['directory', '📋 Directory'], ['accounts', '🪪 Accounts']].map(([id, label]) => (
+      {[['directory', 'Directory'], ['accounts', 'Accounts']].map(([id, label]) => (
         <button
           key={id}
           type="button"
