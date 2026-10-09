@@ -8,6 +8,7 @@ import { navy, line, sansUiFamily as sans, cream } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { SkeletonList } from '@/components/ui/Skeleton'
+import { ANNOUNCEMENT_MAX, announcementError } from '@/lib/validation'
 
 /* ─── Design tokens (matching TeacherLayout) ─── */
 
@@ -300,6 +301,14 @@ export default function AnnouncementsPage() {
       setFormErr('Title and content are required.')
       return
     }
+    // T-154: maxLength stops most typing but not every paste (some browsers
+    // let a paste through, then silently truncate without saying so) --
+    // this is the message for that case.
+    const contentErr = announcementError(form.content)
+    if (contentErr) {
+      setFormErr(contentErr)
+      return
+    }
     const body = {
       title: form.title.trim(),
       // Students and the mobile app render `body`; `content` was the shape the
@@ -392,11 +401,17 @@ export default function AnnouncementsPage() {
             <textarea
               id="ann-content"
               rows={4}
+              maxLength={ANNOUNCEMENT_MAX}
               style={{ ...inputStyle, resize: 'none', height: 110, overflowY: 'auto', lineHeight: 1.6 }}
               placeholder="Write your announcement here…"
               value={form.content}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
             />
+            {/* T-154: visible counter, same traffic-light threshold as the
+                class form's. */}
+            <p style={{ margin: '4px 0 0', fontSize: 11.5, textAlign: 'right', color: form.content.length >= ANNOUNCEMENT_MAX * 0.8 ? '#D97706' : '#9AA6BD' }}>
+              {form.content.length}/{ANNOUNCEMENT_MAX}
+            </p>
           </div>
 
           {/* Row 3: target class + expiry */}

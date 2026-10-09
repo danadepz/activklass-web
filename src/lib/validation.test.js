@@ -9,6 +9,8 @@ import {
   birthdateError, BIRTHDATE_HINT,
   taskTitleError, taskKindError, taskWindowError, taskAttachmentError, taskAttachmentsError, TASK_TITLE_MAX,
   submissionNoteError, SUBMISSION_NOTE_MAX,
+  subjectCodeError, SUBJECT_CODE_MAX, sectionError, SECTION_MAX, subjectError, SUBJECT_MAX,
+  announcementError, ANNOUNCEMENT_MAX, truncateForDisplay,
 } from './validation'
 import { TASK_KINDS } from './deliverables'
 
@@ -449,5 +451,82 @@ describe('submission note (the submission bin)', () => {
     expect(submissionNoteError('x'.repeat(SUBMISSION_NOTE_MAX))).toBe('')
     expect(submissionNoteError(' ' + 'x'.repeat(SUBMISSION_NOTE_MAX) + ' ')).toBe('')
     expect(submissionNoteError('x'.repeat(SUBMISSION_NOTE_MAX + 1))).toMatch(/too long/)
+  })
+})
+
+/* T-154 (andecobs-220): a pasted wall of text into any of these made the My
+   Classes row, the create-confirm dialog, Grade Config's Target Classes
+   picker and the dashboard table all unreadable. Section/Room is pinned at
+   30, not the tester's suggested 10 -- a real class in the live project
+   ("Special Science Class - Curie") is 29 characters, and a 10-char limit
+   would have made it unsavable. */
+describe('subjectCodeError', () => {
+  it('requires a value', () => {
+    expect(subjectCodeError('')).toBe('Subject code is required.')
+  })
+  it('accepts exactly SUBJECT_CODE_MAX, refuses one over', () => {
+    expect(subjectCodeError('x'.repeat(SUBJECT_CODE_MAX))).toBe('')
+    expect(subjectCodeError('x'.repeat(SUBJECT_CODE_MAX + 1))).toMatch(/too long/)
+  })
+  it('is checked against trimmed length', () => {
+    expect(subjectCodeError(` ${'x'.repeat(SUBJECT_CODE_MAX)} `)).toBe('')
+  })
+})
+
+describe('sectionError', () => {
+  it('requires a value, labelled "Section" by default', () => {
+    expect(sectionError('')).toBe('Section is required.')
+  })
+  it('swaps in the college label', () => {
+    expect(sectionError('', { label: 'Room' })).toBe('Room is required.')
+    expect(sectionError('x'.repeat(SECTION_MAX + 1), { label: 'Room' })).toBe(
+      `Room is too long (${SECTION_MAX} characters at most).`,
+    )
+  })
+  it('does not refuse the real class that forced the 30-character ceiling', () => {
+    expect(sectionError('Special Science Class - Curie')).toBe('')
+  })
+  it('refuses the tester\'s own suggested 10-character ceiling worth of overflow', () => {
+    expect(sectionError('x'.repeat(SECTION_MAX))).toBe('')
+    expect(sectionError('x'.repeat(SECTION_MAX + 1))).toMatch(/too long/)
+  })
+})
+
+describe('subjectError', () => {
+  it('requires a value', () => {
+    expect(subjectError('')).toBe('Subject description is required.')
+  })
+  it('accepts exactly SUBJECT_MAX, refuses one over', () => {
+    expect(subjectError('x'.repeat(SUBJECT_MAX))).toBe('')
+    expect(subjectError('x'.repeat(SUBJECT_MAX + 1))).toMatch(/too long/)
+  })
+})
+
+describe('announcementError', () => {
+  it('requires a value', () => {
+    expect(announcementError('')).toBe('Announcement content is required.')
+  })
+  it('accepts exactly ANNOUNCEMENT_MAX, refuses one over', () => {
+    expect(announcementError('x'.repeat(ANNOUNCEMENT_MAX))).toBe('')
+    expect(announcementError('x'.repeat(ANNOUNCEMENT_MAX + 1))).toMatch(/too long/)
+  })
+})
+
+describe('truncateForDisplay', () => {
+  it('leaves a short value untouched', () => {
+    expect(truncateForDisplay('BSIT-C', 30)).toBe('BSIT-C')
+  })
+  it('clamps a value already in Firestore from before the limit existed', () => {
+    // andecobs-220's own repro: a section field holding tens of thousands of
+    // characters, which must never reach a dialog or a table cell whole.
+    const huge = 'Lorem ipsum '.repeat(4000)
+    const shown = truncateForDisplay(huge, 60)
+    expect(shown.length).toBe(61) // 60 characters plus the ellipsis mark
+    expect(shown.endsWith('…')).toBe(true)
+  })
+  it('never touches the value it is given -- display only', () => {
+    const huge = 'x'.repeat(100)
+    truncateForDisplay(huge, 10)
+    expect(huge.length).toBe(100)
   })
 })

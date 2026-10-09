@@ -795,8 +795,18 @@ export default function ClassesPage() {
                     <div style={{ fontWeight: 700, fontSize: 15, color: ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {c.subject_code ? `${c.subject_code} · ` : ''}{c.section}
                     </div>
+                    {/* T-154: a description pasted before the input gained a
+                        length limit can still be arbitrarily long -- clamp the
+                        display to one line rather than letting it fill the row
+                        (andecobs-220's screenshot). title= keeps the full text
+                        reachable on hover; the stored value is untouched. */}
                     {c.subject && (
-                      <div style={{ fontSize: 13, color: muted, marginTop: 2 }}>{c.subject}</div>
+                      <div
+                        title={c.subject}
+                        style={{ fontSize: 13, color: muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {c.subject}
+                      </div>
                     )}
                   </div>
 
@@ -884,8 +894,14 @@ export default function ClassesPage() {
                       <div style={{ fontWeight: 700, fontSize: 15, color: ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.subject_code ? `${c.subject_code} · ` : ''}{c.section}
                       </div>
+                      {/* T-154: same single-line clamp as the list row above. */}
                       {c.subject && (
-                        <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{c.subject}</div>
+                        <div
+                          title={c.subject}
+                          style={{ fontSize: 13, color: muted, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
+                          {c.subject}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -699,7 +699,13 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
                     onChange={() => toggleClass(clazz.id)}
                     className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                   />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+                  {/* T-154: classLabel can still carry an old, unbounded
+                      section or subject_code -- clamp the row to one line
+                      instead of letting it stretch the picker. */}
+                  <span
+                    title={classLabel(clazz)}
+                    style={{ fontSize: 13, fontWeight: 600, color: ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
                     {classLabel(clazz)}
                   </span>
                 </label>

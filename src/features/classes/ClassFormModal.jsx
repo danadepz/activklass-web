@@ -1,5 +1,9 @@
 import { useRef, useState } from 'react'
-import { yearLevelError, semesterError, SEMESTERS, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
+import {
+  yearLevelError, semesterError, SEMESTERS, GRADE_LEVELS, YEAR_LEVELS,
+  subjectCodeError, sectionError, subjectError, truncateForDisplay,
+  SUBJECT_CODE_MAX, SECTION_MAX, SUBJECT_MAX,
+} from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm } from '@/lib/classForm'
@@ -19,6 +23,10 @@ const inputOk = 'border-slate-300 focus:ring-[#0E2A5C]/40'
 const inputBad = 'border-red-400 focus:ring-red-300'
 const inputCls = `${inputBase} ${inputOk}`
 const fieldCls = (bad) => `${inputBase} ${bad ? inputBad : inputOk}`
+
+/* T-154: how much of a class's own label the confirm dialog shows -- see the
+   note at its one call site. */
+export const DIALOG_LABEL_MAX = 60
 
 const MAX_SYLLABUS_BYTES = 10 * 1024 * 1024
 const ALLOWED_SYLLABUS_TYPES = [
@@ -131,13 +139,19 @@ const FIELD_ORDER = [
 export function validate(form, selectedDays, originalMaxStudents = null, enrolledCount = 0) {
   const errors = {}
   const isCollege = form.education_level === 'College'
-  const required = (key, message) => {
-    if (!String(form[key] ?? '').trim()) errors[key] = message
-  }
 
-  required('subject_code', 'Subject code is required.')
-  required('section', isCollege ? 'Room is required.' : 'Section is required.')
-  required('subject', 'Subject description is required.')
+  {
+    const err = subjectCodeError(form.subject_code)
+    if (err) errors.subject_code = err
+  }
+  {
+    const err = sectionError(form.section, { label: isCollege ? 'Room' : 'Section' })
+    if (err) errors.section = err
+  }
+  {
+    const err = subjectError(form.subject)
+    if (err) errors.subject = err
+  }
   {
     const levelProblem = yearLevelError(form.grade_level, { level: isCollege ? 'college' : 'school' })
     if (levelProblem) errors.grade_level = levelProblem
@@ -218,6 +232,20 @@ function FieldError({ id, message }) {
   return <p id={id} role="alert" className="mt-1 text-xs text-red-600">{message}</p>
 }
 
+/* T-154: a visible character count, so a teacher sees the field approaching
+   its limit instead of finding out from a validation message after the
+   fact. Muted until the field is within a fifth of the ceiling, then amber,
+   same traffic-light logic a "characters remaining" counter always uses. */
+function Counter({ value, max }) {
+  const len = String(value ?? '').length
+  const near = len >= max * 0.8
+  return (
+    <p className={`mt-1 text-xs text-right ${near ? 'text-amber-600' : 'text-slate-400'}`}>
+      {len}/{max}
+    </p>
+  )
+}
+
 /* `writeCollegeFields` false leaves units and semester exactly as they are
    stored. Those are the two inputs only the College form renders, so writing
    null from a form that never showed them would discard a value the teacher
@@ -229,6 +257,19 @@ function FieldError({ id, message }) {
    points at the card the teacher will recognise. */
 function classLabel(c) {
   return [c.subject_code, c.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ') || c.subject || 'another class'
+}
+
+/* T-154: the name the create/save confirm dialog puts in its title and
+   builds its clash wording from. Exported, pure, so the truncation can be
+   pinned without driving the whole submit flow -- subject_code and section
+   are capped going in now, but a class saved before that limit existed can
+   still hold an arbitrarily long value, and this is what stops it pushing
+   the dialog's own buttons out of reach. */
+export function dialogLabelFor(form) {
+  return truncateForDisplay(
+    [form.subject_code, form.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · '),
+    DIALOG_LABEL_MAX,
+  )
 }
 
 export function buildMeta(form, { writeCollegeFields = true } = {}) {
@@ -441,7 +482,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
        about to be rejected is a question about nothing. The class is named
        back rather than described, because the field the teacher most often
        gets wrong here is which section they are editing. */
-    const label = [form.subject_code, form.section].map((v) => String(v ?? '').trim()).filter(Boolean).join(' · ')
+    const label = dialogLabelFor(form)
     /* T-26: two classes on "TTh 1:00 PM – 2:30 PM" went through without a
        word. Warn, do not block -- co-teaching and placeholder times are real,
        and the teacher knows better than the form. Only this teacher's live
@@ -452,7 +493,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
       .map((c) => ({ clazz: c, hit: scheduleOverlap(form.schedule, c.schedule) }))
       .filter((x) => x.hit)
     const clashText = clashes
-      .map(({ clazz, hit }) => `${classLabel(clazz)} (${hit.label})`)
+      .map(({ clazz, hit }) => `${truncateForDisplay(classLabel(clazz), DIALOG_LABEL_MAX)} (${hit.label})`)
       .join(' and ')
     const verb = mode === 'edit' ? 'Save' : 'Create'
     if (!(await confirmDialog({
@@ -551,10 +592,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <input
                 required placeholder="e.g. MATH10, SCI-1" value={form.subject_code} onChange={set('subject_code')}
                 data-field="subject_code"
+                maxLength={SUBJECT_CODE_MAX}
                 aria-invalid={!!errors.subject_code}
                 aria-describedby={errors.subject_code ? 'err-subject_code' : undefined}
                 className={fieldCls(errors.subject_code)}
               />
+              <Counter value={form.subject_code} max={SUBJECT_CODE_MAX} />
               <FieldError id="err-subject_code" message={errors.subject_code} />
             </label>
             <label className="block">
@@ -562,10 +605,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <input
                 required placeholder="e.g. Grade 10 - Rizal, Block A" value={form.section} onChange={set('section')}
                 data-field="section"
+                maxLength={SECTION_MAX}
                 aria-invalid={!!errors.section}
                 aria-describedby={errors.section ? 'err-section' : undefined}
                 className={fieldCls(errors.section)}
               />
+              <Counter value={form.section} max={SECTION_MAX} />
               <FieldError id="err-section" message={errors.section} />
             </label>
           </div>
@@ -576,10 +621,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             <input
               required placeholder="e.g. Mathematics 10, Introduction to Computing" value={form.subject} onChange={set('subject')}
               data-field="subject"
+              maxLength={SUBJECT_MAX}
               aria-invalid={!!errors.subject}
               aria-describedby={errors.subject ? 'err-subject' : undefined}
               className={fieldCls(errors.subject)}
             />
+            <Counter value={form.subject} max={SUBJECT_MAX} />
             <FieldError id="err-subject" message={errors.subject} />
           </label>
 

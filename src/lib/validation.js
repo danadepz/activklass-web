@@ -557,3 +557,71 @@ export function taskAttachmentsError(attachments) {
   }
   return ''
 }
+
+/* ------------------------------------------------------------ class setup
+
+   T-154 (andecobs-220): nothing capped how much text went into a class or an
+   announcement, so a pasted wall of lorem ipsum made the My Classes row, the
+   create-confirm dialog, Grade Config's Target Classes picker and the
+   dashboard table all unreadable at once -- the same four fields are read as
+   a label in all four places. The tester asked for limits in words (30 words
+   for a description, 50 for an announcement); an <input> only counts
+   characters, so these are the character translation, chosen by checking the
+   live project on 2026-10-09 before picking numbers:
+     - longest real subject_code: 18 characters
+     - longest real section: "Special Science Class - Curie", 29 characters
+     - longest real subject (description): 171 characters
+     - longest real announcement: 97 characters
+   The tester's own suggestion for Section/Room -- 10 characters -- would have
+   made that real section unsavable, so it gets the same 30-character ceiling
+   as Subject Code instead. The other three ceilings all clear the longest
+   real value with room to grow. */
+
+export const SUBJECT_CODE_MAX = 30
+/** A class's subject code / identifier: required, at most SUBJECT_CODE_MAX characters. */
+export function subjectCodeError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'Subject code is required.'
+  if (text.length > SUBJECT_CODE_MAX) return `Subject code is too long (${SUBJECT_CODE_MAX} characters at most).`
+  return ''
+}
+
+export const SECTION_MAX = 30
+/** A class's section/room: required, at most SECTION_MAX characters.
+ *  @param {string} value
+ *  @param {object} [opts]
+ *  @param {string} [opts.label='Section'] a college class calls this "Room" */
+export function sectionError(value, { label = 'Section' } = {}) {
+  const text = String(value ?? '').trim()
+  if (!text) return `${label} is required.`
+  if (text.length > SECTION_MAX) return `${label} is too long (${SECTION_MAX} characters at most).`
+  return ''
+}
+
+export const SUBJECT_MAX = 200
+/** A class's subject description: required, at most SUBJECT_MAX characters. */
+export function subjectError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'Subject description is required.'
+  if (text.length > SUBJECT_MAX) return `Subject description is too long (${SUBJECT_MAX} characters at most).`
+  return ''
+}
+
+export const ANNOUNCEMENT_MAX = 350
+/** An announcement's message: required, at most ANNOUNCEMENT_MAX characters. */
+export function announcementError(value) {
+  const text = String(value ?? '').trim()
+  if (!text) return 'Announcement content is required.'
+  if (text.length > ANNOUNCEMENT_MAX) return `The announcement is too long (${ANNOUNCEMENT_MAX} characters at most).`
+  return ''
+}
+
+/** "ENGL101 — a very long subject description that g…" -- cap a stored
+ *  value's rendered length so a document saved before these limits existed
+ *  (or written straight through the API) cannot still blow out a layout.
+ *  Never touches the stored value; call sites render the full string into a
+ *  `title` attribute alongside this. */
+export function truncateForDisplay(value, max) {
+  const text = String(value ?? '')
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
