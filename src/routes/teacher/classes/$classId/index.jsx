@@ -13,7 +13,7 @@ import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthd
 import { useAuth } from '@/context/useAuth'
 import { accountKind } from '@/lib/subscription'
 import { issuedLoginId, isIssuedLoginId } from '@/lib/logins'
-import { Users, Check, Clock, Layers } from '@/components/icons'
+import { Users, Check, Clock, Layers, FileText, X } from '@/components/icons'
 import { MetricCard } from '@/components/ui/Card'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { toast } from '@/components/ui/toast'
@@ -1210,9 +1210,20 @@ function adminSuffix(school) {
    creates accounts — under the issued-login scheme the admin makes accounts,
    and a typo'd ID must surface as "no account", not become a duplicate
    student nobody can sign in as. Preview first, with unmatched rows named. */
-export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onDone }) {
+export const ROSTER_TEMPLATE_ROWS = [
+  ['student_number', 'first_name', 'middle_name', 'last_name', 'lrn'],
+  ['2024-00187', 'Juan', 'Reyes', 'Dela Cruz', '123456789012'],
+  ['2024-00212', 'Maria', '', 'Santos', '987654321098'],
+]
+
+/** Bulk-enroll from CSV (Class detail lane). Matches existing users; never
+    creates accounts — under the issued-login scheme the admin makes accounts,
+    and a typo'd ID must surface as "no account", not become a duplicate
+    student nobody can sign in as. Preview first, with unmatched rows named. */
+export function CsvUploadModal({ classId, classTitle, enrolledIds, maxStudents, onClose, onDone }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Upload a roster CSV', closeOnBackdrop: false })
   const { profile, school } = useAuth()
+  const titleLabel = classTitle || classId
   // T-91: an issued teacher has an admin whose job it is to create student
   // accounts; a solo subscriber has nobody above them and creates their own
   // (Student accounts tab on the Students page). Same signal AddStudentModal
@@ -1262,6 +1273,8 @@ export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onD
       const already = []
       const unmatched = []
       const seen = new Set()
+      let alreadyEnrolled = 0
+      let duplicateInFile = 0
       setMatchProgress({ done: 0, total: entries.length })
       // Sequential on purpose, but not for the reason this comment used to
       // give: each match used to be "one or two indexed equality reads"
@@ -1299,15 +1312,24 @@ export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onD
           unmatched.push({ label, id: id || entry.email, reason: 'no student account' })
         } else if (isDeactivated(account)) {
           unmatched.push({ label, id: id || entry.email, reason: 'account is deactivated' })
-        } else if (enrolledIds.includes(account.id) || seen.has(account.id)) {
-          already.push({ label, account })
+        } else if (enrolledIds.includes(account.id)) {
+          already.push({ label, account, reason: 'already enrolled in this class' })
+          alreadyEnrolled++
+        } else if (seen.has(account.id)) {
+          already.push({ label, account, reason: 'duplicate row in file' })
+          duplicateInFile++
         } else {
           seen.add(account.id)
           matched.push({ label, account, middle_name: entry.middle_name })
         }
         setMatchProgress((p) => ({ ...p, done: p.done + 1 }))
       }
-      setPreview({ matched, already, unmatched })
+      setPreview({
+        matched,
+        already,
+        unmatched,
+        duplicateCounts: { alreadyEnrolled, duplicateInFile, total: already.length },
+      })
     } catch (err) {
       fail(err.message)
     } finally {
@@ -1361,145 +1383,250 @@ export function CsvUploadModal({ classId, enrolledIds, maxStudents, onClose, onD
     }
   }
 
+  const dupEnrolled =
+    preview?.duplicateCounts?.alreadyEnrolled ??
+    (preview?.already ? preview.already.filter((a) => a.reason?.includes('already')).length : 0)
+  const dupInFile =
+    preview?.duplicateCounts?.duplicateInFile ??
+    (preview?.already ? preview.already.filter((a) => a.reason?.includes('duplicate')).length : 0)
+  const dupTotal = preview?.duplicateCounts?.total ?? (preview?.already?.length ?? 0)
+
   return (
     <div {...overlayProps} className="fixed inset-0 bg-slate-900/50 z-200 overflow-y-auto">
       <div {...panelProps} className="flex min-h-full items-center justify-center p-4 py-8">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4">
-        <h3 className="text-lg font-semibold text-slate-800">Bulk Upload Roster</h3>
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
-          <ul className="list-disc list-inside space-y-1 text-sm text-slate-500">
-            <li><code className="bg-slate-100 px-1 rounded text-xs">student_number</code> or <code className="bg-slate-100 px-1 rounded text-xs">lrn</code> — required, matches each row to the student's account</li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">first_name</code>, <code className="bg-slate-100 px-1 rounded text-xs">last_name</code> — so unmatched rows are readable in the preview</li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">middle_name</code> — optional; saved to a student's account only if it has none yet</li>
-            <li><code className="bg-slate-100 px-1 rounded text-xs">email</code> — optional fallback for students who signed up themselves</li>
-          </ul>
-          <p className="text-xs text-slate-400">
-            This upload only enrolls students who already have an account — it never creates one.
-            {schoolIssued
-              ? ' Rows with no matching account are listed so you can ask your school admin to add them.'
-              : " Rows with no matching account are listed below. Create those students' accounts first, then upload this file again."}
-          </p>
-          <div className="rounded-lg border border-slate-200 overflow-x-auto">
-            <table className="w-full min-w-[600px] text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-left text-slate-500">
-                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">student_number</th>
-                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">first_name</th>
-                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">middle_name</th>
-                  <th className="px-3 py-2 font-medium border-b border-r border-slate-200">last_name</th>
-                  <th className="px-3 py-2 font-medium border-b border-slate-200">lrn</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="text-slate-600">
-                  <td className="px-3 py-1.5 border-r border-slate-200">2024-00187</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">Juan</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">Reyes</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">Dela Cruz</td>
-                  <td className="px-3 py-1.5">123456789012</td>
-                </tr>
-                <tr className="text-slate-600 bg-slate-50/60">
-                  <td className="px-3 py-1.5 border-r border-slate-200">2024-00212</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">Maria</td>
-                  <td className="px-3 py-1.5 border-r border-slate-200"></td>
-                  <td className="px-3 py-1.5 border-r border-slate-200">Santos</td>
-                  <td className="px-3 py-1.5">987654321098</td>
-                </tr>
-              </tbody>
-            </table>
+        <div className="bg-white rounded-xl p-6 w-full max-w-xl space-y-4 relative">
+          <div className="flex items-start justify-between gap-4">
+            <h3 className="text-lg font-semibold text-slate-800">
+              Bulk upload roster to {titleLabel}
+            </h3>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="text-slate-400 hover:text-slate-600 rounded-lg p-1 transition -mt-1 -mr-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-        </div>
-        {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-        )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
-        />
-        {busy && !preview && (
-          <p className="flex items-center gap-2 text-sm text-slate-400" role="status" aria-live="polite">
-            <span
-              className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin"
-              aria-hidden="true"
-            />
-            {matchProgress.total > 0
-              ? `Matching students… ${matchProgress.done} of ${matchProgress.total}`
-              : 'Matching students…'}
-          </p>
-        )}
+          <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-lg text-xs text-blue-900 leading-relaxed">
+            <p className="font-semibold text-blue-950 mb-0.5">Account requirement</p>
+            <p>
+              This upload only enrolls students who already have an account — it never creates one.
+              {schoolIssued
+                ? ' Rows with no matching account are listed so you can ask your school admin to add them.'
+                : " Rows with no matching account are listed below. Create those students' accounts first, then upload this file again."}
+            </p>
+            {!schoolIssued && (
+              <p className="mt-1">
+                <Link to="/teacher/students" className="font-semibold underline text-blue-700 hover:text-blue-900">
+                  Create student accounts →
+                </Link>
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium text-slate-700">Prepare your CSV file with these columns:</p>
+            <div className="rounded-lg border border-slate-200 overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
+                    <th className="px-3 py-2 border-r border-slate-200">Column</th>
+                    <th className="px-3 py-2 border-r border-slate-200">Required</th>
+                    <th className="px-3 py-2">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-600">
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">student_number</td>
+                    <td className="px-3 py-1.5 font-medium text-slate-700 border-r border-slate-100">Required*</td>
+                    <td className="px-3 py-1.5">Matches each row to the student's account (*either <code className="bg-slate-100 px-1 rounded text-[11px]">student_number</code> or <code className="bg-slate-100 px-1 rounded text-[11px]">lrn</code> required)</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">lrn</td>
+                    <td className="px-3 py-1.5 font-medium text-slate-700 border-r border-slate-100">Required*</td>
+                    <td className="px-3 py-1.5">Learner Reference Number; alternative identifier</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">first_name</td>
+                    <td className="px-3 py-1.5 text-slate-500 border-r border-slate-100">Recommended</td>
+                    <td className="px-3 py-1.5">So unmatched rows are readable in the preview</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">last_name</td>
+                    <td className="px-3 py-1.5 text-slate-500 border-r border-slate-100">Recommended</td>
+                    <td className="px-3 py-1.5">So unmatched rows are readable in the preview</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">middle_name</td>
+                    <td className="px-3 py-1.5 text-slate-500 border-r border-slate-100">Optional</td>
+                    <td className="px-3 py-1.5">Saved to a student's account only if it has none yet</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-1.5 font-mono text-slate-800 border-r border-slate-100">email</td>
+                    <td className="px-3 py-1.5 text-slate-500 border-r border-slate-100">Optional</td>
+                    <td className="px-3 py-1.5">Fallback for students who signed up themselves</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Example</span>
+              <button
+                type="button"
+                onClick={() => downloadCsv('roster_template.csv', ROSTER_TEMPLATE_ROWS)}
+                className="text-xs font-semibold text-blue-700 hover:text-blue-900 underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Download CSV template
+              </button>
+            </div>
+            <div className="rounded-lg border border-slate-200 overflow-x-auto">
+              <table className="w-full min-w-[500px] text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-left text-slate-500">
+                    {ROSTER_TEMPLATE_ROWS[0].map((h, i) => (
+                      <th
+                        key={h}
+                        className={`px-3 py-2 font-medium border-b border-slate-200 ${i < ROSTER_TEMPLATE_ROWS[0].length - 1 ? 'border-r' : ''}`}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ROSTER_TEMPLATE_ROWS.slice(1).map((row, rIdx) => (
+                    <tr key={rIdx} className={`text-slate-600 ${rIdx % 2 === 1 ? 'bg-slate-50/60' : ''}`}>
+                      {row.map((cell, cIdx) => (
+                        <td
+                          key={cIdx}
+                          className={`px-3 py-1.5 ${cIdx < row.length - 1 ? 'border-r border-slate-200' : ''}`}
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
+          />
+          {busy && !preview && (
+            <p className="flex items-center gap-2 text-sm text-slate-400" role="status" aria-live="polite">
+              <span
+                className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin"
+                aria-hidden="true"
+              />
+              {matchProgress.total > 0
+                ? `Matching students… ${matchProgress.done} of ${matchProgress.total}`
+                : 'Matching students…'}
+            </p>
+          )}
 
           {preview && (
             <>
-              <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
-              {preview.matched.map((m, idx) => {
-                const kept = String(m.account.middle_name ?? '').trim()
-                const saving = !kept && middleNamesToWrite([m]).length > 0
-                return (
-                  <div key={`m${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
-                    <span style={{ color: ink }}>
-                      {m.account.last_name}, {m.account.first_name}
-                      {kept ? ` ${kept}` : saving ? ` ${m.middle_name.trim()}` : ''}
-                      {displayIdentifier(m.account) && (
-                        <span style={{ color: faint }}> · {displayIdentifier(m.account)}</span>
-                      )}
-                      {saving && <span style={{ color: faint }}> · middle name will be saved</span>}
-                    </span>
-                    <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
-                  </div>
-                )
-              })}
-              {preview.already.map((a, idx) => (
-                <div key={`a${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
-                  <span style={{ color: muted }}>{a.label}</span>
-                  <span style={{ color: muted, fontWeight: 600 }}>already in class</span>
-                </div>
-              ))}
-              {preview.unmatched.map((u, idx) => (
-                <div key={`u${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
-                  <span style={{ color: ink }}>
-                    {u.label}
-                    {u.id ? <span style={{ color: faint }}> · {u.id}</span> : null}
-                  </span>
-                  <span style={{ color: red, fontWeight: 600 }}>{u.reason}</span>
-                </div>
-              ))}
-            </div>
-            {preview.unmatched.length > 0 && (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1.5">
-                <p>
-                  {preview.unmatched.length} row{preview.unmatched.length === 1 ? '' : 's'} will not be
-                  added, for the reason shown beside each.{' '}
-                  {schoolIssued
-                    ? 'Ask your school admin to create or re-enable those accounts, then upload this file again.'
-                    : "Create those students' accounts first, then upload this file again."}
-                </p>
-                {!schoolIssued && (
-                  <Link to="/teacher/students" className="font-semibold underline">
-                    Create student accounts →
-                  </Link>
-                )}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {preview.matched.length} to add
+                </span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                  {preview.unmatched.length} not found
+                </span>
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                  {dupTotal} duplicate{dupTotal === 1 ? '' : 's'}
+                  {dupTotal > 0 ? ` (${dupEnrolled} already enrolled, ${dupInFile} in file)` : ''}
+                </span>
               </div>
-            )}
-            <button
-              onClick={commit}
-              disabled={busy || preview.matched.length === 0}
-              className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
-              style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
-            >
-              {busy ? 'Adding…' : `Add ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'} to class`}
-            </button>
-          </>
-        )}
 
-        <button onClick={onClose} className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50">
-          Close
-        </button>
-      </div>
+              <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
+                {preview.matched.map((m, idx) => {
+                  const kept = String(m.account.middle_name ?? '').trim()
+                  const saving = !kept && middleNamesToWrite([m]).length > 0
+                  return (
+                    <div key={`m${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                      <span style={{ color: ink }}>
+                        {m.account.last_name}, {m.account.first_name}
+                        {kept ? ` ${kept}` : saving ? ` ${m.middle_name.trim()}` : ''}
+                        {displayIdentifier(m.account) && (
+                          <span style={{ color: faint }}> · {displayIdentifier(m.account)}</span>
+                        )}
+                        {saving && <span style={{ color: faint }}> · middle name will be saved</span>}
+                      </span>
+                      <span style={{ color: blueText, fontWeight: 600 }}>will be added</span>
+                    </div>
+                  )
+                })}
+                {preview.already.map((a, idx) => (
+                  <div key={`a${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                    <span style={{ color: muted }}>{a.label}</span>
+                    <span style={{ color: muted, fontWeight: 600 }}>{a.reason || 'already in class'}</span>
+                  </div>
+                ))}
+                {preview.unmatched.map((u, idx) => (
+                  <div key={`u${idx}`} className="flex justify-between" style={{ padding: '10px 14px', borderBottom: `1px solid ${line}`, fontSize: 13 }}>
+                    <span style={{ color: ink }}>
+                      {u.label}
+                      {u.id ? <span style={{ color: faint }}> · {u.id}</span> : null}
+                    </span>
+                    <span style={{ color: red, fontWeight: 600 }}>{u.reason}</span>
+                  </div>
+                ))}
+              </div>
+
+              {preview.unmatched.length > 0 && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1.5">
+                  <p>
+                    {preview.unmatched.length} row{preview.unmatched.length === 1 ? '' : 's'} will not be
+                    added, for the reason shown beside each.{' '}
+                    {schoolIssued
+                      ? 'Ask your school admin to create or re-enable those accounts, then upload this file again.'
+                      : "Create those students' accounts first, then upload this file again."}
+                  </p>
+                  {!schoolIssued && (
+                    <Link to="/teacher/students" className="font-semibold underline">
+                      Create student accounts →
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={commit}
+                disabled={busy || preview.matched.length === 0}
+                className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-40"
+                style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
+              >
+                {busy ? 'Adding…' : `Add ${preview.matched.length} student${preview.matched.length === 1 ? '' : 's'} to class`}
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-600 hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1979,6 +2106,7 @@ export default function ClassDetailPage() {
       {modal === 'csv' && (
         <CsvUploadModal
           classId={classId}
+          classTitle={clazz.subject_code ? `${clazz.subject_code}${clazz.section ? ` · ${clazz.section}` : ''}` : clazz.subject || clazz.section || clazz.id}
           enrolledIds={clazz.student_ids ?? []}
           maxStudents={clazz.max_students ?? 0}
           onClose={() => setModal(null)}
