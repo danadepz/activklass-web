@@ -28,6 +28,13 @@ const fieldCls = (bad) => `${inputBase} ${bad ? inputBad : inputOk}`
    note at its one call site. */
 export const DIALOG_LABEL_MAX = 60
 
+/* T-159: how much of one summary value the confirm dialog shows. Same
+   reasoning as DIALOG_LABEL_MAX -- a summary field reads from the live form,
+   which is already bounded by the input's own maxLength going forward, but
+   Subject Description alone allows up to SUBJECT_MAX (200) characters, more
+   than a one-line summary row should ever show. */
+export const SUMMARY_FIELD_MAX = 60
+
 const MAX_SYLLABUS_BYTES = 10 * 1024 * 1024
 const ALLOWED_SYLLABUS_TYPES = [
   'application/pdf',
@@ -272,6 +279,53 @@ export function dialogLabelFor(form) {
   )
 }
 
+/* T-159 (maykel_64440-233): the confirm dialog asked a teacher to confirm a
+   class it never showed them -- just a label built from two of its six
+   fields. Every value here is already on `form`, written by buildMeta(); this
+   reads it back rather than fetching anything. Each value is capped
+   independently (see SUMMARY_FIELD_MAX) for the same reason dialogLabelFor
+   is: a very long stored value must never make the dialog itself grow past
+   the viewport. Exported, pure, so the six rows can be pinned without
+   driving the whole submit flow. */
+export function dialogSummaryFor(form) {
+  const row = (label, value) =>
+    `${label}: ${truncateForDisplay(String(value ?? '').trim() || '—', SUMMARY_FIELD_MAX)}`
+  return [
+    row('Subject', form.subject),
+    row('Section', form.section),
+    row('Schedule', form.schedule),
+    row('Grade / Year', form.grade_level),
+    row('Max students', form.max_students),
+    row('School year', form.academic_year),
+  ].join('\n')
+}
+
+/* T-159 (maykel_64440-233): the whole confirmDialog() spec for a save,
+   pulled out of submit() so it can be pinned without driving a file upload,
+   a Firestore write or the rest of the submit flow. The title used to carry
+   the whole class label and nothing else showed its details before asking
+   to confirm; the title now just names the action, and dialogSummaryFor's
+   six rows -- every field buildMeta() is about to save -- are what tell the
+   teacher which class this is. The clash warning, when there is one, stays
+   first and the summary is added below it, never replacing it -- it is the
+   most important thing this dialog ever says. Cancel/"Go back" closes with
+   no write and no change to `form`; confirmDialog's own contract already
+   does that (resolves false), so there is nothing to build here for it. */
+export function saveConfirmSpec(form, { mode, clashText, hasClash }) {
+  const verb = mode === 'edit' ? 'Save' : 'Create'
+  const body = hasClash
+    ? `This meets at the same time as ${clashText}. ${verb} anyway?`
+    : mode === 'edit'
+      ? 'Everyone on the roster sees the updated details the next time they open the class. Nothing recorded against it changes.'
+      : `${String(form.subject_code ?? '').trim()} will be added to your classes with no students. You can enrol students from the class page.`
+  return {
+    title: mode === 'edit' ? 'Save changes to this class?' : 'Create this class?',
+    message: `${body}\n\n${dialogSummaryFor(form)}`,
+    confirmLabel: hasClash ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create class',
+    cancelLabel: 'Go back',
+  }
+}
+
 export function buildMeta(form, { writeCollegeFields = true } = {}) {
   const isCollege = form.education_level === 'College'
   const meta = {
@@ -479,10 +533,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
       return
     }
     /* Asked after validation, not before: a question about a form that is
-       about to be rejected is a question about nothing. The class is named
-       back rather than described, because the field the teacher most often
-       gets wrong here is which section they are editing. */
-    const label = dialogLabelFor(form)
+       about to be rejected is a question about nothing. */
     /* T-26: two classes on "TTh 1:00 PM – 2:30 PM" went through without a
        word. Warn, do not block -- co-teaching and placeholder times are real,
        and the teacher knows better than the form. Only this teacher's live
@@ -495,16 +546,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     const clashText = clashes
       .map(({ clazz, hit }) => `${truncateForDisplay(classLabel(clazz), DIALOG_LABEL_MAX)} (${hit.label})`)
       .join(' and ')
-    const verb = mode === 'edit' ? 'Save' : 'Create'
-    if (!(await confirmDialog({
-      title: mode === 'edit' ? `Save changes to "${label}"?` : `Create "${label}"?`,
-      message: clashes.length
-        ? `This meets at the same time as ${clashText}. ${verb} anyway?`
-        : mode === 'edit'
-          ? 'Everyone on the roster sees the updated details the next time they open the class. Nothing recorded against it changes.'
-          : 'It joins your class list with an empty roster — you enrol students from the class page afterwards.',
-      confirmLabel: clashes.length ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create class',
-    }))) return
+    if (!(await confirmDialog(saveConfirmSpec(form, { mode, clashText, hasClash: clashes.length > 0 })))) return
     setSaving(true)
     setError(null)
     try {
