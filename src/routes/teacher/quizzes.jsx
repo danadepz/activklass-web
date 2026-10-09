@@ -510,7 +510,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   )
 }
 
-function CreateQuizModal({ classes, onClose }) {
+export function CreateQuizModal({ classes, onClose }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Create a new quiz', closeOnBackdrop: false })
   const navigate = useNavigate()
   const { profile } = useAuth()
@@ -579,15 +579,11 @@ function CreateQuizModal({ classes, onClose }) {
                 )
               })}
             </div>
-            {/* Optional here and required to publish, which is a gap a teacher
-                should hear about now rather than from the Publish button at
-                the bottom of a finished quiz. The AI dialog preselects a class,
-                so an unassigned draft is something only this path produces. */}
-            {selectedClassIds.length === 0 && (
-              <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
-                You can assign later, but a quiz needs at least one class before it can be published.
-              </p>
-            )}
+            {/* T-151 (andecobs-216): this field hint used to restate the
+                publish-time rule, which read as contradicting "(Optional)"
+                above. Deleted on the owner's decision -- the rule still
+                surfaces, clearly, from publish() below: an inline error and
+                a toast naming both the rule and the control to use. */}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', background: 'rgba(14,42,92,0.02)', flexShrink: 0 }}>

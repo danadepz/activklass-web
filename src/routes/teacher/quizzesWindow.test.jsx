@@ -55,7 +55,7 @@ vi.mock('@/components/ui/useDialogBehavior', () => ({
 }))
 vi.mock('@/lib/ai', () => ({ draftToQuestions: vi.fn(), generateQuiz: vi.fn(), QUIZ_TYPES: [] }))
 
-import QuizzesIndexPage from './quizzes.jsx'
+import QuizzesIndexPage, { CreateQuizModal } from './quizzes.jsx'
 
 const render = () => renderToStaticMarkup(<QuizzesIndexPage />)
 
@@ -146,5 +146,21 @@ describe('/teacher/quizzes?topic= preselects the topic in the Generate dialog', 
   it('does not open the dialog without the parameter', () => {
     state.classes = [{ id: 'c-bsit', section: 'BSIT-C', subject: 'IT 101', syllabus_id: 'syl-1' }]
     expect(render()).not.toContain('Generate Quiz with AI')
+  })
+})
+
+/* T-151 (andecobs-216): the field hint restated the publish-time rule and
+   read as contradicting "Assign to Classes (Optional)" right above it.
+   Deleted on the owner's decision -- the rule still surfaces at publish
+   time (quizzes.$quizId.jsx's refusePublish), which is not this dialog's
+   job to duplicate. */
+describe('Create New Quiz dialog -- the class-assignment hint', () => {
+  const classes = [{ id: 'c1', section: 'Newton', subject: 'Science 9' }]
+
+  it('no longer tells the teacher they can assign later', () => {
+    const html = renderToStaticMarkup(<CreateQuizModal classes={classes} onClose={() => {}} />)
+    expect(html).toContain('Assign to Classes (Optional)')
+    expect(html).not.toContain('You can assign later')
+    expect(html).not.toContain('before it can be published')
   })
 })
