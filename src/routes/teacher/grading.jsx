@@ -103,6 +103,19 @@ const SKIP_REASONS = {
   not_found: 'the class could not be found',
 }
 
+/* T-152 (andecobs-218): the Target Classes row used to read
+   `{section} · {subject}` -- subject is the long free-text description, which
+   is what broke the tester's layout. Reads education level · section ·
+   subject code instead (subject code is what he meant by "Subject"), and
+   drops a missing segment -- and its separator -- rather than printing a
+   hole like "· 5-Diamond ·". */
+function classLabel(clazz) {
+  return [clazz.education_level, clazz.section, clazz.subject_code]
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function describeSkips(skipped, classes) {
   const nameOf = (id) => {
     const match = classes.find((c) => c.id === id)
@@ -664,7 +677,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
           Choose the classes that will use these grading settings.
         </p>
-        <div className="flex flex-wrap gap-3 max-h-40 overflow-y-auto border border-slate-100 p-3 rounded-xl">
+        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto border border-slate-100 p-3 rounded-xl">
           {classes.length === 0 ? (
             <p style={{ fontSize: 13, color: faint, margin: 0 }}>No classes created yet.</p>
           ) : (
@@ -687,7 +700,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
                     className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                   />
                   <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-                    {clazz.section} · {clazz.subject}
+                    {classLabel(clazz)}
                   </span>
                 </label>
               )
