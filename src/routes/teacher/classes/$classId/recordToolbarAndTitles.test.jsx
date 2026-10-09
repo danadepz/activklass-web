@@ -85,7 +85,7 @@ describe('T-142.3 — Export CSV and Lock period moved to the Summary row', () =
     expect(gridBody).not.toContain('Lock period')
     // + Add assessment and the save button are still there, where the work happens.
     expect(gridBody).toContain('Add assessment')
-    expect(gridBody).toMatch(/All saved/)
+    expect(gridBody).toMatch(/All Saved/)
   })
 
   it('the Summary row (ClassRecordPage) now offers both, only off the Summary tab', () => {

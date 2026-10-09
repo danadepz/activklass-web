@@ -266,8 +266,8 @@ export default function PerformancePage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <MetricCard label="Class average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} Icon={BarChart} tint="rgba(14,42,92,0.07)" iconColor={navy} />
-        <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${vals.length} ${passMark}`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Class Average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} Icon={BarChart} tint="rgba(14,42,92,0.07)" iconColor={navy} />
+        <MetricCard label="Passing Rate" value={passingRate} sub={`${passed} of ${vals.length} ${passMark}`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
         <MetricCard label="Below VS" value={belowVsCount} sub="grade below 85 this period" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={belowVsCount > 0} />
         <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} valueColor={green} Icon={TrendingUp} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
       </div>
@@ -280,7 +280,7 @@ export default function PerformancePage() {
         <>
           {/* Distribution + component averages */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-            <Card title="Grade distribution" sub={`${graded.length} graded students`}>
+            <Card title="Grade Distribution" sub={`${graded.length} graded students`}>
               <div className="grid items-end" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, height: 180, padding: '0 8px', borderBottom: '1px solid rgba(14,42,92,0.08)' }}>
                 {dist.map((d) => (
                   <div key={d.label} className="flex flex-col items-center justify-end" style={{ height: '100%', gap: 6 }}>
@@ -296,7 +296,7 @@ export default function PerformancePage() {
               </div>
             </Card>
 
-            <Card title="Component averages" sub="Class mean per grade component">
+            <Card title="Component Averages" sub="Class mean per grade component">
               <div className="flex flex-col gap-4">
                 {componentAvgs.map((c) => (
                   <div key={c.id}>
@@ -315,7 +315,7 @@ export default function PerformancePage() {
 
           {/* Top + at-risk */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
-            <Card title="Top performers" right={<span style={{ ...mono, fontSize: 11, color: faint }}>Top {Math.min(3, top.length)}</span>}>
+            <Card title="Top Performers" right={<span style={{ ...mono, fontSize: 11, color: faint }}>Top {Math.min(3, top.length)}</span>}>
               <div className="flex flex-col gap-2.5">
                 {top.map((r, i) => (
                   <div key={r.student_id} className="flex items-center gap-3" style={{ padding: '12px 14px', background: 'rgba(14,42,92,0.03)', borderRadius: 11 }}>

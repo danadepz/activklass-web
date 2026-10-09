@@ -470,8 +470,8 @@ function RecordGrid({ classId, record, refetch }) {
       {record.students.length > 0 && (
         <div className="mb-5 grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
           {/* icon-less MetricCards: five across, so the chips would crowd */}
-          <MetricCard label="Class average" value={fmt(avg)} sub={`across ${record.students.length} students`} tint="rgba(14,42,92,0.07)" />
-          <MetricCard label="Passing rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ${passMark}`} valueColor={green} tint="rgba(31,138,91,0.1)" />
+          <MetricCard label="Class Average" value={fmt(avg)} sub={`across ${record.students.length} students`} tint="rgba(14,42,92,0.07)" />
+          <MetricCard label="Passing Rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ${passMark}`} valueColor={green} tint="rgba(31,138,91,0.1)" />
           <MetricCard label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" highlight={atRisk > 0} />
           <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} valueColor={green} tint="rgba(63,169,245,0.13)" />
           <MetricCard label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} valueColor={red} tint="rgba(192,57,43,0.07)" />
@@ -495,7 +495,7 @@ function RecordGrid({ classId, record, refetch }) {
                 className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={btnPrimarySm}
               >
-                {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? '' : 's'}` : 'All saved'}
+                {saving ? 'Saving…' : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? '' : 's'}` : 'All Saved'}
               </button>
             </>
           )}

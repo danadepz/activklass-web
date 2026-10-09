@@ -9,10 +9,10 @@ import { badgeColor, badgeTextColor } from '@/routes/teacher/classes'
 import { MetricCard, Panel } from '@/components/ui/Card'
 
 const QUICK_ACTIONS = [
-  { to: '/teacher/classes', label: 'New class', hint: 'Add a section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
-  { to: '/teacher/attendance', label: 'Take attendance', hint: "Mark today's sheet", Icon: CalendarCheck, bg: 'rgba(63,169,245,0.14)', color: blueText },
-  { to: '/teacher/quizzes', label: 'Create a quiz', hint: 'Build or AI-generate', Icon: FileText, bg: 'rgba(245,197,24,0.2)', color: goldDeep },
-  { to: '/teacher/classes', label: 'Class Analytics', hint: 'Select a class section', Icon: BarChart, bg: 'rgba(14,42,92,0.08)', color: navy },
+  { to: '/teacher/classes', label: 'New Class', hint: 'Add a Section', Icon: Plus, bg: 'rgba(14,42,92,0.08)', color: navy },
+  { to: '/teacher/attendance', label: 'Take Attendance', hint: "Mark Today's Attendance", Icon: CalendarCheck, bg: 'rgba(63,169,245,0.14)', color: blueText },
+  { to: '/teacher/quizzes', label: 'Create a Quiz', hint: 'Build or Generate with AI', Icon: FileText, bg: 'rgba(245,197,24,0.2)', color: goldDeep },
+  { to: '/teacher/classes', label: 'Class Analytics', hint: 'Select a Class Section', Icon: BarChart, bg: 'rgba(14,42,92,0.08)', color: navy },
 ]
 
 /* Fixed categorical order for the enrollment donut (validated for CVD-safe
@@ -163,14 +163,14 @@ function EnrollmentDonut({ list, totalStudents }) {
       {/* summary strip */}
       <div className="flex flex-wrap gap-4" style={{ borderTop: `1px solid ${line}`, marginTop: 18, paddingTop: 14 }}>
         <div style={{ flex: 1, minWidth: 140 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: muted, marginBottom: 3 }}>Largest section</div>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: muted, marginBottom: 3 }}>Largest Section</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {classTitle(largest)} <span style={{ ...mono, fontWeight: 400, color: muted }}>· {largest.student_ids?.length ?? 0}</span>
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 140 }}>
           <div style={{ fontSize: 11.5, fontWeight: 600, color: muted, marginBottom: 3 }}>
-            {capped.length > 0 ? 'Open seats' : 'Sections'}
+            {capped.length > 0 ? 'Open Seats' : 'Sections'}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>
             {capped.length > 0 ? openSeats : list.length}
@@ -233,7 +233,7 @@ function StatusChip({ empty }) {
       }}
     >
       {empty ? <AlertCircle className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-      {empty ? 'Empty roster' : 'Active'}
+      {empty ? 'Empty Roster' : 'Active'}
     </span>
   )
 }
@@ -336,7 +336,7 @@ export default function TeacherDashboard() {
                 <ClassSizeChart list={list} />
               )}
             </Panel>
-            <Panel title="Enrollment mix">
+            <Panel title="Enrollment Overview">
               {isLoading ? (
                 <div className="animate-pulse rounded-xl bg-slate-100" style={{ height: 200 }} />
               ) : (
@@ -373,13 +373,13 @@ export default function TeacherDashboard() {
               Panel's `title`, which would sit 16px left of the "Class" header. */}
           <Panel style={{ marginTop: 14, padding: '18px 4px 6px' }}>
             <div className="mb-4 flex items-center justify-between gap-3" style={{ paddingLeft: 16 }}>
-              <h2 style={{ ...serif, fontSize: 21, margin: 0, color: ink }}>Your classes</h2>
+              <h2 style={{ ...serif, fontSize: 21, margin: 0, color: ink }}>Your Classes</h2>
               <Link
                 to="/teacher/classes"
                 className="inline-flex items-center gap-1.5 transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] rounded"
                 style={{ fontSize: 13, fontWeight: 700, color: navy, textDecoration: 'none', marginRight: 14 }}
               >
-                Manage classes <span style={{ color: gold }}>→</span>
+                Manage Classes <span style={{ color: gold }}>→</span>
               </Link>
             </div>
             <div style={{ overflowX: 'auto' }}>

@@ -394,7 +394,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
         <div style={{ padding: 32, textAlign: 'center', color: faint, fontSize: 13 }}>
           {sheet.students.length === 0
             ? 'No students enrolled yet.'
-            : 'No attendance recorded yet — take a day on the By day tab and it appears here.'}
+            : 'No attendance recorded yet — take a day on the By Day tab and it appears here.'}
         </div>
       ) : (
         /* The term is far wider than the page, so it scrolls in here. The page
@@ -408,7 +408,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
                   <th key={date} style={{ ...thHead, padding: '10px 6px', textAlign: 'center' }}>
                     <button
                       onClick={() => onPickDay(date)}
-                      title={`Open ${date} on the By day tab`}
+                      title={`Open ${date} on the By Day tab`}
                       className="transition hover:brightness-110"
                       style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
@@ -725,7 +725,7 @@ export default function AttendancePage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1" style={{ background: 'rgba(14,42,92,0.05)', borderRadius: 999, padding: 3 }}>
-            {[['day', 'By day'], ['term', 'Whole term']].map(([key, label]) => (
+            {[['day', 'By Day'], ['term', 'Whole Term']].map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setView(key)}

@@ -188,14 +188,14 @@ export default function ReportsPage() {
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <MetricCard label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} with grading set up`} Icon={Notebook} tint="rgba(14,42,92,0.07)" iconColor={navy} />
         <MetricCard label="Students" value={totalStudents} sub={`${totalAssessed} assessed across classes`} Icon={Users} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
-        <MetricCard label="Passing rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} valueColor={green} Icon={BarChart} tint="rgba(31,138,91,0.1)" iconColor={green} />
-        <MetricCard label="Not yet passing" value={notPassing} sub="of the students already assessed" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={notPassing > 0} />
+        <MetricCard label="Passing Rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} valueColor={green} Icon={BarChart} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Needs Improvement" value={notPassing} sub="of the students already assessed" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={notPassing > 0} />
       </div>
 
       {/* Per-class breakdown */}
       <div className="mt-5" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '18px 22px', borderBottom: `1px solid ${line}` }}>
-          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>By class</h3>
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>By Class</h3>
           <span style={{ ...mono, fontSize: 12, color: faint }}>{list.length} class{list.length === 1 ? '' : 'es'}</span>
         </div>
         <div style={{ overflowX: 'auto' }}>

@@ -618,7 +618,7 @@ function SignOutCard() {
     <div style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center',
                   justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
       <div>
-        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign out</h2>
+        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign Out</h2>
         <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
           End your session on this device. You will be asked to confirm first.
         </p>
