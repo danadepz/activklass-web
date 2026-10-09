@@ -45,6 +45,14 @@ const ALLOWED_SYLLABUS_TYPES = [
 const FIRST_YEAR = 2026
 const YEARS = Array.from({ length: 10 }, (_, i) => String(FIRST_YEAR + i))
 
+/* T-153 (andecobs-219): 5-minute increments for class schedule minutes (00..55)
+   replacing the old hard-coded 00 and 30 choices so classes starting or ending
+   at quarter-hour or 5-minute marks (e.g. 7:45 AM) can be truthfully scheduled. */
+export const MINUTE_OPTIONS = [
+  '00', '05', '10', '15', '20', '25',
+  '30', '35', '40', '45', '50', '55',
+]
+
 /* The selects only offer FIRST_YEAR and later, so anything below it is clamped
    for display. Normalising up front keeps the value we save equal to the one on
    screen: a blank form rendered "2026 - 2027" while still holding
@@ -730,8 +738,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                     onChange={(e) => handleStartMinuteChange(e.target.value)}
                     className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
                   >
-                    <option value="00">00</option>
-                    <option value="30">30</option>
+                    {!MINUTE_OPTIONS.includes(startMinute) && (
+                      <option value={startMinute}>{startMinute}</option>
+                    )}
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                   {/* AM/PM Arrow Toggle */}
                   <button
@@ -771,8 +783,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                     onChange={(e) => handleEndMinuteChange(e.target.value)}
                     className="rounded-lg border border-slate-300 px-2 py-2 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40 flex-1"
                   >
-                    <option value="00">00</option>
-                    <option value="30">30</option>
+                    {!MINUTE_OPTIONS.includes(endMinute) && (
+                      <option value={endMinute}>{endMinute}</option>
+                    )}
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                   {/* AM/PM Arrow Toggle */}
                   <button
