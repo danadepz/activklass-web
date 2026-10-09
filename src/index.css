@@ -46,9 +46,17 @@
      container; anything that still pokes past the viewport at a phone width
      is clipped here instead of handing every page a horizontal scrollbar.
      Set on html so it propagates to the viewport and vertical scrolling and
-     the sticky headers keep working. */
+     the sticky headers keep working.
+
+     scrollbar-gutter: stable reserves that scrollbar's width whether or not
+     the page actually scrolls. Without it, a short page (no scrollbar) is
+     ~15px wider than a tall one (scrollbar), and the full-width navbar's
+     right-hand bell/avatar cluster lands 15px further right on the short
+     page -- the chrome itself never changed, the viewport under it did
+     (T-145, andecobs-209). */
   html {
     overflow-x: hidden;
+    scrollbar-gutter: stable;
   }
 
   body {
