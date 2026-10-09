@@ -152,7 +152,7 @@ describe('Up next -- calendar', () => {
 
   it('lists the selected day under the grid, with the same rows the list uses', () => {
     expect(html).toContain('data-day-list="2026-09-17"')
-    expect(html).toContain('Thu 17 Sep · 1 due')
+    expect(html).toContain('09-17-26 · 1 due')
     expect(html).toContain('data-deliverable="task:week"')
     expect(html).toContain(describeWindow(items[2], NOW))
     expect(html).not.toContain('data-deliverable="task:late"')

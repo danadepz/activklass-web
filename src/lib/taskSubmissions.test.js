@@ -58,8 +58,8 @@ describe('isLate', () => {
 
 describe('describeSubmission', () => {
   it('says when, and late when late, and only Submitted while the server time is pending', () => {
-    expect(describeSubmission(onTime, task, NOW)).toBe('Submitted · Sat 19 Sep, 3:12 PM')
-    expect(describeSubmission(late, task, NOW)).toBe('Submitted · Sun 20 Sep, 8:05 AM · late')
+    expect(describeSubmission(onTime, task, NOW)).toBe('Submitted · 09-19-26, 3:12 PM')
+    expect(describeSubmission(late, task, NOW)).toBe('Submitted · 09-20-26, 8:05 AM · late')
     expect(describeSubmission({ submitted_at: null }, task, NOW)).toBe('Submitted')
   })
   it('is the same sentence the deliverable chip prints for a done task', () => {

@@ -119,7 +119,7 @@ describe('the tree', () => {
     const html = render()
     expect(html).toContain('Method quiz')
     expect(html).toContain('href="/teacher/quizzes/q1"')
-    expect(html).toContain('Due Sat 19 Sep, 11:59 PM')
+    expect(html).toContain('Due 09-19-26, 11:59 PM')
     expect(html).not.toContain('Other class quiz')
   })
 
@@ -149,7 +149,7 @@ describe('task rows', () => {
     state.tasks = [{ ...base, id: 'b', title: 'Seatwork', kind: 'activity', status: 'published', opens_at: '2026-09-16T08:00', due_at: '2026-09-18T17:00' }]
     const html = render()
     expect(html).toContain('data-state="scheduled"')
-    expect(html).toContain('Opens Wed 16 Sep, 8:00 AM')
+    expect(html).toContain('Opens 09-16-26, 8:00 AM')
     expect(html).not.toContain('data-testid="draft-badge"')
     expect(html).toContain('Activity')
   })
@@ -165,7 +165,7 @@ describe('task rows', () => {
     }]
     const html = render()
     expect(html).toContain('data-state="open"')
-    expect(html).toContain('Due Fri 18 Sep, 5:00 PM')
+    expect(html).toContain('Due 09-18-26, 5:00 PM')
     expect(html).toContain('50 pts')
     expect(html).toContain('aria-label="File: Reviewer"')
     expect(html).toContain('aria-label="Link: Coverage"')
@@ -176,7 +176,7 @@ describe('task rows', () => {
     state.tasks = [{ ...base, id: 'd', title: 'Late one', status: 'published', opens_at: '2026-09-01T08:00', due_at: '2026-09-10T17:00' }]
     const html = render()
     expect(html).toContain('data-state="overdue"')
-    expect(html).toContain('Overdue since Thu 10 Sep')
+    expect(html).toContain('Overdue since 09-10-26')
     expect(html).not.toContain('Closed')
     expect(row(html)).toContain('>Edit<')
   })
@@ -230,7 +230,7 @@ describe('the submission bin on the Modules tab', () => {
     expect(html.split('data-submitted="true"').length - 1).toBe(1)
     expect(html.split('data-submitted="false"').length - 1).toBe(2)
     expect(html).toContain('Lorenzo, Hana')
-    expect(html).toContain('Submitted · Sat 19 Sep, 3:12 PM')
+    expect(html).toContain('Submitted · 09-19-26, 3:12 PM')
     expect(html).not.toContain('· late')
     expect(html).toContain('https://docs.google.com/d/x')
     expect(html).toContain('Repeated the 60 cm run.')
@@ -244,7 +244,7 @@ describe('the submission bin on the Modules tab', () => {
   it('says late when the hand-in came after the deadline', () => {
     state.submissions = [{ ...hana, submitted_at: new Date(2026, 8, 20, 8, 5) }]
     const html = renderToStaticMarkup(<MemoryRouter><SubmissionsList classId="C1" task={accepting} roster={roster} now={NOW} /></MemoryRouter>)
-    expect(html).toContain('Submitted · Sun 20 Sep, 8:05 AM · late')
+    expect(html).toContain('Submitted · 09-20-26, 8:05 AM · late')
   })
 
   const dialog = (kind, task = null) => renderToStaticMarkup(

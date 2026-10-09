@@ -74,7 +74,7 @@ describe('Quizzes list card window chip', () => {
   it('an open quiz reads Due …, the sentence the student sees', () => {
     state.quizzes = [q({ opens_at: '2026-09-10T08:00', closes_at: '2026-09-19T23:59' })]
     const html = render()
-    expect(html).toContain('Due Sat 19 Sep, 11:59 PM')
+    expect(html).toContain('Due 09-19-26, 11:59 PM')
     // Beside the teacher's status pill, not in place of it.
     expect(html).toContain('>Published<')
   })
@@ -87,6 +87,15 @@ describe('Quizzes list card window chip', () => {
   it('a quiz due today says so', () => {
     state.quizzes = [q({ closes_at: '2026-09-13T17:00' })]
     expect(render()).toContain('Due today, 5:00 PM')
+  })
+
+  // T-150 (andecobs-215): the card's link read "Open ->"; the arrow is gone.
+  it('the card\'s link reads Open, with no arrow', () => {
+    state.quizzes = [q({})]
+    const html = render()
+    expect(html).toMatch(/>Open<\/div>/)
+    expect(html).not.toContain('Open →')
+    expect(html).not.toContain('Open ->')
   })
 })
 

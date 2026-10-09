@@ -15,7 +15,7 @@ import { describeBankResult } from '@/lib/questionBank'
 import { LIFECYCLE_TABS, lifecycleOf } from '@/lib/quizAttempts'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { useAuth } from '@/context/useAuth'
-import { ArrowRight, Plus, Sparkles, Trash, Edit } from '@/components/icons'
+import { ArrowRight, Plus, Sparkles, Trash, Edit, BookOpen, Lock } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useQuizzes } from '@/hooks/useQuizzes'
@@ -678,7 +678,7 @@ function QuizCard({ quiz, classes, onDelete }) {
           <div style={{ ...mono, fontSize: 14, fontWeight: 700, color: ink, marginTop: 2 }}>{points}</div>
         </div>
         <Link to={`/teacher/quizzes/${quiz.id}`} style={{ ...mono, marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: navy, textDecoration: 'none' }} className="hover:underline">
-          Open →
+          Open
         </Link>
       </div>
     </div>
@@ -1104,7 +1104,7 @@ function QuizBankBrowser({ syllabi }) {
                         : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <span>📚</span>
+                    <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="truncate">{s.title}</span>
                   </button>
                   {s.modules?.length > 0 && (
@@ -1384,7 +1384,7 @@ export default function QuizzesIndexPage() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          📋 Quizzes
+          Quizzes
         </button>
         <button
           onClick={() => setActiveTab('bank')}
@@ -1394,7 +1394,7 @@ export default function QuizzesIndexPage() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          📚 Quiz Bank{locks.quizBank && <span aria-hidden> 🔒</span>}
+          Quiz Bank{locks.quizBank && <Lock aria-hidden className="h-3 w-3 inline-block ml-1 -mb-0.5" />}
         </button>
       </div>
 

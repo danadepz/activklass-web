@@ -115,17 +115,17 @@ describe('fromTask', () => {
     const d = fromTask(task({ due_at: '2026-09-19T23:59', accepts_submissions: true }), { now: NOW, submission: sub })
     expect(d).toMatchObject({ done: true, state: 'done', acceptsSubmissions: true, submission: sub })
     expect(d.dueAt).toEqual(new Date(2026, 8, 19, 23, 59))
-    expect(describeWindow(d, NOW)).toBe('Submitted · Sat 19 Sep, 3:12 PM')
+    expect(describeWindow(d, NOW)).toBe('Submitted · 09-19-26, 3:12 PM')
     // late: after the deadline, even though the state is done
     const lateD = fromTask(task({ due_at: '2026-09-19T23:59' }), { now: NOW, submission: { submitted_at: new Date(2026, 8, 20, 8, 5) } })
-    expect(describeWindow(lateD, NOW)).toBe('Submitted · Sun 20 Sep, 8:05 AM · late')
+    expect(describeWindow(lateD, NOW)).toBe('Submitted · 09-20-26, 8:05 AM · late')
     // a done task sorts with the done bucket, not out of the list
     expect(bucket([d], NOW).done).toHaveLength(1)
   })
   it('without a submission a task is never done, and does not accept submissions unless the task says so', () => {
     const d = fromTask(task({ due_at: '2026-09-19T23:59' }), { now: NOW })
     expect(d).toMatchObject({ done: false, state: 'open', acceptsSubmissions: false, submission: null })
-    expect(describeWindow(d, NOW)).toBe('Due Sat 19 Sep, 11:59 PM')
+    expect(describeWindow(d, NOW)).toBe('Due 09-19-26, 11:59 PM')
   })
   it('an unknown kind reads as other, and missing fields have safe defaults', () => {
     const d = fromTask({ id: 'k2', class_id: 'c1', kind: 'homework' }, { now: NOW })
@@ -222,7 +222,7 @@ describe('bucket', () => {
   })
   it('a closed quiz nobody took sits with the overdue work, chip still saying Closed', () => {
     const b = bucket(items, NOW)
-    expect(describeWindow(b.overdue[0], NOW)).toBe('Closed Thu 10 Sep')
+    expect(describeWindow(b.overdue[0], NOW)).toBe('Closed 09-10-26')
   })
   it('undated tasks go to later, after the dated ones', () => {
     const b = bucket([items[5], items[4]], NOW)
@@ -254,12 +254,12 @@ describe('describeWindow', () => {
   const at = (opens, due, over = {}) => fromTask(task({ opens_at: opens, due_at: due, ...over }), { now: NOW })
   const qz = (opens, closes, over = {}) => fromQuiz(quiz({ opens_at: opens, closes_at: closes, ...over }), { classId: 'c1', now: NOW })
 
-  it('one sentence per state, in words a teacher would use', () => {
-    expect(describeWindow(at('2026-09-16T08:00', '2026-09-20T23:59'), NOW)).toBe('Opens Wed 16 Sep, 8:00 AM')
-    expect(describeWindow(at(null, '2026-09-19T23:59'), NOW)).toBe('Due Sat 19 Sep, 11:59 PM')
+  it('one sentence per state, in numeric mm-dd-yy a teacher would use', () => {
+    expect(describeWindow(at('2026-09-16T08:00', '2026-09-20T23:59'), NOW)).toBe('Opens 09-16-26, 8:00 AM')
+    expect(describeWindow(at(null, '2026-09-19T23:59'), NOW)).toBe('Due 09-19-26, 11:59 PM')
     expect(describeWindow(at(null, '2026-09-15T23:59'), NOW)).toBe('Due today, 11:59 PM')
-    expect(describeWindow(at(null, '2026-09-14T23:59'), NOW)).toBe('Overdue since Mon 14 Sep')
-    expect(describeWindow(qz(null, '2026-09-11T17:00'), NOW)).toBe('Closed Fri 11 Sep')
+    expect(describeWindow(at(null, '2026-09-14T23:59'), NOW)).toBe('Overdue since 09-14-26')
+    expect(describeWindow(qz(null, '2026-09-11T17:00'), NOW)).toBe('Closed 09-11-26')
     expect(describeWindow(fromQuiz(quiz(), { classId: 'c1', attempts: [finished], now: NOW }), NOW)).toBe('Done')
   })
   it('undated: no deadline; teacher-closed with the window still ahead: just Closed', () => {
@@ -268,12 +268,12 @@ describe('describeWindow', () => {
     expect(describeWindow(qz(null, '2026-09-30T23:59', { status: 'closed' }), NOW)).toBe('Closed')
   })
   it('midnight reads as 12:00 AM and noon as 12:00 PM', () => {
-    expect(describeWindow(at(null, '2026-09-16T00:00'), NOW)).toBe('Due Wed 16 Sep, 12:00 AM')
-    expect(describeWindow(at(null, '2026-09-16T12:00'), NOW)).toBe('Due Wed 16 Sep, 12:00 PM')
+    expect(describeWindow(at(null, '2026-09-16T00:00'), NOW)).toBe('Due 09-16-26, 12:00 AM')
+    expect(describeWindow(at(null, '2026-09-16T12:00'), NOW)).toBe('Due 09-16-26, 12:00 PM')
   })
-  it('names the year only when it is not this one', () => {
-    expect(describeWindow(at(null, '2027-01-08T08:00'), NOW)).toBe('Due Fri 8 Jan 2027, 8:00 AM')
-    expect(formatDay(new Date(2026, 8, 15), NOW)).toBe('Tue 15 Sep')
+  it('always carries the year, even this one -- the one numeric date in the product (T-150)', () => {
+    expect(describeWindow(at(null, '2027-01-08T08:00'), NOW)).toBe('Due 01-08-27, 8:00 AM')
+    expect(formatDay(new Date(2026, 8, 15))).toBe('09-15-26')
     expect(formatTime(new Date(2026, 8, 15, 23, 5))).toBe('11:05 PM')
   })
   it('never contains vendor or error words', () => {

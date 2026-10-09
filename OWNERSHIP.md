@@ -86,7 +86,20 @@ src/lib/quizAttempts.js  src/lib/schoolDirectory.js
 src/lib/schedule.js       src/lib/validation.js
 src/lib/schoolStatus.js
 src/lib/attachments.js
+src/lib/deliverables.js
 ```
+
+**`lib/deliverables.js`, added 2026-10-09 (T-150 Quizzes-lane build pane).** It was in no
+lane. `fromQuiz`/`fromTask` normalise a quiz and a class task into the one shape the
+teacher's Quiz Manager, the Modules tab and the student's "Up next" panel all read, and
+`describeWindow`/`formatDay` are the one sentence and one date format all three print for
+a deadline -- changing either changes what every one of those screens shows, which is a
+domain rule, not a page. T-150 changed `formatDay` from a word date ("Mon 21 Sep") to
+numeric `mm-dd-yy` ("10-11-26"), decided by the owner for the teacher and the student
+alike; the ripple touched pinned-string tests outside the Quizzes lane (Class detail's
+`modules.test.jsx`, Student's `UpNextPanel.test.jsx`, and `taskSubmissions.test.js`,
+itself also unowned) -- a mechanical string update, not page work, so it travelled with
+this commit rather than waiting on those lanes.
 
 **`lib/schoolStatus.js`, added here 2026-09-26 (T-82 Option C build pane).** It was in no
 lane despite being read by `ProtectedRoute.jsx` (Shared) and `routes/suspended.jsx` /

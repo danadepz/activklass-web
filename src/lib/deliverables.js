@@ -268,15 +268,19 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /**
- * "Mon 15 Sep", with the year added only when it is not this year.
- * Formatted by hand rather than through Intl so the sentence is the same on
- * every machine and in every test run -- locale data has changed "Sep" to
- * "Sept" under some ICU versions.
+ * "09-15-26" -- numeric mm-dd-yy, decided by the owner 2026-10-09 (T-150) for
+ * this one chip, read by both the teacher and the student. The year is no
+ * longer conditional: a word date showed it only when it differed from the
+ * current one, but mm-dd-yy always carries two digits of it, so there is no
+ * "is this year" branch left to keep. This is a deliberate departure --
+ * every other date in the product is still written in words.
  */
-export function formatDay(date, now = Date.now()) {
+export function formatDay(date) {
   const d = new Date(toMs(date))
-  const base = `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`
-  return d.getFullYear() === new Date(toMs(now)).getFullYear() ? base : `${base} ${d.getFullYear()}`
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const yy = String(d.getFullYear()).slice(-2)
+  return `${mm}-${dd}-${yy}`
 }
 
 /** "8:00 AM", "11:59 PM", "12:00 AM". */
@@ -288,8 +292,8 @@ export function formatTime(date) {
   return `${hour12}:${m} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-function formatDayTime(date, now) {
-  return `${formatDay(date, now)}, ${formatTime(date)}`
+function formatDayTime(date) {
+  return `${formatDay(date)}, ${formatTime(date)}`
 }
 
 /* The task's Submitted line, inline rather than imported from
@@ -309,29 +313,31 @@ function describeSubmitted(d, now) {
 /**
  * The one sentence every chip shows for a window. No vendor names, no error
  * text: every branch is something a teacher or a student would say aloud.
+ * The date itself is numeric mm-dd-yy (T-150, 2026-10-09) -- the one place in
+ * the product that writes a date in digits rather than words.
  *
- *   scheduled  Opens Mon 15 Sep, 8:00 AM
- *   open       Due Fri 19 Sep, 11:59 PM     · No deadline (undated)
+ *   scheduled  Opens 09-15-26, 8:00 AM
+ *   open       Due 09-19-26, 11:59 PM       · No deadline (undated)
  *   due_today  Due today, 11:59 PM
- *   overdue    Overdue since Thu 18 Sep
- *   closed     Closed Fri 19 Sep            · Closed (by the teacher, no date)
- *   done       Done                         · Submitted · Fri 19 Sep, 3:12 PM (· late) for a task
+ *   overdue    Overdue since 09-18-26
+ *   closed     Closed 09-19-26              · Closed (by the teacher, no date)
+ *   done       Done                         · Submitted · 09-19-26, 3:12 PM (· late) for a task
  */
 export function describeWindow(d, now = Date.now()) {
   switch (stateOf(d, now)) {
     case 'done':
       return d.source === 'task' && d.submission ? describeSubmitted(d, now) : 'Done'
     case 'scheduled':
-      return `Opens ${formatDayTime(d.opensAt, now)}`
+      return `Opens ${formatDayTime(d.opensAt)}`
     case 'due_today':
       return `Due today, ${formatTime(d.dueAt)}`
     case 'overdue':
-      return `Overdue since ${formatDay(d.dueAt, now)}`
+      return `Overdue since ${formatDay(d.dueAt)}`
     case 'closed':
       return d.dueAt && !(d.closedByTeacher && toMs(now) <= toMs(d.dueAt))
-        ? `Closed ${formatDay(d.dueAt, now)}`
+        ? `Closed ${formatDay(d.dueAt)}`
         : 'Closed'
     default:
-      return d.dueAt ? `Due ${formatDayTime(d.dueAt, now)}` : 'No deadline'
+      return d.dueAt ? `Due ${formatDayTime(d.dueAt)}` : 'No deadline'
   }
 }

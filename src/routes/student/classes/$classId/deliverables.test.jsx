@@ -193,7 +193,7 @@ describe('Modules tab -- the submission bin', () => {
     const html = render('/student/classes/demo-sci9-newton?tab=topics', { tasks: [lab], submissionByTask: { [lab.id]: handedIn } })
     const b = box(html)
     expect(b).toContain('data-state="submitted"')
-    expect(b).toMatch(/Submitted · [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}, 3:12 PM/)
+    expect(b).toMatch(/Submitted · \d{2}-\d{2}-\d{2}, 3:12 PM/)
     expect(b).not.toContain('· late')
     expect(b).toContain('https://docs.google.com/document/d/x')
     expect(b).toContain('Repeated the 60 cm run.')
