@@ -795,14 +795,14 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             <FieldError id="err-schedule" message={errors.schedule} />
           </div>
 
-          {/* Row 4: Grade/Year Level, Max Students, School Year. Each cell
-              reserves a two-line label height (sm: and up, where the grid is
-              4 columns and a wrapped label would otherwise drop only that
-              cell's input) and bottom-aligns the label text inside it, so
-              every input in the row starts from the same top edge whether or
-              not its own label wraps (T-84). */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <label className="flex flex-col col-span-1">
+          {/* Row 4: Grade/Year Level, Max Students, School Year.
+              T-158 (maykel_64440-232): proportional 6-column grid on desktop
+              (Grade/Year sm:col-span-2, Max Students sm:col-span-1, School Year
+              sm:col-span-3) so Grade / Year Level options fit without clipping.
+              Each cell reserves a two-line label height (sm: and up) and
+              bottom-aligns label text inside it (T-84). Stacks to grid-cols-1 on phone. */}
+          <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+            <label className="flex flex-col col-span-1 sm:col-span-2">
               <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem]">Grade / Year Level<Req /></span>
               <select
                 required value={form.grade_level} onChange={set('grade_level')}
@@ -819,7 +819,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               </select>
               <FieldError id="err-grade_level" message={errors.grade_level} />
             </label>
-            <label className="flex flex-col col-span-1">
+            <label className="flex flex-col col-span-1 sm:col-span-1">
               <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem]">Max Students<Req /></span>
               <input
                 required
@@ -838,7 +838,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             </label>
 
             {/* School Year Selectors */}
-            <div className="flex flex-col col-span-2">
+            <div className="flex flex-col col-span-1 sm:col-span-3">
               <span className="text-sm font-medium text-slate-700 flex items-end min-h-0 sm:min-h-[2.5rem] mb-1">School Year<Req /></span>
               <div className="flex items-center gap-1">
                 <select
