@@ -2,8 +2,22 @@ import { describe, it, expect } from 'vitest'
 import { formatSchedule, parseSchedule, scheduleMeetings, scheduleOverlap } from './schedule'
 
 describe('formatSchedule', () => {
-  it('passes a typed string through', () => {
-    expect(formatSchedule('MWF 8:00 AM – 9:30 AM')).toBe('MWF 8:00 AM – 9:30 AM')
+  /* T-160 (maykel_64440-234): a class made through the New Class form stores
+     a typed string and used to be printed verbatim, while a seeded class
+     with the object shape went through the day-grouping below -- two
+     formats on the same screen family. The string branch now reads through
+     `parseSchedule` and joins the same way the object branch does. */
+  it('reads a typed string into days and a clock time, the same format the object shape uses', () => {
+    expect(formatSchedule('MWF 8:00 AM – 9:30 AM')).toBe('Mon, Wed, Fri 8:00–9:30 AM')
+    expect(formatSchedule('ThF 7:00 AM - 9:30 AM')).toBe('Thu, Fri 7:00–9:30 AM')
+  })
+
+  it('returns a string it cannot read as a day list plus a clock time, unchanged', () => {
+    // Old or hand-edited values must never disappear from a class header
+    // because they did not match the regex.
+    expect(formatSchedule('every other Tuesday, room TBA')).toBe('every other Tuesday, room TBA')
+    expect(formatSchedule('MWF')).toBe('MWF')
+    expect(formatSchedule('  room TBA  ')).toBe('room TBA')
   })
 
   it('returns empty for null, undefined and empty values', () => {
@@ -21,7 +35,7 @@ describe('formatSchedule', () => {
       monday: [{ start: '08:00', end: '09:00', room: 'Sci Lab 2' }],
     }
     expect(formatSchedule(seeded)).toBe(
-      'Mon/Wed 08:00–09:00 (Sci Lab 2) · Fri 10:00–11:00 (Sci Lab 2)'
+      'Mon, Wed 08:00–09:00 (Sci Lab 2) · Fri 10:00–11:00 (Sci Lab 2)'
     )
   })
 

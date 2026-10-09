@@ -35,7 +35,7 @@ function slotLabel(slot) {
 
 export function formatSchedule(schedule) {
   if (!schedule) return ''
-  if (typeof schedule === 'string') return schedule.trim()
+  if (typeof schedule === 'string') return formatScheduleString(schedule)
   if (typeof schedule !== 'object') return ''
 
   // Collect one entry per meeting, in weekday order rather than key order --
@@ -52,9 +52,9 @@ export function formatSchedule(schedule) {
   }
   if (!meetings.length) return ''
 
-  // Days sharing a time collapse into one group ("MonWed 08:00-09:00"), which
-  // is how a schedule is written by hand and keeps the line short enough for
-  // the 12px caption it renders into.
+  // Days sharing a time collapse into one group ("Mon, Wed 08:00-09:00"),
+  // which is how a schedule is written by hand and keeps the line short
+  // enough for the 12px caption it renders into.
   const groups = []
   for (const { day, label } of meetings) {
     const existing = groups.find(g => g.label === label)
@@ -63,8 +63,37 @@ export function formatSchedule(schedule) {
   }
 
   return groups
-    .map(g => `${g.days.map(d => DAY_LABEL[d]).join('/')} ${g.label}`)
+    .map(g => `${g.days.map(d => DAY_LABEL[d]).join(', ')} ${g.label}`)
     .join(' · ')
+}
+
+/**
+ * A typed schedule string ("ThF 7:00 AM - 9:30 AM") read back into days and a
+ * clock time and rendered through the same day-grouping the object shape
+ * above uses, so a class made through the New Class form and a seeded class
+ * print in the same format instead of this one going out verbatim (T-160).
+ *
+ * Returns the trimmed original when it cannot be read as a day list plus a
+ * clock time -- an old or hand-edited value must never disappear from a
+ * class header because it did not match the regex. The same "no days, or no
+ * readable clock time" check gates `scheduleMeetings` below, on purpose: a
+ * string too free-form to render here is too free-form to feed a clash
+ * check either.
+ */
+function formatScheduleString(str) {
+  const trimmed = String(str ?? '').trim()
+  if (!trimmed) return ''
+
+  const parsed = parseSchedule(trimmed)
+  if (!parsed.days.length || !/\d{1,2}:\d{2}\s*(AM|PM)/i.test(trimmed)) return trimmed
+
+  const days = DAY_ORDER.filter((day) => parsed.days.some((code) => DAY_CODE[code] === day))
+  if (!days.length) return trimmed
+
+  const start = minutesFromLabel(parsed.startHour, parsed.startMinute, parsed.startPeriod)
+  const end = minutesFromLabel(parsed.endHour, parsed.endMinute, parsed.endPeriod)
+
+  return `${days.map((d) => DAY_LABEL[d]).join(', ')} ${rangeLabel(start, end)}`
 }
 
 /* ---------------------------------------------------------------------------
