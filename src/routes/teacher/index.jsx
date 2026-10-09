@@ -5,6 +5,7 @@ import { navy, ink, gold, goldDeep, goldChart, muted, faint, blueText, blue, gre
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { formatSchedule } from '@/lib/schedule'
 import { academicTerm } from '@/lib/classForm'
+import { badgeColor, badgeTextColor } from '@/routes/teacher/classes'
 import { MetricCard, Panel } from '@/components/ui/Card'
 
 const QUICK_ACTIONS = [
@@ -413,20 +414,26 @@ export default function TeacherDashboard() {
                           >
                             <td style={tdStyle}>
                               <span className="flex items-center gap-3">
-                                <span style={{ ...mono, width: 38, height: 38, borderRadius: 10, background: navy, color: gold, display: 'grid', placeItems: 'center', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
+                                <span style={{ ...mono, width: 38, height: 38, borderRadius: 10, background: badgeColor(c), color: badgeTextColor(badgeColor(c)), display: 'grid', placeItems: 'center', flexShrink: 0, fontWeight: 600, fontSize: 12 }}>
                                   {classBadge(c)}
                                 </span>
+                                {/* T-154: subject_code/section are capped going
+                                    forward, but a class saved before that limit
+                                    existed can still hold an unbounded value --
+                                    clamp the display so one class cannot blow
+                                    out the table (andecobs-220). */}
                                 <Link
                                   to={`/teacher/classes/${c.id}`}
                                   onClick={(e) => e.stopPropagation()}
+                                  title={classTitle(c)}
                                   className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] rounded"
-                                  style={{ fontWeight: 700, color: ink, textDecoration: 'none' }}
+                                  style={{ fontWeight: 700, color: ink, textDecoration: 'none', display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}
                                 >
                                   {classTitle(c)}
                                 </Link>
                               </span>
                             </td>
-                            <td style={tdStyle}>{c.subject || '—'}</td>
+                            <td style={{ ...tdStyle, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={c.subject || undefined}>{c.subject || '—'}</td>
                             <td style={{ ...tdStyle, ...mono, fontSize: 12 }}>{formatSchedule(c.schedule) || '—'}</td>
                             <td style={{ ...tdStyle, ...mono, fontSize: 12 }}>{academicTerm(c)}</td>
                             <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: ink }}>

@@ -62,7 +62,7 @@ function classBadge(c) {
   return base.replace(/[^A-Z0-9]/g, '').slice(0, 3) || '—'
 }
 
-function badgeColor(c) {
+export function badgeColor(c) {
   return c.badge_color || navy
 }
 
@@ -79,7 +79,7 @@ function relativeLuminance(hex) {
 
 const contrastRatio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 
-function badgeTextColor(bg) {
+export function badgeTextColor(bg) {
   const bgLum = relativeLuminance(bg)
   const goldLum = relativeLuminance(gold)
   const navyLum = relativeLuminance(navy)
