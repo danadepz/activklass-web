@@ -155,7 +155,7 @@ export default function StudentsPage() {
     <div className="mb-[26px] flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-[clamp(30px,4vw,40px)]" style={{ ...serif, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
-          Students
+          List of Students
         </h1>
         <p style={{ fontSize: 15, color: muted, margin: 0 }}>
           {tab === 'accounts'
@@ -239,7 +239,7 @@ export default function StudentsPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or LRN"
+          placeholder="Search"
           aria-label="Search students"
           className="ak-input"
           style={{ width: '100%', minWidth: 220, maxWidth: 320, padding: '11px 14px', fontSize: 14, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11 }}

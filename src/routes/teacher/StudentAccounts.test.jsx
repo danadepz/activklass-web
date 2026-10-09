@@ -274,6 +274,39 @@ describe('Students page', () => {
     expect(html).toContain('🪪 Accounts')
     expect(html).toContain('No classes yet')
   })
+
+  /* T-147 (andecobs-211, andecobs-212): "Students" -> "List of Students".
+     The <h1> sits outside the tab === 'accounts' ternary (only the subtitle
+     <p> below it branches on tab), so it reads the same over both tabs --
+     checked here on the solo (tabs present) and school-issued (no tabs)
+     renders, rather than needing to click into the Accounts tab itself. */
+  it('the heading reads "List of Students", identically with and without the Accounts tab', () => {
+    state.classes = [HS]
+    const withTabs = render(<StudentsPage />)
+    expect(withTabs).toContain('List of Students')
+    expect(withTabs).not.toContain('>Students<')
+
+    state.sub = { ...state.sub, kind: 'school', isSolo: false }
+    const withoutTabs = render(<StudentsPage />)
+    expect(withoutTabs).toContain('List of Students')
+    state.sub = { ...state.sub, kind: 'active', isSolo: true }
+  })
+
+  /* T-147: the placeholder promises nothing specific ("Search"), so it can't
+     mislead -- the search still matches first name, last name AND lrn
+     (students.jsx:116-122, untouched by this ticket). The static-markup
+     harness can't simulate typing into the box, so the haystack itself is
+     pinned by reading the source, the same way the reset-password copy test
+     above pins its strings against the live file rather than a click. */
+  it('the search box just says "Search", and still matches name and LRN under the hood', () => {
+    const html = render(<StudentsPage />)
+    expect(html).toContain('placeholder="Search"')
+    expect(html).not.toContain('Search name or LRN')
+    expect(html).not.toContain('Search ID Number')
+
+    const src = readFileSync(fileURLToPath(new URL('./students.jsx', import.meta.url)), 'utf8')
+    expect(src).toMatch(/\$\{r\.firstName\} \$\{r\.lastName\} \$\{r\.lrn \?\? ''\}/)
+  })
 })
 
 describe('Subscription indicator', () => {
