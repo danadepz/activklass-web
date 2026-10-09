@@ -2,7 +2,7 @@ import { useState } from 'react'
 // TEMPORARY dev helper — remove this import and the <DevQuickLogin /> below
 // when the seeded test accounts are no longer needed.
 import DevQuickLogin from '@/components/DevQuickLogin'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   signInWithEmailAndPassword,
   setPersistence,
@@ -56,9 +56,26 @@ function signInError(code, identifier) {
 const SIGN_IN = 'sign_in'
 const NEW_PASSWORD = 'new_password'
 
+/* T-156 (andecobs-222): a visitor who already has a session should not be
+   shown the sign-in form at all -- typing /login, or pressing Back after
+   signing in, would otherwise land on a live form that happily signs them
+   in again, which is what made the report a loop rather than a stale page.
+   Gated to SIGN_IN only: once NEW_PASSWORD is showing, the account IS
+   signed in on purpose (handleSignIn put it there to finish the staff-issued
+   password), and bouncing it to /portal mid-flow would hand that teacher to
+   ProtectedRoute's own temp-password gate instead of this screen --
+   /change-password, not here, a regression on what T-01's gate was built to
+   avoid. Waits past 'loading' so a genuinely signed-out visitor is never
+   flashed through a redirect first. Exported so the NEW_PASSWORD safety case
+   is a plain unit test rather than needing a mounted form and a submit event
+   this repo's test setup cannot drive (no jsdom). */
+export function shouldRedirectSignedInVisitor(stage, status) {
+  return stage === SIGN_IN && status !== 'loading' && status !== 'signed_out'
+}
+
 export default function Login() {
   const navigate = useNavigate()
-  const { markPasswordChanged } = useAuth()
+  const { markPasswordChanged, status } = useAuth()
   const [stage, setStage] = useState(SIGN_IN)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -101,7 +118,7 @@ export default function Login() {
       )
       return
     }
-    navigate('/portal')
+    navigate('/portal', { replace: true })
   }
 
   async function handleSetPassword() {
@@ -132,7 +149,7 @@ export default function Login() {
     // Lift the client-side gate for this session whether or not the write
     // landed, then straight to the role dashboard — no confirmation screen.
     markPasswordChanged()
-    navigate('/portal')
+    navigate('/portal', { replace: true })
   }
 
   async function handleSubmit(e) {
@@ -159,6 +176,10 @@ export default function Login() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (shouldRedirectSignedInVisitor(stage, status)) {
+    return <Navigate to="/portal" replace />
   }
 
   return (
