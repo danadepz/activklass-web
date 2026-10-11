@@ -52,12 +52,20 @@ const RISKS = [
   { name: 'Hidalgo, T.', score: '74 · word probs', pct: '61%' },
 ]
 
+// T-165 (maykel_64440-238, decided 2026-10-11 by the owner): the strip is
+// about who the product is FOR, not who signs up on this landing page --
+// that is why Institutions, Parents and Students belong here even though
+// none of them register on it. CHED Faculty stays deliberately: it is the
+// only line on the page that says the product serves college, and Grade
+// Config ships a full CHED Tertiary mode (1.0-5.0 point scale) -- dropping
+// it would be a regression, not a tidy-up. Subject teachers, Department
+// heads and Registrars are dropped as redundant with Class Advisers.
 const DESIGNED_FOR = [
+  'Institutions',
   'Class Advisers',
-  'Subject teachers',
-  'Department heads',
-  'Registrars',
-  'CHED faculty',
+  'CHED Faculty',
+  'Parents',
+  'Students',
 ]
 
 const STEPS = [

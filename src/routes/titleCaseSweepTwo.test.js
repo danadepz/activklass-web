@@ -32,13 +32,12 @@ describe('T-164 — Landing page (index.jsx)', () => {
     expect(landingSrc).not.toContain('See how it works →')
   })
 
-  it('title-cases the first DESIGNED_FOR entry only, membership untouched (238 casing half)', () => {
+  it('title-cases Class Advisers in DESIGNED_FOR (238 casing half)', () => {
+    // Membership is T-165's call, not this card's -- see designedFor.test.js
+    // for the full array. This only pins that the one entry T-164 touched
+    // stayed Title Case through T-165's later rewrite of the rest.
     expect(landingSrc).toContain("'Class Advisers',")
     expect(landingSrc).not.toContain("'Class advisers',")
-    expect(landingSrc).toContain("'Subject teachers',")
-    expect(landingSrc).toContain("'Department heads',")
-    expect(landingSrc).toContain("'Registrars',")
-    expect(landingSrc).toContain("'CHED faculty',")
   })
 
   it('title-cases the three feature-card headings (239)', () => {
