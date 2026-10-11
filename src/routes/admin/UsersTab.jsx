@@ -164,11 +164,13 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
   const [done, setDone] = useState('')
 
   const mut = useMutation({
-    mutationFn: (term_dates) => saveSchoolSettings({
-      name: school?.name,
-      prefix: school?.login_prefix,
-      term_dates,
-    }),
+    // T-163: this card owns term dates only. It used to resend the school's
+    // name and abbreviation just to satisfy the endpoint's all-or-nothing
+    // shape -- which meant a school with no abbreviation set yet could never
+    // save term dates at all (the endpoint validated the sent prefix "" and
+    // refused). The endpoint now validates only what it is given, so this
+    // sends term_dates alone.
+    mutationFn: (term_dates) => saveSchoolSettings({ term_dates }),
     onSuccess: () => {
       setDates(null)
       setError('')
