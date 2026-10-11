@@ -666,14 +666,16 @@ describe('school_directory · the registration page dropdown', () => {
 })
 
 describe('subscription_requests · the Institution path on /register', () => {
-  // The exact shape register.jsx's details() + createAccount() build (T-61:
-  // 'he'/'she'/'others' and no middle_name/gender_custom key refused every
-  // request after the form switched to female/male/custom).
+  // T-162: this must be the exact shape register.jsx's details() actually
+  // sends. It used to hard-code `gender: 'female'` — a field the form
+  // stopped sending back in T-109 — so every test here was green against a
+  // payload production never produces, while the rules still demanded the
+  // field and refused every real request. No `gender` / `gender_custom` key
+  // belongs in this helper again unless the form sends one.
   const request = (overrides = {}) => ({
     uid: TEACHER,
     first_name: 'Maykel',
     last_name: 'Dela Cruz',
-    gender: 'female',
     phone: '09171234567',
     school_name: 'University of Cebu-Banilad',
     school_type: 'private',
@@ -688,24 +690,24 @@ describe('subscription_requests · the Institution path on /register', () => {
     ...overrides,
   })
 
-  it('lets a signed-in requester file their own request with a female gender', async () => {
+  it('lets a signed-in requester file their own request — the exact shape register.jsx sends', async () => {
     await assertSucceeds(
       setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request()),
     )
   })
 
-  it('lets a Custom gender with a gender_custom note and a middle name through', async () => {
+  it('lets a middle name through', async () => {
     await assertSucceeds(
       setDoc(
         doc(collection(ctx(TEACHER), 'subscription_requests')),
-        request({ gender: 'custom', gender_custom: 'Nonbinary', middle_name: 'Santos' }),
+        request({ middle_name: 'Santos' }),
       ),
     )
   })
 
-  it('refuses the old pronoun-shaped gender values', async () => {
+  it('refuses a stray gender key — T-109 dropped the field, so the rule no longer permits it at all', async () => {
     await assertFails(
-      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request({ gender: 'he' })),
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request({ gender: 'female' })),
     )
   })
 
