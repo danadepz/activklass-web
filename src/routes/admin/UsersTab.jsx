@@ -199,7 +199,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
       <CardHead
         icon="📅"
         tint="rgba(31,138,91,0.12)"
-        title="Term end dates & automatic archiving"
+        title="Term End Dates & Automatic Archiving"
         sub={
           loadError ? 'Your school’s details could not be loaded, so term dates cannot be shown yet.'
             : pending ? 'Checking term dates…'
@@ -218,7 +218,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
       {school && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, alignItems: 'end' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            School year end (K-12)
+            School Year End (K-12)
             <input
               type="date"
               style={{ ...field, padding: '9px 12px' }}
@@ -227,7 +227,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
             />
           </label>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            1st Semester end
+            1st Semester End
             <input
               type="date"
               style={{ ...field, padding: '9px 12px' }}
@@ -236,7 +236,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
             />
           </label>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            2nd Semester end
+            2nd Semester End
             <input
               type="date"
               style={{ ...field, padding: '9px 12px' }}
@@ -245,7 +245,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
             />
           </label>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            Midyear / Summer end
+            Midyear / Summer End
             <input
               type="date"
               style={{ ...field, padding: '9px 12px' }}

@@ -53,7 +53,7 @@ const RISKS = [
 ]
 
 const DESIGNED_FOR = [
-  'Class advisers',
+  'Class Advisers',
   'Subject teachers',
   'Department heads',
   'Registrars',
@@ -210,13 +210,13 @@ export default function Landing() {
               Features
             </a>
             <a href="#how" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#3A4A6B' }}>
-              How it works
+              How It Works
             </a>
             <a href="#compliance" className="hidden text-sm font-medium transition hover:opacity-70 md:inline" style={{ color: '#3A4A6B' }}>
               Compliance
             </a>
             <Link to="/login" className="text-sm font-semibold transition hover:opacity-70" style={{ color: navy }}>
-              Sign in
+              Sign In
             </Link>
             <Link
               to="/login"
@@ -284,7 +284,7 @@ export default function Landing() {
                 className="inline-flex items-center gap-2 rounded-xl px-5 py-4 text-[15px] font-semibold transition hover:bg-[rgba(14,42,92,0.04)]"
                 style={{ color: navy, border: '1.5px solid rgba(14,42,92,0.18)' }}
               >
-                See how it works →
+                See How It Works →
               </a>
             </div>
 
@@ -514,7 +514,7 @@ export default function Landing() {
                 </div>
               </div>
               <h3 style={{ ...serif, fontSize: 24, margin: '0 0 10px', color: ink, lineHeight: 1.15 }}>
-                Automated grade computation
+                Automated Grade Computation
               </h3>
               <p style={{ fontSize: 14, lineHeight: 1.55, color: slate, margin: 0 }}>
                 Real-time weighted totals, DepEd Order No. 8 s. 2015
@@ -550,7 +550,7 @@ export default function Landing() {
                 </div>
               </div>
               <h3 style={{ ...serif, fontSize: 24, margin: '0 0 10px', color: '#FAFAF6', lineHeight: 1.15, position: 'relative' }}>
-                AI-driven remediation
+                AI-Driven Remediation
               </h3>
               <p style={{ fontSize: 14, lineHeight: 1.55, color: 'rgba(250,250,246,0.75)', margin: 0, position: 'relative' }}>
                 Risk prediction and least-mastered-skill mapping recommend
@@ -588,7 +588,7 @@ export default function Landing() {
                 </div>
               </div>
               <h3 style={{ ...serif, fontSize: 24, margin: '0 0 10px', color: ink, lineHeight: 1.15 }}>
-                Privacy-first by design
+                Privacy-First By Design
               </h3>
               <p style={{ fontSize: 14, lineHeight: 1.55, color: slate, margin: 0 }}>
                 Parental-consent records gate access to student grades, in line
