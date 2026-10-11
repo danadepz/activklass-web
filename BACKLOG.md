@@ -3335,3 +3335,229 @@ layout, and splitting them would put four panes in adjacent files.
 
 **One small thing worth recording:** `195` names the wrong screen in its text (*Class Record*) while
 its screenshot shows **Attendance**. The card goes by the screenshot, as the desk's rule says.
+
+
+## Tester tickets — 2026-10-09, Derick's and maykel's walkthroughs (28 tickets, 17 issues)
+
+Two testers, two sweeps, filed within an hour of each other on 2026-10-08: `andecobs-209`–`-222`
+(Derick, teacher web, mostly My Classes / Grade Config / Quizzes) and `maykel_64440-223`–`-236`
+(maykel, teacher web, mostly wording). One of Derick's — `217` — is a **duplicate of T-144**, which
+had already shipped in `bea9296`; its ticket text was pasted from `216` by mistake, and its
+screenshot is the Grade Config centring. Cards are under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+1. **The bell and avatar jump sideways when you move between pages** — `bug · cosmetic`, web,
+   `andecobs-209`. **The navbar is not the cause.** `teacher/_layout.jsx:216-227` is one flex row
+   with the LEFT group on `flex:1`, identical on every page. What changes is the viewport: nothing
+   in the app reserves the scrollbar gutter (`grep scrollbar-gutter src/ index.html` → nothing), so
+   a page that scrolls is ~15px narrower than one that does not and the full-width bar's right
+   cluster moves with it. One line of `index.css`. Card: `…/T-145-navbar-icons-shift-between-pages.md`.
+
+2. **The Dashboard ignores the teacher's chosen class badge colour** — `bug · cosmetic`, web,
+   `andecobs-210`. `badge_color` is a real stored field with a picker
+   (`classes/index.jsx:34-36`, `:527-531`) and two helpers that read it (`:65-66`, `:82`). The
+   Dashboard never calls them: `teacher/index.jsx:416` writes `background: navy, color: gold`
+   straight into the style object. Card: `…/T-146-dashboard-ignores-the-class-badge-colour.md`.
+
+3. **"List of Students", and a placeholder that would hide half of what search does** —
+   `suggestion · cosmetic`, web, `andecobs-211` + `-212` (the same request twice). The heading is a
+   one-line edit. The placeholder is not: `students.jsx:242` says *"Search name or LRN"* and
+   `:116-122` genuinely matches `firstName`, `lastName` **and** `lrn`, so relabelling it
+   *"Search ID Number"* would tell teachers that name search does not work when it does — the test
+   this desk uses for `misleading`. Three honest options on the card; it recommends
+   *"Search name or ID number"*, which also fixes the LRN-only narrowness **T-123** already settled.
+   Card: `…/T-147-students-heading-and-search-placeholder.md`.
+
+4. **The long risk footnote was already cut — by T-136, days earlier** — `suggestion · cosmetic`
+   (`not-a-bug as filed`), web, `andecobs-213`. `students.jsx:393-395` is now one sentence. What is
+   genuinely open is that our shortening **dropped the risk bands** and Derick's version keeps them;
+   the code comment justifies the drop by saying the numbers are on the Risk chips, and they are
+   not — the chips show *counts* (High 2 · Medium 2 · Low 1), not thresholds. One line restores it.
+   Card: `…/T-148-students-risk-footnote-already-shortened.md`.
+
+5. **Emoji used as icons, in an app that already has an icon set** — `suggestion · cosmetic`, web,
+   `andecobs-214`, `maykel_64440-230`, `-235`. Two testers, three screens, one word from maykel:
+   *consistency*. The full inventory is **17 sites in 6 files**, on the card. Three kinds and they
+   are not the same: decorative beside a word (replace or drop), **carrying information** (the three
+   class-header chips at `_layout.jsx:137-140`, which are the only thing distinguishing three
+   identical pills), and **carrying state** (three `🔒` in `record.jsx`, one of them already
+   `title="Locked"` — never just delete those). One lives inside a `<select>` option
+   (`announcements.jsx:412`), which cannot render a component.
+   Card: `…/T-149-emoji-used-as-icons-across-the-teacher-ui.md`.
+
+6. **The quiz card's "Open →", and a date chip shared with the student app** —
+   `suggestion · cosmetic`, web, `andecobs-215`. The arrow is `quizzes.jsx:681`. The date is **not a
+   string in that file**: `Closed Mon 21 Sep` comes from `describeWindow()` in
+   `lib/deliverables.js:320-342`, and `quizzes.jsx:617-619` says deliberately that it is *"the same
+   sentence the student's dashboard and class page print"*. Reformatting it changes the student app
+   too. Blocked on two answers: what format, and does it apply to students. Also noted: **two cards
+   tagged `Draft` read `Closed`**, which is wrong regardless of format.
+   `lib/deliverables.js` **is in no lane** — whoever touches it adds it to `OWNERSHIP.md`.
+   Card: `…/T-150-quiz-card-open-arrow-and-date-chip.md`.
+
+7. **"You can assign later…" is the only notice of a real publish rule** — `suggestion · cosmetic`,
+   web, `andecobs-216`. He asks to delete it as redundant with *"Assign to Classes (Optional)"*. The
+   comment at `quizzes.jsx:581-584` is the counter-argument, written before the ticket: optional
+   *here*, required *to publish*, and a teacher should not learn that from the Publish button at the
+   bottom of a finished quiz. Three options on the card; it recommends shortening rather than
+   deleting. Card: `…/T-151-quiz-assign-helper-is-the-only-notice-of-a-rule.md`.
+
+8. **Grade Config's class picker wraps raggedly and names classes by the wrong fields** —
+   `suggestion · cosmetic`, web, `andecobs-218`. `grading.jsx:667` is `flex flex-wrap`, so chips
+   sized to their own text wrap unevenly; `:689-691` renders `section · subject`, and `subject` is
+   the long Subject **Description**, which is what he is objecting to. **There is no "Program/Course"
+   field** — `buildMeta()` writes `education_level`, which is what his example means. Nothing should
+   invent a schema field. Card: `…/T-152-grade-config-target-classes-list.md`.
+
+9. **A class can only start or end on the hour or the half hour** — `suggestion · feature gap`, web,
+   `andecobs-219`. `ClassFormModal.jsx:644-645` and `:685-686` offer exactly `00` and `30`. A class
+   meeting 7:45–9:15 cannot be entered. The minute is not stored on its own — it is assembled into
+   one schedule string, so `validateSchedule()`, `parseSchedule()` and `scheduleOverlap()` all have
+   to be read before the select is widened. Card:
+   `…/T-153-class-times-only-land-on-the-hour-or-half-hour.md`.
+
+10. **Nothing limits class or announcement text, and one paste makes the class list unusable** —
+    **`bug · wrong behaviour`**, web, `andecobs-220`. **The most serious item in this batch, and he
+    proved it rather than suggesting it**: a few thousand words of lorem ipsum pasted into Subject
+    Description turns the whole My Classes page into one class row, and pushes the create-confirm
+    dialog's **Cancel button off the viewport**. `ClassFormModal.jsx:550-585` has no `maxLength` on
+    `subject_code`, `section` or `subject`, and `validate()` (`:131-181`) checks presence only —
+    every length rule in it belongs to `max_students`. `announcements.jsx:392-399` is the same.
+    The description is used as a *label* on four screens, which is why one field degrades all of
+    them. **Check his 10-character Section/Room limit against real data first**: *"Special Science
+    Class - Curie"* is 29. Card: `…/T-154-no-maximum-length-on-class-or-announcement-text.md`.
+
+11. **A class page opened in a second browser profile without signing in — unconfirmed** —
+    `bug · blocks testing if real`, web, `andecobs-221`. Not dismissed, because his screenshot shows
+    two Chrome windows with different profiles and bookmark bars both rendering the same class page
+    with its roster. But three checks all came back sound: `ProtectedRoute.jsx:37` redirects on
+    `signed_out`; `AuthContext.jsx:20` starts at `'loading'` and only `onAuthStateChanged` moves it,
+    so there is no permissive window; `DevQuickLogin.jsx:17` is `import.meta.env.DEV`-gated with
+    credentials Vite never loads in a production build. Likeliest — **a guess, not a finding** — is
+    that the second profile was signed in already (`browserLocalPersistence` is the default). The
+    card's first instruction is to reproduce in a never-signed-in profile and **check
+    `firestore.rules` for unauthenticated class reads regardless of what the UI does**.
+    Card: `…/T-155-unauthenticated-access-to-a-class-page.md`.
+
+12. **After signing in, Back returns to the login screen** — `bug · wrong behaviour`, web,
+    `andecobs-222`. Confirmed, and it is **two** things: `login.jsx:104` and `:135` call
+    `navigate('/portal')` with no `{ replace: true }`, and `/login` has **no redirect for a
+    signed-in visitor at all**, which is what makes it a loop rather than a stale page. The trap in
+    fixing the second: `/login` holds a second stage (`:56-57`, `:95-102`) where an account on an
+    admin-issued temporary password is signed in *and meant to stay on that screen* — the redirect
+    must fire only in `SIGN_IN`. His `Cache-Control: no-store` suggestion is not needed; this is an
+    SPA. The attachment is an `.mp4` the desk could not play; the code confirms the report.
+    Card: `…/T-156-back-button-returns-to-the-login-screen.md`.
+
+13. **Title Case across the teacher screens** — `suggestion · cosmetic`, web,
+    `maykel_64440-223`–`-229` and `-231` (eight tickets, one convention; `225` is a literal
+    before/after table). Every string is located on the card. Four things bite: **`Class average`
+    and `Passing rate` exist twice** (`performance.jsx:269-270` *and* `record.jsx:473-474`) and he
+    only screenshotted one; `attendance.jsx:411` builds a tooltip naming *"the By day tab"*;
+    `All saved` is pinned by `recordToolbarAndTitles.test.jsx:88` **for its disabled behaviour, not
+    its casing**; and **`227`'s third item is not casing at all** — `Not yet passing` →
+    *"Needs Improvement"* renames a metric, and in a product that elsewhere prints DepEd descriptors
+    (*"Below Very Satisfactory"*, *"DepEd Order No. 8, s. 2015"*) that reads as a descriptor band it
+    is not. Card: `…/T-157-title-case-sweep-across-the-teacher-ui.md`.
+
+14. **"Grade / Year Level" is the longest label in its row and gets the narrowest column** —
+    `suggestion · cosmetic`, web, `maykel_64440-232`. `ClassFormModal.jsx:715-716` is
+    `sm:grid-cols-4` with School Year taking two of them, so the 17-character label and its
+    "Grade 10" options get one. The `min-h-[2.5rem]` at `:717` is the wrap already being managed
+    rather than fixed. Card: `…/T-158-grade-year-level-field-is-too-narrow.md`.
+
+15. **The create-class confirmation asks you to confirm a class it does not show you** —
+    `suggestion · cosmetic`, web, `maykel_64440-233`. `ClassFormModal.jsx:457-466`. Every field he
+    wants summarised is already on `form`. Two cautions: the **schedule-clash branch** is the most
+    important thing that dialog says and must stay first; and a six-field summary makes it taller,
+    which is exactly what `andecobs-220` proved breaks it — build this and T-154 aware of each
+    other. "Cancel keeps form data" **may already be true** (`:466` returns without touching
+    `form`) — verify rather than fix. Card: `…/T-159-create-class-confirmation-needs-a-summary.md`.
+
+16. **Two classes, two schedule formats** — `bug · cosmetic`, web, `maykel_64440-234`. Not a wording
+    change: `lib/schedule.js:38` returns a **string** schedule verbatim while an object schedule
+    goes through day-grouping and `DAY_LABEL`. Classes created in the New Class form store the
+    string shape, so the product prints two formats depending on how a class was made. The parser
+    that closes the gap already exists — `parseSchedule()` at `:103-120`. The one rule: **a string
+    that fails to parse must still render unchanged**. Card:
+    `…/T-160-schedule-chip-prints-the-raw-string.md`.
+
+17. **Bulk Upload Roster: a CSV template, a late notice, and a half-built preview** —
+    `suggestion · feature gap + design`, web, `maykel_64440-236`. `classes/$classId/index.jsx:1364-1500`.
+    **A preview with counts already exists** (`:1437+`, `:1472-1475`, `:1488-1494`) — he screenshotted
+    the before state; what is genuinely missing is a **duplicate** count. The account notice at
+    `:1377-1382` is the faintest text in the modal, below the longest block, and it is the sentence
+    that decides whether the upload does anything — but it has **two `schoolIssued` branches** and
+    both must survive the move. The CSV template is the only new feature: generate it from the same
+    array as the on-screen table, and **check whether `lib/csv.js` already writes a UTF-8 BOM**
+    before writing a second CSV writer. Card: `…/T-161-bulk-upload-roster-modal.md`.
+
+**Two tickets were filed against builds that had already moved on** — `213` (shortened by T-136) and
+`217` (centred by T-144, `bea9296`). Both testers were on 2026-10-06 builds. Worth one line in each
+reply so they re-check rather than re-file.
+
+
+## Tester tickets — 2026-10-11, maykel's landing-page sweep and two real bugs (6 tickets, 4 issues)
+
+`maykel_64440-237`–`-242`, all filed 2026-10-11. Four are wording; two are defects, and **one of
+them is a regression we caused ourselves**. Cards under
+`C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+1. **No institution can register — the rules still demand a field we deleted** —
+   **`bug · blocks testing`**, web + backend, `maykel_64440-240`. Filling in the institution sign-up
+   and pressing **Request access** returns *"…we could not finish setting it up. (Reference:
+   permission-denied)"*. **Confirmed, and it is ours.** `firestore.rules`'s
+   `subscription_requests` create rule still carries `hasAll([… 'gender' …])` and
+   `gender in ['female','male','custom']`; `register.jsx`'s `details()` stopped sending the field
+   when **T-109** dropped Gender from the form in `13f9f2c`. The comment at `register.jsx:59-63`
+   records the belief that made it look safe — *"nothing in the product ever read the stored
+   value"* — and `firestore.rules` read it. `createAccount()` writes the request **before** the
+   profile (T-61's ordering), so the `addDoc` is refused and only the half-made Firebase account
+   survives. Individual sign-up is unaffected — the request write is behind
+   `if (kind === 'institution')`.
+   **Why no test caught it, which is the part worth fixing:** `lib/firestoreRules.test.js:676`
+   hard-codes `gender: 'female'` in its `request()` helper, so the rules suite is green against a
+   payload production never sends; and `registerInstitutionOrder.test.js:44-46` only asserts the
+   *old pronoun* values are absent, which passes vacuously once the field is gone. One test checks
+   the rules against a stale shape, the other checks for an absence — neither checks that what the
+   app sends is what the rules accept. Card: `…/T-162-institution-signup-refused-gender-rule.md`.
+
+2. **Saving term dates fails on an abbreviation the admin was not editing** —
+   `bug · wrong behaviour`, backend + web, `maykel_64440-242` (corroborated by `-241`). maykel's own
+   phrasing is the diagnosis: *"There is an error in the 'save term dates' even though its not for
+   abbreviation part"*. `UsersTab.jsx:166-171` sends `prefix: school?.login_prefix` on every
+   term-dates save, and `app/api/admin.py:184-203`'s `update_school()` validates name, abbreviation
+   **and** dates on every call regardless of what was sent. His school (*Lorma Colleges, Inc.*) has
+   no abbreviation — `-241`'s screenshot shows the field empty — so `PREFIX_RE` refuses `""` and the
+   request dies before the dates are read. **A school that never set an abbreviation can never save
+   term dates.** The fix belongs at the endpoint (validate only what you were given), with the card
+   also dropping the fields the client has no business re-sending. T-138 built this card; its brief
+   said to follow `LoginPrefixCard`'s shape, and the save path was followed too.
+   Card: `…/T-163-term-dates-save-rejected-by-the-abbreviation-check.md`.
+
+3. **Title Case, round two** — `suggestion · cosmetic`, web, `maykel_64440-237`, `-238` (casing
+   half), `-239`, `-241`. The same convention **T-157** applied to the teacher screens, now on the
+   landing page and the new term-dates card — nine strings, located on the card. Three traps:
+   *"Privacy-first by design"* exists twice and the second copy is pinned by
+   `AuthLayout.test.jsx:76-79` asserting it is **absent** (T-141 removed that chip), so only
+   `index.jsx:591` is in scope; maykel capitalises across the hyphen (`AI-Driven`) and capitalises
+   `By`, which is his call; and *"Automated grade computation"* also appears in the hero **sentence**
+   at `index.jsx:266`, which stays as prose. Card: `…/T-164-title-case-round-two.md`.
+
+4. **Who the landing page says ActivKlass is for** — `suggestion · cosmetic`, web,
+   `maykel_64440-238`'s second half. He asks to add *Institutions, Parents, Students* to the
+   `DESIGNED FOR` strip (`index.jsx:55-61`) and remove *Subject teachers, Department heads,
+   Registrars, CHED faculty*. **Trivial to edit, not trivial to decide**, so it is its own issue:
+   removing `CHED faculty` deletes the only line on the landing page that says the product serves
+   college, while Grade Config ships a whole CHED Tertiary mode with a 1.0–5.0 scale; and adding
+   Parents and Students lists audiences who cannot sign up here at all — schools are onboarded by
+   the team, and student and parent accounts are issued by a school. He may be describing who the
+   product is *for* rather than who *registers*, which is a fair reading — but that is a positioning
+   call for the owner, not something to settle inside a casing ticket. The card recommends keeping
+   `CHED Faculty`, taking the additions, and dropping only the three narrow job titles.
+   Card: `…/T-165-landing-page-designed-for-audience.md`.
+
+**One process note, and it is the expensive one.** T-109 removed a field the product "never read",
+and the thing that read it was `firestore.rules`. The reply this desk sent Kristine said so in as
+many words — *"nothing in the app ever used it, so it came out cleanly"* — and that was wrong.
+**A field removed from a write is a rules change until the rules say otherwise**, and the rules
+suite will not tell you, because its fixtures are written by hand rather than taken from the app.
