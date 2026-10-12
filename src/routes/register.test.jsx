@@ -815,3 +815,31 @@ describe('T-129 (andecobs-170) — the seat sliders become number inputs, same f
     expect(clamp(250, 20, 500)).toBe(250) // already in range -- untouched
   })
 })
+
+/* T-169 (maykel_64440-254, 2026-10-12): the abbreviation collected and
+   validated at step 3 was written only to `school_directory`
+   (`addSchoolToDirectory`) -- nothing carried it onto the `subscription_requests`
+   document the ActivKlass team provisions a school from, so the school
+   record's login prefix stayed empty no matter what was typed at sign-up.
+   This pins the one-line fix: the request write includes `school_abbr` from
+   the `school` the create flow already resolved (the just-created directory
+   entry, or the picked existing one), and only when that resolved to one --
+   `addSchoolToDirectory` can return the existing entry on a name match, and
+   a stray `schoolId` with nothing in `schools` is still a guarded `null`. */
+describe('T-169 — the abbreviation reaches the request, so it can reach the school record', () => {
+  const requestWriteAt = registerSource.indexOf("addDoc(collection(db, 'subscription_requests')")
+  const abbrSpreadAt = registerSource.indexOf('...(school?.abbreviation && { school_abbr: school.abbreviation })')
+
+  it('sends school_abbr on the subscription_requests write, guarded — no school resolved means no key at all', () => {
+    expect(abbrSpreadAt).toBeGreaterThan(-1)
+    expect(requestWriteAt).toBeGreaterThan(-1)
+    expect(requestWriteAt).toBeLessThan(abbrSpreadAt)
+  })
+
+  it('reads the abbreviation off the same `school` the directory step resolved, not off the raw form field', () => {
+    // `school` is either the just-created directory entry or the picked
+    // existing one (`:420-422`) -- never `form.newSchoolAbbr` directly,
+    // which is unset on the "pick an existing school" path.
+    expect(registerSource).not.toMatch(/school_abbr: form\.newSchoolAbbr/)
+  })
+})

@@ -705,6 +705,25 @@ describe('subscription_requests · the Institution path on /register', () => {
     )
   })
 
+  // T-169: the abbreviation register.jsx now sends alongside the request, so
+  // it can reach the school record at approval instead of staying stuck in
+  // school_directory. Optional — a request filed before this field existed
+  // must still be writable without it.
+  it('lets the school abbreviation through (T-169)', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(collection(ctx(TEACHER), 'subscription_requests')),
+        request({ school_abbr: 'UCB' }),
+      ),
+    )
+  })
+
+  it('still files a request with no abbreviation at all — a request filed before T-169', async () => {
+    await assertSucceeds(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request()),
+    )
+  })
+
   it('refuses a stray gender key — T-109 dropped the field, so the rule no longer permits it at all', async () => {
     await assertFails(
       setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')), request({ gender: 'female' })),

@@ -438,6 +438,15 @@ export default function Register() {
         ...details(),
         uid,
         email: auth.currentUser.email,
+        // T-169: this is the only copy of the abbreviation that ever leaves
+        // the directory. The school record gets built from this request at
+        // approval (superadmin.py's approve_request), and until now nothing
+        // carried the abbreviation that far — it sat in school_directory and
+        // nowhere else, so a newly provisioned school's login prefix was
+        // always empty. `school` is the directory entry, picked or just
+        // created above, so its abbreviation is already validated and
+        // conflict-checked.
+        ...(school?.abbreviation && { school_abbr: school.abbreviation }),
         teacher_seats: Number(form.teacherSeats),
         students_per_teacher: Number(form.studentsPerTeacher),
         student_seats: totalStudents,
