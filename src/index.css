@@ -53,10 +53,25 @@
      ~15px wider than a tall one (scrollbar), and the full-width navbar's
      right-hand bell/avatar cluster lands 15px further right on the short
      page -- the chrome itself never changed, the viewport under it did
-     (T-145, andecobs-209). */
+     (T-145, andecobs-209).
+
+     That reserved strip is ~16-17px of html's own box, painted with html's
+     own background -- which was never set. On a page tall enough to scroll,
+     the real scrollbar fills the strip and nothing shows; on a short page
+     there is nothing to fill it, so the bare canvas default (white) showed
+     through as a seam between the page's own background and the true right
+     edge of the window, next to anything pinned there (the navbar's account
+     id, a page's own top-right button) -- read as clipped content and a
+     missing scrollbar (T-168, andecobs-260). Confirmed live: forcing html's
+     background to red on a genuinely non-scrolling page painted red in
+     exactly that strip, right up to the true edge -- nothing was actually
+     being clipped, the strip just had no color of its own. Matching it to
+     the page's own background (the same token body already uses) makes the
+     reserved strip blend in instead of showing bare white. */
   html {
     overflow-x: hidden;
     scrollbar-gutter: stable;
+    background-color: var(--color-slate-50);
   }
 
   body {

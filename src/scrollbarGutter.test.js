@@ -44,3 +44,31 @@ describe('the navbar cluster stays put between scrolling and non-scrolling pages
     expect(html).toMatch(/overflow-x\s*:\s*hidden/)
   })
 })
+
+/**
+ * The reserved gutter itself is correct (T-145 needs it, see above) -- the
+ * regression is what paints inside it (T-168, andecobs-260).
+ *
+ * `scrollbar-gutter: stable` always reserves ~16-17px on the right of
+ * `html`'s own box, scrolling or not. `html` had no `background-color`, so
+ * that strip painted with the bare canvas default (white) instead of the
+ * app's own background -- on a page tall enough to scroll, the real
+ * scrollbar fills the strip and nothing shows; on a short page there is no
+ * scrollbar to fill it, so a white seam appeared between the page's content
+ * (navy header, slate-50 body) and the true right edge of the window,
+ * exactly where the New Class button and the account id looked "clipped".
+ * Nothing was ever actually clipped -- confirmed live by forcing `html`'s
+ * background to red on a genuinely non-scrolling page and watching the red
+ * paint in that exact strip, right up to the true window edge.
+ *
+ * Giving `html` the same background the page already uses on `body` makes
+ * the reserved strip blend in instead of showing bare white.
+ */
+describe('the reserved scrollbar gutter matches the page background, not bare white (T-168)', () => {
+  const css = read('./index.css')
+
+  it('html paints the same background the page uses, so the reserved gutter never shows bare white', () => {
+    const html = ruleBody(css, 'html')
+    expect(html).toMatch(/background-color\s*:\s*var\(--color-slate-50\)/)
+  })
+})
