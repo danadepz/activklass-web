@@ -522,10 +522,25 @@ function CreateUserForm({ onCreated, settings, users, role }) {
                  onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
         </label>
 
-        <label style={labelStyle}>
+        {/* Spans two grid columns -- at one, "Temporary Password (Optional)"
+            is longer than this column's minmax(190px) floor and wraps the
+            "(Optional)" onto its own line, misaligning the input against the
+            row beside it (T-173, andecobs-250). The extra width is no loss:
+            a password field benefits from it more than a name field does. */}
+        <label style={{ ...labelStyle, gridColumn: 'span 2' }}>
           Temporary Password <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
-                 onChange={set('password')} placeholder={`defaults to ${DEFAULT_PASSWORD}`} />
+                 onChange={set('password')} />
+          {/* The placeholder used to say this ("defaults to pass1234"), which
+              reads as a suggested value to type rather than what happens if
+              the field is left blank -- the fact survives here instead,
+              matching every account actually created this way (createUser
+              falls back to DEFAULT_PASSWORD server-side on an empty string,
+              the same fallback BulkUpload's row spec and this form's own
+              success message both already assume). */}
+          <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
+            Leave blank and they start on {DEFAULT_PASSWORD}, usable immediately — have them change it.
+          </span>
         </label>
       </div>
 
@@ -542,9 +557,6 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           <strong style={{ ...mono, fontSize: 19, fontWeight: 800, color: navy, letterSpacing: '0.03em' }}>
             {loginPreview}
           </strong>
-          <span style={{ fontSize: 12.5, color: faint }}>
-            — this exact form, not the full {role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee number'}
-          </span>
         </div>
       ) : (
         <p style={{ ...mono, fontSize: 12.5, color: prefix ? faint : red, margin: '12px 0 0' }}>
