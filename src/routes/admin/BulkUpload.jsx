@@ -155,6 +155,25 @@ function rowDuplicate(row, index, rows, users) {
 }
 
 /**
+ * What the picked file's state should look like once an upload attempt
+ * comes back. A row that just became an account still sits in `rows`, and
+ * the duplicate check runs live against the `users` prop — so the moment
+ * `onDone()` refetches the roster, every row the upload just created relints
+ * as "already belongs to" itself, beside the green "N created" notice
+ * (T-166, maykel_64440-244 / andecobs-247; the before/after screenshots on
+ * the same file and account prove it). The preview is meant to answer "what
+ * will this file do", and once the file has been acted on that question is
+ * answered — so a create that actually made accounts clears it, leaving only
+ * the result notice below; a wholly-failed attempt (`created: 0`) leaves the
+ * rows in place, since there is nothing to re-check against and the admin is
+ * about to fix them in place. Re-uploading the same file afterwards is
+ * unaffected: `onFile` re-parses it into fresh rows, re-linted against the
+ * (now updated) directory as always. */
+export function afterUpload(created) {
+  return created > 0 ? { rows: [], fileName: '' } : null
+}
+
+/**
  * Bulk Upload Teachers / Bulk Upload Students.
  *
  * One component for both: the CSV is identical apart from the role, so the
@@ -284,6 +303,11 @@ export default function BulkUpload({ role, onDone, settings, users }) {
         role: r.role || role,
       })))
       setResult(res)
+      const cleared = afterUpload(res.summary.created)
+      if (cleared) {
+        setRows(cleared.rows)
+        setFileName(cleared.fileName)
+      }
       if (res.summary.created) onDone()
     } catch (err) {
       // A 400 with a body still carries per-row detail worth showing.
