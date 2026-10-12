@@ -12,6 +12,8 @@ import { accountsNamed, accountWithEmail, accountWithLogin, accountName, describ
 import { summarizeFailures } from './bulkFailures'
 import Notice from './Notice'
 
+const PREVIEW_CAP = 8
+
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
   'role', 'email', 'middle_name', 'password', // blank password -> the default
@@ -155,6 +157,29 @@ function rowDuplicate(row, index, rows, users) {
 }
 
 /**
+ * What the preview table shows, and what the row under it says, given
+ * whether the admin has expanded it past the default cap. Before this, the
+ * rows past the cap were named ("…and 2 more") but never reachable — and
+ * they are exactly the rows a real conflict is most likely to be hiding in,
+ * since the preview exists so an admin can check credentials before
+ * creating (T-171, maykel_64440-243: "i cannot click the 2 more to view the
+ * credentials of the other 2"). The cap itself stays: a 500-row file still
+ * does not render by default. `shown` always starts at index 0, whether
+ * collapsed or expanded, so its indices line up with `dupes` (computed over
+ * the full, unsliced `rows`) either way — a hidden row's duplicate warning
+ * is already computed, just not rendered until the row is.
+ */
+export function previewRows(rows, expanded) {
+  if (rows.length <= PREVIEW_CAP) return { shown: rows, toggleLabel: null }
+  return {
+    shown: expanded ? rows : rows.slice(0, PREVIEW_CAP),
+    toggleLabel: expanded
+      ? 'Show fewer rows'
+      : `…and ${rows.length - PREVIEW_CAP} more — click to show all`,
+  }
+}
+
+/**
  * What the picked file's state should look like once an upload attempt
  * comes back. A row that just became an account still sits in `rows`, and
  * the duplicate check runs live against the `users` prop — so the moment
@@ -208,6 +233,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState(false)
+  const [showAllRows, setShowAllRows] = useState(false)
 
   // Each row with the login it will be issued and its spreadsheet line, so a
   // row can be checked against the rows above it with the calls that check
@@ -228,6 +254,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
     () => summarizeFailures(result?.failed, withLogins.map((r) => [r.login_id, accountName(r)].filter(Boolean).join(' '))),
     [result, withLogins],
   )
+  const { shown: shownRows, toggleLabel } = previewRows(rows, showAllRows)
   const takenLogins = dupes.filter((d) => d?.kind === 'login').length
   const reusedEmails = dupes.filter((d) => d?.kind === 'email').length
   const sharedNames = dupes.filter((d) => d?.kind === 'name').length
@@ -267,6 +294,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
       })
       setRows(mapped)
       setFileName(file.name)
+      setShowAllRows(false)  // a fresh file always starts collapsed
     } catch (err) {
       setRows([])
       setFileName('')
@@ -416,16 +444,24 @@ export default function BulkUpload({ role, onDone, settings, users }) {
       {rows.length > 0 && (
         <>
           <div style={{ border: `1px solid ${line}`, borderRadius: 12, overflowX: 'auto', margin: '14px 0' }}>
-            <table style={{ width: '100%', minWidth: 460, borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
-                  {['login', 'name', 'role', 'id number', 'password'].map((h) => (
-                    <th key={h} style={{ ...th, color: muted }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 8).map((r, i) => {
+            {/* Expanded, the body scrolls inside its own max-height instead
+                of the table (and the page) growing to fit a 500-row file —
+                the same treatment T-174 gives the Users roster below, so one
+                scroll behaviour reads consistently down this screen. */}
+            <div style={showAllRows && rows.length > PREVIEW_CAP
+              ? { maxHeight: '55vh', overflowY: 'auto' } : undefined}>
+              <table style={{ width: '100%', minWidth: 460, borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  {/* Solid, not the usual translucent tint — sticky, it would
+                      otherwise show scrolled-past rows bleeding through it. */}
+                  <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0 }}>
+                    {['login', 'name', 'role', 'id number', 'password'].map((h) => (
+                      <th key={h} style={{ ...th, color: muted }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shownRows.map((r, i) => {
                   const problem = rowProblem(r, prefix)
                   const login = rowLogin(r, prefix)
                   const dup = dupes[i]
@@ -460,13 +496,19 @@ export default function BulkUpload({ role, onDone, settings, users }) {
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </table>
-            {rows.length > 8 && (
-              <div style={{ padding: '8px 14px', fontSize: 12, color: faint, borderTop: `1px solid ${line}` }}>
-                …and {rows.length - 8} more
-              </div>
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {toggleLabel && (
+              <button type="button"
+                      onClick={() => setShowAllRows((v) => !v)}
+                      style={{ display: 'block', width: '100%', textAlign: 'left',
+                               padding: '8px 14px', fontSize: 12, color: navy, fontWeight: 600,
+                               background: 'none', border: 0, borderTop: `1px solid ${line}`,
+                               cursor: 'pointer' }}>
+                {toggleLabel}
+              </button>
             )}
           </div>
 
