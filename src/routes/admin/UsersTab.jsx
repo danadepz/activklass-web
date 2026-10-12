@@ -682,6 +682,24 @@ function userSearchText(u) {
     .map((v) => v ?? '').join(' ').toLowerCase()
 }
 
+const ROLE_VIEWS = ['all', ...ROLES]
+
+/**
+ * The Users roster, narrowed by the active role view and then by the search
+ * box — the same combination this screen always used, now named so the view
+ * switch (T-174, andecobs-255) can be pinned without a DOM library. Search
+ * is never scoped away by the role view: an admin unsure whether someone is
+ * a teacher starts on "All" and finds them regardless, same as before.
+ */
+export function filterUsers(users, roleView, search) {
+  const q = search.trim().toLowerCase()
+  return users.filter((u) => {
+    if (roleView !== 'all' && u.role !== roleView) return false
+    if (!q) return true
+    return userSearchText(u).includes(q)
+  })
+}
+
 function UserRow({ user, isSelf, onChanged }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -858,14 +876,10 @@ export default function UsersTab() {
   const refresh = () => qc.invalidateQueries({ queryKey: adminUsersKey })
   const refreshSchool = () => qc.invalidateQueries({ queryKey: adminSchoolKey })
 
-  const shown = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return users.filter((u) => {
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false
-      if (!q) return true
-      return userSearchText(u).includes(q)
-    })
-  }, [users, roleFilter, search])
+  const shown = useMemo(
+    () => filterUsers(users, roleFilter, search),
+    [users, roleFilter, search],
+  )
 
   function exportCsv() {
     downloadCsv(stampedName('users'), [
@@ -896,11 +910,6 @@ export default function UsersTab() {
                 <input placeholder="Search name, email, login or ID" value={search}
                        onChange={(e) => setSearch(e.target.value)}
                        style={{ ...field, width: 220, padding: '8px 12px', fontSize: 13 }} />
-                <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-                        style={{ ...field, width: 'auto', padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
-                  <option value="all">All roles</option>
-                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
                 {/* A disabled button with no reason reads as a broken one -- which is
                     what a tester reported. Say which it is, the way the row's own
                     Deactivate button does. */}
@@ -914,6 +923,19 @@ export default function UsersTab() {
           />
         </div>
 
+        {/* The "All roles" filter already worked — a dropdown beside the search
+            box — but a control someone has to notice and open is not the same
+            as a visible split. Promoted to tabs here rather than left beside a
+            second control (T-174, andecobs-255: "role-based separation...
+            mixing all accounts makes tracking difficult" on a 100+/500+ roster).
+            Search keeps working underneath whichever tab is active — it is not
+            a second, competing filter, just a more visible version of the one
+            that was already there. */}
+        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.015)' }}>
+          <RolePicker value={roleFilter} onChange={setRoleFilter} options={ROLE_VIEWS}
+                      ariaLabel="Filter users by role" />
+        </div>
+
         {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={6} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
@@ -921,21 +943,33 @@ export default function UsersTab() {
           shown.length === 0 ? (
             <p style={{ padding: 28, textAlign: 'center', color: faint }}>No users match that filter.</p>
           ) : (
+            // The table used to grow with the roster and push this card's own
+            // controls off screen as the page kept scrolling (T-174). It now
+            // scrolls inside its own cap instead -- a viewport-relative height,
+            // not a pixel one, so a laptop still sees more than two rows -- the
+            // same treatment T-171 gives the bulk-upload preview a few hundred
+            // pixels up this screen, so one scroll behaviour reads consistently
+            // down the page. A short roster never hits the cap, so nothing
+            // changes for a small school.
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
-                <thead>
-                  <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
-                    {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', ''].map((h, i) => (
-                      <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
+              <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                  <thead>
+                    {/* Solid, not the usual translucent tint -- sticky, it would
+                        otherwise show scrolled-past rows bleeding through it. */}
+                    <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0 }}>
+                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', ''].map((h, i) => (
+                        <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((u) => (
+                      <UserRow key={u.id} user={u} isSelf={u.id === profile.id} onChanged={refresh} />
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.map((u) => (
-                    <UserRow key={u.id} user={u} isSelf={u.id === profile.id} onChanged={refresh} />
-                  ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
         )}
