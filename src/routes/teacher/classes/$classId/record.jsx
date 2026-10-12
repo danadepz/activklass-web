@@ -1199,7 +1199,7 @@ export default function ClassRecordPage() {
     <div>
       <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: bundle.configured ? '0 0 6px' : '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
         Class Record
-        {bundle.configured && transmutationNote && (
+        {transmutationNote && (
           <InfoTooltip label="How this record is graded">{transmutationNote}</InfoTooltip>
         )}
       </h1>
