@@ -71,7 +71,7 @@ const RECOVERY_CLAIM = /password recovery|their recovery|recover their (password
 describe('T-90 · Add student: Personal email is a contact address, not a recovery inbox', () => {
   it('with a school prefix the label calls it a contact address and never promises recovery', () => {
     const html = renderWithPrefix('ucb')
-    expect(html).toContain('Personal email')
+    expect(html).toContain('Personal Email')
     expect(html).toContain('a contact address, not their sign-in')
     expect(html).not.toMatch(RECOVERY_CLAIM)
   })

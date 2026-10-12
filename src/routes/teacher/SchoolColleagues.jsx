@@ -57,7 +57,7 @@ function ChooseSchool() {
   })
   return (
     <form onSubmit={(e) => { e.preventDefault(); save.mutate() }}>
-      <Heading title="Your school" sub="Tell us where you teach. Colleagues who sign up with the same school are grouped with you automatically." />
+      <Heading title="Your School" sub="Tell us where you teach. Colleagues who sign up with the same school are grouped with you automatically." />
       <label htmlFor="school-pick" style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 6 }}>School</label>
       <select id="school-pick" className="ak-input" value={schoolId} onChange={(e) => setSchoolId(e.target.value)} style={{ ...field, cursor: 'pointer' }} disabled={isLoading}>
         <option value="">{isLoading ? 'Loading schools…' : 'Select your school'}</option>
@@ -78,7 +78,7 @@ function Colleagues() {
   return (
     <>
       <Heading
-        title="Your school"
+        title="Your School"
         sub={schoolName}
         right={<span style={{ fontSize: 12.5, color: muted, whiteSpace: 'nowrap' }}>{isLoading ? '' : `${n} ${n === 1 ? 'colleague' : 'colleagues'}`}</span>}
       />
@@ -124,7 +124,7 @@ export default function SchoolColleaguesCard() {
     return (
       <div style={{ ...card, position: 'relative' }} aria-disabled="true">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>Your school</h2>
+          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>Your School</h2>
           <PaidPlanHint />
         </div>
         <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>

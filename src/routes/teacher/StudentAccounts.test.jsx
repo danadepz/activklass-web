@@ -59,7 +59,7 @@ describe('Student accounts tab', () => {
     const html = render(<StudentAccounts classes={[HS]} rows={[]} />)
     expect(html).toContain('Add Student')
     expect(html).toContain('Search by name or login')
-    expect(html).not.toContain('Into class')
+    expect(html).not.toContain('Into Class')
     expect(html).not.toContain('Download template')
     expect(html).not.toContain('Create accounts from a file')
     // Only one button renders at the top level -- the trigger, not a form.
@@ -78,12 +78,12 @@ describe('Student accounts tab', () => {
     expect(html).toContain('Add Student')
     expect(html).toContain('>Bulk<')
     expect(html).toContain('>Individual<')
-    expect(html).toContain('Into class')
+    expect(html).toContain('Into Class')
     expect(html).toContain('MATH10 · Rizal')
     expect(html).toContain('High School · Grade 10 · Rizal')
     expect(html).toContain('the login comes from the LRN')
     expect(html).toContain('>LRN<')
-    expect(html).toContain('Add student')
+    expect(html).toContain('Add Student')
     // the pattern line, before any digits are typed
     expect(html).toContain('ucb-&lt;last 6 digits of their LRN&gt;')
     expect(html).not.toContain('Level') // no level dropdown: the class decides
@@ -103,8 +103,8 @@ describe('Student accounts tab', () => {
     const html = render(<AddStudentModal classes={[]} prefix="ucb" onClose={() => {}} onDone={() => {}} />)
     expect(html).toContain('No class yet')
     expect(html).toContain('href="/teacher/classes"')
-    expect(html).toContain('Add student')
-    expect(html).toContain('First name')
+    expect(html).toContain('Add Student')
+    expect(html).toContain('First Name')
   })
 
   it('without a school prefix the email becomes the login', () => {

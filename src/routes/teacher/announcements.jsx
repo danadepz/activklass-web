@@ -54,7 +54,7 @@ function EmptyState({ filtered }) {
     <div style={{ textAlign: 'center', padding: '64px 32px', color: '#9AA6BD' }}>
       <Megaphone aria-hidden style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#C7CEDC' }} />
       <div style={{ fontWeight: 700, fontSize: 16, color: '#6A7A95', marginBottom: 8 }}>
-        {filtered ? 'No announcements in this category' : 'No announcements yet'}
+        {filtered ? 'No announcements in this category' : 'No Announcements Yet'}
       </div>
       <div style={{ fontSize: 13 }}>
         {filtered
@@ -425,7 +425,7 @@ export default function AnnouncementsPage() {
                 value={form.class_id}
                 onChange={e => setForm(f => ({ ...f, class_id: e.target.value }))}
               >
-                <option value="">All my classes (Global)</option>
+                <option value="">All My Classes (Global)</option>
                 {classes.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.subject_code ? `${c.subject_code} — ` : ''}{c.section || c.subject || c.id}
@@ -434,7 +434,7 @@ export default function AnnouncementsPage() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Expires On (optional)</label>
+              <label style={labelStyle}>Expires On (Optional)</label>
               <input
                 id="ann-expires"
                 type="date"
@@ -448,7 +448,7 @@ export default function AnnouncementsPage() {
           {/* Row 4: linked resource (collapsible-ish) */}
           <details style={{ marginBottom: 18 }}>
             <summary style={{ fontSize: 13, color: '#6A7A95', cursor: 'pointer', userSelect: 'none', fontWeight: 600 }}>
-              + Link a resource (optional)
+              + Link a resource (Optional)
             </summary>
             <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14, marginTop: 12 }}>
               <div>

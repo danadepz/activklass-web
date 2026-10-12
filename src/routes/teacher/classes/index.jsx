@@ -27,8 +27,8 @@ import { formatSchedule } from '@/lib/schedule'
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS = [
-  { value: 'default', label: 'Last accessed' },
-  { value: 'subject', label: 'Subject name' },
+  { value: 'default', label: 'Last Accessed' },
+  { value: 'subject', label: 'Subject Name' },
 ]
 
 // 2026-06-20: Preset palette for the class badge background colour

@@ -50,7 +50,7 @@ describe('SchoolColleaguesCard', () => {
       { id: 'b', last_name: 'Zamora', first_name: 'Ana', email: 'ana@ucb.edu.ph' },
     ] }
     const html = render(<SchoolColleaguesCard />)
-    expect(html).toContain('Your school')
+    expect(html).toContain('Your School')
     expect(html).toContain('University of Cebu-Banilad')
     expect(html).toContain('2 colleagues')
     expect(html).toContain('Santos, Ben')

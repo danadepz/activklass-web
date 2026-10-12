@@ -329,7 +329,7 @@ export function saveConfirmSpec(form, { mode, clashText, hasClash }) {
   return {
     title: mode === 'edit' ? 'Save changes to this class?' : 'Create this class?',
     message: `${body}\n\n${dialogSummaryFor(form)}`,
-    confirmLabel: hasClash ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create class',
+    confirmLabel: hasClash ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create Class',
     cancelLabel: 'Go back',
   }
 }
@@ -926,7 +926,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           {/* Syllabus Upload */}
           <div className="border-t border-slate-200 pt-4">
             <span className="text-sm font-medium text-slate-700">
-              Syllabus <span className="text-slate-400 font-normal">(optional)</span>
+              Syllabus <span className="text-slate-400 font-normal">(Optional)</span>
             </span>
             {currentSyllabusFile && !syllabusFile && (
               <p className="text-xs text-slate-500 mt-1">
@@ -970,7 +970,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               className="rounded-lg px-4 py-2 font-medium transition hover:brightness-110 disabled:opacity-50 text-sm"
               style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer' }}
             >
-              {saving ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create class'}
+              {saving ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Create Class'}
             </button>
           </div>
         </form>

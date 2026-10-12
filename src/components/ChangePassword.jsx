@@ -105,7 +105,7 @@ export default function ChangePassword({ compact = false }) {
     <form onSubmit={submit} style={card}>
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ ...serif, fontSize: compact ? 18 : 20, color: ink, margin: 0 }}>
-          Change password
+          Change Password
         </h2>
         <p style={{ fontSize: 13, color: muted, margin: '3px 0 0' }}>
           Your current password is required to confirm it is you. {PASSWORD_RULE}
@@ -114,18 +114,18 @@ export default function ChangePassword({ compact = false }) {
 
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Current password
+          Current Password
           <input style={field} type="password" autoComplete="current-password"
                  value={form.current} onChange={set('current')} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          New password
+          New Password
           <input style={field} type="password" autoComplete="new-password"
                  value={form.next} onChange={set('next')}
                  placeholder={`at least ${MIN_PASSWORD} characters`} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Confirm new password
+          Confirm New Password
           <input style={field} type="password" autoComplete="new-password"
                  value={form.confirm} onChange={set('confirm')} />
         </label>
@@ -133,7 +133,7 @@ export default function ChangePassword({ compact = false }) {
 
       <div style={{ marginTop: 16 }}>
         <button type="submit" style={button} disabled={busy}>
-          {busy ? 'Changing…' : 'Change password'}
+          {busy ? 'Changing…' : 'Change Password'}
         </button>
       </div>
 

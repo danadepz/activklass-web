@@ -125,7 +125,7 @@ async function provisionInto(classId, rows) {
 
 const fieldStyle = { padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, width: '100%' }
 const labelStyle = { display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: muted }
-const optional = <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+const optional = <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
 
 /**
  * The admin's single-user form with the role fixed to student. Grade 12 and
@@ -228,7 +228,7 @@ function ManualCreate({ classes, prefix, onDone }) {
     <form onSubmit={submit} style={{ padding: '18px 22px', borderTop: `1px solid ${line}` }}>
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', width: '100%' }}>
         <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-          Into class
+          Into Class
           {classes.length ? (
             <select value={form.classId} onChange={set('classId')} className="ak-input" style={{ ...fieldStyle, fontWeight: 700, cursor: 'pointer' }}>
               {classes.map((c) => <option key={c.id} value={c.id}>{classLabel(c)}</option>)}
@@ -245,10 +245,10 @@ function ManualCreate({ classes, prefix, onDone }) {
             </span>
           )}
         </label>
-        <label style={labelStyle}>First name<input style={fieldStyle} value={form.firstName} onChange={set('firstName')} /></label>
-        <label style={labelStyle}>Middle name {optional}<input style={fieldStyle} value={form.middleName} onChange={set('middleName')} /></label>
-        <label style={labelStyle}>Last name<input style={fieldStyle} value={form.lastName} onChange={set('lastName')} /></label>
-        <label style={labelStyle}>Student number<input style={fieldStyle} value={form.studentNumber} onChange={set('studentNumber')} /></label>
+        <label style={labelStyle}>First Name<input style={fieldStyle} value={form.firstName} onChange={set('firstName')} /></label>
+        <label style={labelStyle}>Middle Name {optional}<input style={fieldStyle} value={form.middleName} onChange={set('middleName')} /></label>
+        <label style={labelStyle}>Last Name<input style={fieldStyle} value={form.lastName} onChange={set('lastName')} /></label>
+        <label style={labelStyle}>Student Number<input style={fieldStyle} value={form.studentNumber} onChange={set('studentNumber')} /></label>
         {isG12 && (
           <label style={labelStyle}>LRN<input style={fieldStyle} value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" inputMode="numeric" /></label>
         )}
@@ -258,7 +258,7 @@ function ManualCreate({ classes, prefix, onDone }) {
           <span style={{ fontSize: 12, fontWeight: 400, color: faint }}>{BIRTHDATE_HINT}</span>
         </label>
         <label style={labelStyle}>
-          Personal email <span style={{ color: faint, fontWeight: 400 }}>({prefix ? 'optional — a contact address, not their sign-in' : 'becomes their login'})</span>
+          Personal Email <span style={{ color: faint, fontWeight: 400 }}>({prefix ? 'optional — a contact address, not their sign-in' : 'becomes their login'})</span>
           <input style={fieldStyle} type="email" value={form.personalEmail} onChange={set('personalEmail')} />
           {prefix && (
             <span style={{ fontSize: 12, fontWeight: 400, color: faint }}>
@@ -296,7 +296,7 @@ function ManualCreate({ classes, prefix, onDone }) {
           and "a file" IS the Bulk tab), so only the submit stays. */}
       <div className="flex flex-wrap items-center gap-2.5" style={{ marginTop: 12 }}>
         <button type="submit" style={{ ...btnPrimary, opacity: busy ? 0.5 : 1 }} disabled={busy}>
-          {busy ? 'Adding…' : 'Add student'}
+          {busy ? 'Adding…' : 'Add Student'}
         </button>
       </div>
       {error && <p style={{ fontSize: 13, color: red, margin: '10px 0 0' }}>{error}</p>}
@@ -405,7 +405,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
       </button>
       <div className="flex flex-wrap items-end gap-3">
         <label style={{ display: 'grid', gap: 4, fontSize: 12, fontWeight: 700, color: muted }}>
-          Into class
+          Into Class
           <select value={classId} onChange={(e) => setClassId(e.target.value)} className="ak-input"
                   style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, minWidth: 220 }}>
             {classes.map((c) => (

@@ -130,7 +130,7 @@ export function ProfileCard() {
 
   return (
     <form onSubmit={submit} style={card}>
-      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Your profile</h2>
+      <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 4px' }}>Your Profile</h2>
       <p style={{ fontSize: 13, color: muted, margin: '0 0 16px' }}>
         Your name as students and parents see it. Your email is your sign-in and cannot be changed here.
         {profile.verification_id_number
@@ -139,17 +139,17 @@ export function ProfileCard() {
       </p>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          First name
+          First Name
           <input style={{ ...field, marginTop: 6 }} value={form.first_name}
                  onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Middle name <span style={{ color: muted, fontWeight: 400 }}>(optional)</span>
+          Middle Name <span style={{ color: muted, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} value={form.middle_name}
                  onChange={(e) => setForm((f) => ({ ...f, middle_name: e.target.value }))} />
         </label>
         <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-          Last name
+          Last Name
           <input style={{ ...field, marginTop: 6 }} value={form.last_name}
                  onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
         </label>
@@ -168,7 +168,7 @@ export function ProfileCard() {
       </div>
       <div style={{ marginTop: 16 }}>
         <Button type="submit" disabled={mut.isPending}>
-          {mut.isPending ? 'Saving…' : 'Save profile'}
+          {mut.isPending ? 'Saving…' : 'Save Profile'}
         </Button>
       </div>
       <Notice>{err}</Notice>

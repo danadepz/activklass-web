@@ -33,6 +33,6 @@ describe('T-149 — Announcements carries no emoji', () => {
   })
 
   it('the <option> is plain text, not rewritten into a different control', () => {
-    expect(src).toContain('<option value="">All my classes (Global)</option>')
+    expect(src).toContain('<option value="">All My Classes (Global)</option>')
   })
 })
