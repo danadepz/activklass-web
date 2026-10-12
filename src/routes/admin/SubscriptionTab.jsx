@@ -16,6 +16,32 @@ import ChangePassword from '@/components/ChangePassword'
 
 const GB = 1024 ** 3
 
+/**
+ * The address already named on the "Verifying your account" hold screen
+ * (`routes/pending-verification.jsx`) -- the one real, monitored inbox this
+ * product points teachers to. Plan changes get refused with the same
+ * "handled by ActivKlass support" sentence and deserve the same route.
+ */
+export const SUPPORT_EMAIL = 'danadepz13@gmail.com'
+
+/** T-172: the backend's plan-change refusal names support, not a way to reach it. */
+export const isSupportOnlyError = (message) => /handled by ActivKlass support/i.test(message || '')
+
+export function PlanChangeNotice({ error }) {
+  if (!error) return null
+  return (
+    <Notice>
+      {error}
+      {isSupportOnlyError(error) && (
+        <>
+          {' '}Reach us at{' '}
+          <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: navy, fontWeight: 600 }}>{SUPPORT_EMAIL}</a>.
+        </>
+      )}
+    </Notice>
+  )
+}
+
 function Meter({ label, used, total, unit, over }) {
   const pct = total ? Math.min(100, Math.round((used / total) * 100)) : null
   const bar = over ? red : pct != null && pct >= 80 ? gold : green
@@ -137,7 +163,7 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
         <StorageMeter limitBytes={storageBytes} />
       </div>
 
-      {error && <div style={{ marginTop: 14 }}><Notice>{error}</Notice></div>}
+      {error && <div style={{ marginTop: 14 }}><PlanChangeNotice error={error} /></div>}
     </section>
   )
 }
