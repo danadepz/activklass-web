@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const overview = vi.fn()
 vi.mock('@/hooks/useAdminOverview', () => ({ useAdminOverview: (...a) => overview(...a) }))
 vi.mock('@/lib/csv', () => ({ downloadCsv: vi.fn(), stampedName: (p) => `${p}.csv` }))
+vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'admin-1', role: 'admin', school_id: 'srnhs' } }) }))
 
 import ClassesTab from './ClassesTab.jsx'
 

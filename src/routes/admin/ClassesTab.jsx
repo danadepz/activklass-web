@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
+import { useAuth } from '@/context/useAuth'
 import { useAdminOverview } from '@/hooks/useAdminOverview'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, blueText, orangeDeep, line, serif, mono } from '@/theme'
@@ -14,7 +15,8 @@ function pct(value) {
 
 /** Class Oversight: View All Classes, View Class Records, School-Wide Statistics. */
 export default function ClassesTab() {
-  const { data, isLoading, isError, error } = useAdminOverview()
+  const { profile } = useAuth()
+  const { data, isLoading, isError, error } = useAdminOverview(profile.school_id)
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [openId, setOpenId] = useState(null)

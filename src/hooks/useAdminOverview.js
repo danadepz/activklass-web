@@ -1,16 +1,25 @@
 /**
  * School-wide data for the admin's oversight and reports.
  *
- * Owned by the logic lane (see OWNERSHIP.md). Everything here is a plain
- * Firestore read: firestore.rules grants isAdmin() read on every collection
- * involved, so class oversight and school-wide statistics need no endpoint.
+ * Owned by the logic lane (see OWNERSHIP.md). Firestore reads, joined in
+ * memory. firestore.rules lets isAdmin() read `classes`, `quizzes` and
+ * `quiz_attempts` unconditionally (none of those three rules reference
+ * resource.data in that branch, so an unscoped list is provable and passes)
+ * -- but `users/{uid}` was narrowed by T-126 to isAdmin() && sameSchoolAsCaller,
+ * which an unscoped `getDocs(collection(db,'users'))` can never prove, and
+ * Firestore refuses the whole call (T-167). The users read below carries the
+ * same `where('school_id','==',schoolId)` filter `useAdminUsers.js` already
+ * uses for exactly that reason.
  *
- * One query per collection, joined in memory. At pilot scale that is far
- * cheaper than per-class fan-out; if the school grows past a few thousand
- * attempts this should move to aggregated counters written on submit.
+ * Reading `classes`/`quizzes`/`quiz_attempts` unscoped is rule-legal for an
+ * admin but not what this screen means by "school-wide" -- a class belongs to
+ * this oversight view only if its teacher is one of this school's own users,
+ * so classes/quizzes/attempts are filtered down to that set after the users
+ * read comes back scoped. No change to firestore.rules; this stays a
+ * client-side join, same as `rows.map` already did for teacher names.
  */
 import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export const adminOverviewKey = ['fs-admin-overview']
@@ -20,21 +29,41 @@ const all = async (name) => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
+const usersInSchool = async (schoolId) => {
+  const snap = await getDocs(query(collection(db, 'users'), where('school_id', '==', schoolId)))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
 /** A quiz may link to classes by array or by the legacy scalar. */
 function classIdsOf(quiz) {
   if (Array.isArray(quiz.class_ids) && quiz.class_ids.length) return quiz.class_ids
   return quiz.class_id ? [quiz.class_id] : []
 }
 
-export async function fetchOverview() {
-  const [users, classes, quizzes, attempts] = await Promise.all([
-    all('users'),
+const emptyOverview = {
+  rows: [],
+  users: [],
+  stats: { totalUsers: 0, activeUsers: 0, teachers: 0, students: 0, parents: 0,
+           classes: 0, activeClasses: 0, quizzes: 0, attempts: 0, schoolAverage: null },
+}
+
+export async function fetchOverview(schoolId) {
+  if (!schoolId) return emptyOverview
+
+  const [users, allClasses, allQuizzes, allAttempts] = await Promise.all([
+    usersInSchool(schoolId),
     all('classes'),
     all('quizzes'),
     all('quiz_attempts'),
   ])
 
   const byId = Object.fromEntries(users.map((u) => [u.id, u]))
+  const schoolTeacherIds = new Set(users.filter((u) => u.role === 'teacher').map((u) => u.id))
+  const classes = allClasses.filter((c) => schoolTeacherIds.has(c.teacher_id))
+  const classIds = new Set(classes.map((c) => c.id))
+  const quizzes = allQuizzes.filter((q) => classIdsOf(q).some((id) => classIds.has(id)))
+  const attempts = allAttempts.filter((a) => classIds.has(a.class_id))
+
   const attemptsByClass = {}
   attempts.forEach((a) => {
     if (!a.class_id) return
@@ -92,6 +121,11 @@ export async function fetchOverview() {
   }
 }
 
-export function useAdminOverview(options = {}) {
-  return useQuery({ ...options, queryKey: adminOverviewKey, queryFn: fetchOverview })
+export function useAdminOverview(schoolId, options = {}) {
+  return useQuery({
+    ...options,
+    queryKey: [...adminOverviewKey, schoolId],
+    queryFn: () => fetchOverview(schoolId),
+    enabled: Boolean(schoolId),
+  })
 }
