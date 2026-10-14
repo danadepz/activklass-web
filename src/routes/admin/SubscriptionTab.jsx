@@ -6,7 +6,8 @@ import {
 import {
   fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
 } from '@/lib/institution'
-import { ink, muted, faint, green, red, gold, navy, line, serif, mono } from '@/theme'
+import { ink, muted, faint, green, red, gold, navy, line, serif, mono, blueText, goldDeep } from '@/theme'
+import { School, GraduationCap, Layers } from '@/components/icons'
 import { card, field, th } from './ui'
 import Notice from './Notice'
 import CardHead from './CardHead'
@@ -110,9 +111,9 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
         <div className="flex items-start gap-3">
           <span
             aria-hidden="true"
-            style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(14,42,92,0.07)', border: `1px solid ${line}`, display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 20 }}
+            style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(14,42,92,0.07)', border: `1px solid ${line}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}
           >
-            🏛️
+            <School className="w-5 h-5" style={{ color: navy }} />
           </span>
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
@@ -249,7 +250,7 @@ function TeacherSeatsCard({ onChanged }) {
   return (
     <section style={{ ...card, padding: 22 }}>
       <CardHead
-        icon="🧑‍🏫"
+        icon={<GraduationCap className="w-5 h-5" style={{ color: blueText }} />}
         tint="rgba(63,169,245,0.13)"
         title="Teachers on your plan"
         sub="Invite a teacher who currently pays for their own ActivKlass plan. When they accept, their subscription stops and they take one of your teacher seats. Their classes, students and records are not transferred — this moves billing only."
@@ -406,7 +407,7 @@ export default function SubscriptionTab() {
         <section style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
             <CardHead
-              icon="🗂️"
+              icon={<Layers className="w-5 h-5" style={{ color: goldDeep }} />}
               tint="rgba(245,197,24,0.15)"
               title="Available plans"
               sub="Seat counts are limits, not reservations — usage is measured live from the user list. Nothing is blocked when a limit is passed."

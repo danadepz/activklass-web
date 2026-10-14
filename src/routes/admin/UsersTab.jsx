@@ -8,7 +8,8 @@ import {
 } from '@/lib/admin'
 import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
+import { navy, ink, muted, faint, green, red, line, mono, goldDeep, blueText } from '@/theme'
+import { School, CalendarCheck, UserPlus, Users } from '@/components/icons'
 import { ROLES, CREATABLE_ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
 import {
   emailError, nameError, tempPasswordError,
@@ -92,7 +93,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
   return (
     <form onSubmit={submit} style={{ ...card, padding: 22 }}>
       <CardHead
-        icon="🏫"
+        icon={<School className="w-5 h-5" style={{ color: goldDeep }} />}
         tint="rgba(245,197,24,0.14)"
         title="School & login prefix"
         sub={
@@ -197,7 +198,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
   return (
     <form onSubmit={submit} style={{ ...card, padding: 22 }}>
       <CardHead
-        icon="📅"
+        icon={<CalendarCheck className="w-5 h-5" style={{ color: green }} />}
         tint="rgba(31,138,91,0.12)"
         title="Term End Dates & Automatic Archiving"
         sub={
@@ -612,7 +613,7 @@ export function AddUserSection({ onCreated, settings, users }) {
   return (
     <section style={{ ...card, padding: 22 }}>
       <CardHead
-        icon="👤"
+        icon={<UserPlus className="w-5 h-5" style={{ color: navy }} />}
         tint="rgba(14,42,92,0.07)"
         title="Add User"
         sub="Create one account at a time, or upload a spreadsheet for many at once. Parents are not added here — they register themselves and claim their student's invitation code."
@@ -913,7 +914,7 @@ export default function UsersTab() {
       <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
           <CardHead
-            icon="👥"
+            icon={<Users className="w-5 h-5" style={{ color: blueText }} />}
             tint="rgba(63,169,245,0.13)"
             title="Users"
             count={shown.length}

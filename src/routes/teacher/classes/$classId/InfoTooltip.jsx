@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { navy, ink, muted, line, sansFamily as sans } from '@/theme'
+import { Info } from '@/components/icons'
 
 /**
- * The one ⓘ control for this class's tabs (T-137, reused by T-140). Opens on
- * click, not hover -- a tablet has no hover -- and is a real <button>, so
- * keyboard focus plus Enter/Space already opens it with no extra wiring.
- * Dismisses on Escape, on an outside click, and on its own close button.
+ * The one InfoTooltip control for this class's tabs (T-137, reused by T-140,
+ * vector icon T-179). Opens on click, not hover -- a tablet has no hover --
+ * and is a real <button>, so keyboard focus plus Enter/Space already opens it
+ * with no extra wiring. Dismisses on Escape, on an outside click, and on its
+ * own close button.
  */
 export default function InfoTooltip({ label = 'How this is calculated', children }) {
   const [open, setOpen] = useState(false)
@@ -39,13 +41,12 @@ export default function InfoTooltip({ label = 'How this is calculated', children
         style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           width: 20, height: 20, borderRadius: '50%', marginLeft: 6,
-          border: `1px solid ${open ? navy : 'rgba(14,42,92,0.25)'}`,
+          border: 'none',
           background: open ? 'rgba(14,42,92,0.08)' : 'transparent',
-          color: navy, fontSize: 12.5, fontWeight: 700, fontFamily: sans,
-          lineHeight: 1, cursor: 'pointer', padding: 0,
+          color: navy, cursor: 'pointer', padding: 0,
         }}
       >
-        ⓘ
+        <Info className="w-4 h-4" />
       </button>
       <span
         id={panelId}

@@ -3,7 +3,7 @@ import { useAuth } from '@/context/useAuth'
 import { useAdminOverview } from '@/hooks/useAdminOverview'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, blueText, orangeDeep, line, serif, mono } from '@/theme'
-import { Layers, BookOpen, Users, BarChart } from '@/components/icons'
+import { Layers, BookOpen, Users, BarChart, School } from '@/components/icons'
 import { card, field, btnGhost, th } from './ui'
 import { MetricCard } from '@/components/ui/Card'
 import Notice from './Notice'
@@ -74,7 +74,7 @@ export default function ClassesTab() {
       <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
           <CardHead
-            icon="🏫"
+            icon={<School className="w-5 h-5" style={{ color: navy }} />}
             tint="rgba(14,42,92,0.07)"
             title="All classes"
             count={rows.length}
