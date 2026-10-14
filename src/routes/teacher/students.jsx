@@ -289,8 +289,8 @@ export default function StudentsPage() {
             {riskCounts.none} without a score
             {unscored.length > 0 && (
               <>
-                {' '}·{' '}
-                <Link to="/teacher/classes" style={{ color: navy, fontWeight: 600 }}>open the Performance tab</Link>
+                {' '}· open the{' '}
+                <Link to="/teacher/classes" style={{ color: navy, fontWeight: 600 }}>Performance Tab</Link>
                 {' '}of {unscored.slice(0, 2).join(unscored.length > 2 ? ', ' : ' and ')}
                 {unscored.length > 2 && ` and ${unscored.length - 2} more ${unscored.length === 3 ? 'class' : 'classes'}`}
                 {' '}to compute {riskCounts.none === 1 ? 'it' : 'them'}

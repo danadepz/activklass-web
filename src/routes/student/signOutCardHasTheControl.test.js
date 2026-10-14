@@ -40,7 +40,7 @@ describe('T-95 — the Sign out card actually holds a sign-out control', () => {
   it('the heading alone does not satisfy it — the control is what a student presses', () => {
     const body = signOutCardBody()
     // Both are wanted; this states plainly that the text is not the thing.
-    expect(body).toContain('Sign out')
+    expect(body).toMatch(/Sign [Oo]ut/)
     expect(body).toMatch(/<SignOutButton\b/)
   })
 })

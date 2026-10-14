@@ -83,6 +83,6 @@ describe('Class Oversight export button (T-20)', () => {
     // button would again promise something the header does not.
     const html = withRows(7)
     expect(exportButton(html)).toContain('Export 7 classes')
-    expect(html).toMatch(/All classes[\s\S]{0,400}?>7</)
+    expect(html).toMatch(/All [Cc]lasses[\s\S]{0,400}?>7</)
   })
 })

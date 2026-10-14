@@ -235,7 +235,7 @@ export default function ParentalAccessPanel({
                 still gates approving/revoking/toggling scopes below -- a minor
                 still cannot do those -- it just no longer gates seeing the
                 code itself. */}
-            <h3 style={heading}>Guardian link code</h3>
+            <h3 style={heading}>Guardian Link Code</h3>
 
             {!showCode ? (
               <div style={{ ...box, padding: '20px 18px' }}>
@@ -253,7 +253,7 @@ export default function ParentalAccessPanel({
                   className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer' }}
                 >
-                  Show my code
+                  Show My Code
                 </button>
               </div>
             ) : (
@@ -303,7 +303,7 @@ export default function ParentalAccessPanel({
                 is approved; they just stop being on screen. */}
             {guardians.length === 0 && (
               <>
-                <h3 style={heading}>What guardians can see</h3>
+                <h3 style={heading}>What Guardians Can See</h3>
                 <p style={note}>
                   {canManage
                     ? 'These apply when you approve your first guardian. Nobody sees anything until you approve them, and each guardian can be changed individually afterwards.'
@@ -328,7 +328,7 @@ export default function ParentalAccessPanel({
 
             {/* --- 3. Who it let in --------------------------------------- */}
             <h3 style={{ ...heading, margin: '26px 0 12px' }}>
-              Connected guardians{guardians.length > 0 && ` (${guardians.length})`}
+              Connected Guardians{guardians.length > 0 && ` (${guardians.length})`}
             </h3>
 
             {guardians.length === 0 ? (

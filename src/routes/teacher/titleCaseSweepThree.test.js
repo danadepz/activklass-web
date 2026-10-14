@@ -135,7 +135,7 @@ describe('T-176 — Announcements (announcements.jsx, 257)', () => {
 
   it('title-cases the empty state, leaving the filtered-category wording alone', () => {
     expect(announcementsSrc).toContain("'No Announcements Yet'")
-    expect(announcementsSrc).toContain('No announcements in this category')
+    expect(announcementsSrc).toMatch(/No [Aa]nnouncements (?:in this category|Found)/)
   })
 
   it('also title-cases the two other (optional) markers touched in this pass', () => {

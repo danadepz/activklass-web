@@ -19,7 +19,7 @@ import SubscriptionTab from './SubscriptionTab'
  */
 const TABS = [
   { key: 'users', label: 'Users', hint: 'Create, upload, enable and disable accounts' },
-  { key: 'classes', label: 'Class oversight', hint: 'All classes, records and school statistics' },
+  { key: 'classes', label: 'Class Overview', hint: 'All classes, records and school statistics' },
   { key: 'subscription', label: 'Subscription', hint: 'Plan, seat usage and storage' },
 ]
 

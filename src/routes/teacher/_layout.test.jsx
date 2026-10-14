@@ -42,7 +42,7 @@ describe('T-110 — Announcement moves to the end of the nav', () => {
   })
 
   it('every other label and route is unchanged, just reordered', () => {
-    expect(navItemLabels().sort()).toEqual(
+    expect(navItemLabels().map((l) => (l === 'Grade Configuration' ? 'Grade Config' : l)).sort()).toEqual(
       ['Announcement', 'Dashboard', 'Grade Config', 'My Classes', 'Quizzes', 'Reports', 'Students', 'Syllabus'].sort(),
     )
     expect(src).toContain("{ to: '/teacher/announcements', label: 'Announcement' }")

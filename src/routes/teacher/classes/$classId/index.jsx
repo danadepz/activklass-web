@@ -180,7 +180,7 @@ function ProgramYearFields({ fields, set, clazz, programs = [], disabled = false
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
-        <label style={labelStyle}>Program <span style={optHint}>(opt)</span></label>
+        <label style={labelStyle}>Program <span style={optHint}>(Optional)</span></label>
         <input className="ak-input" list="ak-programs" autoComplete="off" placeholder="e.g. BSIT / JHS / Grade School" value={fields.course} onChange={set('course')} style={fieldStyle} disabled={disabled} />
         <datalist id="ak-programs">
           {programs.map((p) => (
@@ -189,7 +189,7 @@ function ProgramYearFields({ fields, set, clazz, programs = [], disabled = false
         </datalist>
       </div>
       <div>
-        <label style={labelStyle}>Year <span style={optHint}>(opt)</span></label>
+        <label style={labelStyle}>Year <span style={optHint}>(Optional)</span></label>
         <select className="ak-input" value={year} onChange={set('year_level')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
           <option value="">—</option>
           {offList && <option value={offList}>{offList}</option>}
@@ -347,14 +347,14 @@ function StudentFields({ fields, setFields, clazz, programs, disabled = false })
           <input className="ak-input" placeholder="Student ID" value={fields.student_number} onChange={set('student_number')} style={fieldStyle} disabled={disabled} />
         </div>
         <div>
-          <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
+          <label style={labelStyle}>Middle Name <span style={optHint}>(Optional)</span></label>
           <input className="ak-input" value={fields.middle_name} onChange={set('middle_name')} style={fieldStyle} disabled={disabled} />
         </div>
       </div>
       <ProgramYearFields fields={fields} set={set} clazz={clazz} programs={programs} disabled={disabled} />
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
+          <label style={labelStyle}>Remarks <span style={optHint}>(Optional)</span></label>
           <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
             <option value="">—</option>
             {REMARKS_OPTIONS.map((r) => (
@@ -363,7 +363,7 @@ function StudentFields({ fields, setFields, clazz, programs, disabled = false })
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Enrollment status</label>
+          <label style={labelStyle}>Enrollment Status</label>
           <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
             {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label} ({value})</option>
@@ -373,7 +373,7 @@ function StudentFields({ fields, setFields, clazz, programs, disabled = false })
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>LRN <span style={optHint}>(basic ed, opt)</span></label>
+          <label style={labelStyle}>LRN <span style={optHint}>(Basic Ed, Optional)</span></label>
           <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} disabled={disabled} />
         </div>
         <div>
@@ -729,7 +729,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
     return (
       <>
         <div>
-          <label style={labelStyle}>Student identifier <span className="text-red-500">*</span></label>
+          <label style={labelStyle}>Student Identifier <span className="text-red-500">*</span></label>
           <div style={{ marginBottom: 8 }}>
             <SegmentedControl
               options={[
@@ -752,7 +752,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label style={labelStyle}>Middle name <span style={optHint}>(opt)</span></label>
+            <label style={labelStyle}>Middle Name <span style={optHint}>(Optional)</span></label>
             <input className="ak-input" value={f.middle_name} onChange={handleSet('middle_name')} style={fieldStyle} />
           </div>
           <div>
@@ -769,7 +769,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
         <ProgramYearFields fields={f} set={handleSet} clazz={clazz} programs={programs} />
 
         <div>
-          <label style={labelStyle}>Remarks <span style={optHint}>(opt)</span></label>
+          <label style={labelStyle}>Remarks <span style={optHint}>(Optional)</span></label>
           <select className="ak-input" value={f.remarks} onChange={handleSet('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }}>
             <option value="">—</option>
             {REMARKS_OPTIONS.map((r) => (
@@ -781,7 +781,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
         <div style={{ borderTop: '1px solid rgba(14,42,92,0.1)', margin: '16px 0' }} />
 
         <div>
-          <label style={labelStyle}>Enrollment status</label>
+          <label style={labelStyle}>Enrollment Status</label>
           <select className="ak-input" value={f.enrollment_status} onChange={handleSet('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }}>
             {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label} ({value})</option>
@@ -923,11 +923,11 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label style={labelStyle}>First name <span className="text-red-500">*</span></label>
+                    <label style={labelStyle}>First Name <span className="text-red-500">*</span></label>
                     <input required className="ak-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={fieldStyle} />
                   </div>
                   <div>
-                    <label style={labelStyle}>Last name <span className="text-red-500">*</span></label>
+                    <label style={labelStyle}>Last Name <span className="text-red-500">*</span></label>
                     <input required className="ak-input" value={lastName} onChange={(e) => setLastName(e.target.value)} style={fieldStyle} />
                   </div>
                 </div>
@@ -1108,7 +1108,7 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
         {/* 2026-06-20: Name fields — teachers can now correct first and last name */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">First name <span className="text-red-400">*</span></span>
+            <span className="text-sm font-medium text-slate-700">First Name <span className="text-red-400">*</span></span>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
@@ -1117,7 +1117,7 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Last name <span className="text-red-400">*</span></span>
+            <span className="text-sm font-medium text-slate-700">Last Name <span className="text-red-400">*</span></span>
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -1128,7 +1128,7 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
         </div>
         <StudentFields fields={fields} setFields={setFields} clazz={clazz} programs={programs} disabled={readOnly} />
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">Academic progress</span>
+          <span className="text-sm font-medium text-slate-700">Academic Progress</span>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -1156,8 +1156,8 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
               {accountBusy
                 ? 'Working…'
                 : (student.status ?? 'active') === 'active'
-                  ? 'Disable sign-in'
-                  : 'Enable sign-in'}
+                  ? 'Disable Sign-In'
+                  : 'Enable Sign-In'}
             </button>
           </div>
         )}

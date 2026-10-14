@@ -64,7 +64,7 @@ describe('T-139 — student profile recovery email', () => {
   it('renders a recovery email field clearly labelled for recovery, not sign-in', () => {
     profile = { ...base, login_id: 'snhs-123456' }
     const markup = renderToStaticMarkup(<StudentProfile />)
-    expect(markup).toContain('Password recovery email')
+    expect(markup).toMatch(/Password [Rr]ecovery [Ee]mail/)
     expect(markup).toContain('Used to reset your password if you ever forget it')
     expect(markup).toContain('You will still sign in with your login ID')
     expect(markup).toContain('snhs-123456')

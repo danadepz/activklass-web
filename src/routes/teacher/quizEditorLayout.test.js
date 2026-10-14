@@ -102,7 +102,8 @@ describe('the quiz settings row lines up (T-86)', () => {
     // still a passenger in that cell, so the cell is taller than Opens and
     // Closes and the row's alignment rule is what decides the line.
     const from = src.indexOf('<label style={labelStyle}>Attempts</label>', draftRow.index)
-    const span = src.slice(from, src.indexOf('Unlimited until it closes', from))
+    const tick = src.slice(from).search(/Unlimited [Uu]ntil [Ii]t [Cc]loses|Unlimited until it closes/)
+    const span = src.slice(from, from + tick)
     expect(span).not.toContain('</div>')
   })
 

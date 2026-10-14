@@ -58,7 +58,7 @@ function SignOutCard() {
       }}
     >
       <div>
-        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign out</h2>
+        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign Out</h2>
         <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
           End your session on this device. You will be asked to confirm first.
         </p>
@@ -254,7 +254,7 @@ export default function StudentProfile() {
         )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <InfoCell label="Student number" value={profile.student_number} />
+          <InfoCell label="Student Number" value={profile.student_number} />
           <InfoCell label="DepEd LRN" value={profile.lrn} />
           <InfoCell label="Course / Strand" value={profile.course} />
           <InfoCell label="Year / Grade level" value={profile.year_level} />
@@ -267,7 +267,7 @@ export default function StudentProfile() {
           <form onSubmit={handleSaveEmail}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 520 }}>
               <label htmlFor="recovery-email" style={{ fontSize: 13, fontWeight: 700, color: ink, fontFamily: sans }}>
-                Password recovery email
+                Password Recovery Email
               </label>
               <p style={{ fontSize: 12.5, color: muted, margin: 0, lineHeight: 1.4 }}>
                 Used to reset your password if you ever forget it. You will still sign in with your login ID ({profile.login_id ?? profile.email}).

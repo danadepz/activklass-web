@@ -147,7 +147,7 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
                     style={{ ...field, width: 'auto', padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
               {names.map((n) => (
                 <option key={n} value={n}>
-                  {n} — {catalogue[n].student_seats} students
+                  {n.charAt(0).toUpperCase() + n.slice(1)} — {catalogue[n].student_seats} Students
                 </option>
               ))}
             </select>
@@ -157,9 +157,9 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
 
       <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
                     marginTop: 22 }}>
-        <Meter label="Teacher seats" used={usage.teachers.used} total={usage.teachers.seats}
+        <Meter label="Teacher Seats" used={usage.teachers.used} total={usage.teachers.seats}
                over={usage.teachers.over} />
-        <Meter label="Student seats" used={usage.students.used} total={usage.students.seats}
+        <Meter label="Student Seats" used={usage.students.used} total={usage.students.seats}
                over={usage.students.over} />
         <StorageMeter limitBytes={storageBytes} />
       </div>
@@ -252,7 +252,7 @@ function TeacherSeatsCard({ onChanged }) {
       <CardHead
         icon={<GraduationCap className="w-5 h-5" style={{ color: blueText }} />}
         tint="rgba(63,169,245,0.13)"
-        title="Teachers on your plan"
+        title="Teachers Included in Your Plan"
         sub="Invite a teacher who currently pays for their own ActivKlass plan. When they accept, their subscription stops and they take one of your teacher seats. Their classes, students and records are not transferred — this moves billing only."
         style={{ marginBottom: 16 }}
       />
@@ -270,7 +270,7 @@ function TeacherSeatsCard({ onChanged }) {
           style={{ ...field, flex: '1 1 240px', minWidth: 0 }}
         />
         <Button type="submit" disabled={busy || !email.trim()}>
-          {invite.isPending ? 'Sending…' : 'Send invitation'}
+          {invite.isPending ? 'Sending…' : 'Send Invitation'}
         </Button>
       </form>
 
@@ -409,7 +409,7 @@ export default function SubscriptionTab() {
             <CardHead
               icon={<Layers className="w-5 h-5" style={{ color: goldDeep }} />}
               tint="rgba(245,197,24,0.15)"
-              title="Available plans"
+              title="Available Plans"
               sub="Seat counts are limits, not reservations — usage is measured live from the user list. Nothing is blocked when a limit is passed."
             />
           </div>
@@ -417,7 +417,7 @@ export default function SubscriptionTab() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
               <thead>
                 <tr style={{ background: 'rgba(14,42,92,0.03)' }}>
-                  {['Type', 'Plan', 'Teacher seats', 'Student seats', 'Storage'].map((h, i) => (
+                  {['Type', 'Plan', 'Teacher Seats', 'Student Seats', 'Storage'].map((h, i) => (
                     <th key={h} style={{ ...th, color: muted, textAlign: i >= 2 ? 'right' : 'left' }}>{h}</th>
                   ))}
                 </tr>
@@ -431,11 +431,11 @@ export default function SubscriptionTab() {
                         borderTop: `1px solid ${line}`,
                         background: current ? 'rgba(245,197,24,0.10)' : undefined,
                       }}>
-                        <td style={{ padding: '10px 14px', fontSize: 13, color: muted }}>{type}</td>
-                        <td style={{ padding: '10px 14px', fontSize: 13.5, fontWeight: 700, color: ink }}>
+                        <td style={{ padding: '10px 14px', fontSize: 13, color: muted, textTransform: 'capitalize' }}>{type}</td>
+                        <td style={{ padding: '10px 14px', fontSize: 13.5, fontWeight: 700, color: ink, textTransform: 'capitalize' }}>
                           {name}
                           {current && (
-                            <span style={{ ...mono, fontSize: 11, color: navy, marginLeft: 8 }}>current</span>
+                            <span style={{ ...mono, fontSize: 11, color: navy, marginLeft: 8, textTransform: 'none' }}>Current</span>
                           )}
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 13.5 }}>{l.teacher_seats}</td>

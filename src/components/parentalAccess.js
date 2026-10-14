@@ -8,7 +8,7 @@
  */
 export const PERMISSIONS = [
   { key: 'grades', label: 'Grades', hint: 'Component scores and computed final grades' },
-  { key: 'quiz_scores', label: 'Quiz & activity scores', hint: 'Individual quiz, activity and performance-task results' },
-  { key: 'attendance', label: 'Attendance record', hint: 'Daily attendance, absences and excuse letters' },
-  { key: 'analytics', label: 'Subject analytics', hint: 'Topic mastery, weak areas and recommendations' },
+  { key: 'quiz_scores', label: 'Quiz & Activity Scores', hint: 'Individual quiz, activity and performance-task results' },
+  { key: 'attendance', label: 'Attendance Record', hint: 'Daily attendance, absences and excuse letters' },
+  { key: 'analytics', label: 'Subject Analytics', hint: 'Topic mastery, weak areas and recommendations' },
 ]

@@ -58,7 +58,7 @@ export default function ClassesTab() {
           { label: 'Classes', value: s.activeClasses, sub: s.classes !== s.activeClasses ? `${s.classes} incl. archived` : null, tint: 'rgba(14,42,92,0.08)', Icon: Layers, iconColor: navy },
           { label: 'Teachers', value: s.teachers, tint: 'rgba(63,169,245,0.15)', Icon: BookOpen, iconColor: blueText },
           { label: 'Students', value: s.students, tint: 'rgba(31,138,91,0.12)', Icon: Users, iconColor: green },
-          { label: 'School average', value: pct(s.schoolAverage), color: orangeDeep, tint: 'rgba(230,126,34,0.13)', Icon: BarChart, iconColor: orangeDeep },
+          { label: 'School Average', value: pct(s.schoolAverage), color: orangeDeep, tint: 'rgba(230,126,34,0.13)', Icon: BarChart, iconColor: orangeDeep },
         ].map((k) => (
           <MetricCard key={k.label} label={k.label} value={k.value} sub={k.sub} valueColor={k.color} tint={k.tint} Icon={k.Icon} iconColor={k.iconColor} />
         ))}
@@ -76,7 +76,7 @@ export default function ClassesTab() {
           <CardHead
             icon={<School className="w-5 h-5" style={{ color: navy }} />}
             tint="rgba(14,42,92,0.07)"
-            title="All classes"
+            title="All Classes"
             count={rows.length}
             action={
               <div className="flex flex-wrap items-center gap-3">
@@ -85,7 +85,7 @@ export default function ClassesTab() {
                        style={{ ...field, width: 250, padding: '8px 12px', fontSize: 13 }} />
                 <label style={{ fontSize: 13, color: muted, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-                  Show archived
+                  Show Archive
                 </label>
                 <button style={btnGhost} onClick={exportCsv} disabled={!rows.length}
                         title={rows.length ? `Download ${rows.length === 1 ? 'this class' : `these ${rows.length} classes`} as a CSV file`

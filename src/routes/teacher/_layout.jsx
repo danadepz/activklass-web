@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { to: '/teacher/students', label: 'Students' },
   { to: '/teacher/syllabus', label: 'Syllabus' },
   { to: '/teacher/quizzes', label: 'Quizzes' },
-  { to: '/teacher/grading', label: 'Grade Config' },
+  { to: '/teacher/grading', label: 'Grade Configuration' },
   { to: '/teacher/reports', label: 'Reports' },
   { to: '/teacher/announcements', label: 'Announcement' },
 ]

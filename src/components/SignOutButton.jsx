@@ -18,7 +18,7 @@ import Button from '@/components/ui/Button'
  *
  * Owned by the UI/UX lane (see OWNERSHIP.md).
  */
-export default function SignOutButton({ children = 'Sign out', className, style }) {
+export default function SignOutButton({ children = 'Sign Out', className, style }) {
   const { logout } = useAuth()
   const [asking, setAsking] = useState(false)
 
@@ -84,7 +84,7 @@ export default function SignOutButton({ children = 'Sign out', className, style 
                 onClick={() => { setAsking(false); logout() }}
                 style={{ flex: 1 }}
               >
-                Sign out
+                Sign Out
               </Button>
             </div>
           </div>

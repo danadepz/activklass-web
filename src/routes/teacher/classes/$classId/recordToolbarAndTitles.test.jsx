@@ -82,9 +82,9 @@ describe('T-142.3 — Export CSV and Lock period moved to the Summary row', () =
     expect(gridEnd).toBeGreaterThan(gridAt)
     const gridBody = src.slice(gridAt, gridEnd)
     expect(gridBody).not.toContain('Export CSV')
-    expect(gridBody).not.toContain('Lock period')
+    expect(gridBody).not.toMatch(/Lock [Pp]eriod/)
     // + Add assessment and the save button are still there, where the work happens.
-    expect(gridBody).toContain('Add assessment')
+    expect(gridBody).toMatch(/Add [Aa]ssessment/)
     expect(gridBody).toMatch(/All Saved/)
   })
 
@@ -93,7 +93,7 @@ describe('T-142.3 — Export CSV and Lock period moved to the Summary row', () =
     expect(pageAt).toBeGreaterThan(-1)
     const pageBody = src.slice(pageAt)
     expect(pageBody).toContain('Export CSV')
-    expect(pageBody).toContain('Lock period')
+    expect(pageBody).toMatch(/Lock [Pp]eriod/)
     expect(pageBody).toMatch(/tab !== 'summary' &&/)
   })
 })

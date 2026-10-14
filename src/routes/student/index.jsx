@@ -270,9 +270,9 @@ export default function StudentDashboard() {
 
       {/* Classes */}
       <div className="mt-8 mb-4 flex items-center justify-between">
-        <h2 style={{ ...serif, fontSize: 24, margin: 0, color: ink }}>Your classes</h2>
+        <h2 style={{ ...serif, fontSize: 24, margin: 0, color: ink }}>Your Classes</h2>
         <Link to="/student/classes" style={{ fontSize: 13, fontWeight: 700, color: navy, textDecoration: 'none' }}>
-          View all <span style={{ color: gold }}>→</span>
+          View All <span style={{ color: gold }}>→</span>
         </Link>
       </div>
 

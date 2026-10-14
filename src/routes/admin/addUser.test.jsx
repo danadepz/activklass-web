@@ -72,7 +72,7 @@ describe('Add User (T-113) -- nothing renders until both controls are set', () =
     expect(html).not.toMatch(/>student</i)
     // Neither form's own content is reachable.
     expect(html).not.toContain('First name')
-    expect(html).not.toContain('Choose file')
+    expect(html).not.toMatch(/Choose [Ff]ile/)
     expect(html).toContain('Pick Bulk or Individual first')
   })
 
@@ -81,7 +81,7 @@ describe('Add User (T-113) -- nothing renders until both controls are set', () =
     expect(html).toMatch(/>teacher</i)
     expect(html).toMatch(/>student</i)
     expect(html).not.toContain('First name')
-    expect(html).not.toContain('Choose file')
+    expect(html).not.toMatch(/Choose [Ff]ile/)
     expect(html).toContain('Pick a role and the rest appears')
   })
 
@@ -89,12 +89,12 @@ describe('Add User (T-113) -- nothing renders until both controls are set', () =
     const html = render({ mode: 'individual', role: 'teacher' })
     expect(html).toContain('First Name')
     expect(html).toContain('Employee Number')
-    expect(html).not.toContain('Choose file')
+    expect(html).not.toMatch(/Choose [Ff]ile/)
   })
 
   it('renders the bulk uploader once Bulk + Student are both set', () => {
     const html = render({ mode: 'bulk', role: 'student' })
-    expect(html).toContain('Choose file')
+    expect(html).toMatch(/Choose [Ff]ile/)
     expect(html).toContain('What a student row needs')
     expect(html).not.toContain('First name')
   })

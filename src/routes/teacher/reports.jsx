@@ -186,17 +186,17 @@ export default function ReportsPage() {
 
       {/* Global KPIs */}
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        <MetricCard label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} with grading set up`} Icon={Notebook} tint="rgba(14,42,92,0.07)" iconColor={navy} />
-        <MetricCard label="Students" value={totalStudents} sub={`${totalAssessed} assessed across classes`} Icon={Users} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
-        <MetricCard label="Passing Rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} passing`} valueColor={green} Icon={BarChart} tint="rgba(31,138,91,0.1)" iconColor={green} />
-        <MetricCard label="Needs Improvement" value={notPassing} sub="of the students already assessed" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={notPassing > 0} />
+        <MetricCard label="Classes" value={list.length} sub={`${list.filter((r) => r.configured).length} With Grading Setup`} Icon={Notebook} tint="rgba(14,42,92,0.07)" iconColor={navy} />
+        <MetricCard label="Students" value={totalStudents} sub={`${totalAssessed} Assessed Across Classes`} Icon={Users} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
+        <MetricCard label="Passing Rate" value={passRate == null ? '—' : `${passRate}%`} sub={`${totalPassing} of ${totalAssessed} Passing`} valueColor={green} Icon={BarChart} tint="rgba(31,138,91,0.1)" iconColor={green} />
+        <MetricCard label="Needs Improvement" value={notPassing} sub="Of Students Assessed" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={notPassing > 0} />
       </div>
 
       {/* Per-class breakdown */}
       <div className="mt-5" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '18px 22px', borderBottom: `1px solid ${line}` }}>
           <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>By Class</h3>
-          <span style={{ ...mono, fontSize: 12, color: faint }}>{list.length} class{list.length === 1 ? '' : 'es'}</span>
+          <span style={{ ...mono, fontSize: 12, color: faint }}>{list.length} {list.length === 1 ? 'Class' : 'Classes'}</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
@@ -268,7 +268,7 @@ export default function ReportsPage() {
 
       <p style={{ fontSize: 12.5, color: faint, margin: '16px 2px 0', maxWidth: 720 }}>
         Averages are each class's final grade across all grading periods, in that class's own grading mode. A student
-        counts as <em>assessed</em> once they have at least one recorded grade.
+        counts as assessed once they have at least one recorded grade.
       </p>
     </div>
   )

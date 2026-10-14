@@ -417,7 +417,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
           action this card exists for, outlined for the helper beside it. */}
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
         <label style={{ ...btnPrimary, display: 'inline-block' }}>
-          📂 Choose file…
+          📂 Choose File…
           <input type="file"
                  accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                  onChange={onFile}
@@ -430,7 +430,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
                 disabled={preparing}
                 onClick={downloadTemplate}>
           <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
-          {preparing ? 'Preparing…' : 'Download template'}
+          {preparing ? 'Preparing…' : 'Download Template'}
         </button>
         {fileName && (
           <span style={{ ...mono, fontSize: 12, color: faint }}>

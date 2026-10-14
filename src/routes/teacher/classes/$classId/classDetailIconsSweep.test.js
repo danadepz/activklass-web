@@ -58,7 +58,7 @@ describe('T-149 — Class Record keeps the locked-period state visible', () => {
   })
 
   it('Unlock period keeps its label text -- T-149 must not reword it', () => {
-    expect(recordSrc).toContain('Unlock period')
-    expect(recordSrc).toContain('Lock period')
+    expect(recordSrc).toMatch(/Unlock [Pp]eriod/)
+    expect(recordSrc).toMatch(/Lock [Pp]eriod/)
   })
 })

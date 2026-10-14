@@ -101,7 +101,7 @@ export default function UpNextPanel({ now: nowProp }) {
   return (
     <div data-up-next style={{ marginTop: 32 }}>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 style={{ ...serif, fontSize: 24, margin: 0, color: ink }}>Up next</h2>
+        <h2 style={{ ...serif, fontSize: 24, margin: 0, color: ink }}>Up Next</h2>
         <div role="group" aria-label="View" style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 10, background: '#FFFFFF', border: `1px solid ${line}` }}>
           {toggleBtn('list', 'List')}
           {toggleBtn('calendar', 'Calendar')}

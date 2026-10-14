@@ -612,7 +612,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
-            Grade Config
+            Grade Configuration
           </h1>
           <p style={{ fontSize: 13.5, color: muted, margin: 0 }}>
             Define grading periods and components. Save as preset template and apply it to target classes.

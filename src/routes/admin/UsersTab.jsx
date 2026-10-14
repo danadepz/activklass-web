@@ -95,7 +95,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
       <CardHead
         icon={<School className="w-5 h-5" style={{ color: goldDeep }} />}
         tint="rgba(245,197,24,0.14)"
-        title="School & login prefix"
+        title="School & Login Prefix"
         sub={
           loadError ? 'Your school’s details could not be loaded, so this card cannot show them yet. Nothing has been changed.'
             : pending ? 'Checking which school this account manages…'
@@ -114,7 +114,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
       {school && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
-            School name
+            School Name
             <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200 }} value={shownName}
                    onChange={(e) => { setName(e.target.value); setDone('') }}
                    placeholder="e.g. University of Cebu-Banilad" />
@@ -256,7 +256,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
           </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, gridColumn: '1 / -1', marginTop: 4 }}>
             <button type="submit" style={btnPrimary} disabled={mut.isPending}>
-              {mut.isPending ? 'Saving…' : 'Save term dates'}
+              {mut.isPending ? 'Saving…' : 'Save Term Dates'}
             </button>
             <Notice>{error}</Notice>
             <Notice tone="ok">{done}</Notice>
@@ -464,7 +464,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
               </select>
             </label>
             <label style={labelStyle}>
-              Student number
+              Student Number
               <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
                      onChange={set('studentNumber')} placeholder="e.g. 2024-00123" />
             </label>
@@ -483,13 +483,13 @@ function CreateUserForm({ onCreated, settings, users, role }) {
             )}
             {isG12 ? (
               <label style={labelStyle}>
-                Grade &amp; section <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+                Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
                 <input style={{ ...field, marginTop: 6 }} value={form.gradeSection}
                        onChange={set('gradeSection')} placeholder="e.g. Grade 9 - Rizal" />
               </label>
             ) : (
               <label style={labelStyle}>
-                Course &amp; year <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+                Course &amp; Year <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
                 <input style={{ ...field, marginTop: 6 }} value={form.courseYear}
                        onChange={set('courseYear')} placeholder="e.g. BSIT - 3rd Year" />
               </label>
@@ -510,7 +510,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
                      onChange={set('employeeNumber')} placeholder="e.g. T-2024-018" />
             </label>
             <label style={labelStyle}>
-              Department <span style={{ color: faint, fontWeight: 400 }}>(optional)</span>
+              Department <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
               <input style={{ ...field, marginTop: 6 }} value={form.department}
                      onChange={set('department')} placeholder="e.g. Mathematics" />
             </label>

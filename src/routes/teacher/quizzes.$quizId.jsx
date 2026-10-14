@@ -1353,7 +1353,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             <input className="ak-input" value={settings.title} onChange={set('title')} style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Time limit</label>
+            <label style={labelStyle}>Time Limit</label>
             <select className="ak-input" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} style={{ ...fieldStyle, cursor: 'pointer' }}>
               <option value="">No time limit</option>
               {timeLimitOptions(settings.time_limit_minutes).map((minutes) => (
@@ -1363,7 +1363,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Syllabus topic</label>
+          <label style={labelStyle}>Syllabus Topic</label>
           <select
             className="ak-input"
             value={settings.topic_id}
@@ -1388,7 +1388,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           </p>
         </div>
         <div>
-          <label style={labelStyle}>Instructions (optional)</label>
+          <label style={labelStyle}>Instructions (Optional)</label>
           <input className="ak-input" value={settings.instructions} onChange={set('instructions')} style={fieldStyle} />
         </div>
         <div className="grid grid-cols-2 items-start gap-3 sm:grid-cols-4">
@@ -1407,7 +1407,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
             />
             <label className="flex items-center gap-2" style={{ fontSize: 12, color: '#3A4A6B', cursor: 'pointer', marginTop: 6 }}>
               <input type="checkbox" checked={settings.attempts_unlimited} onChange={set('attempts_unlimited')} style={{ accentColor: navy, width: 15, height: 15 }} />
-              Unlimited until it closes
+              Unlimited Until It Closes
             </label>
           </div>
           <div>
@@ -1433,15 +1433,15 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <div className="flex flex-col gap-2 pb-2">
             <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
               <input type="checkbox" checked={settings.shuffle_questions} onChange={set('shuffle_questions')} style={{ accentColor: navy, width: 16, height: 16 }} />
-              Shuffle questions
+              Shuffle Questions
             </label>
             <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }} title="Reorders the choices within each multiple-choice question">
               <input type="checkbox" checked={settings.shuffle_options} onChange={set('shuffle_options')} style={{ accentColor: navy, width: 16, height: 16 }} />
-              Shuffle options
+              Shuffle Options
             </label>
             <label className="flex items-center gap-2" style={{ fontSize: 13, color: '#3A4A6B', cursor: 'pointer' }}>
               <input type="checkbox" checked={settings.prevent_backtracking} onChange={set('prevent_backtracking')} style={{ accentColor: navy, width: 16, height: 16 }} />
-              Prevent backtracking
+              Prevent Backtracking
             </label>
           </div>
         </div>
@@ -1454,7 +1454,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         <div style={{ borderTop: `1px solid ${line}`, paddingTop: 14 }} className="flex flex-col gap-3.5">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label style={labelStyle}>Marks count from</label>
+              <label style={labelStyle}>Marks Count From</label>
               <select className="ak-input" value={settings.scoring_attempt} onChange={set('scoring_attempt')} style={{ ...fieldStyle, cursor: 'pointer' }}>
                 {SCORING_POLICIES.map((sp) => (
                   <option key={sp.id} value={sp.id}>{sp.label}</option>
@@ -1465,7 +1465,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
               </p>
             </div>
             <div>
-              <label style={labelStyle}>Release results</label>
+              <label style={labelStyle}>Release Results</label>
               <select className="ak-input" value={settings.feedback_release} onChange={set('feedback_release')} style={{ ...fieldStyle, cursor: 'pointer' }}>
                 {RELEASE_OPTIONS.map((r) => (
                   <option key={r.id} value={r.id}>{r.label}</option>
@@ -1478,7 +1478,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           </div>
 
           <div>
-            <label style={labelStyle}>Students see</label>
+            <label style={labelStyle}>Result Visibility</label>
             <select className="ak-input" value={settings.feedback_detail} onChange={set('feedback_detail')} disabled={settings.feedback_release === 'never'} style={{ ...fieldStyle, cursor: 'pointer', opacity: settings.feedback_release === 'never' ? 0.5 : 1 }}>
               {DETAIL_OPTIONS.map((d) => (
                 <option key={d.id} value={d.id}>{d.label}</option>
@@ -1497,7 +1497,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <label className="flex items-start gap-2.5" style={{ cursor: 'pointer' }}>
             <input type="checkbox" checked={settings.pool_enabled} onChange={set('pool_enabled')} style={{ accentColor: navy, width: 16, height: 16, marginTop: 2 }} />
             <span>
-              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Draw a random subset for each student</span>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Draw Random Subset</span>
               <span style={{ display: 'block', fontSize: 11.5, color: faint, marginTop: 2 }}>
                 The questions below become a pool. Every student gets a different paper from it, stable if they refresh.
               </span>
@@ -1507,7 +1507,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           {settings.pool_enabled && (
             <div className="flex flex-wrap items-end gap-3" style={{ paddingLeft: 26 }}>
               <div style={{ width: 150 }}>
-                <label style={labelStyle}>Questions to draw</label>
+                <label style={labelStyle}>Questions to Draw</label>
                 <input
                   className="ak-input"
                   type="number"

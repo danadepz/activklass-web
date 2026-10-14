@@ -260,7 +260,7 @@ export default function TeacherDashboard() {
       {/* Header — welcome + primary action */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: muted, margin: '0 0 2px' }}>Welcome back!</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: muted, margin: '0 0 2px' }}>Welcome Back!</p>
           <h1 className="text-[clamp(24px,3vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.02em', margin: 0, color: ink }}>
             {profile.first_name} {profile.last_name}
           </h1>
@@ -284,7 +284,7 @@ export default function TeacherDashboard() {
         <MetricCard label="Classes" value={list.length} Icon={Layers} tint="rgba(14,42,92,0.07)" iconColor={navy} loading={isLoading} />
         <MetricCard label="Students" value={totalStudents} Icon={Users} tint="rgba(63,169,245,0.13)" iconColor={blueText} loading={isLoading} />
         <MetricCard
-          label="Avg. class size"
+          label="Average Class Size"
           value={hasClasses ? avgClassSize : '—'}
           sub={hasClasses ? 'per section' : undefined}
           Icon={TrendingUp}
@@ -293,7 +293,7 @@ export default function TeacherDashboard() {
           loading={isLoading}
         />
         <MetricCard
-          label="Rosters to fill"
+          label="Rosters to Fill"
           value={emptyRosters.length}
           sub={emptyRosters.length === 0 ? 'all filled' : 'no students yet'}
           Icon={emptyRosters.length > 0 ? AlertCircle : Check}
@@ -329,7 +329,7 @@ export default function TeacherDashboard() {
         <>
           {/* Charts row — class sizes + enrollment mix */}
           <div className="mt-3.5 grid grid-cols-1 gap-3.5 lg:grid-cols-[1.35fr_1fr]">
-            <Panel title="Class sizes">
+            <Panel title="Class Sizes">
               {isLoading ? (
                 <div className="animate-pulse rounded-xl bg-slate-100" style={{ height: 200 }} />
               ) : (

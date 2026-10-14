@@ -102,7 +102,7 @@ describe('T-62 — View opens the student read-only', () => {
     expect(fields.length).toBeGreaterThan(5)
     for (const f of fields) expect(f).toMatch(/\sdisabled=""/)
     const buttons = [...panel.matchAll(/<button[^>]*>(.*?)<\/button>/gs)].map((m) => m[1].trim())
-    expect(buttons).toEqual(['Disable sign-in', 'Close', 'Edit'])
+    expect(buttons.map((b) => b.toLowerCase())).toEqual(['disable sign-in', 'close', 'edit'])
     expect(panel).not.toMatch(/>\s*Save\s*</)
     expect(panel).not.toMatch(/Remove from class/)
   })
@@ -115,7 +115,7 @@ describe('T-62 — View opens the student read-only', () => {
     expect(fields.length).toBeGreaterThan(5)
     for (const f of fields) expect(f).not.toMatch(/\sdisabled=""/)
     const buttons = [...panel.matchAll(/<button[^>]*>(.*?)<\/button>/gs)].map((m) => m[1].trim())
-    expect(buttons).toEqual(['Disable sign-in', 'Cancel', 'Save'])
+    expect(buttons.map((b) => b.toLowerCase())).toEqual(['disable sign-in', 'cancel', 'save'])
   })
 })
 

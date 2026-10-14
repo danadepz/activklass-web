@@ -227,11 +227,11 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
           </div>
           <div className="grid grid-cols-2 gap-3.5">
             <div>
-              <label style={labelStyle}>Total points</label>
+              <label style={labelStyle}>Total Points</label>
               <input className="ak-input" required type="number" min="0.5" step="0.5" value={form.total_points} onChange={set('total_points')} style={fieldStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Date given</label>
+              <label style={labelStyle}>Date Given</label>
               <input className="ak-input" type="date" value={form.date_given} onChange={set('date_given')} style={fieldStyle} />
             </div>
           </div>
@@ -241,7 +241,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
             Cancel
           </button>
           <button type="submit" disabled={saving} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnPrimary}>
-            {saving ? 'Adding…' : 'Add assessment'}
+            {saving ? 'Adding…' : 'Add Assessment'}
             <GoldArrow />
           </button>
         </div>
@@ -472,7 +472,7 @@ function RecordGrid({ classId, record, refetch }) {
           {/* icon-less MetricCards: five across, so the chips would crowd */}
           <MetricCard label="Class Average" value={fmt(avg)} sub={`across ${record.students.length} students`} tint="rgba(14,42,92,0.07)" />
           <MetricCard label="Passing Rate" value={passingRate} sub={`${passed} of ${gradeVals.length} ${passMark}`} valueColor={green} tint="rgba(31,138,91,0.1)" />
-          <MetricCard label="At risk · below VS" value={atRisk} sub="candidates for scaffolds" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" highlight={atRisk > 0} />
+          <MetricCard label="At Risk · Below VS" value={atRisk} sub="candidates for scaffolds" valueColor={goldDeep} tint="rgba(245,197,24,0.15)" highlight={atRisk > 0} />
           <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={nameForGrade(hi)} valueColor={green} tint="rgba(63,169,245,0.13)" />
           <MetricCard label="Lowest" value={lo == null ? '—' : fmt(lo)} sub={nameForGrade(lo)} valueColor={red} tint="rgba(192,57,43,0.07)" />
         </div>
@@ -487,7 +487,7 @@ function RecordGrid({ classId, record, refetch }) {
           {!locked && (
             <>
               <button onClick={() => setShowAdd(true)} className="transition hover:brightness-105" style={btnGhostSm}>
-                <span style={{ color: gold }}>+</span> Add assessment
+                <span style={{ color: gold }}>+</span> Add Assessment
               </button>
               <button
                 onClick={saveAll}
@@ -1269,7 +1269,7 @@ export default function ClassRecordPage() {
               : {
                   title: 'Lock this period?',
                   message: 'Scores, assessments and overrides become read-only until you unlock it again.',
-                  confirmLabel: 'Lock period',
+                  confirmLabel: 'Lock Period',
                 }
             if (!(await confirmDialog(ask))) return
             try {
@@ -1312,7 +1312,7 @@ export default function ClassRecordPage() {
                           common state -- same navy ghost look as Export CSV now;
                           locked keeps its own gold "active" look, unchanged. */}
                       <button onClick={toggleLock} className="transition hover:brightness-105" style={locked ? lockBtnActive : btnGhostSm}>
-                        {locked ? <><Lock aria-hidden className="h-3.5 w-3.5 inline-block mr-1 -mb-0.5" /> Unlock period</> : 'Lock period'}
+                        {locked ? <><Lock aria-hidden className="h-3.5 w-3.5 inline-block mr-1 -mb-0.5" /> Unlock Period</> : 'Lock Period'}
                       </button>
                     </>
                   )}

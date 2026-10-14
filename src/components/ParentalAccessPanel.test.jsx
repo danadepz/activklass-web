@@ -51,7 +51,7 @@ describe('T-66 — the guardian code says where it goes', () => {
   it('shows no code, and no such caption, before the student asks for it', () => {
     const page = render({ reveal: false, code: 'NZ9V2J' })
     expect(page).not.toContain('NZ9V2J')
-    expect(page).toContain('Show my code')
+    expect(page).toMatch(/Show [Mm]y [Cc]ode/)
   })
 })
 
@@ -62,7 +62,7 @@ describe('T-105 (andecobs-137) — a minor can see their own guardian code', () 
      code of their own and no connected guardian had no way forward at all. */
   it('offers Show my code to a minor, not "you don\'t need a link code"', () => {
     const page = render({ reveal: false, code: 'CRL7K2', canManage: false, isMinor: true })
-    expect(page).toContain('Show my code')
+    expect(page).toMatch(/Show [Mm]y [Cc]ode/)
     expect(page).not.toMatch(/you don.t need a link code/i)
   })
 
