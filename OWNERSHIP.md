@@ -37,7 +37,16 @@ src/theme.js          ← all colour + typography tokens
 src/index.css         ← global styles
 src/components/**     ← shared presentational components
 index.html            ← the document shell: which font faces are loaded
+docs/UI-COPY.md       ← casing & copy conventions (Title Case guide, added T-180)
 ```
+
+**`docs/UI-COPY.md`, added 2026-10-14 (T-180 build pane).** It documents the
+settled Title Case and UI copy rules across the entire app (headings, card
+titles, field labels, buttons, menu options, empty states in Title Case;
+sentences, helper copy, metric subtexts in sentence case; `(Optional)` with a
+capital O). It was established per the owner's decision (Option a) after four
+rounds of repetitive tester casing tickets (T-157, T-164, T-176, T-178).
+Any pane adding or editing screens must consult it.
 
 **`index.html` added 2026-09-01 (T-15 build pane).** It was in no lane. It is
 here rather than under Shared because the only thing in it any pane ever edits
