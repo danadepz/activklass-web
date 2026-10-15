@@ -6,7 +6,7 @@ export default function AttendanceIndexPage() {
       title="Attendance"
       hint="Pick a class to take or review attendance."
       buildPath={(c) => `/teacher/classes/${c.id}/attendance`}
-      linkLabel="Open attendance"
+      linkLabel="Open Attendance"
     />
   )
 }

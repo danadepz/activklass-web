@@ -259,7 +259,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
         >
-          {saving ? 'Saving…' : hasChanges ? `Save attendance${dirtyCount ? ` · ${dirtyCount}` : ''}` : 'All saved'}
+          {saving ? 'Saving…' : hasChanges ? `Save Attendance${dirtyCount ? ` · ${dirtyCount}` : ''}` : 'All Saved'}
         </button>
       </div>
 
