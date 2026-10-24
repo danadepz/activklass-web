@@ -1108,7 +1108,11 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
         {/* 2026-06-20: Name fields — teachers can now correct first and last name */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">First Name <span className="text-red-400">*</span></span>
+            {/* T-191 (andecobs-295): was Tailwind text-sm/font-medium/slate-700
+                (14px, weight 500) -- a point larger and a shade lighter than
+                labelStyle, the system every other field in this modal uses.
+                That is what read as "different," not bolder. */}
+            <span style={labelStyle}>First Name <span className="text-red-400">*</span></span>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
@@ -1117,7 +1121,7 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Last Name <span className="text-red-400">*</span></span>
+            <span style={labelStyle}>Last Name <span className="text-red-400">*</span></span>
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
