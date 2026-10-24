@@ -51,7 +51,8 @@ const authState = vi.hoisted(() => ({ current: { markPasswordChanged: vi.fn(), s
 vi.mock('@/context/useAuth', () => ({ useAuth: () => authState.current }))
 vi.mock('@/components/DevQuickLogin', () => ({ default: () => null }))
 
-import Login, { shouldRedirectSignedInVisitor } from './login.jsx'
+import Login, { shouldRedirectSignedInVisitor, PasswordChecklist, PASSWORD_REQUIREMENTS } from './login.jsx'
+import { passwordError } from '@/lib/validation'
 
 const text = (html) => html.replace(/<[^>]+>/g, '').replace(/&rsquo;|&#x27;|’/g, "'").replace(/\s+/g, ' ')
 
@@ -174,5 +175,97 @@ describe('T-182 — the set-password screen is Title Case, not the old sentence 
 
   it('leaves the settled Email/Login ID label alone (andecobs-169) -- not this sweep\'s to re-open', () => {
     expect(source).toContain('Email/Login ID</label>')
+  })
+})
+
+/* T-201 (maykel_64440-301, owner decision (b), 2026-10-24): on the first-
+ * login set-password screen, replace the password-requirements sentence
+ * with a live checklist, and remove the disabled temp-password field. The
+ * card's own named trap: that field's VALUE is still load-bearing --
+ * handleSetPassword refuses setting the new password to the one just typed
+ * (:175, `newPassword === password`) -- so the fix must hide the input
+ * without touching the `password` state or that comparison. Removing the
+ * state along with the field would make the guard compare against '',
+ * which is never the typed password, silently passing it every time.
+ */
+describe('T-201 — the live password checklist mirrors passwordError, never redefines it', () => {
+  it('five requirements, same order, same thresholds as lib/validation.js\'s passwordError', () => {
+    expect(PASSWORD_REQUIREMENTS).toHaveLength(5)
+    const [length, upper, lower, digit, special] = PASSWORD_REQUIREMENTS
+
+    // Mirrors passwordError's own check order: length, upper, lower, digit, special.
+    expect(length.test('1234567')).toBe(false) // 7 chars
+    expect(length.test('12345678')).toBe(true) // 8 chars (MIN_PASSWORD)
+    expect(upper.test('abcdefgh')).toBe(false)
+    expect(upper.test('Abcdefgh')).toBe(true)
+    expect(lower.test('ABCDEFGH')).toBe(false)
+    expect(lower.test('ABCDEFGh')).toBe(true)
+    expect(digit.test('Abcdefgh')).toBe(false)
+    expect(digit.test('Abcdefg1')).toBe(true)
+    expect(special.test('Abcdefg1')).toBe(false)
+    expect(special.test('Abcdefg1!')).toBe(true)
+  })
+
+  it('a password meeting every rule passes every requirement, matching an empty passwordError()', () => {
+    const strong = 'Abcdefg1!'
+    expect(passwordError(strong)).toBe('')
+    expect(PASSWORD_REQUIREMENTS.every(({ test }) => test(strong))).toBe(true)
+  })
+})
+
+describe('T-201 — PasswordChecklist renders all five rules and reflects which are met', () => {
+  it('lists all five requirement labels', () => {
+    const html = renderToStaticMarkup(<PasswordChecklist value="" />)
+    for (const { label } of PASSWORD_REQUIREMENTS) {
+      expect(html).toContain(label)
+    }
+  })
+
+  it('an empty value shows none met -- every item the unmet (grey, hollow) style', () => {
+    const html = renderToStaticMarkup(<PasswordChecklist value="" />)
+    expect(html).not.toContain('#1F8A5B') // the met colour never appears
+  })
+
+  it('a password meeting only SOME rules shows a mix, not all-or-nothing', () => {
+    // "abcdefgh": length OK, lowercase OK; no upper, no digit, no special.
+    const html = renderToStaticMarkup(<PasswordChecklist value="abcdefgh" />)
+    const metCount = (html.match(/#1F8A5B/g) ?? []).length
+    // Met items render the colour twice each (text colour + filled circle
+    // background) -- two of five met (length, lowercase) is 4 occurrences,
+    // strictly between 0 (none) and 10 (all five).
+    expect(metCount).toBeGreaterThan(0)
+    expect(metCount).toBeLessThan(10)
+  })
+})
+
+describe('T-201 — the temp-password field is gone from the set-password screen, its STATE is not', () => {
+  const source = readFileSync(fileURLToPath(new URL('./login.jsx', import.meta.url)), 'utf8')
+
+  it('the login-password input only renders when NOT settingPassword', () => {
+    const fieldAt = source.indexOf('id="login-password"')
+    const guardAt = source.lastIndexOf('{!settingPassword && (', fieldAt)
+    expect(fieldAt).toBeGreaterThan(-1)
+    expect(guardAt).toBeGreaterThan(-1)
+    // No closing of that guard's block between the guard and the field --
+    // i.e. the field is actually inside it, not just preceded by it.
+    const between = source.slice(guardAt, fieldAt)
+    expect(between).not.toMatch(/\n {8}\)\}/) // the guard's own closing at the same indent
+  })
+
+  it('the checklist replaces the old prose sentence under New Password', () => {
+    expect(source).toContain('<PasswordChecklist value={newPassword} />')
+    expect(source).not.toMatch(/\{PASSWORD_RULE\}/)
+  })
+
+  it('THE TRAP: handleSetPassword still refuses reusing the password just typed, reading the `password` state directly', () => {
+    const at = source.indexOf('async function handleSetPassword')
+    const end = source.indexOf('\n  async function handleSubmit', at)
+    const body = source.slice(at, end)
+    expect(body).toMatch(/newPassword === password/)
+    expect(body).toMatch(/must be different from the one you were given/)
+  })
+
+  it('the `password` useState itself is still declared -- the field is hidden, not deleted', () => {
+    expect(source).toMatch(/const \[password, setPassword\] = useState\(''\)/)
   })
 })

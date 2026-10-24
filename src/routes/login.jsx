@@ -13,7 +13,7 @@ import {
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { toAuthEmail, wrongCredentialMessage } from '@/lib/logins'
-import { passwordError, PASSWORD_RULE } from '@/lib/validation'
+import { passwordError, MIN_PASSWORD } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
   SubmitButton,
@@ -22,7 +22,54 @@ import AuthLayout, {
   AuthNotice,
 } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
-import { navy, ink } from '@/theme'
+import { Check } from '@/components/icons'
+import { navy, ink, muted } from '@/theme'
+
+/* T-201 (maykel_64440-301, owner decision (b), 2026-10-24): the same five
+   rules passwordError() enforces (lib/validation.js), reported live instead
+   of one message at a time -- a checklist does not DEFINE the rules, it only
+   reports them, so these checks must stay in the same order and match the
+   same regexes passwordError uses. Duplicated here rather than exported from
+   validation.js because nothing else needs a live per-rule check, and this
+   screen owns its own display concern. */
+export const PASSWORD_REQUIREMENTS = [
+  { label: `At least ${MIN_PASSWORD} characters`, test: (v) => v.length >= MIN_PASSWORD },
+  { label: 'An uppercase letter', test: (v) => /[A-Z]/.test(v) },
+  { label: 'A lowercase letter', test: (v) => /[a-z]/.test(v) },
+  { label: 'A number', test: (v) => /\d/.test(v) },
+  { label: 'A special character (like ! @ # $)', test: (v) => /[^A-Za-z0-9\s]/.test(v) },
+]
+
+export function PasswordChecklist({ value }) {
+  return (
+    <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {PASSWORD_REQUIREMENTS.map(({ label, test }) => {
+        const met = test(value)
+        return (
+          <li key={label} className="flex items-center gap-2" style={{ fontSize: 12, color: met ? '#1F8A5B' : muted }}>
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                border: met ? 'none' : '1.5px solid #C7D0DE',
+                background: met ? '#1F8A5B' : 'transparent',
+                color: '#FFFFFF',
+              }}
+            >
+              {met && <Check className="h-2.5 w-2.5" />}
+            </span>
+            {label}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
 
 const FRIENDLY_ERRORS = {
   'auth/user-not-found': 'No account found with that email or login ID.',
@@ -211,12 +258,18 @@ export default function Login() {
           />
         </div>
 
-        <div>
-          <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <label htmlFor="login-password" style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-              Password
-            </label>
-            {!settingPassword && (
+        {/* T-201 (owner decision (b)): the temporary password just typed on
+            the sign-in step above is not shown again here -- it served its
+            purpose getting here, and `handleSetPassword`'s own guard against
+            reusing it (below) reads the `password` state directly, not this
+            field, so hiding the input changes nothing about what gets
+            checked at submit. */}
+        {!settingPassword && (
+          <div>
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <label htmlFor="login-password" style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+                Password
+              </label>
               <Link
                 to="/forgot-password"
                 className="transition hover:opacity-70"
@@ -224,26 +277,23 @@ export default function Login() {
               >
                 Forgot your password?
               </Link>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            <input
-              id="login-password"
-              className="ak-input"
-              type={showPassword ? 'text' : 'password'}
-              required
-              disabled={settingPassword}
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ ...authInputStyle, paddingRight: 46, opacity: settingPassword ? 0.6 : 1 }}
-            />
-            {!settingPassword && (
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input
+                id="login-password"
+                className="ak-input"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...authInputStyle, paddingRight: 46 }}
+              />
               <EyeToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {settingPassword && (
           <>
@@ -264,9 +314,7 @@ export default function Login() {
                 />
                 <EyeToggle shown={showNew} onToggle={() => setShowNew((s) => !s)} />
               </div>
-              <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
-                {PASSWORD_RULE}
-              </p>
+              <PasswordChecklist value={newPassword} />
             </div>
 
             <div>
