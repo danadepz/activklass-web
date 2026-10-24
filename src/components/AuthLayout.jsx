@@ -483,7 +483,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
                 inputs below): bumped from clamp(30px, 6vw, 40px). This is
                 login.jsx's own title -- the "card" variant above has its
                 own copy of this same h1 and got the same bump. */}
-            <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(32px, 6.5vw, 44px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink }}>
+            <h1 style={{ ...serif, fontSize: titleSize ?? 'clamp(32px, 6.5vw, 44px)', lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 0 8px', color: ink, textWrap: 'balance' }}>
               {title}
             </h1>
             {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 32px', lineHeight: 1.5 }}>{subtitle}</p>}

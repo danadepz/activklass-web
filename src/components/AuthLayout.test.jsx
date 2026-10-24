@@ -219,3 +219,48 @@ describe('T-184 — the scrollbar gutter beside the navy card backdrop is filled
     expect(html).not.toMatch(/position:fixed;inset:0 0 0 auto/)
   })
 })
+
+/**
+ * T-187 (andecobs-290, Derickk 2026-10-15; owner decision (b), 2026-10-24):
+ * "Reset your password" breaks after "Reset your", leaving a ragged second
+ * line that reads as unbalanced against the form below it. Derick's own
+ * suggested fix (centre the heading) was declined -- the form beneath it
+ * (Email label, input, "Back to Sign In" link) is left-aligned, and
+ * centring only the heading would put it out of step with everything else
+ * on the same card, landing on every default-variant screen at once since
+ * they share this one heading component.
+ *
+ * The owner's fix: stop the ragged wrap without moving anything.
+ * `textWrap: 'balance'` evens the two lines instead of leaving one long
+ * and one short -- exactly what the card variant's own heading
+ * (register.jsx) already had. The default variant (login.jsx,
+ * forgot-password.jsx) never got it. No textAlign change -- that is the
+ * one outcome the owner explicitly ruled out (centring the heading while
+ * the form stays left-aligned).
+ */
+describe('T-187 — the default heading balances a wrap instead of centring', () => {
+  it('"Reset Your Password" renders with textWrap: balance, matching the card variant', () => {
+    const html = sidebar('Reset Your Password')
+    const at = html.indexOf('>Reset Your Password<')
+    const openTagAt = html.lastIndexOf('<h1', at)
+    const h1Tag = html.slice(openTagAt, at)
+    expect(h1Tag).toMatch(/text-wrap:balance/)
+  })
+
+  it('does NOT centre the heading -- the declined option -- so it stays in step with the left-aligned form beneath it', () => {
+    const html = sidebar('Reset Your Password')
+    const at = html.indexOf('>Reset Your Password<')
+    const openTagAt = html.lastIndexOf('<h1', at)
+    const h1Tag = html.slice(openTagAt, at)
+    expect(h1Tag).not.toMatch(/text-align/)
+  })
+
+  it('the card variant (Register) is untouched -- it already had the balanced wrap before this card', () => {
+    const html = card('Create Your ActivKlass Account')
+    const at = html.indexOf('>Create Your ActivKlass Account<')
+    const openTagAt = html.lastIndexOf('<h1', at)
+    const h1Tag = html.slice(openTagAt, at)
+    expect(h1Tag).toMatch(/text-align:center/)
+    expect(h1Tag).toMatch(/text-wrap:balance/)
+  })
+})
