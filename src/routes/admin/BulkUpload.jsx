@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
 import { emailError } from '@/lib/validation'
 import { bulkCreateUsers } from '@/lib/admin'
@@ -234,6 +234,24 @@ export default function BulkUpload({ role, onDone, settings, users }) {
   const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState(false)
   const [showAllRows, setShowAllRows] = useState(false)
+  const fileInputRef = useRef(null)
+
+  // The one place the staged file gets put back to its empty state (T-188,
+  // andecobs-292) -- a parse failure and a create that actually made
+  // accounts both used to repeat these five calls inline, and neither was
+  // reachable from a button: the only way to back out of a staged file was
+  // reloading the page. Clearing the input's own value too is what lets the
+  // *same* file be re-picked afterwards -- without it, choosing it again
+  // sets no new value, so no change event fires and the preview never comes
+  // back.
+  function reset() {
+    setRows([])
+    setFileName('')
+    setParseError('')
+    setResult(null)
+    setShowAllRows(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   // Each row with the login it will be issued and its spreadsheet line, so a
   // row can be checked against the rows above it with the calls that check
@@ -296,8 +314,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
       setFileName(file.name)
       setShowAllRows(false)  // a fresh file always starts collapsed
     } catch (err) {
-      setRows([])
-      setFileName('')
+      reset()
       setParseError(err.message)
     }
     e.target.value = ''  // let the same file be re-picked after a fix
@@ -330,12 +347,8 @@ export default function BulkUpload({ role, onDone, settings, users }) {
         ...(grade ? { year_level: grade } : {}),
         role: r.role || role,
       })))
+      if (afterUpload(res.summary.created)) reset()
       setResult(res)
-      const cleared = afterUpload(res.summary.created)
-      if (cleared) {
-        setRows(cleared.rows)
-        setFileName(cleared.fileName)
-      }
       if (res.summary.created) onDone()
     } catch (err) {
       // A 400 with a body still carries per-row detail worth showing.
@@ -419,6 +432,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
         <label style={{ ...btnPrimary, display: 'inline-block' }}>
           📂 Choose File…
           <input type="file"
+                 ref={fileInputRef}
                  accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                  onChange={onFile}
                  style={{ display: 'none' }} />
@@ -432,6 +446,16 @@ export default function BulkUpload({ role, onDone, settings, users }) {
           <span aria-hidden="true" style={{ fontSize: 17, fontWeight: 900, color: navy, lineHeight: 1 }}>⬇</span>
           {preparing ? 'Preparing…' : 'Download Template'}
         </button>
+        {/* Only while something is staged -- nothing to back out of
+            otherwise. No confirm: discarding an unsubmitted preview destroys
+            nothing (T-188). */}
+        {(rows.length > 0 || parseError) && (
+          <button type="button"
+                  style={{ ...btnGhost, padding: '10px 18px', fontSize: 14, fontWeight: 700, borderRadius: 10 }}
+                  onClick={reset}>
+            Clear File
+          </button>
+        )}
         {fileName && (
           <span style={{ ...mono, fontSize: 12, color: faint }}>
             {fileName} · {rows.length} row{rows.length === 1 ? '' : 's'}
