@@ -11,7 +11,7 @@ import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import { bankQuestions, filterBankedQuestions, useBankedQuestions } from '@/hooks/useBankedQuestions'
 import { describeBankResult } from '@/lib/questionBank'
-import { SCORING_POLICIES, describeSyncResult, quizzesToAutoPost } from '@/lib/quizToRecord'
+import { SCORING_POLICIES, describePostScoresLine, describeSyncResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { topicOptions, topicPatch } from '@/lib/quizTopics'
 import { suggestMapping } from '@/lib/recordMapping'
@@ -409,7 +409,7 @@ function LiveSettings({ quiz, refetch }) {
   return (
     <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Change while it is live</h3>
+        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Quiz Settings</h3>
         <span style={{ fontSize: 12, color: faint }}>
           Questions and answer keys stay locked — students are sitting them.
         </span>
@@ -419,7 +419,7 @@ function LiveSettings({ quiz, refetch }) {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div style={{ width: 130 }}>
-          <label style={labelStyle}>Attempts</label>
+          <label style={labelStyle}>Allowed Attempts</label>
           <input
             className="ak-input"
             type="number"
@@ -442,7 +442,7 @@ function LiveSettings({ quiz, refetch }) {
           Unlimited attempts until it closes
         </label>
         <div style={{ minWidth: 230, flex: '0 1 260px' }}>
-          <label style={labelStyle}>Closes</label>
+          <label style={labelStyle}>Closing Date and Time</label>
           <input
             className="ak-input"
             type="datetime-local"
@@ -457,7 +457,7 @@ function LiveSettings({ quiz, refetch }) {
           className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ ...btnPrimary, padding: '12px 20px', marginBottom: 1 }}
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : 'Save Settings'}
         </button>
         {saved && <span style={{ fontSize: 13, fontWeight: 700, color: green, marginBottom: 12 }}>Saved.</span>}
       </div>
@@ -477,11 +477,20 @@ const thHead = { padding: '13px 18px', textAlign: 'left', fontSize: 11, fontWeig
  *
  * Since 2026-09-13 the same sync also runs on its own when this view or the
  * class record opens (useAutoPostScores) -- the owner wanted quiz marks in
- * the record without a button. The button stays for the case in between:
- * a teacher who has just marked an essay and wants the record updated now,
+ * the record without a button. The button stays for the case in between: a
+ * teacher who has just marked an essay and wants the record updated now,
  * without leaving. Pressing it twice is harmless -- the assessment row has
- * a derived id and merges. `auto` is the last automatic run, for the line
- * under the button.
+ * a derived id and merges.
+ *
+ * T-200 (maykel_64440-306 item 5): the sentence below used to render only
+ * once `auto` reached its `done` state, so on first paint -- before that
+ * effect resolves -- a teacher saw only the button and nothing explaining
+ * it, which is what read as "pressing this is required". The sentence now
+ * always renders, above the button, so it leads regardless of where `auto`
+ * is in its own cycle; the button is titled, and labelled, as the optional
+ * one. The label deliberately stops short of "to Class Record" -- per
+ * T-199, a pending essay makes this button skip that student, so a label
+ * promising the class record would not always be true.
  */
 function PostScoresButton({ quiz, classId, auto }) {
   const mapping = quiz.class_mappings?.[classId]
@@ -498,29 +507,22 @@ function PostScoresButton({ quiz, classId, auto }) {
       toast.error(`Could not post to the class record: ${err.message}`)
     }
   })
-  const autoLine =
-    auto?.status === 'posting' ? 'Posting scores to the class record…'
-    : auto?.skipped?.length ? auto.skipped.join(' ')
-    : auto?.status === 'done' ? `Scores post to the class record on their own when this page or the record opens${auto.written ? ` — ${auto.written} posted just now` : ''}${auto.kept ? ` — ${auto.kept} kept as typed` : ''}.`
-    : mapping ? null
-    : 'Not mapped to a grading component for this class, so nothing posts on its own — republish to map it.'
+  const leadLine = describePostScoresLine({ mapped: !!mapping, auto })
   return (
     <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+      <p role="status" style={{ fontSize: 11.5, color: auto?.skipped?.length ? goldDeep : faint, margin: 0, textAlign: 'right', maxWidth: 420, lineHeight: 1.45 }}>
+        {leadLine}
+      </p>
       <button
         type="button"
         onClick={post}
         disabled={posting}
-        title="Write each student's best graded attempt into the class record now"
+        title="Scores already post on their own — this writes them in right now instead of waiting for the next page open"
         className="transition hover:brightness-105 disabled:opacity-50"
         style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy }}
       >
-        {posting ? 'Posting…' : 'Post scores now'}
+        {posting ? 'Posting…' : 'Post Scores Now'}
       </button>
-      {autoLine && (
-        <p role="status" style={{ fontSize: 11.5, color: auto?.skipped?.length ? goldDeep : faint, margin: 0, textAlign: 'right', maxWidth: 420, lineHeight: 1.45 }}>
-          {autoLine}
-        </p>
-      )}
     </div>
   )
 }

@@ -242,6 +242,29 @@ export function quizTotalPoints(quiz) {
   return drawTotalPoints(quiz)
 }
 
+/**
+ * The sentence the published-quiz page shows above its "Post Scores Now"
+ * button -- always, regardless of where the automatic sync is in its own
+ * cycle (T-200, maykel_64440-306 item 5).
+ *
+ * Before this it rendered only once the auto-sync's effect reached its
+ * `done` state, so on first paint a teacher saw the button with no
+ * explanation at all -- which reads as "pressing this is required", when in
+ * fact scores already post on their own (useAutoPostScores, since
+ * 2026-09-13). Returning a sentence for every state, including the initial
+ * one, is what makes the sentence lead and the button read as optional.
+ */
+export function describePostScoresLine({ mapped = false, auto } = {}) {
+  if (!mapped) {
+    return 'Not mapped to a grading component for this class, so nothing posts on its own — republish to map it.'
+  }
+  if (auto?.status === 'posting') return 'Posting scores to the class record…'
+  if (auto?.skipped?.length) return auto.skipped.join(' ')
+  const justPosted = auto?.written ? `; ${auto.written} posted just now` : ''
+  const justKept = auto?.kept ? `, ${auto.kept} kept as typed` : ''
+  return `Scores post to the class record on their own — the next time this page or the class record opens${justPosted}${justKept}.`
+}
+
 /** One sentence for the toast after a sync. */
 export function describeSyncResult({ written = 0, pendingEssays = 0, notTaken = 0, versionMismatch = 0, kept = 0 } = {}) {
   const parts = [`${written} score${written === 1 ? '' : 's'} posted to the class record`]

@@ -70,9 +70,10 @@ describe('quiz editor centring (T-35)', () => {
  * 429.64, at 2133px wide and again at 377px where the row folds to two
  * columns). What is pinned here is the markup contract that produces it, for
  * both states the row has: the draft row, whose cells differ in height and so
- * must top-align, and the live "Change while it is live" strip, whose cells
- * are the same height because its Unlimited tick is a sibling of them rather
- * than a passenger inside the Attempts cell.
+ * must top-align, and the live "Quiz Settings" strip (named "Change while it
+ * is live" until T-200), whose cells are the same height because its
+ * Unlimited tick is a sibling of them rather than a passenger inside the
+ * Allowed Attempts cell.
  */
 describe('the quiz settings row lines up (T-86)', () => {
   /** The draft row: the grid whose first cell opens with the Attempts label. */
@@ -108,15 +109,16 @@ describe('the quiz settings row lines up (T-86)', () => {
   })
 
   it('leaves the live strip bottom-aligned, where its two cells are the same height', () => {
-    // "Change while it is live" shows Attempts and Closes only, each a label
-    // plus one input, so items-end and items-start put them on the same line.
+    // "Quiz Settings" (T-200 renamed it from "Change while it is live") shows
+    // Allowed Attempts and Closing Date and Time only, each a label plus one
+    // input, so items-end and items-start put them on the same line.
     expect(liveSrc).toMatch(/<div className="mt-4 flex flex-wrap items-end gap-3">/)
   })
 
-  it('keeps that strip’s Unlimited tick a sibling of its cells, not inside Attempts', () => {
-    // The moment the tick moves into the Attempts cell, this row grows the
-    // same uneven-height problem the draft row had, and items-end re-breaks it.
-    const from = liveSrc.indexOf('<label style={labelStyle}>Attempts</label>')
+  it('keeps that strip’s Unlimited tick a sibling of its cells, not inside Allowed Attempts', () => {
+    // The moment the tick moves into the Allowed Attempts cell, this row grows
+    // the same uneven-height problem the draft row had, and items-end re-breaks it.
+    const from = liveSrc.indexOf('<label style={labelStyle}>Allowed Attempts</label>')
     const span = liveSrc.slice(from, liveSrc.indexOf('Unlimited attempts until it closes', from))
     expect(span).toContain('</div>')
   })

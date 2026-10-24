@@ -14,6 +14,7 @@ import {
   assessmentIdForQuiz,
   attemptForScoring,
   bestAttempt,
+  describePostScoresLine,
   describeSweepResult,
   describeSyncResult,
   orphanedQuizAssessments,
@@ -223,6 +224,43 @@ describe('describeSyncResult', () => {
 
   it('names how many were left as typed', () => {
     expect(describeSyncResult({ written: 5, kept: 2 })).toBe('5 scores posted to the class record · 2 kept as typed.')
+  })
+})
+
+describe('describePostScoresLine (T-200, maykel_64440-306 item 5)', () => {
+  it('leads with the automatic-posting sentence even before the auto-sync has run', () => {
+    // This is the exact contradiction the tester reported: a teacher landing
+    // on the page saw the "Post Scores Now" button with nothing beside it
+    // explaining it, which reads as the button being required. `auto`
+    // undefined is that first-paint state.
+    expect(describePostScoresLine({ mapped: true, auto: undefined }))
+      .toBe('Scores post to the class record on their own — the next time this page or the class record opens.')
+  })
+
+  it('never promises the class record outright -- a pending essay can make the button skip a student', () => {
+    // Per T-199, Post Scores Now skips any student with a pending essay, so
+    // the sentence must not read as an unconditional guarantee.
+    expect(describePostScoresLine({ mapped: true, auto: undefined })).not.toMatch(/^Scores are now in the class record/)
+  })
+
+  it('says so while the automatic sync is in flight', () => {
+    expect(describePostScoresLine({ mapped: true, auto: { status: 'posting' } }))
+      .toBe('Posting scores to the class record…')
+  })
+
+  it('surfaces what the last automatic run skipped', () => {
+    expect(describePostScoresLine({ mapped: true, auto: { skipped: ['A locked period kept 2 scores out.'] } }))
+      .toBe('A locked period kept 2 scores out.')
+  })
+
+  it('names what the last automatic run actually posted', () => {
+    expect(describePostScoresLine({ mapped: true, auto: { status: 'done', written: 4, kept: 1 } }))
+      .toBe('Scores post to the class record on their own — the next time this page or the class record opens; 4 posted just now, 1 kept as typed.')
+  })
+
+  it('says plainly why nothing posts at all when the quiz has no mapping for this class', () => {
+    expect(describePostScoresLine({ mapped: false }))
+      .toBe('Not mapped to a grading component for this class, so nothing posts on its own — republish to map it.')
   })
 })
 
