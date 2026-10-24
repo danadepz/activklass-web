@@ -134,6 +134,19 @@ describe('T-141 — the policy popup’s own content, read off the source (close
     expect(body).toMatch(/guardian/i)
   })
 
+  /* T-183 (andecobs-291, Derickk 2026-10-15): the four "What We Collect"
+     items read as indented paragraphs, no bullet markers. The markup was
+     already a correct <ul>/<li> -- Derick's own guess that it needed
+     restructuring was wrong. The actual cause: Tailwind's preflight resets
+     `ul { list-style: none }`, and the inline paddingLeft:20 restored the
+     indent but not the marker. House pattern (Markdown.jsx:94) sets
+     listStyle: 'disc' explicitly; this <ul> didn't. One property. */
+  it('the "What We Collect" list sets listStyle: disc, matching every other bulleted list in the app', () => {
+    const ulAt = body.indexOf('<ul')
+    const ulTag = body.slice(ulAt, body.indexOf('>', ulAt) + 1)
+    expect(ulTag).toMatch(/listStyle:\s*'disc'/)
+  })
+
   /* T-182 (andecobs-291, Derickk 2026-10-15): "all seven policy headings"
      read sentence case -- docs/UI-COPY.md Rule 1 covers page/section
      headings, and these seven h4s are exactly that. Three already had

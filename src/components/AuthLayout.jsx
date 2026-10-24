@@ -194,7 +194,7 @@ function PrivacyPolicyModal({ open, onClose }) {
         </section>
         <section>
           <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>What We Collect</h4>
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <ul style={{ margin: 0, paddingLeft: 20, listStyle: 'disc' }}>
             <li>Account details: your name, email address or login ID, phone number, and the school you're affiliated with.</li>
             <li>Class records: grades, attendance, quiz and assignment scores, and the syllabus content a teacher creates.</li>
             <li>AI-assisted features: when a teacher generates a quiz, a syllabus, or a risk prediction, the content involved (a topic, a student's grade history) is sent to the AI service behind that feature, and the result is saved into your class records.</li>
