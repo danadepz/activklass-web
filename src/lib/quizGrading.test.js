@@ -7,7 +7,7 @@
  * credit, hence the dedicated block for it.
  */
 import { describe, expect, it } from 'vitest'
-import { gradeAnswer, gradeQuiz } from './quizGrading.js'
+import { applyEssayMarks, gradeAnswer, gradeQuiz } from './quizGrading.js'
 
 const mcq = (id, points = 5) => ({
   id,
@@ -253,5 +253,55 @@ describe('gradeAnswer — other objective types', () => {
       correct: false,
     })
     expect(gradeAnswer({ points: 5 }, 'x')).toEqual({ earned: 0, correct: false })
+  })
+})
+
+describe('applyEssayMarks', () => {
+  const pending = (id, possible = 10) => ({ id, qtype: 'essay', earned: 0, possible, correct: null, pending: true })
+  const objective = (id, earned = 5, possible = 5) => ({ id, qtype: 'mcq', earned, possible, correct: true, pending: false })
+
+  it('clears has_essays_pending and flips status to graded once every essay is marked', () => {
+    const result = applyEssayMarks([objective('q1'), pending('q2')], { q2: { earned: 7 } })
+    expect(result.has_essays_pending).toBe(false)
+    expect(result.status).toBe('graded')
+    expect(result.total_score).toBe(12) // 5 objective + 7 essay
+    expect(result.total_possible).toBe(15)
+    expect(result.per_question[1]).toMatchObject({ earned: 7, pending: false, feedback: null })
+  })
+
+  it('leaves a second, unmarked essay pending -- a partial save, not a revert', () => {
+    const result = applyEssayMarks([pending('q1'), pending('q2')], { q1: { earned: 4 } })
+    expect(result.per_question[0]).toMatchObject({ earned: 4, pending: false })
+    expect(result.per_question[1]).toMatchObject({ earned: 0, pending: true })
+    expect(result.has_essays_pending).toBe(true)
+    expect(result.status).toBe('submitted')
+  })
+
+  it('clamps an essay score to the question\'s own possible points', () => {
+    const result = applyEssayMarks([pending('q1', 10)], { q1: { earned: 99 } })
+    expect(result.per_question[0].earned).toBe(10)
+  })
+
+  it('clamps a negative score to zero', () => {
+    const result = applyEssayMarks([pending('q1', 10)], { q1: { earned: -3 } })
+    expect(result.per_question[0].earned).toBe(0)
+  })
+
+  it('keeps optional feedback trimmed, and null when blank', () => {
+    const result = applyEssayMarks([pending('q1')], { q1: { earned: 5, feedback: '  Cite a source next time.  ' } })
+    expect(result.per_question[0].feedback).toBe('Cite a source next time.')
+    const blank = applyEssayMarks([pending('q1')], { q1: { earned: 5, feedback: '   ' } })
+    expect(blank.per_question[0].feedback).toBeNull()
+  })
+
+  it('leaves an already-marked essay alone even if it appears in marks again', () => {
+    const already = { id: 'q1', qtype: 'essay', earned: 6, possible: 10, correct: null, pending: false }
+    const result = applyEssayMarks([already], { q1: { earned: 2 } })
+    expect(result.per_question[0].earned).toBe(6)
+  })
+
+  it('leaves objective questions untouched', () => {
+    const result = applyEssayMarks([objective('q1', 5, 5)], { q1: { earned: 1 } })
+    expect(result.per_question[0]).toEqual(objective('q1', 5, 5))
   })
 })

@@ -25,6 +25,7 @@ import {
   feedbackProblem,
 } from '@/lib/quizFeedback'
 import { drawTotalPoints, poolProblem } from '@/lib/quizPool'
+import { applyEssayMarks, correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import {
   attemptsAllowedFor,
   attemptsLabel,
@@ -640,7 +641,9 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
       )
       const attempts = {}
       attemptsSnap.forEach((d) => {
-        const a = d.data()
+        // `id` is kept on the object -- it is not part of `d.data()` -- so a
+        // teacher marking an essay has a document to write the mark onto.
+        const a = { id: d.id, ...d.data() }
         // filter attempts for this specific class
         if (a.class_id === classId) {
           ;(attempts[a.student_id] ??= []).push(a)
@@ -751,9 +754,149 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
         <StudentDetailsModal
           detailsFor={detailsFor}
           classId={classId}
+          quiz={quiz}
           totalPoints={totalPoints}
           onClose={() => setDetailsFor(null)}
+          refetchResults={refetch}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Write a teacher's essay scores onto one attempt (T-199, maykel_64440-305).
+ *
+ * Pure recomputation lives in lib/quizGrading.js (`applyEssayMarks`) so the
+ * arithmetic is unit-tested without a project attached; this is only the
+ * Firestore half, following the same direct-updateDoc pattern the rest of
+ * this page uses for quiz_attempts (DiscardAttemptButton, GrantAttemptButton).
+ */
+async function saveEssayMarks(attempt, marks) {
+  const result = applyEssayMarks(attempt.per_question ?? [], marks)
+  await updateDoc(doc(db, 'quiz_attempts', attempt.id), {
+    per_question: result.per_question,
+    total_score: result.total_score,
+    score: result.total_score,
+    total_possible: result.total_possible,
+    score_ratio: result.score_ratio,
+    has_essays_pending: result.has_essays_pending,
+    status: result.status,
+  })
+  return result
+}
+
+/**
+ * One attempt's answers, read-only, with essay marking where one is still
+ * pending (T-199, maykel_64440-305 / -306 items 8-10).
+ *
+ * Before this there was no way to read what a student submitted anywhere in
+ * the app's teacher side, and an essay question stayed "Essay pending
+ * review" forever -- nothing cleared `pending`, so `quizToRecord`'s skip
+ * (deliberately kept, see quizToRecord.js:187-190) meant the student never
+ * reached the class record. Marking here clears it honestly instead of
+ * loosening that skip.
+ *
+ * Deliberately not built (per the card, a bigger feature than this pass):
+ * selecting among several *simultaneously* pending attempts for the same
+ * student -- each attempt row already opens its own answers independently,
+ * which covers the ordinary case of one open attempt at a time.
+ */
+function AttemptAnswers({ attempt, quiz, onMarked }) {
+  const [drafts, setDrafts] = useState({})
+  const [error, setError] = useState(null)
+  const questions = quiz?.questions ?? []
+  const perQById = Object.fromEntries((attempt.per_question ?? []).map((pq) => [pq.id, pq]))
+  const answers = attempt.answers ?? {}
+  const dirty = Object.values(drafts).some((d) => d?.touched)
+  const anyPending = questions.some((q) => perQById[q.id]?.pending)
+
+  const [save, savingAction] = useAsyncAction(async () => {
+    const marks = {}
+    for (const [qid, d] of Object.entries(drafts)) {
+      if (d?.touched) marks[qid] = { earned: d.earned, feedback: d.feedback }
+    }
+    if (!Object.keys(marks).length) return
+    setError(null)
+    try {
+      const result = await saveEssayMarks(attempt, marks)
+      toast.success(
+        result.has_essays_pending
+          ? 'Marks saved. Another essay on this attempt is still pending.'
+          : 'Marks saved. This attempt is fully graded.',
+      )
+      setDrafts({})
+      onMarked?.(result)
+    } catch (err) {
+      setError(err.message)
+    }
+  })
+
+  return (
+    <div className="mt-2 flex flex-col gap-2.5" style={{ background: 'rgba(14,42,92,0.025)', border: `1px solid ${line}`, borderRadius: 10, padding: 12 }}>
+      {questions.map((q, i) => {
+        const pq = perQById[q.id]
+        const given = answers[q.id]
+        return (
+          <div key={q.id} style={i > 0 ? { borderTop: '1px solid rgba(14,42,92,0.07)', paddingTop: 8 } : undefined}>
+            <p style={{ fontSize: 12.5, fontWeight: 700, color: ink, margin: 0 }}>
+              Q{i + 1}. <span style={{ fontWeight: 400, color: '#3A4A6B' }}>{q.text}</span>
+              <span style={{ color: faint, fontWeight: 400 }}> · {TYPE_LABELS[q.qtype] || q.qtype} · {q.points} pts</span>
+            </p>
+            <p style={{ fontSize: 12.5, color: '#3A4A6B', margin: '4px 0 0' }}>
+              <strong>Answer: </strong>{studentAnswerText(q, given)}
+            </p>
+            {q.qtype !== 'essay' && (
+              <p style={{ fontSize: 11.5, margin: '2px 0 0', color: pq?.correct ? green : red }}>
+                {pq?.correct ? 'Correct' : 'Incorrect'}
+                <span style={{ color: faint }}> · Key: {correctAnswerText(q)}</span>
+              </p>
+            )}
+            {q.qtype === 'essay' && pq && !pq.pending && (
+              <p style={{ fontSize: 11.5, color: muted, margin: '2px 0 0' }}>
+                Marked {pq.earned} / {pq.possible}
+                {pq.feedback && <span style={{ color: faint }}> · "{pq.feedback}"</span>}
+              </p>
+            )}
+            {q.qtype === 'essay' && pq?.pending && (
+              <div className="mt-1.5 flex flex-col gap-1.5" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 8, padding: 9 }}>
+                {q.rubric && <p style={{ fontSize: 11, color: faint, margin: 0 }}>Rubric: {q.rubric}</p>}
+                <div className="flex items-center gap-2">
+                  <label style={{ fontSize: 11.5, color: ink, fontWeight: 600 }}>Score</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={pq.possible}
+                    step="0.5"
+                    value={drafts[q.id]?.earned ?? ''}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], touched: true, earned: e.target.value } }))}
+                    style={{ ...fieldStyle, ...mono, width: 64, padding: '6px 9px' }}
+                  />
+                  <span style={{ fontSize: 12, color: faint }}>/ {pq.possible}</span>
+                </div>
+                <textarea
+                  rows={2}
+                  placeholder="Feedback (optional)"
+                  value={drafts[q.id]?.feedback ?? ''}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], touched: true, feedback: e.target.value } }))}
+                  style={{ ...fieldStyle, resize: 'vertical', fontSize: 12.5 }}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {error && <AlertBox>{error}</AlertBox>}
+      {anyPending && (
+        <button
+          type="button"
+          onClick={save}
+          disabled={savingAction || !dirty}
+          className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ ...btnPrimary, alignSelf: 'flex-start', padding: '8px 16px', fontSize: 12.5 }}
+        >
+          {savingAction ? 'Saving…' : 'Save marks'}
+        </button>
       )}
     </div>
   )
@@ -767,9 +910,17 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
  * plus this quiz's attempts for that student. Never a password -- the
  * fields kept on the row (see ResultsView above) do not include one.
  */
-function StudentDetailsModal({ detailsFor, classId, totalPoints, onClose }) {
-  const { student: s, allowed, best, attempts } = detailsFor
+function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, onClose, refetchResults }) {
+  const { student: s, allowed } = detailsFor
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: `${s.last_name}, ${s.first_name}` })
+  // A local copy so marking an essay updates this dialog immediately, without
+  // waiting on the results table's own refetch (still triggered, for when
+  // this closes) -- detailsFor is a snapshot taken at the moment "View
+  // details" was clicked and does not update on its own.
+  const [attempts, setAttempts] = useState(detailsFor.attempts)
+  const [openAttemptId, setOpenAttemptId] = useState(null)
+  const scores = attempts.filter((a) => a.total_score != null).map((a) => a.total_score)
+  const best = scores.length ? Math.max(...scores) : null
 
   const fields = [
     ['ID / login', s.login_id],
@@ -780,6 +931,11 @@ function StudentDetailsModal({ detailsFor, classId, totalPoints, onClose }) {
     ['Year level', s.year_level],
     ['Status', STATUS_LABELS[s.status] ?? s.status],
   ].filter(([, value]) => value)
+
+  function onMarked(attemptId, result) {
+    setAttempts((prev) => prev.map((a) => (a.id === attemptId ? { ...a, ...result } : a)))
+    refetchResults?.()
+  }
 
   return (
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
@@ -807,13 +963,44 @@ function StudentDetailsModal({ detailsFor, classId, totalPoints, onClose }) {
               {best !== null && <> · Best {best} / {totalPoints}</>}
             </p>
             {attempts.length > 0 && (
-              <div className="mt-2 flex flex-col gap-1">
-                {attempts.map((a, i) => (
-                  <div key={i} style={{ ...mono, fontSize: 12, color: '#3A4A6B', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{a.submitted_at ? new Date(a.submitted_at.seconds ? a.submitted_at.seconds * 1000 : a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `Attempt ${i + 1}`}</span>
-                    <span>{a.total_score != null ? `${a.total_score} / ${a.total_possible ?? totalPoints}` : a.status}</span>
-                  </div>
-                ))}
+              <div className="mt-2 flex flex-col gap-2">
+                {attempts.map((a, i) => {
+                  const pending = a.status === 'submitted'
+                  const isOpen = openAttemptId === a.id
+                  return (
+                    <div key={a.id ?? i}>
+                      <div style={{ ...mono, fontSize: 12, color: '#3A4A6B', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span>{a.submitted_at ? new Date(a.submitted_at.seconds ? a.submitted_at.seconds * 1000 : a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `Attempt ${i + 1}`}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: pending ? goldDeep : undefined }}>
+                            {a.total_score != null ? `${a.total_score} / ${a.total_possible ?? totalPoints}` : a.status}
+                            {pending ? ' · pending' : ''}
+                          </span>
+                          {/* Read-only even when graded -- a teacher checking a
+                              contested mark needs the submission, not just the
+                              number (T-199). */}
+                          {a.id && (
+                            <button
+                              type="button"
+                              onClick={() => setOpenAttemptId(isOpen ? null : a.id)}
+                              className="transition hover:opacity-70"
+                              style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: blueText, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              {isOpen ? 'Hide answers' : 'View answers'}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      {isOpen && (
+                        <AttemptAnswers
+                          attempt={a}
+                          quiz={quiz}
+                          onMarked={(result) => onMarked(a.id, result)}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

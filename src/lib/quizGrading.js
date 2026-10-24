@@ -131,3 +131,42 @@ export function studentAnswerText(q, answer) {
 export function matchingChoices(q) {
   return [...new Set((q.answer_key?.pairs ?? []).map((p) => p.right))]
 }
+
+/**
+ * Apply a teacher's essay scores onto an attempt's existing `per_question`
+ * breakdown and recompute the totals that depend on it.
+ *
+ * `marks` is `{ [questionId]: { earned, feedback? } }` for the essay
+ * questions being marked right now -- not necessarily all of them, so
+ * marking one essay on a two-essay quiz saves that one and leaves the other
+ * `pending`. `has_essays_pending` (and with it the `submitted` status
+ * `quizToRecord` treats as unscorable, see `quizScoreCells`) clears only
+ * once every essay question in `perQuestion` has been marked.
+ *
+ * A non-essay or already-marked row is returned unchanged, so this is safe
+ * to call with the attempt's full `per_question` array every time.
+ */
+export function applyEssayMarks(perQuestion = [], marks = {}) {
+  const per_question = perQuestion.map((pq) => {
+    if (pq.qtype !== 'essay' || !pq.pending) return pq
+    const mark = marks[pq.id]
+    if (!mark) return pq
+    const possible = Number(pq.possible) || 0
+    const earned = Math.min(possible, Math.max(0, round2(Number(mark.earned) || 0)))
+    return { ...pq, earned, pending: false, feedback: mark.feedback?.trim() || null }
+  })
+  const total_score = round2(per_question.reduce((sum, pq) => sum + (Number(pq.earned) || 0), 0))
+  const total_possible = per_question.reduce((sum, pq) => sum + (Number(pq.possible) || 0), 0)
+  const has_essays_pending = per_question.some((pq) => pq.qtype === 'essay' && pq.pending)
+  return {
+    per_question,
+    total_score,
+    total_possible,
+    score_ratio: total_possible ? round2(total_score / total_possible) : 0,
+    has_essays_pending,
+    // 'submitted' is the status quizToRecord's skip treats as unscorable
+    // (see quizScoreCells) -- so a fully-marked attempt must read 'graded',
+    // the same status an all-objective attempt gets at submit time.
+    status: has_essays_pending ? 'submitted' : 'graded',
+  }
+}
