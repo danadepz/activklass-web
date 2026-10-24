@@ -28,7 +28,7 @@ import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
-import { ArrowRight, Check, Clock, Plus, X, Lock } from '@/components/icons'
+import { ArrowRight, Check, Clock, X, Lock } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -52,10 +52,6 @@ const cardStyle = {
 const headerStyle = {
   padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)',
   display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
-}
-const iconSquare = {
-  width: 36, height: 36, borderRadius: 10, background: navy, color: gold,
-  display: 'grid', placeItems: 'center', flexShrink: 0,
 }
 const bodyStyle = { padding: '24px 28px', overflowY: 'auto' }
 const footerStyle = {
@@ -196,9 +192,6 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
     <div {...overlayProps} style={overlayStyle}>
       <form {...panelProps} onSubmit={submit} style={{ ...cardStyle, maxWidth: 460 }}>
         <div style={headerStyle}>
-          <span style={iconSquare}>
-            <Plus className="h-[18px] w-[18px]" />
-          </span>
           <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>New Assessment · {record.period.name}</h2>
         </div>
         <div style={bodyStyle} className="flex flex-col gap-4">
@@ -823,7 +816,6 @@ function ContestReviewModal({ classId, contest, quizId, error, busy, onResolve, 
     <div {...overlayProps} style={overlayStyle}>
       <div {...panelProps} style={{ ...cardStyle, maxWidth: 760 }}>
         <div style={headerStyle}>
-          <span style={{ ...iconSquare, fontSize: 15 }} aria-hidden="true">◆</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...serif, fontSize: 20, color: ink, lineHeight: 1.2 }}>{contest.student_name}</div>
             <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>
