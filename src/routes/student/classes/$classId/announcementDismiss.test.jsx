@@ -86,15 +86,15 @@ describe('Announcements tab -- dismiss control and the two empty states', () => 
     expect(html.match(/>Dismiss</g)?.length).toBe(2)
   })
 
-  it('reads "No announcements" when the class has posted none at all', () => {
+  it('reads "No Announcements" when the class has posted none at all', () => {
     const html = page({ announcements: [], announcementsTotal: 0 })
-    expect(html).toContain('No announcements')
-    expect(html).not.toContain('All caught up')
+    expect(html).toContain('No Announcements')
+    expect(html).not.toContain('All Caught Up')
   })
 
   it('reads a different empty state once every posted announcement has been dismissed', () => {
     const html = page({ announcements: [], announcementsTotal: 2 })
-    expect(html).toContain('All caught up')
-    expect(html).not.toContain('No announcements')
+    expect(html).toContain('All Caught Up')
+    expect(html).not.toContain('No Announcements')
   })
 })

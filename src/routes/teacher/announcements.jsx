@@ -21,6 +21,11 @@ const CATEGORIES = [
 ]
 const catMap = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
 
+/** The bell notification's label prefix for a posted announcement (T-189). */
+export function announcementNotificationPrefix(category) {
+  return category === 'urgent' ? 'Urgent Announcement' : 'New Announcement'
+}
+
 /* The composer's blank state -- shared by the initial useState, a
    successful post and the Clear control, so the three cannot drift. */
 const EMPTY_FORM = {
@@ -256,7 +261,7 @@ export default function AnnouncementsPage() {
       }
       await batch.commit()
       // Best-effort: the announcement is posted even if the bell fails.
-      const prefix = fields.category === 'urgent' ? 'Urgent announcement' : 'New announcement'
+      const prefix = announcementNotificationPrefix(fields.category)
       await Promise.all(targets.map((c) =>
         notifyStudents({
           studentIds: c.student_ids ?? [],

@@ -392,7 +392,7 @@ function TopicsTab({ syllabus, classId, quizzes = [], attemptsByQuiz = {}, tasks
   }, [focusTopicId])
 
   if (!syllabus || !(syllabus.modules?.length)) {
-    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No modules yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
+    return <Empty icon={<BookOpen className="h-6 w-6" />} title="No Modules Yet" text="Your teacher hasn't published the modules and sub-modules for this class." />
   }
 
   return (
@@ -814,7 +814,7 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
 function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAssessment, onContested, dropped = false }) {
   const [contestAsmt, setContestAsmt] = useState(null)
   if (!entry || entry.final_grade == null) {
-    return <Empty icon={<ClipboardList className="h-6 w-6" />} title="No grades yet" text="Your grade summary appears here once your teacher records and saves your scores." />
+    return <Empty icon={<ClipboardList className="h-6 w-6" />} title="No Grades Yet" text="Your grade summary appears here once your teacher records and saves your scores." />
   }
   const components = entry.components ?? []
   const assessments = entry.assessments ?? []
@@ -1040,7 +1040,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
       </div>
 
       {log.length === 0 ? (
-        <Empty icon={<CalendarCheck className="h-6 w-6" />} title="No attendance recorded" text="Your daily attendance will appear here once your teacher starts marking the sheet." />
+        <Empty icon={<CalendarCheck className="h-6 w-6" />} title="No Attendance Recorded" text="Your daily attendance will appear here once your teacher starts marking the sheet." />
       ) : (
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
           <div className="overflow-x-auto">
@@ -1122,7 +1122,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
 
 function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId, dropped = false }) {
   if (quizzes.length === 0) {
-    return <Empty icon={<FileText className="h-6 w-6" />} title="No quizzes yet" text="Quizzes your teacher publishes for this class will show up here." />
+    return <Empty icon={<FileText className="h-6 w-6" />} title="No Quizzes Yet" text="Quizzes your teacher publishes for this class will show up here." />
   }
   return (
     <div className="flex flex-col gap-3">
@@ -1458,7 +1458,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
     return (
       <div className="flex flex-col gap-4">
         {forecast}
-        <Empty icon={<BarChart className="h-6 w-6" />} title="No analytics yet" text="Once your teacher records and saves graded work, your performance trends will appear here." />
+        <Empty icon={<BarChart className="h-6 w-6" />} title="No Analytics Yet" text="Once your teacher records and saves graded work, your performance trends will appear here." />
       </div>
     )
   }
@@ -1613,8 +1613,8 @@ function AnnouncementsTab({ announcements, announcementsTotal, studentId, onDism
 
   if (announcements.length === 0) {
     return announcementsTotal > 0
-      ? <Empty icon={<Megaphone className="h-6 w-6" />} title="All caught up" text="You've dismissed every announcement from your teacher." />
-      : <Empty icon={<Megaphone className="h-6 w-6" />} title="No announcements" text="Class announcements from your teacher will show up here." />
+      ? <Empty icon={<Megaphone className="h-6 w-6" />} title="All Caught Up" text="You've dismissed every announcement from your teacher." />
+      : <Empty icon={<Megaphone className="h-6 w-6" />} title="No Announcements" text="Class announcements from your teacher will show up here." />
   }
 
   const handleDismiss = async (announcementId) => {
