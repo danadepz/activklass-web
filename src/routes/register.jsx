@@ -655,7 +655,7 @@ export default function Register() {
                       <input id="reg-school-name" className="ak-input" required maxLength={120} placeholder="Name of your School" value={form.newSchoolName} onChange={set('newSchoolName')} style={authInputStyle} />
                     </Field>
                     <Field id="reg-school-abbr" label="Abbreviation">
-                      <input id="reg-school-abbr" className="ak-input" required maxLength={12} placeholder="UCB" value={form.newSchoolAbbr} onChange={set('newSchoolAbbr')} style={{ ...authInputStyle, textTransform: 'uppercase' }} />
+                      <input id="reg-school-abbr" className="ak-input" required maxLength={12} placeholder="e.g. ABC" value={form.newSchoolAbbr} onChange={set('newSchoolAbbr')} style={{ ...authInputStyle, textTransform: 'uppercase' }} />
                     </Field>
                   </div>
                 )}

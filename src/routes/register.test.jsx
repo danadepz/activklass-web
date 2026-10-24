@@ -855,3 +855,18 @@ describe('T-182 — the step 1 heading is Title Case', () => {
     expect(html).not.toContain('Create your ActivKlass account')
   })
 })
+
+/* T-185 (andecobs-289, Derickk 2026-10-15): the Abbreviation field on step 3
+   ("Your school", Others path) placeholdered "UCB" -- one specific
+   institution's own initials, shown to every school filling in the form.
+   Replaced with a generic example matching the Campus field beside it
+   ("Main campus"). Source-read, not rendered -- step 3 needs the "Others"
+   school path selected, internal state a static render of the default
+   step 1 can't reach (same constraint register.test.jsx's own "steps 3 and
+   4, read off the source" test above already documents). */
+describe('T-185 — the Abbreviation placeholder is generic, not one school\'s initials', () => {
+  it('reads "e.g. ABC", not "UCB"', () => {
+    expect(registerSource).toContain('placeholder="e.g. ABC"')
+    expect(registerSource).not.toMatch(/placeholder="UCB"/)
+  })
+})
