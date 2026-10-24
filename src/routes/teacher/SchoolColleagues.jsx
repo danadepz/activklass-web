@@ -93,7 +93,7 @@ function Colleagues() {
         </p>
       )}
       {n > 0 && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
           {colleagues.map((c) => (
             <li key={c.id} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderRadius: 10, background: 'rgba(14,42,92,0.035)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 14, fontWeight: 500, color: ink }}>{c.last_name}, {c.first_name}</span>

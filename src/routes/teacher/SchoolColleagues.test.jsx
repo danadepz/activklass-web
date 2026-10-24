@@ -58,6 +58,24 @@ describe('SchoolColleaguesCard', () => {
     expect(html).not.toMatch(/code|invite|request/i)
   })
 
+  it('caps the list height so a large roster scrolls instead of stretching the page', () => {
+    // T-196 (andecobs-300): "Your School" listed all 24 colleagues at full
+    // height with no cap, so a bigger roster stretches the profile page
+    // arbitrarily. The owner's decision (a): keep the panel and the
+    // addresses, just wrap the list so it scrolls instead of growing.
+    state.colleagues = {
+      ...state.colleagues,
+      colleagues: Array.from({ length: 24 }, (_, i) => ({
+        id: `t${i}`, last_name: `Teacher${i}`, first_name: 'A', email: `t${i}@activklass.internal`,
+      })),
+    }
+    const html = render(<SchoolColleaguesCard />)
+    const ulStyle = html.match(/<ul style="([^"]*)"/)?.[1] ?? ''
+    expect(ulStyle).toMatch(/max-height/)
+    expect(ulStyle).toMatch(/overflow-y:\s*auto/)
+    state.colleagues = { ...state.colleagues, colleagues: [] }
+  })
+
   it('with nobody else yet, says colleagues appear on their own', () => {
     state.colleagues = { ...state.colleagues, colleagues: [] }
     const html = render(<SchoolColleaguesCard />)
