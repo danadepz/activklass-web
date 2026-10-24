@@ -21,10 +21,16 @@
  *   (T-157, ticket 231) and the card text below it — checked, not re-fixed.
  * - 257 (announcements.jsx): "All my classes (Global)" -> "All My Classes
  *   (Global)" (an <option> value="" label, not the value), "No announcements
- *   yet" -> "No Announcements Yet". The filtered-category empty state keeps
- *   its own wording. Two more (optional) markers in this same file —
- *   "Expires On" and "+ Link a resource" — are title-cased for the same
- *   consistency pass.
+ *   yet" -> "No Announcements Yet". The filtered-category empty state kept
+ *   its own wording at the time. Two more (optional) markers in this same
+ *   file — "Expires On" and "+ Link a resource" — are title-cased for the
+ *   same consistency pass.
+ *   T-194 (2026-10-24, andecobs-294) later aligned the two empty-state
+ *   HEADINGS to one string, "No Announcements Found" — the tester saw them
+ *   read differently and the owner chose that compromise. Only the
+ *   subtexts still differ ("Use the form above…" vs "Switch the filter back
+ *   to…"), because they carry situation-specific guidance a shared heading
+ *   cannot.
  * - 258 (classes/index.jsx): SORT_OPTIONS labels only — "Last accessed" ->
  *   "Last Accessed", "Subject name" -> "Subject Name". The sort keys
  *   ('default'/'subject') T-134 named are untouched.
@@ -133,9 +139,16 @@ describe('T-176 — Announcements (announcements.jsx, 257)', () => {
     expect(announcementsSrc).not.toContain('All my classes (Global)')
   })
 
-  it('title-cases the empty state, leaving the filtered-category wording alone', () => {
-    expect(announcementsSrc).toContain("'No Announcements Yet'")
-    expect(announcementsSrc).toMatch(/No [Aa]nnouncements (?:in this category|Found)/)
+  it('T-194: aligns both empty-state headings to one string, leaving the subtexts different', () => {
+    // Both the never-posted and the filtered-empty states now share one
+    // heading — the old "No Announcements Yet" string must be gone, not
+    // just overshadowed by a second one.
+    expect(announcementsSrc).toContain('No Announcements Found')
+    expect(announcementsSrc).not.toContain('No Announcements Yet')
+    // The subtexts are what still carries the situation-specific guidance,
+    // and the owner's decision (T-194, 2026-10-24) was to leave them as is.
+    expect(announcementsSrc).toContain('Use the form above to post your first announcement.')
+    expect(announcementsSrc).toContain('Switch the filter back to "All" or post a new one.')
   })
 
   it('also title-cases the two other (optional) markers touched in this pass', () => {

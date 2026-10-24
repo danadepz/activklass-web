@@ -54,7 +54,7 @@ function EmptyState({ filtered }) {
     <div style={{ textAlign: 'center', padding: '64px 32px', color: '#9AA6BD' }}>
       <Megaphone aria-hidden style={{ width: 48, height: 48, margin: '0 auto 16px', color: '#C7CEDC' }} />
       <div style={{ fontWeight: 700, fontSize: 16, color: '#6A7A95', marginBottom: 8 }}>
-        {filtered ? 'No Announcements Found' : 'No Announcements Yet'}
+        No Announcements Found
       </div>
       <div style={{ fontSize: 13 }}>
         {filtered
