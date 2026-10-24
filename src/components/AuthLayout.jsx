@@ -184,7 +184,7 @@ function PrivacyPolicyModal({ open, onClose }) {
     >
       <div className="flex flex-col" style={{ gap: 18 }}>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>About this policy</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>About This Policy</h4>
           <p style={{ margin: 0 }}>
             ActivKlass is a capstone project built for DepEd and CHED classrooms, currently in
             its pilot phase — the people using it today are real teachers, students and school
@@ -193,7 +193,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </p>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>What we collect</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>What We Collect</h4>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             <li>Account details: your name, email address or login ID, phone number, and the school you're affiliated with.</li>
             <li>Class records: grades, attendance, quiz and assignment scores, and the syllabus content a teacher creates.</li>
@@ -202,7 +202,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </ul>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Why we collect it</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Why We Collect It</h4>
           <p style={{ margin: 0 }}>
             To run the class record and gradebook system you're using: computing grades,
             tracking attendance, generating and grading quizzes, predicting which students may
@@ -210,7 +210,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </p>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Consent, including for a minor</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Consent, Including for a Minor</h4>
           <p style={{ margin: 0 }}>
             Many students using ActivKlass are minors. Where RA 10173 asks for a parent or
             guardian's consent before a minor's data is processed, that consent is recorded
@@ -220,7 +220,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </p>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>How it's protected</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>How It's Protected</h4>
           <p style={{ margin: 0 }}>
             Your data is stored with the cloud infrastructure ActivKlass's hosting depends on,
             behind sign-in and access rules that limit who can read or change it — a teacher can
@@ -229,7 +229,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </p>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Your rights</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Your Rights</h4>
           <p style={{ margin: 0 }}>
             Under RA 10173 you have the right to be informed about what's collected, to access
             your own data, to have it corrected if it's wrong, and to object to or withdraw
@@ -240,7 +240,7 @@ function PrivacyPolicyModal({ open, onClose }) {
           </p>
         </section>
         <section>
-          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Changes to this policy</h4>
+          <h4 style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 700, color: ink }}>Changes to This Policy</h4>
           <p style={{ margin: 0 }}>
             This is a pilot system under active development, so this policy will change as the
             product does.

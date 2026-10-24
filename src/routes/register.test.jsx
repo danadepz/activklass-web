@@ -843,3 +843,15 @@ describe('T-169 — the abbreviation reaches the request, so it can reach the sc
     expect(registerSource).not.toMatch(/school_abbr: form\.newSchoolAbbr/)
   })
 })
+
+/* T-182 (andecobs-289, Derickk 2026-10-15): the screens a visitor sees
+   before logging in never got the Title Case pass the rest of the product
+   got -- rounds one to four (T-157, T-164, T-176, T-178) swept the signed-in
+   screens and left this one. docs/UI-COPY.md Rule 1 covers page headings. */
+describe('T-182 — the step 1 heading is Title Case', () => {
+  it('reads "Create Your ActivKlass Account", not the old sentence case', () => {
+    const html = step1()
+    expect(html).toContain('Create Your ActivKlass Account')
+    expect(html).not.toContain('Create your ActivKlass account')
+  })
+})

@@ -85,7 +85,15 @@ describe('forgot password page itself (T-131)', () => {
 
   it('drops "Remembered it?" but still offers a way back to sign in', () => {
     expect(html).not.toContain('Remembered it?')
-    expect(html).toContain('Back to sign in')
+    expect(html).toContain('Back to Sign In')
+  })
+
+  /* T-182 (andecobs-290, Derickk 2026-10-15): the page heading and the
+     "Back to sign in" link both read sentence case -- the link is covered
+     just above; this is the heading. */
+  it('the heading is Title Case: "Reset Your Password", not the old sentence case', () => {
+    expect(html).toContain('Reset Your Password')
+    expect(html).not.toContain('Reset your password')
   })
 
   it('placeholders a generic sample address, not a school domain', () => {

@@ -101,7 +101,7 @@ export default function ForgotPassword() {
 
   return (
     <AuthLayout
-      title="Reset your password"
+      title="Reset Your Password"
       subtitle="Enter the email you sign in with and we'll send you a link to set a new password."
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
@@ -129,7 +129,7 @@ export default function ForgotPassword() {
 
         <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: '#6A7A95' }}>
           <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-            Back to sign in
+            Back to Sign In
           </Link>
         </div>
       </form>

@@ -248,7 +248,7 @@ export default function Login() {
         {settingPassword && (
           <>
             <div>
-              <label htmlFor="login-new-password" style={authLabelStyle}>New password</label>
+              <label htmlFor="login-new-password" style={authLabelStyle}>New Password</label>
               <div style={{ position: 'relative' }}>
                 <input
                   id="login-new-password"
@@ -270,7 +270,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label htmlFor="login-confirm-password" style={authLabelStyle}>Confirm new password</label>
+              <label htmlFor="login-confirm-password" style={authLabelStyle}>Confirm New Password</label>
               <div style={{ position: 'relative' }}>
                 <input
                   id="login-confirm-password"
@@ -304,7 +304,7 @@ export default function Login() {
         <SubmitButton type="submit" disabled={submitting} aria-busy={submitting}>
           {submitting
             ? settingPassword ? 'Setting password…' : 'Signing in…'
-            : settingPassword ? 'Set password and continue' : 'Sign in'}
+            : settingPassword ? 'Set Password and Continue' : 'Sign in'}
         </SubmitButton>
 
         {/* T-114: registration used to be explained in two lines here — one

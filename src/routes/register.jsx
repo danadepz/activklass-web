@@ -515,7 +515,7 @@ export default function Register() {
       ? 'Request sent'
       : gettingApp
         ? 'Get the ActivKlass app'
-        : 'Create your ActivKlass account'
+        : 'Create Your ActivKlass Account'
   const subtitle = completing
     ? 'Complete your profile to finish setting up your account.'
     : sent

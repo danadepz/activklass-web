@@ -128,10 +128,25 @@ describe('T-141 — the policy popup’s own content, read off the source (close
   })
 
   it('covers what RA 10173 asks a policy to say: what is collected, why, and the consent basis', () => {
-    expect(body).toMatch(/What we collect/)
-    expect(body).toMatch(/Why we collect it/)
-    expect(body).toMatch(/Consent, including for a minor/)
+    expect(body).toMatch(/What We Collect/)
+    expect(body).toMatch(/Why We Collect It/)
+    expect(body).toMatch(/Consent, Including for a Minor/)
     expect(body).toMatch(/guardian/i)
+  })
+
+  /* T-182 (andecobs-291, Derickk 2026-10-15): "all seven policy headings"
+     read sentence case -- docs/UI-COPY.md Rule 1 covers page/section
+     headings, and these seven h4s are exactly that. Three already had
+     coverage above (the RA 10173 content test); the other four did not. */
+  it('all seven section headings are Title Case, not the old sentence case', () => {
+    expect(body).toMatch(/About This Policy/)
+    expect(body).toMatch(/How It's Protected/)
+    expect(body).toMatch(/Your Rights/)
+    expect(body).toMatch(/Changes to This Policy/)
+    expect(body).not.toMatch(/>About this policy</)
+    expect(body).not.toMatch(/>How it's protected</)
+    expect(body).not.toMatch(/>Your rights</)
+    expect(body).not.toMatch(/>Changes to this policy</)
   })
 
   it('states a right to access, correct and object/withdraw consent -- the rights RA 10173 actually grants', () => {

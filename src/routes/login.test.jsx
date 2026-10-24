@@ -149,3 +149,30 @@ describe('T-156 — /login rendered for an already-signed-in visitor', () => {
     expect(render('signed_out')).toContain('Sign in')
   })
 })
+
+/* T-182 (maykel_64440-301, 2026-10-24): the first-login set-password screen
+   -- stage === NEW_PASSWORD, reached only through internal state a static
+   render cannot force (see T-156's own source-read above for the same
+   constraint) -- still read sentence case: "New password", "Confirm new
+   password", "Set password and continue". Source-read, not rendered. Does
+   NOT touch "Email/Login ID" -- the owner settled that wording in the
+   andecobs-169 review and it is not this sweep's to re-open. */
+describe('T-182 — the set-password screen is Title Case, not the old sentence case', () => {
+  const source = readFileSync(fileURLToPath(new URL('./login.jsx', import.meta.url)), 'utf8')
+
+  it('both field labels', () => {
+    expect(source).toContain('New Password</label>')
+    expect(source).toContain('Confirm New Password</label>')
+    expect(source).not.toContain('New password</label>')
+    expect(source).not.toContain('Confirm new password</label>')
+  })
+
+  it('the submit label', () => {
+    expect(source).toContain("'Set Password and Continue'")
+    expect(source).not.toContain("'Set password and continue'")
+  })
+
+  it('leaves the settled Email/Login ID label alone (andecobs-169) -- not this sweep\'s to re-open', () => {
+    expect(source).toContain('Email/Login ID</label>')
+  })
+})
