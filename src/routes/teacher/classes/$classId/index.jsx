@@ -115,6 +115,31 @@ function identifierError(fields, identifierType) {
   return key === 'lrn' ? 'LRN is required.' : 'ID Number is required.'
 }
 
+/* T-197 (maykel_64440-302): Add Student -> Individual used to write every
+   field of the found student's form back to users/{id} unconditionally --
+   rosterPatch(findFields) -- even though the form pre-filled those fields
+   from the account itself. An untouched form wrote the same values back and
+   changed nothing; one stray keystroke, or the year_level fallback that used
+   to live in the lookup handler, silently rewrote a SHARED record (the
+   student may be in several teachers' classes) from inside this one.
+
+   Enrolling an existing student should only ever ADD what the account is
+   genuinely missing and this class needs -- an identifier or a birthdate --
+   never overwrite a value the account already has. Returns null when there
+   is nothing new to add, so the caller can skip the write entirely. */
+export function addStudentPatch(original, fields, identifierType) {
+  const patch = {}
+  const idKey = identifierKey(identifierType)
+  if (!original[idKey]?.trim() && fields[idKey]?.trim()) {
+    patch[idKey] = fields[idKey].trim()
+  }
+  if (!original.birthdate && fields.birthdate) {
+    patch.birthdate = fields.birthdate
+    patch.age = ageFromBirthdate(fields.birthdate)
+  }
+  return Object.keys(patch).length ? patch : null
+}
+
 /* T-121 (triplecookiemonster-152): `login_id ?? email` surfaces the synthetic
    ...@activklass.internal address whenever a student has no login_id --
    invented only so Firebase Auth can key a login-ID account, and it
@@ -586,11 +611,15 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
         )
       } else {
         setStudent(found)
+        // T-197: no `|| defaultYear` fallback here any more. This panel only
+        // displays the account's own year level now -- it never writes one
+        // back -- so substituting this class's default would show a value
+        // on screen that was never true of the student's record.
         const fields = {
           student_number: found.student_number ?? '',
           middle_name: found.middle_name ?? '',
           course: found.course ?? '',
-          year_level: matchYearLevel(found.year_level, yearOptionsFor(clazz)) || defaultYear,
+          year_level: matchYearLevel(found.year_level, yearOptionsFor(clazz)),
           remarks: found.remarks ?? '',
           enrollment_status: normalizeEnrollmentStatus(found.enrollment_status),
           lrn: found.lrn ?? '',
@@ -610,9 +639,12 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
     if (isFull) { fail(`This class is full (max ${maxStudents} students).`); return }
     const idProblem = identifierError(findFields, findIdentifierType)
     if (idProblem) { fail(idProblem); return }
-    // Required here too: the account exists, but this is the teacher's one
-    // pass over the record before the student is theirs (T-50).
-    const fieldProblem = rosterFieldsError(findFields) || birthdateError(findFields.birthdate)
+    // Birthdate is required to enroll (T-50) -- but only when the account
+    // genuinely lacks one. Every other roster field is locked read-only on
+    // this panel now (T-197), so there is nothing left for rosterFieldsError
+    // to usefully check: a pre-existing value in a field this form no longer
+    // offers to edit is not something the teacher can fix here.
+    const fieldProblem = birthdateError(findFields.birthdate)
     if (fieldProblem) { fail(fieldProblem); return }
     setBusy(true)
     fail(null)
@@ -623,7 +655,10 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       // teacher edit a student only once they handle them, and it is the
       // roster write that makes that true.
       await addToRoster(classId, [student.id])
-      await updateDoc(doc(db, 'users', student.id), rosterPatch(findFields))
+      // T-197: only ever ADD what the account is missing -- never patch the
+      // whole record back. No gap to fill means no write at all.
+      const patch = addStudentPatch(student, findFields, findIdentifierType)
+      if (patch) await updateDoc(doc(db, 'users', student.id), patch)
       onDone()
     } catch (err) {
       fail(err.message)
@@ -723,9 +758,23 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
     </button>
   )
 
-  const renderRosterFields = (f, setF, identifierType, setIdentifierType) => {
+  /* T-197: `lockedFields` disables a field so Add Student can show what is
+     already on an existing account without offering to change it -- the
+     create tab passes nothing, so a brand-new student's form stays fully
+     editable, exactly as before. A locked field that is also BLANK (an
+     identifier or birthdate the account never had) stays open instead: this
+     class genuinely needs one, and there is nothing on the account to
+     overwrite. `newFieldHint` says so on screen, right under that field. */
+  const renderRosterFields = (f, setF, identifierType, setIdentifierType, lockedFields = {}) => {
     const handleSet = (key) => (e) => setF((prev) => ({ ...prev, [key]: e.target.value }))
     const idKey = identifierKey(identifierType)
+    const isLocked = (key) => !!lockedFields[key]
+    const isGap = (key) => key in lockedFields && !lockedFields[key]
+    const newFieldHint = (label) => (
+      <p className="mt-1 text-xs" style={{ color: goldDeep }}>
+        Not on this student's record yet — {label} will be saved to their account.
+      </p>
+    )
     return (
       <>
         <div>
@@ -747,13 +796,15 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
             value={f[idKey]}
             onChange={handleSet(idKey)}
             style={fieldStyle}
+            disabled={isLocked(idKey)}
           />
+          {isGap(idKey) && newFieldHint('it')}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label style={labelStyle}>Middle Name <span style={optHint}>(Optional)</span></label>
-            <input className="ak-input" value={f.middle_name} onChange={handleSet('middle_name')} style={fieldStyle} />
+            <input className="ak-input" value={f.middle_name} onChange={handleSet('middle_name')} style={fieldStyle} disabled={isLocked('middle_name')} />
           </div>
           <div>
             <label style={labelStyle}>Birthdate <span className="text-red-500">*</span></label>
@@ -762,15 +813,16 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                 said nothing a teacher didn't already know. The roster's own
                 tooltip on an existing student missing one (:title below)
                 is a different thing and stays. */}
-            <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} />
+            <input className="ak-input" type="date" max={TODAY_ISO} value={f.birthdate} onChange={handleSet('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={isLocked('birthdate')} />
+            {isGap('birthdate') && newFieldHint('it')}
           </div>
         </div>
 
-        <ProgramYearFields fields={f} set={handleSet} clazz={clazz} programs={programs} />
+        <ProgramYearFields fields={f} set={handleSet} clazz={clazz} programs={programs} disabled={isLocked('course') || isLocked('year_level')} />
 
         <div>
           <label style={labelStyle}>Remarks <span style={optHint}>(Optional)</span></label>
-          <select className="ak-input" value={f.remarks} onChange={handleSet('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+          <select className="ak-input" value={f.remarks} onChange={handleSet('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={isLocked('remarks')}>
             <option value="">—</option>
             {REMARKS_OPTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -782,7 +834,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
 
         <div>
           <label style={labelStyle}>Enrollment Status</label>
-          <select className="ak-input" value={f.enrollment_status} onChange={handleSet('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }}>
+          <select className="ak-input" value={f.enrollment_status} onChange={handleSet('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={isLocked('enrollment_status')}>
             {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label} ({value})</option>
             ))}
@@ -882,7 +934,19 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                         <span className="text-slate-400 font-normal"> · {displayIdentifier(student)}</span>
                       )}
                     </p>
-                    {renderRosterFields(findFields, setFindFields, findIdentifierType, setFindIdentifierType)}
+                    <p className="text-xs text-slate-500">
+                      Adding an existing student only enrolls them in this class — it does not change their record.
+                    </p>
+                    {renderRosterFields(findFields, setFindFields, findIdentifierType, setFindIdentifierType, {
+                      student_number: !!student.student_number?.trim(),
+                      lrn: !!student.lrn?.trim(),
+                      middle_name: true,
+                      course: true,
+                      year_level: true,
+                      remarks: true,
+                      enrollment_status: true,
+                      birthdate: !!student.birthdate,
+                    })}
                     <div className="pt-2 flex flex-col gap-2">
                       <button
                         onClick={enroll}
