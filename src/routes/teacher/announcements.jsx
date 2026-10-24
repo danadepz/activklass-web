@@ -21,6 +21,18 @@ const CATEGORIES = [
 ]
 const catMap = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
 
+/* The composer's blank state -- shared by the initial useState, a
+   successful post and the Clear control, so the three cannot drift. */
+const EMPTY_FORM = {
+  title: '',
+  content: '',
+  category: 'general',
+  class_id: '',      // '' = global
+  expires_at: '',
+  linked_resource_type: '',
+  linked_resource_id: '',
+}
+
 /* ─── Helpers ─── */
 /** Accepts an ISO string or a Firestore Timestamp ({ seconds }). */
 function timeAgo(value) {
@@ -181,15 +193,7 @@ export default function AnnouncementsPage() {
   const [filterCat, setFilterCat] = useState('all')
 
   /* form state */
-  const [form, setForm] = useState({
-    title: '',
-    content: '',
-    category: 'general',
-    class_id: '',      // '' = global
-    expires_at: '',
-    linked_resource_type: '',
-    linked_resource_id: '',
-  })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [formErr, setFormErr] = useState('')
   const [deletingId, setDeletingId] = useState(null)
 
@@ -266,7 +270,7 @@ export default function AnnouncementsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fs-announcements'] })
-      setForm({ title: '', content: '', category: 'general', class_id: '', expires_at: '', linked_resource_type: '', linked_resource_id: '' })
+      setForm(EMPTY_FORM)
       setFormErr('')
     },
     onError: (e) => setFormErr(e.message?.startsWith('You have no classes') ? e.message : 'The announcement could not be posted. Please try again.'),
@@ -336,10 +340,23 @@ export default function AnnouncementsPage() {
         message:
           `It appears in ${targets.length} class${targets.length === 1 ? '' : 'es'} straight away and notifies ` +
           `${readers} student${readers === 1 ? '' : 's'}. You can delete it later, but anyone who has already read it has seen it.`,
-        confirmLabel: 'Post announcement',
+        // T-193: "Post announcement" wrapped to two lines in the dialog.
+        // The dialog's own title already says "Post this announcement?", so
+        // "Post" reads unambiguously beside "Cancel".
+        confirmLabel: 'Post',
       }))) return
     }
     createMut.mutate(body)
+  }
+
+  /* T-193: nothing to clear, so no Clear control -- shown only once the
+     teacher has actually typed or chosen something away from the blank
+     defaults. No confirmation on clear: an unposted draft is not data. */
+  const hasDraft = Object.keys(EMPTY_FORM).some((key) => form[key] !== EMPTY_FORM[key])
+
+  function handleClear() {
+    setForm(EMPTY_FORM)
+    setFormErr('')
   }
 
   /* ── filtered list ── */
@@ -485,31 +502,54 @@ export default function AnnouncementsPage() {
             </div>
           )}
 
-          <button
-            id="ann-submit"
-            type="submit"
-            disabled={createMut.isPending}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              background: navy,
-              color: cream,
-              border: 'none',
-              borderRadius: 10,
-              padding: '11px 28px',
-              fontSize: 14,
-              fontWeight: 700,
-              fontFamily: sans,
-              cursor: createMut.isPending ? 'not-allowed' : 'pointer',
-              opacity: createMut.isPending ? 0.7 : 1,
-              transition: 'opacity .15s, transform .1s',
-            }}
-            onMouseEnter={e => { if (!createMut.isPending) e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-          >
-            {createMut.isPending ? 'Posting…' : <><Megaphone aria-hidden className="h-4 w-4" /> Post Announcement</>}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              id="ann-submit"
+              type="submit"
+              disabled={createMut.isPending}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                background: navy,
+                color: cream,
+                border: 'none',
+                borderRadius: 10,
+                padding: '11px 28px',
+                fontSize: 14,
+                fontWeight: 700,
+                fontFamily: sans,
+                cursor: createMut.isPending ? 'not-allowed' : 'pointer',
+                opacity: createMut.isPending ? 0.7 : 1,
+                transition: 'opacity .15s, transform .1s',
+              }}
+              onMouseEnter={e => { if (!createMut.isPending) e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              {createMut.isPending ? 'Posting…' : <><Megaphone aria-hidden className="h-4 w-4" /> Post Announcement</>}
+            </button>
+
+            {hasDraft && (
+              <button
+                id="ann-clear"
+                type="button"
+                onClick={handleClear}
+                disabled={createMut.isPending}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6A7A95',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  fontFamily: sans,
+                  cursor: createMut.isPending ? 'not-allowed' : 'pointer',
+                  padding: '11px 4px',
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
