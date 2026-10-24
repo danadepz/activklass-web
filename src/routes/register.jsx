@@ -889,7 +889,7 @@ export default function Register() {
                 className="transition hover:opacity-70"
                 style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}
               >
-                ← Back
+                Back
               </button>
             )}
             <SubmitButton type="submit" disabled={submitting} aria-busy={submitting} style={{ marginTop: 0 }}>
@@ -1137,7 +1137,7 @@ function ParentAppQr({ onBack }) {
         className="transition hover:opacity-70"
         style={{ fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}
       >
-        ← Back
+        Back
       </button>
       <div style={{ textAlign: 'center', fontSize: 14, color: muted }}>
         Already have an account?{' '}

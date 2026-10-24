@@ -870,3 +870,19 @@ describe('T-185 — the Abbreviation placeholder is generic, not one school\'s i
     expect(registerSource).not.toMatch(/placeholder="UCB"/)
   })
 })
+
+/* T-186 (andecobs-289, Derickk 2026-10-15; owner decision (c), 2026-10-24):
+   "remove the left arrow from Back" -- built literally as asked, at BOTH
+   places this control renders (the step navigation and ParentAppQr),
+   since changing only one would leave two Back buttons that disagree.
+   SubmitButton (the "Next" button's right arrow) is untouched -- option
+   (b) would have gone there; (c) does not. */
+describe('T-186 — both Back controls lose the left arrow, Next keeps its own', () => {
+  it('neither "← Back" occurrence survives', () => {
+    expect(registerSource).not.toMatch(/← Back/)
+  })
+
+  it('both instances still read plain "Back"', () => {
+    expect(registerSource.match(/>\s*Back\s*</g)?.length).toBe(2)
+  })
+})
