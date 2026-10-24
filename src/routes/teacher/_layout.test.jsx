@@ -80,3 +80,32 @@ describe('T-110 — the mobile hamburger dropdown is deliberately out of scope',
     expect(afterCard).toMatch(/profile\.first_name/)
   })
 })
+
+/**
+ * T-184 (andecobs-293, 2026-10-24): the sticky header above is navy
+ * edge-to-edge, but its own overflowX:'clip' -- needed to clip the
+ * decorative rings -- also clips anything bleeding past its own right
+ * edge, which is exactly what would be needed to paint over the
+ * scrollbar-gutter strip index.css reserves on <html>. Without that
+ * bleed, the gutter shows html's own background beside the navy header --
+ * the pale strip reported on My Classes.
+ *
+ * The fix is a position:fixed filler, navy, matching the header's own
+ * fixed height, rendered as a SIBLING after </header> rather than a
+ * child inside it -- a child would be clipped by overflowX:'clip' right
+ * back to the original bug. Because the header is position:sticky, top:0,
+ * it is always at the same viewport position the fixed filler covers,
+ * at every scroll position.
+ */
+describe('T-184 — the scrollbar gutter beside the navy header is filled, not left pale', () => {
+  it('renders a fixed, navy filler sized to the header\'s own height (64px bar + 1px border)', () => {
+    expect(src).toMatch(/position: 'fixed', top: 0, right: 0, height: 65, width: 24, background: navy, pointerEvents: 'none'/)
+  })
+
+  it('the filler sits AFTER </header>, not inside it -- a child would be clipped by the header\'s own overflowX:\'clip\' right back to the original bug', () => {
+    const headerCloseAt = src.indexOf('</header>')
+    const fillerAt = src.indexOf("position: 'fixed', top: 0, right: 0, height: 65")
+    expect(headerCloseAt).toBeGreaterThan(-1)
+    expect(fillerAt).toBeGreaterThan(headerCloseAt)
+  })
+})

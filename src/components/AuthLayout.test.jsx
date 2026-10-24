@@ -152,3 +152,42 @@ describe('T-141 — the policy popup’s own content, read off the source (close
     expect(body).not.toMatch(/firebase|firestore|google cloud|flask/i)
   })
 })
+
+/**
+ * T-184 (andecobs-289, 2026-10-24): the card variant's navy backdrop is
+ * edge-to-edge, but its own overflow-hidden -- needed to clip the wandering
+ * rings -- also clips anything bleeding past its own right edge, which is
+ * exactly what would be needed to paint over the scrollbar-gutter strip
+ * index.css reserves on <html>. Without that bleed, the gutter shows
+ * html's own background (near-white) beside the navy backdrop -- a pale
+ * line down the registration screen's far right edge.
+ *
+ * The fix is a position:fixed filler, navy, rendered as a SIBLING before
+ * the overflow-hidden backdrop rather than a child inside it -- a fixed
+ * element's containing block is the viewport regardless of an ancestor's
+ * overflow, but only if it is not itself a descendant of that clipping
+ * box. Placing it inside would reintroduce exactly the clipping this
+ * fix exists to escape, with no visible error -- the only way to catch
+ * that regression here is checking it renders BEFORE the clipped div in
+ * the static markup, not merely that it renders somewhere.
+ */
+describe('T-184 — the scrollbar gutter beside the navy card backdrop is filled, not left pale', () => {
+  it('renders a fixed, navy filler sized to the gutter', () => {
+    const html = card()
+    expect(html).toMatch(/<div aria-hidden="true" style="position:fixed;inset:0 0 0 auto;width:24px;background:#0E2A5C;pointer-events:none">/)
+  })
+
+  it('the filler is a SIBLING before the overflow-hidden backdrop, not a child inside it -- a child would be clipped right back to the original bug', () => {
+    const html = card()
+    const fillerAt = html.indexOf('position:fixed;inset:0 0 0 auto')
+    const backdropAt = html.indexOf('overflow-hidden')
+    expect(fillerAt).toBeGreaterThan(-1)
+    expect(backdropAt).toBeGreaterThan(-1)
+    expect(fillerAt).toBeLessThan(backdropAt)
+  })
+
+  it('the default variant (Login / forgot-password) needs no filler -- its right edge is cream, not navy, close enough to html\'s own slate-50 background that T-168 already covers it', () => {
+    const html = sidebar()
+    expect(html).not.toMatch(/position:fixed;inset:0 0 0 auto/)
+  })
+})

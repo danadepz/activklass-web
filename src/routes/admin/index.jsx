@@ -30,7 +30,16 @@ export default function AdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: cream, fontFamily: sans }}>
-      <header style={{ background: navy, color: cream, padding: '20px 28px 0' }}>
+      <header style={{ background: navy, color: cream, padding: '20px 28px 0', position: 'relative' }}>
+        {/* T-184 (andecobs-293): this header is navy edge-to-edge, but its
+            own width is narrowed by the scrollbar-gutter html reserves on
+            the right (src/index.css), leaving a pale strip beside it where
+            html's own background shows instead. This header scrolls away
+            with the page (no sticky/fixed), so the fix has to scroll with
+            it too -- an absolutely-positioned child tracks the header's own
+            box exactly, at every height and every scroll position, which a
+            viewport-fixed filler (used on the sticky teacher nav) could not. */}
+        <div aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: -24, width: 24, background: navy, pointerEvents: 'none' }} />
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
                         gap: 16, flexWrap: 'wrap' }}>

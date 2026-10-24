@@ -303,10 +303,19 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
   // default two-panel shell below is untouched (Login uses it).
   if (variant === 'card') {
     return (
-      <div
-        className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 md:px-8"
-        style={{ background: navy, color: ink, fontFamily: sans }}
-      >
+      <>
+        {/* T-184 (andecobs-289/293): the backdrop below is navy edge-to-edge,
+            but its own overflow-hidden (needed to clip the wandering rings)
+            also clips anything bleeding past its own right edge -- which is
+            exactly what's needed to paint over the scrollbar-gutter strip
+            html reserves on the right (src/index.css). A fixed sibling,
+            outside that clipping box, escapes it and stays navy for this
+            screen's full height, scrolling or not. */}
+        <div aria-hidden="true" style={{ position: 'fixed', inset: '0 0 0 auto', width: 24, background: navy, pointerEvents: 'none' }} />
+        <div
+          className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 md:px-8"
+          style={{ background: navy, color: ink, fontFamily: sans }}
+        >
         {/* the wandering rings from the brand panel, five of them, behind the container */}
         <div aria-hidden="true" style={{ position: 'absolute', top: -160, left: -120, width: 480, height: 480, border: '1px solid rgba(245,197,24,0.18)', borderRadius: '50%', animation: 'ak-wander-a 46s linear infinite' }} />
         <div aria-hidden="true" style={{ position: 'absolute', top: -60, right: -140, width: 400, height: 400, border: '1px solid rgba(245,197,24,0.12)', borderRadius: '50%', animation: 'ak-wander-b 38s linear infinite', animationDelay: '-12s' }} />
@@ -395,8 +404,10 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, childr
           {policyModal}
         </div>
       </div>
+      </>
     )
   }
+
 
   return (
     <div

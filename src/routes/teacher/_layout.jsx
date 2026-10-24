@@ -517,6 +517,18 @@ export default function TeacherLayout() {
         )}
       </header>
 
+      {/* T-184 (andecobs-293): the sticky header above is navy edge-to-edge,
+          but its own overflowX:'clip' (needed to clip the decorative rings)
+          also clips anything bleeding past its own right edge -- which is
+          exactly what's needed to paint over the scrollbar-gutter strip
+          html reserves on the right (src/index.css). A fixed sibling,
+          outside that clipping box, escapes it; since the header is always
+          pinned at viewport top (position: sticky, top: 0), a fixed filler
+          matching its height stays aligned with it at every scroll
+          position. 65 = the header's own fixed content height (64) plus its
+          border-bottom (1) -- keep the two in step if either changes. */}
+      <div aria-hidden="true" style={{ position: 'fixed', top: 0, right: 0, height: 65, width: 24, background: navy, pointerEvents: 'none', zIndex: 50 }} />
+
       {/* MAIN CONTENT — responsive padding */}
       <main className="px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-9" style={{ flex: 1 }}>
         <Outlet />
