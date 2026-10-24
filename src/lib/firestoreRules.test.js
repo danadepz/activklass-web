@@ -1145,3 +1145,92 @@ describe('T-125 — admin guardian access restored; role-escalation block untouc
     )
   })
 })
+
+/*
+ * announcement_dismissals (T-195, 2026-10-25): a student hiding a read
+ * announcement from their own list. Per-student only — proves a student
+ * cannot write (or read) another student's dismissal, which is the whole
+ * point of the feature: the owner's decision (b) was dismiss, never
+ * teacher-visible delete.
+ */
+describe('announcement_dismissals · a student hides their own, never another\'s', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'announcements', 'ann-1'), {
+        teacher_id: TEACHER,
+        class_id: 'class-1',
+        title: 'Quiz on Monday',
+        body: 'Bring a calculator.',
+      })
+    })
+  })
+
+  it('lets a student dismiss an announcement under their own id', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: STUDENT,
+        dismissed_at: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('refuses a student writing a dismissal under another student\'s id', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${OTHER_STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: OTHER_STUDENT,
+        dismissed_at: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('refuses a dismissal for an announcement that does not exist', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ghost_${STUDENT}`), {
+        announcement_id: 'ghost',
+        student_id: STUDENT,
+        dismissed_at: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('lets a student read only their own dismissal, never another\'s', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'announcement_dismissals', `ann-1_${STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: STUDENT,
+        dismissed_at: serverTimestamp(),
+      })
+      await setDoc(doc(admin.firestore(), 'announcement_dismissals', `ann-1_${OTHER_STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: OTHER_STUDENT,
+        dismissed_at: serverTimestamp(),
+      })
+    })
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`)))
+    await assertFails(getDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${OTHER_STUDENT}`)))
+  })
+
+  it('refuses a teacher writing a dismissal on a student\'s behalf', async () => {
+    await assertFails(
+      setDoc(doc(ctx(TEACHER), 'announcement_dismissals', `ann-1_${STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: STUDENT,
+        dismissed_at: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('refuses updating or deleting a dismissal once written — there is no undo', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'announcement_dismissals', `ann-1_${STUDENT}`), {
+        announcement_id: 'ann-1',
+        student_id: STUDENT,
+        dismissed_at: serverTimestamp(),
+      })
+    })
+    await assertFails(updateDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`), { student_id: STUDENT }))
+    await assertFails(deleteDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`)))
+  })
+})

@@ -53,7 +53,7 @@ async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
-  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
+  const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, dismissalsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
       loadStudentEntry(classId, profile.id),
       loadStudentAttendance(classId, profile.id),
@@ -61,6 +61,11 @@ async function loadClassDetail(classId, profile) {
       loadStudentGradeContests(classId, profile.id),
       loadSyllabus(classId),
       getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId))),
+      // T-195: which of this student's own announcements they have already
+      // dismissed. Best-effort -- a failed read just means nothing is
+      // filtered out yet, not a broken page.
+      getDocs(query(collection(db, 'announcement_dismissals'), where('student_id', '==', profile.id)))
+        .catch((err) => { console.error('Announcement dismissals did not load', err); return null }),
       clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
       getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', profile.id))),
@@ -82,8 +87,13 @@ async function loadClassDetail(classId, profile) {
     ])
 
   const teacher = teachers[0] ?? null
+  const dismissedAnnouncementIds = new Set(
+    (dismissalsSnap?.docs ?? []).map((d) => d.data().announcement_id),
+  )
+  const announcementsTotal = announcementsSnap.docs.length
   const announcements = announcementsSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((a) => !dismissedAnnouncementIds.has(a.id))
     .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
 
   // Students see only published/closed quizzes (never drafts).
@@ -127,6 +137,7 @@ async function loadClassDetail(classId, profile) {
     gradeContestsByAssessment,
     syllabus,
     announcements,
+    announcementsTotal,
     quizzes,
     attemptsByQuiz,
     scaffoldedTopicIds,
@@ -1577,19 +1588,70 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
   )
 }
 
-function AnnouncementsTab({ announcements }) {
+/** The document id: `{announcementId}_{studentId}`. The only place it is built. */
+export function announcementDismissalId(announcementId, studentId) {
+  return `${announcementId}_${studentId}`
+}
+
+/**
+ * Hides one announcement from this student's own list (T-195, owner
+ * decision (b)). Per-student: the teacher's copy and every other student's
+ * list are untouched -- this never deletes the announcement itself, which
+ * stays a teacher-only act.
+ */
+export async function dismissAnnouncement(announcementId, studentId) {
+  await setDoc(doc(db, 'announcement_dismissals', announcementDismissalId(announcementId, studentId)), {
+    announcement_id: announcementId,
+    student_id: studentId,
+    dismissed_at: serverTimestamp(),
+  })
+}
+
+function AnnouncementsTab({ announcements, announcementsTotal, studentId, onDismissed }) {
+  const [pendingId, setPendingId] = useState(null)
+  const [error, setError] = useState('')
+
   if (announcements.length === 0) {
-    return <Empty icon={<Megaphone className="h-6 w-6" />} title="No announcements" text="Class announcements from your teacher will show up here." />
+    return announcementsTotal > 0
+      ? <Empty icon={<Megaphone className="h-6 w-6" />} title="All caught up" text="You've dismissed every announcement from your teacher." />
+      : <Empty icon={<Megaphone className="h-6 w-6" />} title="No announcements" text="Class announcements from your teacher will show up here." />
   }
+
+  const handleDismiss = async (announcementId) => {
+    setError('')
+    setPendingId(announcementId)
+    try {
+      await dismissAnnouncement(announcementId, studentId)
+      onDismissed?.()
+    } catch (err) {
+      console.error('Could not dismiss announcement', err)
+      setError('Could not dismiss that announcement. Check your connection and try again.')
+    } finally {
+      setPendingId(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {error && <div style={{ fontSize: 13, color: red }}>{error}</div>}
       {announcements.map((a) => {
         const when = a.created_at?.seconds ? new Date(a.created_at.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
         return (
           <div key={a.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
             <div className="flex items-center justify-between gap-3" style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: ink }}>{a.title || 'Announcement'}</div>
-              {when && <div style={{ ...mono, fontSize: 11.5, color: faint }}>{when}</div>}
+              <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
+                {when && <div style={{ ...mono, fontSize: 11.5, color: faint }}>{when}</div>}
+                <button
+                  type="button"
+                  onClick={() => handleDismiss(a.id)}
+                  disabled={pendingId === a.id}
+                  aria-label="Dismiss this announcement"
+                  style={{ fontSize: 12, fontWeight: 600, color: muted, background: 'transparent', border: 'none', cursor: pendingId === a.id ? 'default' : 'pointer', padding: '2px 4px', opacity: pendingId === a.id ? 0.5 : 1 }}
+                >
+                  {pendingId === a.id ? 'Dismissing…' : 'Dismiss'}
+                </button>
+              </div>
             </div>
             <div style={{ fontSize: 14, color: muted, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{a.body || a.message}</div>
           </div>
@@ -1645,7 +1707,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, announcementsTotal = 0, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1782,7 +1844,14 @@ export default function StudentClassDetail() {
           dropped={dropped}
         />
       )}
-      {tab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
+      {tab === 'announcements' && (
+        <AnnouncementsTab
+          announcements={announcements}
+          announcementsTotal={announcementsTotal}
+          studentId={profile.id}
+          onDismissed={invalidate}
+        />
+      )}
     </div>
   )
 }
