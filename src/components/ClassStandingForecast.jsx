@@ -107,7 +107,7 @@ export default function ClassStandingForecast({
   return (
     <div style={shell}>
       <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 4px' }}>Projected standing</h3>
-      <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px', maxWidth: '68ch' }}>
+      <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
         A projection, not a grade. It looks at where your attendance and scores are heading, so it
         can change well before your grade does.
       </p>
