@@ -3561,3 +3561,261 @@ and the thing that read it was `firestore.rules`. The reply this desk sent Krist
 many words — *"nothing in the app ever used it, so it came out cleanly"* — and that was wrong.
 **A field removed from a write is a rules change until the rules say otherwise**, and the rules
 suite will not tell you, because its fixtures are written by hand rather than taken from the app.
+
+
+## Tester tickets — 2026-10-14, Title Case round four and the convention policy (24 tickets, 3 issues)
+
+`andecobs-262`–`-278`, `maykel_64440-279`–`-284`, and `dawny808-285` (pipeline test), filed 2026-10-14.
+Twenty-two tickets auditing casing across the entire product, plus an info glyph cleanup and a root-cause convention policy.
+Cards under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+1. **Title Case, round four: the whole product, and six items that are not casing** —
+   `suggestion · cosmetic`, web, `andecobs-262`–`-270`, `-272`–`-278`, `maykel_64440-279`–`-284`.
+   Comprehensive Title Case sweep across Admin, Class setup, Class detail, Quizzes, and Student views.
+   Includes six items that are renames or markup, not casing (such as "Grade Configuration" in teacher navbar and "Result Visibility" in student quizzes).
+   Card: `…/T-178-title-case-round-four.md`.
+
+2. **The ⓘ marker is a text character, and admin still carries the emoji T-149 removed** —
+   `suggestion · cosmetic`, web, `andecobs-271`.
+   Replace low-res / text glyph with clean SVG tooltip icon in `InfoTooltip.jsx` and scrub leftover emoji in admin tabs.
+   Card: `…/T-179-info-glyph-is-a-character-and-admin-still-has-emoji.md`.
+
+3. **Four rounds of the same ticket, because nothing records or enforces the convention** —
+   `suggestion · design`, web, desk finding from T-157/T-164/T-176/T-178.
+   Establish explicit UI copy guidelines in `docs/UI-COPY.md` and reference in `OWNERSHIP.md`.
+   Card: `…/T-180-no-casing-convention-is-written-down-or-enforced.md`.
+
+
+## Tester tickets — 2026-10-15, attendance casing and pre-refresh repeats (3 tickets, 1 issue)
+
+`andecobs-286`, `andecobs-287`, and `maykel_64440-288`, filed 2026-10-15.
+Cards under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+1. **Attendance: "Open attendance", "All saved", and "Save attendance" are in sentence case** —
+   `suggestion · cosmetic`, web, `maykel_64440-288`. `src/routes/teacher/attendance.jsx:9` passes
+   `linkLabel="Open attendance"` to `ClassPicker`, and `src/routes/teacher/classes/$classId/attendance.jsx:262`
+   renders `'All saved'` and ``Save attendance...``. Action buttons and links should be Title Case per `docs/UI-COPY.md`.
+   Card: `…/T-181-attendance-casing.md`.
+
+**Note on #286 and #287:** Filed by Derick (`andecobs-286` on Add User student labels, `andecobs-287` on Subscription plan labels)
+shortly before refreshing their browser against the `daf066c` deployment. Both screens were already fixed in that commit;
+corroborating tickets added to T-178.
+
+## Tester tickets — 2026-10-15, the signed-out screens (4 tickets, 7 issues)
+
+`andecobs-289`, `andecobs-290`, and `andecobs-291`, filed by Derick 2026-10-15 within
+eighteen minutes of each other. Cards under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+One finding runs through all three: rounds one to four of the Title Case sweep
+(T-157, T-164, T-176, T-178) covered the admin and teacher screens, and never touched the
+screens a visitor sees **before** signing in. T-180 wrote the convention down and left open
+whether a fifth round happens; these tickets are a tester asking that question for us.
+
+1. **Title Case never reached the sign-in, registration and policy screens** —
+   `suggestion · cosmetic`, web, all three tickets. `src/routes/register.jsx:518`
+   ("Create your ActivKlass account"), `src/routes/forgot-password.jsx:104` ("Reset your
+   password") and `:132` ("Back to sign in"), and seven `<h4>` section headings in
+   `src/components/AuthLayout.jsx:187` onward. Two tests assert the current strings and
+   must be updated rather than deleted: `forgot-password.test.jsx:88` and
+   `AuthLayout.test.jsx:40`. Card: `…/T-182-title-case-round-five-the-auth-and-policy-screens.md`.
+
+2. **The privacy policy's "What we collect" list renders without bullets** —
+   `bug · cosmetic`, web, `andecobs-291`. The tester's diagnosis was wrong and the real
+   cause is one property: `src/components/AuthLayout.jsx:197` is already a correct `<ul>`
+   with four `<li>`, but Tailwind preflight resets `ul { list-style: none }`, so the inline
+   `paddingLeft: 20` gives the indent without the marker. Every list in this codebase that
+   wants markers sets them explicitly — `src/components/Markdown.jsx:94` uses
+   `listStyle: 'disc'`. Card: `…/T-183-privacy-policy-list-renders-without-bullets.md`.
+
+3. **The reserved scrollbar strip shows pale grey down the navy sign-in screens** —
+   `bug · cosmetic`, web, `andecobs-289`. **This is the half of T-168 that fix did not
+   cover.** `src/index.css:71-75` reserves the gutter with `scrollbar-gutter: stable` and
+   paints it with `html`'s background, which T-168 set to `--color-slate-50`. Invisible on
+   the light signed-in app; a pale line against the navy auth shell
+   (`src/components/AuthLayout.jsx:49` sets `background: navy`). T-168 matched the gutter to
+   one page background and the product has two. Card:
+   `…/T-184-scrollbar-gutter-shows-pale-on-the-navy-auth-screens.md`.
+
+4. **The school abbreviation placeholder is one real school's initials** —
+   `bug · cosmetic`, web, `andecobs-289`. `src/routes/register.jsx:658` hardcodes
+   `placeholder="UCB"` on a form every school fills in. The other "UCB" occurrences
+   (`src/hooks/useSchoolColleagues.js:27`, `src/lib/firestoreRules.test.js`) are a comment
+   and fixture data — not user-visible, leave them.
+   Card: `…/T-185-abbreviation-placeholder-is-a-real-schools-initials.md`.
+
+5. **Asked: remove the left arrow from the registration Back button** —
+   `suggestion · design`, web, `andecobs-289`, **deferred pending an owner decision**. The
+   tester's stated reason does not survive the screenshot: "← Back" at
+   `src/routes/register.jsx:892` mirrors the right arrow `SubmitButton` puts on "Next", so
+   removing only the left one makes the pair *less* symmetrical. Three options on the card;
+   a second instance at `:1140` must move with whichever is chosen.
+   Card: `…/T-186-remove-the-arrow-from-the-registration-back-button.md`.
+
+6. **Asked: centre the "Reset your password" heading** — `suggestion · design`, web,
+   `andecobs-290`, **deferred pending an owner decision**. The awkward two-line wrap is
+   real, but the form beneath it is left-aligned too, and `AuthLayout` renders that heading
+   for *every* auth screen — so centring is not a one-screen change. Recommended option is
+   to fix the wrap without moving the alignment.
+   Card: `…/T-187-centre-the-reset-password-heading.md`.
+
+7. **No way to clear a staged bulk-upload file without reloading** — `suggestion · feature gap`,
+   web, `andecobs-292` (arrived mid-pass). On Admin → Users → Bulk upload the parsed preview has no
+   discard control; "Choose File…" only reopens the OS picker. Worth more than its severity suggests:
+   in the tester's screenshot all ten staged rows collide with existing logins and the only button
+   that does anything is **Create 10 accounts** — the action the red banner is warning against.
+   The reset already exists twice and is simply unreachable — `src/routes/admin/BulkUpload.jsx:299-300`
+   on a parse failure and `:336-337` after a create. One extracted `reset()` plus a button, and it must
+   clear the file input's value or re-choosing the same file fires no change event.
+   Card: `…/T-188-no-way-to-clear-a-staged-bulk-upload.md`.
+
+**Note:** five of these six live in files another card is also editing — T-182, T-185 and
+T-186 all touch `register.jsx`, and T-182, T-183 and T-187 all touch `AuthLayout.jsx`.
+They are separate issues deliberately, but they are not separable work: the roadmap should
+put the overlapping ones in one convoy rather than hand them to parallel agents.
+
+## Tester tickets — 2026-10-24, the student portal, the quiz dead end, and a write-back (14 tickets, 13 issues + 2 widened)
+
+`andecobs-293` … `-300` and `maykel_64440-301` … `-306`, filed 2026-10-15 to 2026-10-19 and
+triaged 2026-10-24. Cards under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`. Nothing
+landed in the repo between 2026-10-15 and this pass, so T-182 … T-188 are all still open.
+
+**Two of these are not cosmetic**, and both were filed as suggestions: item 11 is a dead end
+in the grading flow, and item 9 is an unguarded write to shared student data.
+
+1. **Title Case never reached the student portal either** — `suggestion · cosmetic`, web,
+   `andecobs-297` + `maykel_64440-303`. "No modules yet", "No analytics yet", "No attendance
+   recorded", "No grades yet", and the notification bell's "New announcement". Rounds one to
+   four swept admin and teacher, T-182 covers the signed-out screens; the student portal has
+   never been swept. Two testers found it independently a day apart.
+   Card: `…/T-189-student-portal-casing-round-six.md`.
+
+2. **The student's "Projected standing" text is boxed to half the card** — `bug · cosmetic`,
+   web, `andecobs-297`. On the student class Analytics tab the heading, its sentence and its
+   footnotes are constrained to about half the width while the green "On track" banner nested
+   inside the same card runs full width. Cause unconfirmed — needs a browser.
+   Card: `…/T-190-projected-standing-text-is-half-width.md`.
+
+3. **The student details modal mixes two label systems** — `bug · cosmetic`, web,
+   `andecobs-295`. `classes/$classId/index.jsx:1111` and `:1120` give First/Last Name the
+   Tailwind `text-sm font-medium text-slate-700` (14px, **weight 500**); every other field
+   uses `labelStyle` at `:1646` (13px, **weight 600**, ink). **The tester has it backwards** —
+   he reported First/Last as the bold pair at 700/600 and asked for their bold to be removed,
+   which would leave them at 400 beside 600 and widen the gap he wants closed.
+   Card: `…/T-191-student-modal-mixes-two-label-systems.md`.
+
+4. **Asked: remove the plus badge from the New Assessment modal header** —
+   `suggestion · design`, web, `andecobs-296`, **deferred pending an owner decision**. Filed as
+   a repeat of #275; it is not. #275 became T-178, whose card says three times "do not touch
+   any emoji icon" because icons were T-179's job, and T-179 (`da97160`) covered the info glyph
+   and the admin emoji, not this badge. The navy-square-with-gold-icon is the house pattern, so
+   removing it from one modal is the option that creates an inconsistency.
+   Card: `…/T-192-new-assessment-modal-plus-badge.md`.
+
+5. **No way to clear a typed announcement, and the confirm button wraps** —
+   `suggestion · feature gap`, web, `andecobs-298`. The confirm dialog's "Post announcement"
+   wraps to two lines, and having typed a title and message there is nothing that empties the
+   form — the dialog's Cancel closes the dialog and leaves the text. Same shape as T-188 on
+   `admin/BulkUpload.jsx`; different file and lane, so separate issues.
+   Card: `…/T-193-announcement-form-cannot-be-cleared.md`.
+
+6. **Asked: make both announcement empty states say the same thing** —
+   `suggestion · not-a-bug as filed`, web, `andecobs-294`. **Building it as asked would be a
+   regression.** `teacher/announcements.jsx:57` branches on `filtered`, and
+   `teacher/titleCaseSweepThree.test.js:24` records the decision in writing: *"The
+   filtered-category empty state keeps its own wording."* They differ because the situations
+   do — standardising means telling a teacher with twenty announcements to "post your first
+   announcement", which is `misleading` by this desk's own rule.
+   Card: `…/T-194-announcement-empty-states-are-deliberately-different.md`.
+
+7. **Asked: truncate long student announcements, and let students dismiss them** —
+   `suggestion · feature gap`, web, `andecobs-299`, **deferred**. The truncation half describes
+   something that cannot happen: `ANNOUNCEMENT_MAX` is **350 characters**
+   (`src/lib/validation.js:610`, enforced at `teacher/announcements.jsx:405` with a paste guard
+   at `:305`), and his own screenshot shows one four-line announcement on an empty page. The
+   dismiss half is a real gap — but Dismiss (per-student hide), never Delete: the teacher's own
+   confirm dialog promises deletion as a *teacher* capability.
+   Card: `…/T-195-student-announcements-truncation-and-dismiss.md`.
+
+8. **The teacher profile lists every colleague, unbounded** — `suggestion · design`, web,
+   `andecobs-300`, **deferred pending the owner's answer**. He asked a fair question (is the
+   roster necessary?) and reported a real layout fault (no `max-height`, so a large faculty
+   stretches the page). On the privacy half, worth being precise: the addresses are
+   `thc-950007@activklass.internal`, derived from the login ID rather than personal contact
+   details, and `useSchoolColleagues.js:27` documents the school scoping that keeps one
+   school's list out of another's. Not a leak; still the owner's call.
+   Card: `…/T-196-teacher-profile-colleague-list.md`.
+
+9. **Adding an existing student to a class can silently overwrite their record** —
+   `bug · wrong data`, web, `maykel_64440-302`. **Filed as a suggestion; it is a defect he did
+   not know the extent of.** `classes/$classId/index.jsx:625-626` runs `addToRoster(...)` and
+   then `updateDoc(doc(db, 'users', student.id), rosterPatch(findFields))` — so pressing **Add
+   to class** writes the form's fields to the student's **user document**, shared across every
+   class they are in. Worse, `:590` sets `year_level` to
+   `matchYearLevel(found.year_level, yearOptionsFor(clazz)) || defaultYear`: if a student's
+   stored year is not one this class offers, the fallback can rewrite their year level with
+   **no keystroke at all**. That part should be checked first.
+   Card: `…/T-197-add-student-writes-back-editable-credentials.md`.
+
+10. **Asked: change "Create an Account" to "Create new account"** —
+    `suggestion · not-a-bug as filed`, web, `maykel_64440-304`. The ledger records the owner
+    settling this exact string under `andecobs-171`: *link reads "Create an Account" (note the
+    article; T-114 shipped it without)*. maykel was not in that thread, so it is reasonable to
+    raise — but it also runs against T-182 and T-189, two open sweeps towards Title Case, while
+    "Create new account" is sentence case.
+    Card: `…/T-198-create-an-account-rename-request.md`.
+
+11. **A teacher cannot see a student's answers, so an essay quiz never reaches the gradebook** —
+    `bug · blocks testing`, web + backend, `maykel_64440-305` and `-306` items 8–10. **The most
+    serious finding of the pass, filed as a feature request.** The chain, all checked:
+    `src/lib/quizGrading.js:75-77` scores an essay `{ earned: 0, pending: true }` and `:12` says
+    essays are "queued for" teacher grading → `teacher/quizzes.$quizId.jsx:722` renders
+    "Essay pending review" → **nothing in any of the three repos clears it** (no `gradeEssay`,
+    no answer view; the read-only "Questions and answer key" card at `:2265-2293` shows the
+    *key*, never a submission) → `src/lib/quizToRecord.js:187-190` **skips** any student whose
+    attempt `has_essays_pending` when syncing to the class record. So a quiz containing one
+    essay question produces no gradebook entry for any student who sat it, permanently, and no
+    teacher action can change that. The skip is correct and is the only reason a 0-for-essay
+    score is not being written — the data is protected, the workflow is a dead end.
+    Note `teacher/quizzes.$quizId.jsx:480`, which describes the Post Scores button as being for
+    *"a teacher who has just marked an essay"* — no such teacher can exist; the comment
+    documents an intention. Half the plumbing exists unused:
+    `activklass-backend/app/api/ai.py:151-165` exposes `POST /api/grade_essay` via
+    `AIEssayGrader`, mentioned in `src/lib/ai.js:12` and called by nothing.
+    Card: `…/T-199-no-way-to-see-answers-or-mark-an-essay.md`.
+
+12. **The quiz page says scores post automatically and also offers a Post button** —
+    `suggestion · misleading`, web, `maykel_64440-306` items 1–7. Six wording items plus one
+    real contradiction: a "Post scores now" button sits above the sentence *"Scores post to the
+    class record on their own when this page or the record opens."* `:477-483` confirms the
+    sentence is true and the button is a convenience kept "for the case in between" since
+    2026-09-13 — but the screen never says so, leaving a teacher unsure whether a required step
+    was missed. His suggested label "Post Scores to Class Record" needs care: per item 11 the
+    button skips students with a pending essay, so that promise is not always kept.
+    Card: `…/T-200-quiz-settings-wording-and-the-post-scores-contradiction.md`.
+
+13. **Asked: tidy the first-login set-password screen** — `suggestion · clarity`, web,
+    `maykel_64440-301`, **deferred**; he attached a mock-up. The "Password" field he wants
+    removed is **already disabled and dimmed** — the screen is `login.jsx` in its
+    `settingPassword` state, where Email/Login ID and Password are both `disabled` at
+    `opacity: 0.6` and the eye toggle and reset link are hidden (`:205`–`:242`). Removing it is
+    a design choice, not a fix. The requirements-as-checklist half is the substantive
+    improvement. His casing asks went to T-182; his "Email or Login ID" rename is declined for
+    the same reason as item 10.
+    Card: `…/T-201-first-login-password-screen-structure.md`.
+
+**Two existing issues widened rather than duplicated:**
+
+- **T-184** (`andecobs-293`) — the pale right-edge strip is **not only the signed-out screens**.
+  `teacher/_layout.jsx:202` and `admin/index.jsx:33` paint `background: navy` on bars that fill
+  the body, and the body is inset by the gutter `html` reserves, so every full-bleed coloured
+  bar in the product stops ~17px short of the edge. A fix that only repaints `AuthLayout` leaves
+  both of Derick's screenshots unchanged. (He filed it as "same as #255"; `andecobs-255` was
+  T-174, the Users roster tabs — unrelated.)
+- **T-182** (`maykel_64440-301`) — add the first-login set-password screen's labels and submit
+  button, with an explicit exception for `Email/Login ID`, which the owner settled.
+
+**Note for the roadmap:** these overlap heavily with the still-open T-182 … T-188, and with each
+other — `teacher/announcements.jsx` carries T-193 and T-194; `classes/$classId/index.jsx` carries
+T-191 and T-197; `teacher/quizzes.$quizId.jsx` carries T-199 and T-200; `login.jsx` carries T-182,
+T-198 and T-201; `student/classes/**` carries T-189, T-190 and T-195. Five files, thirteen issues.
+Group before dispatching.
