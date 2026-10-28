@@ -127,9 +127,11 @@ describe('PreviewPanel — what the card shows', () => {
       <PreviewPanel components={college} mode="deped_k12" policy={{}} initialSamples={{ 0: '85', 1: '70' }} />,
     ))
     // 79 → band 77.6 → 86, Very Satisfactory.
-    expect(deped).toMatch(/86/)
-    expect(deped).toMatch(/Very Satisfactory/)
-    expect(deped).toMatch(/DepEd Order No\. 8/)
+    // Class Standing 85 (60%) + Major Exam 70 (40%) = 79.00 -> band 78.26 -> 82 -> Satisfactory.
+    expect(deped).toMatch(/82/)
+    expect(deped).not.toMatch(/Very Satisfactory/)
+    expect(deped).toMatch(/Satisfactory/)
+    expect(deped).toMatch(/DepEd Order No\. 015/)
   })
 
   it('says when only some components were counted', () => {

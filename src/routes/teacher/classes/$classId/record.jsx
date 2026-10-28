@@ -1174,7 +1174,7 @@ export default function ClassRecordPage() {
   // below) -- only the transmutation note was not duplicated anywhere else,
   // so that's what moved into the tooltip; the rest of the old subline is gone.
   const transmutationNote = bundle.mode === 'deped_k12'
-    ? 'Grades on this record are transmuted per DepEd Order No. 8, s. 2015.'
+    ? 'Grades on this record are transmuted per DepEd Order No. 015, s. 2026.'
     : null
 
   // T-87: the sweep note is appended onto the auto-post's own status line

@@ -44,49 +44,49 @@ const depedScience = () => [
 describe('computeFinalGrade — DepEd K-12 weighting path', () => {
   it('weights the three core components, then transmutes', () => {
     // WW 24/30=80, PT 45/50=90, QA 40/50=80
-    // initial = (30*80 + 50*90 + 20*80)/100 = 8500/100 = 85.00 -> band 84.0 -> 90
+    // initial = (30*80 + 50*90 + 20*80)/100 = 8500/100 = 85.00 -> band 84.16 -> 87
     const result = computeFinalGrade(
       depedCore(),
       { w1: graded(24), p1: graded(45), q1: graded(40) },
       'deped_k12',
     )
     expect(result.initial).toBe(85)
-    expect(result.final).toBe(90)
-    expect(result.descriptor).toBe('Outstanding')
+    expect(result.final).toBe(87)
+    expect(result.descriptor).toBe('Very Satisfactory')
     expect(result.breakdown).toEqual({ ww: 80, pt: 90, qa: 80 })
   })
 
   it('matches the backend fixture for Science/Math weights (initial 84.00)', () => {
     // (40*80 + 40*90 + 20*80)/100 = 8400/100 = 84.00 -- the same value as
-    // test_grade_service.py "full period grade".
+    // test_grade_service.py "full period grade". Band 82.98 -> 86.
     const result = computeFinalGrade(
       depedScience(),
       { w1: graded(24), p1: graded(45), q1: graded(40) },
       'deped_k12',
     )
     expect(result.initial).toBe(84)
-    expect(result.final).toBe(90)
+    expect(result.final).toBe(86)
   })
 
   it('re-normalizes over components that have data when QA is not yet given', () => {
-    // (30*80 + 50*90)/80 = 6900/80 = 86.25 -> band 85.6 -> 91
+    // (30*80 + 50*90)/80 = 6900/80 = 86.25 -> band 85.34 -> 88
     const result = computeFinalGrade(
       depedCore(),
       { w1: graded(24), p1: graded(45) },
       'deped_k12',
     )
     expect(result.initial).toBe(86.25)
-    expect(result.final).toBe(91)
-    expect(result.descriptor).toBe('Outstanding')
+    expect(result.final).toBe(88)
+    expect(result.descriptor).toBe('Very Satisfactory')
     // An ungraded component neither drags the grade down nor inflates it.
     expect(result.breakdown.qa).toBeNull()
   })
 
   it('falls back to the grade of the only component with data', () => {
-    // PT alone: 45/50 = 90.00 -> band 88.8 -> 93
+    // PT alone: 45/50 = 90.00 -> band 88.88 -> 91
     const result = computeFinalGrade(depedCore(), { p1: graded(45) }, 'deped_k12')
     expect(result.initial).toBe(90)
-    expect(result.final).toBe(93)
+    expect(result.final).toBe(91)
   })
 
   it('counts missing work as zero of possible', () => {
@@ -108,7 +108,7 @@ describe('computeFinalGrade — DepEd K-12 weighting path', () => {
     // 24/30 = 80, not 24/50 = 48
     const result = computeFinalGrade(components, { w1: graded(24), w2: excused }, 'deped_k12')
     expect(result.initial).toBe(80)
-    expect(result.final).toBe(87) // band 79.2 -> 87
+    expect(result.final).toBe(83) // band 79.44 -> 83
   })
 
   it('treats a score of zero as data, not as an ungraded item', () => {
@@ -121,8 +121,8 @@ describe('computeFinalGrade — DepEd K-12 weighting path', () => {
     // WW 20/30 = 66.666..% -> 66.67 -> band 66.4 -> 79
     const result = computeFinalGrade(depedCore(), { w1: graded(20) }, 'deped_k12')
     expect(result.initial).toBe(66.67)
-    expect(result.final).toBe(79)
-    expect(result.descriptor).toBe('Fairly Satisfactory')
+    expect(result.final).toBe(74)
+    expect(result.descriptor).toBe('Did Not Meet Expectations')
   })
 
   it('does not drift below 100 on decimal weights that sum to 100', () => {
@@ -151,8 +151,8 @@ describe('computeFinalGrade — DepEd K-12 weighting path', () => {
       depedCore(),
       { w1: graded(24), p1: graded(45), q1: graded(40) },
     )
-    expect(result.final).toBe(90)
-    expect(result.descriptor).toBe('Outstanding')
+    expect(result.final).toBe(87)
+    expect(result.descriptor).toBe('Very Satisfactory')
   })
 
   it('tolerates missing components and scores rather than throwing', () => {
@@ -172,17 +172,17 @@ describe('computeFinalGrade — transmutation band edges', () => {
 
   it.each([
     [100, 100, 'Outstanding'],
-    [90, 93, 'Outstanding'],
-    [85.6, 91, 'Outstanding'],
-    [84, 90, 'Outstanding'],
-    [83.99, 89, 'Very Satisfactory'],
-    [76, 85, 'Very Satisfactory'],
-    [75, 84, 'Satisfactory'],
-    [68, 80, 'Satisfactory'],
-    [61.6, 76, 'Fairly Satisfactory'],
-    [60, 75, 'Fairly Satisfactory'],
-    [59.99, 74, 'Did Not Meet Expectations'],
-    [4, 61, 'Did Not Meet Expectations'],
+    [90, 91, 'Outstanding'],
+    [85.6, 88, 'Very Satisfactory'],
+    [84, 86, 'Very Satisfactory'],
+    [83.99, 86, 'Very Satisfactory'],
+    [76, 80, 'Satisfactory'],
+    [75, 79, 'Fairly Satisfactory'],
+    [68, 74, 'Did Not Meet Expectations'],
+    [61.6, 73, 'Did Not Meet Expectations'],
+    [60, 72, 'Did Not Meet Expectations'],
+    [59.99, 72, 'Did Not Meet Expectations'],
+    [4, 60, 'Did Not Meet Expectations'],
     [0, 60, 'Did Not Meet Expectations'],
   ])('initial %s transmutes to %s (%s)', (initial, final, descriptor) => {
     const result = at(initial)
@@ -218,8 +218,8 @@ describe('computeFinalGrade — malformed assessment data', () => {
       'deped_k12',
     )
     expect(result.initial).toBe(80)
-    expect(result.final).toBe(87)
-    expect(result.descriptor).toBe('Very Satisfactory')
+    expect(result.final).toBe(83)
+    expect(result.descriptor).toBe('Satisfactory')
   })
 
   it('skips a non-numeric raw_score', () => {
@@ -236,7 +236,7 @@ describe('computeFinalGrade — malformed assessment data', () => {
       'deped_k12',
     )
     expect(result.initial).toBe(80)
-    expect(result.final).toBe(87)
+    expect(result.final).toBe(83)
   })
 
   it('ignores a component whose weight is not a number', () => {
@@ -584,12 +584,12 @@ describe('computeFinalGrade — a gradebook without the new fields computes exac
     {}, // nothing recorded
   ]
   const expectedFinal = {
-    deped_k12: [90, 91, 79, 60, null],
+    deped_k12: [87, 88, 74, 60, null],
     ched_percentage: [85, 86.25, 66.67, 0, null],
     ched_point: [2.0, 2.0, 5.0, 5.0, null],
   }
   const expectedDescriptor = {
-    deped_k12: ['Outstanding', 'Outstanding', 'Fairly Satisfactory', 'Did Not Meet Expectations', null],
+    deped_k12: ['Very Satisfactory', 'Very Satisfactory', 'Did Not Meet Expectations', 'Did Not Meet Expectations', null],
     ched_percentage: ['Passed', 'Passed', 'Failed', 'Failed', null],
     ched_point: ['Passed', 'Passed', 'Failed', 'Failed', null],
   }

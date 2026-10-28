@@ -38,7 +38,7 @@ describe('T-140 — Class Record loses the duplicated weights line and keeps the
   })
 
   it('keeps the DepEd Order transmutation note, now inside the tooltip instead of the subline', () => {
-    expect(src).toContain('transmuted per DepEd Order No. 8, s. 2015')
+    expect(src).toContain('transmuted per DepEd Order No. 015, s. 2026')
     expect(src).toMatch(/InfoTooltip[\s\S]{0,40}transmutationNote/)
   })
 })

@@ -33,7 +33,8 @@ export const PASSING = DEFAULT_PASSING_PERCENT
  * (`passing_percent`, read through gradePolicy()); before this, recovery was
  * pinned at 75 regardless, so a college class with a pass mark of 80 recovered
  * students to a mark that still failed. DepEd K-12 ignores the field the same
- * way the record page does (DepEd Order No. 8 s. 2015 fixes 75), and a
+ * way the record page does (DepEd Order No. 015 s. 2026 still fixes 75 on the
+ * transmuted grade; only the raw-to-transmuted table changed), and a
  * gradebook without the field or without a mode falls back to 75 -- the
  * default mode is deped_k12 (DATA-MODEL.md).
  */

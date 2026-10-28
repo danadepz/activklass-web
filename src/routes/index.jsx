@@ -102,7 +102,7 @@ const STEPS = [
 ]
 
 const BADGES = [
-  'DepEd Order No. 8 s. 2015',
+  'DepEd Order No. 015 s. 2026',
   'CHED tertiary mode',
   'RA 10173 compliant',
   'NPC-registered DPO',
@@ -525,7 +525,7 @@ export default function Landing() {
                 Automated Grade Computation
               </h3>
               <p style={{ fontSize: 14, lineHeight: 1.55, color: slate, margin: 0 }}>
-                Real-time weighted totals, DepEd Order No. 8 s. 2015
+                Real-time weighted totals, DepEd Order No. 015 s. 2026
                 transmutation, and a CHED tertiary mode — locked once you're done.
               </p>
             </article>
@@ -815,7 +815,7 @@ export default function Landing() {
           </div>
           {[
             { head: 'Product', links: ['Features', 'Compliance', 'Pricing', 'Roadmap'] },
-            { head: 'Resources', links: ['Teacher guides', 'DepEd Order No. 8', 'Webinars', 'Support'] },
+            { head: 'Resources', links: ['Teacher guides', 'DepEd Order No. 015', 'Webinars', 'Support'] },
             { head: 'Legal', links: ['Privacy (RA 10173)', 'Terms of use', 'DPO contact'] },
           ].map((col) => (
             <div key={col.head}>

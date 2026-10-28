@@ -70,7 +70,7 @@ export function describeFormula(sim, mode, policy) {
   const weights = sim.used.map((u) => u.weight).join(' + ')
   const lines = [`Weighted percent = (${terms}) ÷ (${weights}) = ${sim.initial}`]
   if (mode === 'deped_k12') {
-    lines.push(`Transmuted per DepEd Order No. 8, s. 2015 → ${fmtFinal(sim.final, mode)} · ${sim.descriptor} · passes at 75`)
+    lines.push(`Transmuted per DepEd Order No. 015, s. 2026 → ${fmtFinal(sim.final, mode)} · ${sim.descriptor} · passes at 75`)
   } else if (mode === 'ched_point') {
     const bands = pointScaleBands(policy)
     const band = bands.find((b) => sim.initial >= b.from) ?? bands[bands.length - 1]

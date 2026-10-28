@@ -27,7 +27,7 @@
  *      those exact numbers; pinned so the table cannot drift from them.
  *   4. The simulator computes through the same function the record uses, and
  *      its sentence names the band, the direction and the pass rule.
- *   5. DepEd K-12 ignores the pass mark entirely (DO 8 s. 2015 fixes 75). A
+ *   5. DepEd K-12 ignores the pass mark entirely (DO 015 s. 2026 fixes 75). A
  *      teacher setting 60 for her college class must not move her Grade 9
  *      class's pass line — seen on the Newton record as "≥ 75" beside
  *      BSIT-C's "≤ 3.00".

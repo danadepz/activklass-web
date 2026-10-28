@@ -11,9 +11,16 @@
  *   ungraded component neither drags down nor inflates the grade.
  *
  * Grading modes (PREPARE.md §1.7 Grading Type Selector):
- * - 'deped_k12':     weighted percentage → DepEd Order No. 8 s. 2015 transmutation
+ * - 'deped_k12':     weighted percentage → DepEd Order No. 015 s. 2026 transmutation
  * - 'ched_percentage': raw weighted percentage, no transmutation
  * - 'ched_point':    percentage mapped to the 1.0–5.0 collegiate point scale
+ *
+ * DepEd Order No. 015, s. 2026 (signed 2026-06-04, effective SY 2026-2027)
+ * replaced DO 8, s. 2015's transmutation table with an adjusted one, Table 4
+ * "Adjusted Transmutation Table" -- a transition step toward a zero-based
+ * grading system starting SY 2027-2028. The passing transmuted grade is
+ * still 75, but it now takes an initial grade of 70.00 to reach it, not
+ * 60.00 -- a raw 65, comfortably passing under the old table, now fails.
  */
 
 export const GRADING_MODES = [
@@ -26,8 +33,9 @@ export const GRADING_MODES = [
  * What passes, and which way the point scale runs (T-45, from a tester's
  * description of his school's grading module). Two settings on the gradebook:
  * - `passing_percent`: the lowest weighted percent that passes in the CHED
- *   modes. Default 75. DepEd K-12 ignores it -- DepEd Order No. 8 s. 2015
- *   fixes 75 on the transmuted grade.
+ *   modes. Default 75. DepEd K-12 ignores it -- DepEd Order No. 015 s. 2026
+ *   fixes 75 on the transmuted grade (DO 8 s. 2015 also fixed 75; only the
+ *   table mapping an initial grade onto it changed).
  * - `point_scale_direction`: 'ched' (1.0 is highest, 5.0 fails -- the default
  *   and what every gradebook meant before the field existed) or 'inverted'
  *   (the reversed scale: 5.0 is highest, 1.0 fails). 3.0 passes either way.
@@ -52,7 +60,9 @@ export function gradePolicy(source) {
   }
 }
 
-// DepEd K-12 preset (DepEd Order No. 8, s. 2015 — core subjects).
+// DepEd K-12 preset component weights (DepEd Order No. 8, s. 2015 — core
+// subjects). Unlike the transmutation table above, DO 015 s. 2026's effect
+// on these weights has not been confirmed, so they are left as-is.
 export const DEPED_COMPONENT_PRESET = [
   { name: 'Written Works', weight_percent: 30 },
   { name: 'Performance Tasks', weight_percent: 50 },
@@ -142,20 +152,26 @@ export function periodGrade(components, studentScores) {
 }
 
 /**
- * DepEd Order No. 8, s. 2015 transmutation table: Initial Grade → Transmuted
- * Grade (60 = floor, 100 = ceiling). Table 1 of the order, expressed as the
- * lower bound of each initial-grade band.
+ * DepEd Order No. 015, s. 2026 transmutation table ("Table 4. Adjusted
+ * Transmutation Table"): Initial Grade → Transmuted Grade (60 = floor,
+ * 100 = ceiling), expressed as the lower bound of each initial-grade band.
+ * Replaces DO 8, s. 2015's table for SY 2026-2027 -- the owner-supplied
+ * table image is the source; every lower bound below is copied from it, not
+ * derived. The step above 70 is roughly 1.18 points per transmuted point and
+ * below 70 roughly 4.2-4.7 points, tightening the band around the new 70→75
+ * pass line rather than scaling it evenly, so do not "fix" an apparently
+ * uneven gap -- it is uneven in the source table too.
  */
 const DEPED_TRANSMUTATION_BANDS = [
-  [100, 100], [98.4, 99], [96.8, 98], [95.2, 97], [93.6, 96],
-  [92.0, 95], [90.4, 94], [88.8, 93], [87.2, 92], [85.6, 91],
-  [84.0, 90], [82.4, 89], [80.8, 88], [79.2, 87], [77.6, 86],
-  [76.0, 85], [74.4, 84], [72.8, 83], [71.2, 82], [69.6, 81],
-  [68.0, 80], [66.4, 79], [64.8, 78], [63.2, 77], [61.6, 76],
-  [60.0, 75], [56.0, 74], [52.0, 73], [48.0, 72], [44.0, 71],
-  [40.0, 70], [36.0, 69], [32.0, 68], [28.0, 67], [24.0, 66],
-  [20.0, 65], [16.0, 64], [12.0, 63], [8.0, 62], [4.0, 61],
-  [0.0, 60],
+  [99.50, 100], [98.32, 99], [97.14, 98], [95.96, 97], [94.78, 96],
+  [93.60, 95], [92.42, 94], [91.24, 93], [90.06, 92], [88.88, 91],
+  [87.70, 90], [86.52, 89], [85.34, 88], [84.16, 87], [82.98, 86],
+  [81.80, 85], [80.62, 84], [79.44, 83], [78.26, 82], [77.08, 81],
+  [75.90, 80], [74.72, 79], [73.54, 78], [72.36, 77], [71.18, 76],
+  [70.00, 75], [65.34, 74], [60.67, 73], [56.01, 72], [51.34, 71],
+  [46.67, 70], [42.01, 69], [37.34, 68], [32.68, 67], [28.01, 66],
+  [23.35, 65], [18.68, 64], [14.01, 63], [9.35, 62], [4.68, 61],
+  [0.00, 60],
 ]
 
 /** Initial grade (0–100) → DepEd transmuted grade (60–100). */
@@ -170,7 +186,7 @@ export function transmuteDepEd(initialGrade) {
   return 60
 }
 
-/** DepEd descriptor for a transmuted grade (DepEd Order No. 8 s. 2015). */
+/** DepEd descriptor for a transmuted grade (unchanged by DO 015 s. 2026). */
 export function depEdDescriptor(transmutedGrade) {
   if (transmutedGrade == null) return null
   if (transmutedGrade >= 90) return 'Outstanding'

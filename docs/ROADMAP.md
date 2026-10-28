@@ -671,6 +671,79 @@ Still open at this altitude:
   `failWith`, which no longer calls `toast.error`, `noDuplicateToast.test.js` passes with
   its explicit toast-count assertion, and the one remaining `toast.error` in that file
   (guardian removal) has no paired inline banner, so it is not a duplicate.
+- `[~]` **The DepEd transmutation table follows the current order, DO 015 s. 2026, not
+  the 2015 one** (2026-10-29, QA pane — a tester's grading-config comparison report flagged
+  it as an unconfirmed risk from news coverage; confirmed real and current by searching
+  directly, and the owner supplied the official **Table 4, "Adjusted Transmutation Table"**
+  as a screenshot). DepEd Order No. 015, s. 2026 (signed 2026-06-04) replaced DO 8, s.
+  2015's table for SY 2026-2027 — the school year this app is being built for — as a
+  transition step toward a zero-based grading system in SY 2027-2028. The passing
+  transmuted grade is still 75, but it now takes an initial grade of **70.00**, not 60.00,
+  to reach it: under the old table a raw 65 passed (transmuted 74 was actually failing too,
+  but a raw 65 transmuted to 79 and passed); under the new one a raw 65 transmutes to 74 and
+  fails. `DEPED_TRANSMUTATION_BANDS` in `lib/grading.js` now holds the 41-band table exactly
+  as given in the owner's table image, with every citation across the client ("DepEd Order
+  No. 8 s. 2015" in `grading.js`, `gradePreview.js`, `remediationRecovery.js`, `record.jsx`
+  and the landing page's compliance badges) updated to "DepEd Order No. 015 s. 2026".
+  *Verified:* every pinned DepEd transmutation expectation in `grading.test.js` (the
+  weighting-path tests, all 13 band-edge cases, the malformed-data tests and the pre-T-45
+  parity table) hand-recomputed against the new table and watched go red on the old table,
+  green on the new one; `PreviewPanel.test.jsx` re-pinned to the Preview's own recomputed
+  output (85/70 weighted sample now reads 82 "Satisfactory", not 86 "Very Satisfactory");
+  `npm run test` 1867/1867, `npm run build` clean. **Not done:** a browser walkthrough (no
+  class in the live project currently sits near the moved band to show the swing visually);
+  whether DO 015 also changed the DepEd component weights (WW 30 / PT 50 / QA 20) or moved
+  to a three-term structure is a separate, unconfirmed question — left untouched here, the
+  preset and `DEPED_COMPONENT_PRESET` still cite DO 8 s. 2015 for the weight split only.
+- `[x]` **An institution admin and a solo teacher can each buy more seats mid-year, on their
+  own, without a superadmin** (2026-10-29, owner question: "is the number of teachers
+  scalable... should we make it adjustable"). Before this, the only lever that ever raised
+  `subscriptions/{id}.limits` after approval was the superadmin console's negotiated-seat
+  editor (`updateSubscriber`, `PATCH /api/superadmin/subscribers/{id}`) — free, manual, no
+  billing attached. Self-service had already been tried and deliberately shut off once:
+  `change_plan`'s own comment records that a school admin could self-upgrade for free before
+  it was locked to superadmin-only, "self-service plan changes belong behind billing, not
+  behind a role every customer has." This builds the self-service path the right way instead
+  of reopening that hole: a new `POST /api/subscription/<owner_id>/seats/checkout`
+  **(cross-repo, `app/api/subscriptions.py`)** starts a PayMongo checkout for the delta only
+  — full per-seat annual rate, no proration, the new seats renew on the plan's *existing*
+  date — and never touches `limits` itself; `_mark_paid` is the only thing that raises them,
+  and only after PayMongo actually confirms, reusing T-68's existing checkout/confirm/
+  reconcile machinery rather than a new money path. Increase-only: a decrease is refused with
+  the exact phrase `change_plan`'s refusal already uses ("handled by ActivKlass support"), so
+  the web client's existing `isSupportOnlyError` detection renders the mailto link with no
+  new client logic. Institution admins can raise both teacher and student seats
+  (`SeatIncreaseCard`, `routes/admin/SubscriptionTab.jsx`); a solo teacher can raise student
+  seats only, their one teacher seat is fixed (`AddStudentSeatsControl`,
+  `routes/teacher/account.jsx`) — both share one `useCheckoutReturn` poll-and-confirm hook,
+  now lifted into `lib/subscription.js` instead of living twice. **A real gap found and fixed
+  along the way:** a solo teacher's `subscriptions/{uid}.limits` was never written by
+  `_mark_paid` at all — only an institution's `limits` ever got set (at `approve_request`,
+  before any payment); a solo teacher's seat count lived only on `users.student_seats`, read
+  once for the *first* checkout's amount and never again, so every usage meter silently read
+  "unlimited" for every solo teacher and a second-year renewal would have under-charged to
+  just the ₱1,200 teacher seat. Fixed in the same function: `_mark_paid` now backfills
+  `limits` from the profile the moment a solo subscription is first created, and only then —
+  a renewal never resets seats a since-confirmed increase already raised. *Verified:* backend
+  `tests/smoke_payments.py` (+27: the delta-only amount for both paths, the backfill itself,
+  `limits` untouched until confirm, a decrease refused with the support phrase, no-op
+  refused, foreign/wrong-admin refused, pre-activation refused, reconciliation catching an
+  unreturned seat payment); full backend smoke suite (16 files) re-run clean, no regressions.
+  Web: `accountPayButton.test.jsx` (+5, the solo control's visibility matrix) and new
+  `seatIncreaseCard.test.jsx` (+4, institution-only and active-only); `npm run test`
+  1876/1876, `npm run build` clean. Browser, against the live project with two throwaway
+  accounts (deleted after, Admin SDK): as a throwaway institution admin, Add Seats pre-filled
+  5/300 (the school's real limits), raising to 8/350 opened "Add 3 teacher seats and 50
+  student seats? This charges ₱6,600 now..." and Pay landed on a real
+  `checkout.paymongo.com` session reading "ActivKlass — seat increase, ₱6,600"; as a
+  throwaway solo teacher on 40 student seats, raising to 55 opened "Add 15 student seats?
+  …₱900 now" and reached a real checkout reading "ActivKlass — seat increase, ₱900.00" —
+  both the exact delta, not the full plan price. Neither test payment was completed, per this
+  project's standing note that finishing a PayMongo test payment through browser automation
+  has been unreliable in past sessions. **Not built:** a self-service decrease (by design —
+  refunding unused seats is a harder policy question than this card answers, so it stays a
+  superadmin/support conversation); enforcing the new seat count anywhere (same as every
+  other seat limit in this app — a display and a bill, never a block).
 
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
