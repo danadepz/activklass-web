@@ -705,11 +705,18 @@ Still open at this altitude:
   it was locked to superadmin-only, "self-service plan changes belong behind billing, not
   behind a role every customer has." This builds the self-service path the right way instead
   of reopening that hole: a new `POST /api/subscription/<owner_id>/seats/checkout`
-  **(cross-repo, `app/api/subscriptions.py`)** starts a PayMongo checkout for the delta only
-  — full per-seat annual rate, no proration, the new seats renew on the plan's *existing*
-  date — and never touches `limits` itself; `_mark_paid` is the only thing that raises them,
-  and only after PayMongo actually confirms, reusing T-68's existing checkout/confirm/
-  reconcile machinery rather than a new money path. Increase-only: a decrease is refused with
+  **(cross-repo, `app/api/subscriptions.py`)** starts a PayMongo checkout for the delta only,
+  **prorated to the months left until the plan's own renewal** (owner's refinement the same
+  day, over Tagalog: "prorate to the months remaining na kasabay sa main subscription" — a
+  seat added in month 8 of 10 costs roughly 2/10 of the annual rate, not the full year,
+  because it still renews on the plan's *existing* date rather than buying a fresh year of
+  its own; `_renewal_fraction` reads the fraction straight off `subscriptions.paid_through`,
+  clamped to [0, 1], falling back to the full rate — never a guessed shorter one — for the
+  rare subscription with no `paid_through` on file, e.g. one a superadmin provisioned
+  directly rather than through checkout). This never touches `limits` itself; `_mark_paid` is
+  the only thing that raises them, and only after PayMongo actually confirms, reusing T-68's
+  existing checkout/confirm/reconcile machinery rather than a new money path. Increase-only:
+  a decrease is refused with
   the exact phrase `change_plan`'s refusal already uses ("handled by ActivKlass support"), so
   the web client's existing `isSupportOnlyError` detection renders the mailto link with no
   new client logic. Institution admins can raise both teacher and student seats
@@ -725,15 +732,24 @@ Still open at this altitude:
   just the ₱1,200 teacher seat. Fixed in the same function: `_mark_paid` now backfills
   `limits` from the profile the moment a solo subscription is first created, and only then —
   a renewal never resets seats a since-confirmed increase already raised. *Verified:* backend
-  `tests/smoke_payments.py` (+27: the delta-only amount for both paths, the backfill itself,
-  `limits` untouched until confirm, a decrease refused with the support phrase, no-op
-  refused, foreign/wrong-admin refused, pre-activation refused, reconciliation catching an
-  unreturned seat payment); full backend smoke suite (16 files) re-run clean, no regressions.
-  Web: `accountPayButton.test.jsx` (+5, the solo control's visibility matrix) and new
-  `seatIncreaseCard.test.jsx` (+4, institution-only and active-only); `npm run test`
-  1876/1876, `npm run build` clean. Browser, against the live project with two throwaway
-  accounts (deleted after, Admin SDK): as a throwaway institution admin, Add Seats pre-filled
-  5/300 (the school's real limits), raising to 8/350 opened "Add 3 teacher seats and 50
+  `tests/smoke_payments.py`'s seat-increase section (38 checks): the delta-only prorated
+  amount for both paths, the backfill itself, `limits` untouched until confirm, a decrease
+  refused with the support phrase, no-op refused, foreign/wrong-admin refused, pre-activation
+  refused, reconciliation catching an unreturned seat payment, **and** the three proration
+  shapes added for the Tagalog refinement — half the school year left charges half the annual
+  rate, no `paid_through` on file falls back to the full rate rather than a guessed shorter
+  one, and a plan renewing within the hour is refused outright (409, pointed at the renewal)
+  rather than charging a sliver of a peso; full backend smoke suite (16 files) re-run clean,
+  no regressions. Web: `pricing.test.js` (+9, `renewalFraction`/`estimateProrated` pinned
+  against hand-computed fractions), `accountPayButton.test.jsx` (+5, the solo control's
+  visibility matrix) and new `seatIncreaseCard.test.jsx` (+4, institution-only and
+  active-only); `npm run test` 1884/1884, `npm run build` clean. Browser, against the live
+  project with two throwaway accounts (deleted after, Admin SDK) **before the proration
+  refinement** — both accounts' `paid_through` was far enough out to clamp the fraction to 1,
+  so this walkthrough exercises the full-rate edge of the formula, not a fractional one (the
+  fractional math itself is backend-test-only, not re-driven live): as a throwaway
+  institution admin, Add Seats pre-filled 5/300 (the school's real limits), raising to 8/350
+  opened "Add 3 teacher seats and 50
   student seats? This charges ₱6,600 now..." and Pay landed on a real
   `checkout.paymongo.com` session reading "ActivKlass — seat increase, ₱6,600"; as a
   throwaway solo teacher on 40 student seats, raising to 55 opened "Add 15 student seats?
