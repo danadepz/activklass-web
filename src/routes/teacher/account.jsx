@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
-import { changePlan, confirmCheckout, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout, toMillis } from '@/lib/subscription'
+import {
+  changePlan, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout,
+  startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
+} from '@/lib/subscription'
+import { estimateProrated, pesos } from '@/lib/pricing'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -227,11 +230,79 @@ function PayButton({ ownerId }) {
   )
 }
 
+/**
+ * "Add student seats" -- a mid-year top-up on an already-active solo plan,
+ * the one state `PayButton` above never covers. The one teacher seat on a
+ * solo plan is fixed and never offered here (the backend refuses a change to
+ * it too); only student seats grow, and only upward -- a decrease routes to
+ * ActivKlass support, the same rule `change_plan` already enforces for a
+ * full plan change.
+ */
+function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
+  const floor = currentSeats ?? 0
+  const [value, setValue] = useState(String(floor))
+  const [err, setErr] = useState('')
+  const mut = useMutation({
+    mutationFn: (studentSeats) => startSeatIncreaseCheckout(ownerId, { studentSeats }),
+    onSuccess: (res) => { window.location.href = res.checkout_url },
+    onError: (e) => setErr(e.message),
+  })
+
+  async function submit() {
+    setErr('')
+    const next = Number.parseInt(value, 10)
+    if (!Number.isInteger(next) || next <= floor) {
+      setErr('Enter a student seat count above what you already have.')
+      return
+    }
+    const added = next - floor
+    const amount = estimateProrated(0, added, paidThroughMs)
+    const ok = await confirmDialog({
+      title: `Add ${added} student seat${added === 1 ? '' : 's'}?`,
+      message:
+        `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
+        + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
+        + 'not this screen.',
+      confirmLabel: `Pay ${pesos(amount)}`,
+    })
+    if (!ok) return
+    mut.mutate(next)
+  }
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line}` }}>
+      <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
+        Add student seats
+      </label>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="number" min={floor + 1} step={1} value={value}
+          onChange={(e) => setValue(e.target.value)}
+          aria-label="New student seat total"
+          style={{ ...field, width: 110 }}
+        />
+        <Button disabled={mut.isPending} onClick={submit}>
+          {mut.isPending ? 'Starting payment…' : 'Add seats'}
+        </Button>
+      </div>
+      <p style={{ fontSize: 12, color: faint, margin: '8px 0 0', lineHeight: 1.5 }}>
+        Billed only for the months left until your plan renews, and the new seats renew on that
+        same date. They're available as soon as payment is confirmed. To reduce seats, contact
+        ActivKlass support.
+      </p>
+      <Notice>{err}</Notice>
+    </div>
+  )
+}
+
 // Exported so a test can lock CLAUDE.md's rule against this map without
 // having to drive five real polls through useCheckoutReturn's effect.
 export const CHECKOUT_BANNER = {
   checking: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Checking your payment…' },
   paid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — you are subscribed for the school year.' },
+  // T-?: a seat top-up is not a renewal, so it gets its own text rather than
+  // claiming a subscription event that did not happen.
+  seatsAdded: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
     text: 'We could not confirm the payment yet. If you completed it, refresh in a moment — otherwise nothing was charged.',
@@ -241,13 +312,17 @@ export const CHECKOUT_BANNER = {
 
 function CheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
-  const s = CHECKOUT_BANNER[state]
+  const seatIncrease = state === 'paid' && receipt?.kind === 'seat_increase'
+  const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : state]
   // T-69: once paid, say what happened to the receipt too -- never left as
   // a silent "did that actually send" guess.
   const receiptLine = state === 'paid' && receipt
     ? (receipt.receiptSentTo
         ? `A receipt was sent to ${receipt.receiptSentTo}.`
         : 'We could not send the receipt — it is on your Account page.')
+    : null
+  const seatsLine = seatIncrease && receipt.newLimits
+    ? `You now have ${receipt.newLimits.student_seats} student seat${receipt.newLimits.student_seats === 1 ? '' : 's'}.`
     : null
   return (
     <div style={{
@@ -256,6 +331,7 @@ function CheckoutBanner({ state, receipt, dismiss }) {
     }}>
       <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>
         {s.text}
+        {seatsLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{seatsLine}</span>}
         {receiptLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{receiptLine}</span>}
       </span>
       {state !== 'checking' && (
@@ -269,61 +345,6 @@ function CheckoutBanner({ state, receipt, dismiss }) {
       )}
     </div>
   )
-}
-
-/**
- * The trip back from PayMongo's hosted page. `checkout_ref` in the URL is
- * this account's OWN reference (T-68), minted before the gateway is called
- * -- not PayMongo's session id, which does not exist yet at that point.
- * Polls a few times because a test payment can take a moment to settle,
- * then stops rather than polling forever.
- */
-function useCheckoutReturn(ownerId) {
-  const [params, setParams] = useSearchParams()
-  const qc = useQueryClient()
-  const reference = params.get('checkout_ref')
-  const cancelled = params.get('checkout_cancelled')
-  const [state, setState] = useState(reference ? 'checking' : cancelled ? 'cancelled' : null)
-  const [receipt, setReceipt] = useState(null)
-
-  useEffect(() => {
-    if (!reference || !ownerId) return undefined
-    let stopped = false
-    let attempt = 0
-    async function poll() {
-      attempt += 1
-      try {
-        const res = await confirmCheckout(ownerId, reference)
-        if (stopped) return
-        if (res.status === 'paid') {
-          setState('paid')
-          // T-69: sent to <email>, or explicitly not sent -- never guessed
-          // from silence.
-          setReceipt({ receiptSentTo: res.receipt_sent_to ?? null, receiptFailed: !!res.receipt_failed })
-          qc.invalidateQueries({ queryKey: ['subscription'] })
-          return
-        }
-      } catch {
-        if (stopped) return
-      }
-      if (attempt < 5) setTimeout(poll, 2000)
-      else if (!stopped) setState('unconfirmed')
-    }
-    poll()
-    return () => { stopped = true }
-    // reference/ownerId only -- qc is stable, and re-running on every
-    // render would restart the poll from attempt 1 forever.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reference, ownerId])
-
-  function dismiss() {
-    setState(null)
-    params.delete('checkout_ref')
-    params.delete('checkout_cancelled')
-    setParams(params, { replace: true })
-  }
-
-  return { state, receipt, dismiss }
 }
 
 function SubscriptionCard() {
@@ -501,6 +522,14 @@ function SubscriptionCard() {
           </div>
         </div>
       </div>
+
+      {sub.type !== 'institution' && sub.status === 'active' && (
+        <AddStudentSeatsControl
+          ownerId={profile.id}
+          currentSeats={sub.limits?.student_seats}
+          paidThroughMs={toMillis(sub.paid_through)}
+        />
+      )}
 
       <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))',
                     marginTop: 20 }}>

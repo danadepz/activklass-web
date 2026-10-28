@@ -53,6 +53,7 @@ vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn() }))
 import TeacherAccountPage, { CHECKOUT_BANNER } from './account.jsx'
 
 const PAY = 'Pay for this school year'
+const ADD_SEATS = 'Add student seats'
 const DAY = 24 * 60 * 60 * 1000
 
 function page({ profile = {}, subscription = null, noDoc = false } = {}) {
@@ -86,9 +87,31 @@ describe('T-68 — the Account page offers to pay, inside the website', () => {
 })
 
 describe('T-68 — the checkout banners never name the gateway', () => {
-  it('none of the four banner strings mention the vendor', () => {
+  it('none of the banner strings mention the vendor', () => {
     for (const { text } of Object.values(CHECKOUT_BANNER)) {
       expect(text).not.toMatch(/paymongo/i)
     }
+  })
+})
+
+describe('self-service seat increase — the Account page offers "Add student seats" only once there is a plan to add to', () => {
+  it('offers it to a solo teacher already paid up', () => {
+    expect(page({ subscription: { type: 'teacher', status: 'active', limits: { teacher_seats: 1, student_seats: 40 } } })).toContain(ADD_SEATS)
+  })
+
+  it('never offers it on a trial — there is no plan yet to top up', () => {
+    expect(page({ subscription: { type: 'teacher', status: 'trial', trial_ends_at: Date.now() + 20 * DAY } })).not.toContain(ADD_SEATS)
+  })
+
+  it('never offers it once a trial has expired', () => {
+    expect(page({ subscription: { type: 'teacher', status: 'expired', trial_ends_at: Date.now() - DAY } })).not.toContain(ADD_SEATS)
+  })
+
+  it("never offers it on a school's plan — the admin adds seats there, not the teacher", () => {
+    expect(page({ profile: { school_id: 'S1' }, subscription: { type: 'institution', status: 'active' } })).not.toContain(ADD_SEATS)
+  })
+
+  it('never offers it on the self-registered path with no subscription document yet', () => {
+    expect(page({ profile: { subscription_status: 'trial', trial_ends_at: Date.now() + 5 * DAY }, noDoc: true })).not.toContain(ADD_SEATS)
   })
 })
