@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes, toMillis,
+  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
+  startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
+import { estimateProrated, pesos } from '@/lib/pricing'
 import {
   fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
 } from '@/lib/institution'
@@ -164,6 +166,140 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
         <StorageMeter limitBytes={storageBytes} />
       </div>
 
+      {error && <div style={{ marginTop: 14 }}><PlanChangeNotice error={error} /></div>}
+    </section>
+  )
+}
+
+// Exported alongside the component below for the same reason
+// teacher/account.jsx exports its own: a test locking "no banner names the
+// vendor" without driving a real poll through the effect.
+export const SEAT_CHECKOUT_BANNER = {
+  checking: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Checking your payment…' },
+  paid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
+  unconfirmed: {
+    bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
+    text: 'We could not confirm the payment yet. If you completed it, refresh in a moment — otherwise nothing was charged.',
+  },
+  cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
+}
+
+function SeatCheckoutBanner({ state, receipt, dismiss }) {
+  if (!state) return null
+  const s = SEAT_CHECKOUT_BANNER[state]
+  const seatsLine = state === 'paid' && receipt?.newLimits
+    ? `Your school now has ${receipt.newLimits.teacher_seats} teacher seats and `
+      + `${receipt.newLimits.student_seats} student seats.`
+    : null
+  return (
+    <div style={{
+      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: '12px 16px',
+      marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+    }}>
+      <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>
+        {s.text}
+        {seatsLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{seatsLine}</span>}
+      </span>
+      {state !== 'checking' && (
+        <button
+          type="button"
+          onClick={dismiss}
+          style={{ background: 'none', border: 'none', color: s.color, fontWeight: 700, cursor: 'pointer', fontSize: 13, padding: 0 }}
+        >
+          Dismiss
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Add teacher and/or student seats to an already-active institution plan,
+ * mid-year. Increase-only: the inputs are floored at what the school already
+ * has, and the backend refuses a decrease with the same "handled by
+ * ActivKlass support" wording `change_plan` already uses for a full plan
+ * change -- so `PlanChangeNotice` above picks it up and renders the mailto
+ * link without any new detection logic here.
+ */
+function SeatIncreaseCard({ ownerId, sub }) {
+  const curTeacher = sub.limits?.teacher_seats ?? 0
+  const curStudent = sub.limits?.student_seats ?? 0
+  const [teacherSeats, setTeacherSeats] = useState(String(curTeacher))
+  const [studentSeats, setStudentSeats] = useState(String(curStudent))
+  const [error, setError] = useState('')
+
+  const mut = useMutation({
+    mutationFn: ({ teacherSeats: t, studentSeats: s }) => startSeatIncreaseCheckout(ownerId, { teacherSeats: t, studentSeats: s }),
+    onSuccess: (res) => { window.location.href = res.checkout_url },
+    onError: (e) => setError(e.message),
+  })
+
+  async function submit() {
+    setError('')
+    const t = Number.parseInt(teacherSeats, 10)
+    const s = Number.parseInt(studentSeats, 10)
+    if (!Number.isInteger(t) || !Number.isInteger(s) || t < curTeacher || s < curStudent) {
+      setError('Enter seat counts at or above what your school already has.')
+      return
+    }
+    if (t === curTeacher && s === curStudent) {
+      setError('Raise at least one seat count above what you already have.')
+      return
+    }
+    const addedTeacher = t - curTeacher
+    const addedStudent = s - curStudent
+    const amount = estimateProrated(addedTeacher, addedStudent, toMillis(sub.paid_through))
+    const parts = []
+    if (addedTeacher > 0) parts.push(`${addedTeacher} teacher seat${addedTeacher === 1 ? '' : 's'}`)
+    if (addedStudent > 0) parts.push(`${addedStudent} student seat${addedStudent === 1 ? '' : 's'}`)
+    const ok = await confirmDialog({
+      title: `Add ${parts.join(' and ')}?`,
+      message:
+        `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
+        + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
+        + 'not this screen.',
+      confirmLabel: `Pay ${pesos(amount)}`,
+    })
+    if (!ok) return
+    mut.mutate({ teacherSeats: t, studentSeats: s })
+  }
+
+  return (
+    <section style={{ ...card, padding: 22 }}>
+      <CardHead
+        icon={<Layers className="w-5 h-5" style={{ color: goldDeep }} />}
+        tint="rgba(245,197,24,0.15)"
+        title="Add Seats"
+        sub="Seats can only be increased here — to reduce seats, contact ActivKlass support. New seats are billed only for the months left until your plan renews, and renew on that same date. They're available as soon as payment is confirmed."
+        style={{ marginBottom: 16 }}
+      />
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
+            Teacher seats
+          </label>
+          <input
+            type="number" min={curTeacher} step={1} value={teacherSeats}
+            onChange={(e) => setTeacherSeats(e.target.value)}
+            aria-label="New teacher seat total"
+            style={{ ...field, width: 110 }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
+            Student seats
+          </label>
+          <input
+            type="number" min={curStudent} step={1} value={studentSeats}
+            onChange={(e) => setStudentSeats(e.target.value)}
+            aria-label="New student seat total"
+            style={{ ...field, width: 110 }}
+          />
+        </div>
+        <Button disabled={mut.isPending} onClick={submit}>
+          {mut.isPending ? 'Starting payment…' : 'Add seats'}
+        </Button>
+      </div>
       {error && <div style={{ marginTop: 14 }}><PlanChangeNotice error={error} /></div>}
     </section>
   )
@@ -359,6 +495,7 @@ export default function SubscriptionTab() {
     retry: false,
   })
   const ownerId = mine?.owner_id
+  const checkout = useCheckoutReturn(ownerId)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['subscription', ownerId],
     queryFn: () => fetchSubscription(ownerId),
@@ -396,8 +533,14 @@ export default function SubscriptionTab() {
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
+      <SeatCheckoutBanner {...checkout} />
+
       <PlanCard ownerId={ownerId} sub={subscription} usage={usage} plans={plans}
                 onChanged={refresh} />
+
+      {subscription.type === 'institution' && subscription.status === 'active' && (
+        <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
+      )}
 
       <TeacherSeatsCard onChanged={refresh} />
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import SignOutButton from '@/components/SignOutButton'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
@@ -25,7 +26,16 @@ const TABS = [
 
 export default function AdminPage() {
   const { profile } = useAuth()
-  const [tab, setTab] = useState('users')
+  // A PayMongo seat-increase checkout returns to /admin?tab=subscription --
+  // read once on mount so that lands on the Subscription tab instead of the
+  // Users default, which would never mount SubscriptionTab to poll the
+  // pending payment. Not a full URL-synced tab system -- clicking a tab
+  // afterward does not write the URL, same as before this.
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => {
+    const requested = searchParams.get('tab')
+    return TABS.some((t) => t.key === requested) ? requested : 'users'
+  })
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
 
   return (
