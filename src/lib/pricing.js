@@ -49,6 +49,10 @@ export const TRIAL_DAYS = 30
 export const TEACHER_SEAT_PER_YEAR = 1200
 export const STUDENT_SEAT_PER_YEAR = 60
 export const MONTHS_PER_SCHOOL_YEAR = 10
+/** Mirrors `SCHOOL_YEAR_DAYS` in app/api/subscriptions.py (backend) -- the
+ * two repos share no module, so this stays in step by hand. Used only to
+ * prorate a mid-year seat increase against the months actually left. */
+export const SCHOOL_YEAR_DAYS = 300
 
 /**
  * Academic calendars a school can run on. Recorded on the profile and the
@@ -72,6 +76,32 @@ export function estimateAnnual(teacherSeats, studentSeats) {
 /** A solo teacher: their own seat plus the students they handle. */
 export function estimateSolo(studentSeats) {
   return estimateAnnual(1, studentSeats)
+}
+
+/**
+ * What fraction of a school year is left until `paidThroughMs`, clamped to
+ * [0, 1]. Mirrors the backend's `_renewal_fraction` (subscriptions.py)
+ * exactly -- same constant, same clamping, same "no renewal date on file ->
+ * charge the full rate rather than guess a shorter one" fallback -- so the
+ * estimate shown before checkout matches what the server actually charges.
+ */
+export function renewalFraction(paidThroughMs, now = Date.now()) {
+  if (!paidThroughMs) return 1
+  const remainingDays = (paidThroughMs - now) / (24 * 60 * 60 * 1000)
+  return Math.max(0, Math.min(1, remainingDays / SCHOOL_YEAR_DAYS))
+}
+
+/**
+ * A mid-year seat top-up's price: the full annual rate for the seats added,
+ * prorated to the months left until the plan's own renewal -- a seat added
+ * in month 8 of 10 costs roughly 2/10 of the annual rate, because it rides
+ * the SAME renewal date as the rest of the plan rather than buying a fresh
+ * year of its own (owner decision 2026-10-29). Display only: the backend
+ * recomputes this independently at checkout and never trusts the client's
+ * figure.
+ */
+export function estimateProrated(teacherSeatsAdded, studentSeatsAdded, paidThroughMs, now = Date.now()) {
+  return Math.round(estimateAnnual(teacherSeatsAdded, studentSeatsAdded) * renewalFraction(paidThroughMs, now))
 }
 
 /** When a trial that starts now ends — a Date, for a Firestore Timestamp. */

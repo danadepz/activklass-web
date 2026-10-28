@@ -7,6 +7,9 @@
  * unlimited institution plan. firestore.rules lets an owner read their record
  * but not update it, and the server applies limits from its own plan table.
  */
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import { blue, gold, green, red } from '../theme'
 
@@ -102,6 +105,88 @@ export function createPendingSchool(requestId) {
  */
 export function confirmCheckout(ownerId, reference) {
   return api(`/api/subscription/${ownerId}/checkout/${reference}/confirm`, { method: 'POST' })
+}
+
+/**
+ * Buy more seats on an already-active subscription (institution admin, both
+ * seat types; solo teacher, student seats only -- their one teacher seat is
+ * fixed). `teacherSeats` / `studentSeats` are the NEW TOTALS, not deltas; a
+ * field left out means "no change to that one". The server recomputes the
+ * charge from the delta and never writes `limits` until PayMongo confirms --
+ * this only starts the checkout, same shape as `startCheckout`.
+ */
+export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats } = {}) {
+  const body = {}
+  if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
+  if (studentSeats !== undefined) body.student_seats = studentSeats
+  return api(`/api/subscription/${ownerId}/seats/checkout`, { method: 'POST', body })
+}
+
+/**
+ * The trip back from PayMongo's hosted page. `checkout_ref` in the URL is
+ * this account's OWN reference (T-68), minted before the gateway is called
+ * -- not PayMongo's session id, which does not exist yet at that point.
+ * Polls a few times because a test payment can take a moment to settle,
+ * then stops rather than polling forever.
+ *
+ * Shared by `teacher/account.jsx` (a solo teacher's own renewal or seat
+ * top-up) and `routes/admin/SubscriptionTab.jsx` (an institution's seat
+ * top-up) -- both poll the same confirm endpoint and need identical
+ * settle/stop behaviour, so this lives beside the checkout wrappers instead
+ * of being written twice.
+ */
+export function useCheckoutReturn(ownerId) {
+  const [params, setParams] = useSearchParams()
+  const qc = useQueryClient()
+  const reference = params.get('checkout_ref')
+  const cancelled = params.get('checkout_cancelled')
+  const [state, setState] = useState(reference ? 'checking' : cancelled ? 'cancelled' : null)
+  const [receipt, setReceipt] = useState(null)
+
+  useEffect(() => {
+    if (!reference || !ownerId) return undefined
+    let stopped = false
+    let attempt = 0
+    async function poll() {
+      attempt += 1
+      try {
+        const res = await confirmCheckout(ownerId, reference)
+        if (stopped) return
+        if (res.status === 'paid') {
+          setState('paid')
+          // T-69: sent to <email>, or explicitly not sent -- never guessed
+          // from silence. `kind`/`newLimits` tell a seat top-up apart from
+          // the annual payment so the caller's banner can say which.
+          setReceipt({
+            receiptSentTo: res.receipt_sent_to ?? null,
+            receiptFailed: !!res.receipt_failed,
+            kind: res.kind ?? 'subscription',
+            newLimits: res.new_limits ?? null,
+          })
+          qc.invalidateQueries({ queryKey: ['subscription'] })
+          return
+        }
+      } catch {
+        if (stopped) return
+      }
+      if (attempt < 5) setTimeout(poll, 2000)
+      else if (!stopped) setState('unconfirmed')
+    }
+    poll()
+    return () => { stopped = true }
+    // reference/ownerId only -- qc is stable, and re-running on every
+    // render would restart the poll from attempt 1 forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference, ownerId])
+
+  function dismiss() {
+    setState(null)
+    params.delete('checkout_ref')
+    params.delete('checkout_cancelled')
+    setParams(params, { replace: true })
+  }
+
+  return { state, receipt, dismiss }
 }
 
 /**
