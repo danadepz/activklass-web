@@ -8,9 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run --exclude \"**/firestoreRules.test.js\" --exclude \"**/node_modules/**\"",
+    "test": "vitest run --exclude \"**/firestoreRules.test.js\" --exclude \"**/storageRules.test.js\" --exclude \"**/node_modules/**\"",
     "test:watch": "vitest",
-    "test:rules": "firebase emulators:exec --only firestore --project activklass-rules-test \"vitest run src/lib/firestoreRules.test.js\""
+    "test:rules": "firebase emulators:exec --only firestore --project activklass-rules-test \"vitest run src/lib/firestoreRules.test.js\"",
+    "test:rules:storage": "firebase emulators:exec --only firestore,storage --project activklass-rules-test \"vitest run src/lib/storageRules.test.js\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",

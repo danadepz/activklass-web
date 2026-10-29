@@ -1,0 +1,14 @@
+// Not the real rules. The Storage emulator CLI refuses to start without a
+// rules file named in firebase.json, but the actual ruleset under test is
+// activklass-backend/storage.rules — loaded at runtime by
+// src/lib/storageRules.test.js via initializeTestEnvironment(), which
+// overwrites whatever the emulator booted with. Deny-all here so a test that
+// forgot to load real rules fails loudly instead of silently passing.
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
