@@ -326,8 +326,29 @@ export default function SuperAdminSubscribersPage() {
           rather than failed. */}
       <div className="mt-8 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Clickable tabs for Institution vs Solo Teacher */}
+          {/* Clickable tabs for All | Institution | Solo */}
           <div className="flex items-center gap-1.5" role="tablist" aria-label="Subscriber Types">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={segment === 'all'}
+              onClick={() => setSegment('all')}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                segment === 'all'
+                  ? 'border border-amber-400/40 bg-amber-400/10 text-amber-300 shadow-sm'
+                  : 'border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+              }`}
+            >
+              <span>All</span>
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                  segment === 'all' ? 'bg-amber-400/20 text-amber-300' : 'bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                {rows.length}
+              </span>
+            </button>
+
             <button
               type="button"
               role="tab"
@@ -339,7 +360,7 @@ export default function SuperAdminSubscribersPage() {
                   : 'border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
               }`}
             >
-              <span>Institutions</span>
+              <span>Institution</span>
               <span
                 className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
                   segment === 'institution' ? 'bg-amber-400/20 text-amber-300' : 'bg-zinc-800 text-zinc-500'
@@ -360,7 +381,7 @@ export default function SuperAdminSubscribersPage() {
                   : 'border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
               }`}
             >
-              <span>Solo Teachers</span>
+              <span>Solo</span>
               <span
                 className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
                   segment === 'teacher' ? 'bg-amber-400/20 text-amber-300' : 'bg-zinc-800 text-zinc-500'
@@ -368,21 +389,6 @@ export default function SuperAdminSubscribersPage() {
               >
                 {teacherCount}
               </span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={segment === 'all'}
-              onClick={() => setSegment('all')}
-              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                segment === 'all'
-                  ? 'border border-zinc-700 bg-zinc-800 text-zinc-100 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              <span>All</span>
-              <span className="font-mono text-[10px] text-zinc-500">{rows.length}</span>
             </button>
           </div>
 
