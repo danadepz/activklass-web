@@ -55,7 +55,7 @@ export default function SuperAdminLayout() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800 bg-zinc-900/60 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* The mark identifies the product; the INTERNAL badge stays beside
                 it at equal weight so a screenshot still reads as ours-not-theirs.
@@ -100,7 +100,7 @@ export default function SuperAdminLayout() {
         </div>
 
         {tabs.length > 1 && (
-          <nav className="mx-auto max-w-6xl px-6 flex gap-1">
+          <nav className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 flex gap-1">
             {tabs.map((tab) => (
               <Link
                 key={tab.to}
@@ -123,7 +123,7 @@ export default function SuperAdminLayout() {
         )}
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 py-8">
         <Outlet />
       </main>
     </div>
