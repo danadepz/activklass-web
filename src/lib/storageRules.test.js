@@ -122,3 +122,71 @@ describe('learning_materials · read (T-204)', () => {
     )
   })
 })
+
+/*
+ * T-205 / audit F-10: /excuse_letters/{classId}/{studentId}/{fileName} and
+ * /contest_files/{classId}/{studentId}/{fileName} both had
+ * `allow read: if signedIn()` — any signed-in user, including any student at
+ * any school, could read another student's excuse letter or contest
+ * attachment (which can hold a medical document). Scoped to: the owning
+ * student, the class's teacher, or an admin.
+ */
+describe('excuse_letters · read (T-205)', () => {
+  it("refuses another student reading this student's excuse letter", async () => {
+    await seedFile('excuse_letters/class-1/student-1/2026-10-29.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_STUDENT), 'excuse_letters/class-1/student-1/2026-10-29.pdf')),
+    )
+  })
+
+  it('refuses a teacher who does not teach this class', async () => {
+    await seedFile('excuse_letters/class-1/student-1/2026-10-29.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_TEACHER), 'excuse_letters/class-1/student-1/2026-10-29.pdf')),
+    )
+  })
+
+  it('allows the owning student to read their own excuse letter', async () => {
+    await seedFile('excuse_letters/class-1/student-1/2026-10-29.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(STUDENT), 'excuse_letters/class-1/student-1/2026-10-29.pdf')),
+    )
+  })
+
+  it("allows the class's own teacher to read it", async () => {
+    await seedFile('excuse_letters/class-1/student-1/2026-10-29.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(TEACHER), 'excuse_letters/class-1/student-1/2026-10-29.pdf')),
+    )
+  })
+
+  it('allows an admin to read it', async () => {
+    await seedFile('excuse_letters/class-1/student-1/2026-10-29.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(ADMIN), 'excuse_letters/class-1/student-1/2026-10-29.pdf')),
+    )
+  })
+})
+
+describe('contest_files · read (T-205)', () => {
+  it("refuses another student reading this student's contest attachment", async () => {
+    await seedFile('contest_files/class-1/student-1/assessment-1.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_STUDENT), 'contest_files/class-1/student-1/assessment-1.pdf')),
+    )
+  })
+
+  it('allows the owning student to read their own contest attachment', async () => {
+    await seedFile('contest_files/class-1/student-1/assessment-1.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(STUDENT), 'contest_files/class-1/student-1/assessment-1.pdf')),
+    )
+  })
+
+  it("allows the class's own teacher to read it", async () => {
+    await seedFile('contest_files/class-1/student-1/assessment-1.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(TEACHER), 'contest_files/class-1/student-1/assessment-1.pdf')),
+    )
+  })
+})
