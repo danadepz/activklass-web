@@ -73,7 +73,8 @@ function whose new return shape was still uncommitted). Before `--only` on a sha
   Invalidation works off the `['fs-classes']` key prefix.
 - **Firebase Web SDK 12** — Auth, Firestore, Storage, initialized in `lib/firebase.js`.
   Init is guarded: missing env keys render setup instructions instead of a white screen.
-- **Vitest 4** — 446 tests over the pure modules. **The only automated check** besides the
+- **Vitest 4** — the count is `npm run test`'s own output, quoted once below so this
+  doesn't drift out of sync with it again. **The only automated check** besides the
   build; there is no typechecker (plain JSX, not TypeScript).
 - Rejected and abandoned choices, with reasons: `docs/TECH-STACK.md`.
 
@@ -90,7 +91,7 @@ src/
 ├── context/           ✅ AuthContext + useAuth — SHARED
 ├── hooks/             ✅ shared Firestore queries (new ones go here, not into a route)
 └── lib/               ✅ api.js · firebase.js · ai.js · grading · gradebook · roster ·
-                          quiz* · validation · 18 *.test.js files
+                          quiz* · validation · 41 *.test.js files
 ```
 `lib/quizPool.js`, `lib/quizFeedback.js` and `lib/quizAttempts.js` **exist twice** — each
 has a TypeScript port in `activklass-mobile/src/lib/`. Edit one, edit the other;
@@ -101,7 +102,11 @@ Never "fix" a parity failure by editing the test.
 ```bash
 npm run dev          # Vite on :5173 — ONE dev server for all panes, not four
 npm run build        # production build to dist/  (645ms, main chunk 654 kB)
-npm run test         # vitest, 446 tests in 18 files — must pass before you finish
+npm run test         # vitest, 1899 tests in 192 files as of 2026-10-29 — must pass before you finish
+                      # (excludes firestoreRules.test.js / storageRules.test.js — those need
+                      # the Firebase emulator + Java, run and counted separately via
+                      # npm run test:rules / test:rules:storage, see docs/ROADMAP.md
+                      # for that suite's own current count)
 npm run test:rules   # real firestore.rules against the emulator (needs Java)
 npm run lint         # 41 PRE-EXISTING errors, nearly all no-unused-vars — not your bug
 ```

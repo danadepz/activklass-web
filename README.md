@@ -104,7 +104,7 @@ Copy `.env.example` to `.env.local`:
 | `npm run dev` | Starts the local Vite development server with HMR |
 | `npm run build` | Compiles the production build to `dist/` |
 | `npm run preview` | Previews the production build locally |
-| `npm test` | Runs the Vitest test suite (**523 unit/integration tests across 27 suites**) |
+| `npm test` | Runs the Vitest test suite — current count tracked in [`CLAUDE.md`](CLAUDE.md#development-commands), not restated here, since a hardcoded number here had already drifted out of sync with it |
 | `npm run test:watch` | Runs Vitest in interactive watch mode |
 | `npm run test:rules` | Runs `firestore.rules` validation against the local Firebase emulator |
 | `npm run lint` | Runs ESLint |
