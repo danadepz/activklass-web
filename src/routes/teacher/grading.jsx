@@ -135,7 +135,7 @@ function withIds(rows, extraKeys = []) {
     })
 }
 
-function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
+function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave }) {
   // Badge reflects what would actually be saved, so it agrees with the check
   // in persist() rather than counting weights on unnamed rows.
   const counted = namedRows(rows)
@@ -236,13 +236,31 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false }) {
       >
         <span style={{ color: gold }}>+</span> {addLabel}
       </button>
+
+      {onSave && (
+        /* This card's own Save & Sync -- it still saves the whole grading
+           setup (periods, components, passing score, target classes), the
+           same single request the top button sends. The backend's
+           /api/grading-setup always needs both groups together, so there is
+           no such thing as saving just this card; the button lives here
+           only so the action sits beside the weights a teacher just
+           changed, instead of a scroll away. */
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(14,42,92,0.06)', display: 'flex', justifyContent: 'flex-end' }}>
+          <Button onClick={onSave} disabled={busy} radius={11}>
+            {busy ? 'Saving…' : 'Save & Sync'}
+            <GoldArrowDot>
+              <ArrowRight className="h-3 w-3" />
+            </GoldArrowDot>
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
 
 /*
  * What passes, per grading type (T-45). DepEd K-12 has nothing to set: DepEd
- * Order No. 8, s. 2015 fixes 75 on the transmuted grade. The CHED modes take a
+ * Order No. 015, s. 2026 fixes 75 on the transmuted grade. The CHED modes take a
  * passing score, and the point scale also takes its direction -- 1.0 highest
  * (standard) or 5.0 highest (reversed) -- with the ranges the choice produces
  * generated from lib/grading.js, the same function the record computes with,
@@ -253,7 +271,7 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
     return (
       <p style={{ fontSize: 12.5, color: muted, margin: '14px 0 0' }}>
         Passing score is fixed at <strong style={{ color: ink }}>75</strong> following DepEd guidelines
-        (Order No. 8, s. 2015), so there is no passing score to set.
+        (Order No. 015, s. 2026), so there is no passing score to set.
       </p>
     )
   }
@@ -607,6 +625,38 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   // race the request in flight (two saves, last-write-wins on the backend).
   const busy = save.isPending || applyPreset.isPending
 
+  /* Gates every Save & Sync button on the page (the top one and the one on
+     each weight card -- all three save the same whole setup, see the note
+     in EditorCard). An unbalanced group or a bad pass mark goes straight to
+     the same error persist() would throw anyway, with no confirmation step
+     -- asking "are you sure?" about a save that cannot succeed has nothing
+     to confirm. Only a setup that would actually save asks first, because
+     saving recomputes every grade on every selected class immediately. */
+  async function requestSave() {
+    if (busy) return
+    if (!balanced(periods) || !balanced(components)) {
+      reportError('Every weight must be above 0%, and each group must total 100%.')
+      return
+    }
+    const passError = gradingMode !== 'deped_k12' ? passingPercentError(passingPercent) : null
+    if (passError) {
+      reportError(passError)
+      return
+    }
+    const ok = await confirmDialog({
+      title: 'Save this grading setup?',
+      message: selectedClassIds.length
+        ? `Saves these grading periods and components, and applies them to ${selectedClassIds.length} `
+          + `selected class${selectedClassIds.length === 1 ? '' : 'es'}. Grades already recorded are `
+          + 'recomputed under the new weights.'
+        : 'Saves these grading periods and components as a preset. Tick target classes below to apply '
+          + 'it to a class.',
+      confirmLabel: 'Save & Sync',
+    })
+    if (!ok) return
+    save.mutate()
+  }
+
   return (
     <div className="max-w-4xl mx-auto pb-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -629,7 +679,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
             </p>
           )}
         </div>
-        <Button onClick={() => save.mutate()} disabled={busy} radius={11}>
+        <Button onClick={requestSave} disabled={busy} radius={11}>
           {busy ? 'Saving…' : 'Save & Sync'}
           <GoldArrowDot>
             <ArrowRight className="h-3 w-3" />
@@ -761,6 +811,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           setRows={setPeriods}
           addLabel="Add period"
           busy={busy}
+          onSave={requestSave}
         />
         <EditorCard
           title="Grade Components"
@@ -769,6 +820,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           setRows={setComponents}
           addLabel="Add component"
           busy={busy}
+          onSave={requestSave}
         />
       </div>
 
