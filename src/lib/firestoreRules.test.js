@@ -789,7 +789,13 @@ const FOREIGN_TEACHER = 'teacher-2'
 async function seedRoster() {
   await testEnv.withSecurityRulesDisabled(async (admin) => {
     const db = admin.firestore()
-    await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T' })
+    // OWN_TEACHER and FOREIGN_TEACHER share a school_id: the "School
+    // Colleagues" card (hooks/useSchoolColleagues.js) needs same-school
+    // teachers to read each other (T-213, audit F-13) -- this fixture's
+    // other tests are all about class/roster ownership, which school_id
+    // does not touch.
+    await setDoc(doc(db, 'users', OWN_TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+    await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-1' })
     await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B', teacher_ids: [OWN_TEACHER] })
     await setDoc(doc(db, 'classes', 'class-1'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT] })
     await setDoc(doc(db, 'classes', 'class-2'), { teacher_id: FOREIGN_TEACHER, student_ids: [] })
@@ -817,8 +823,17 @@ describe('a teacher reads only the students they handle', () => {
     await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'users', STUDENT)))
   })
 
-  it('teacher profiles stay readable by every teacher (the Your school card)', async () => {
+  it('teacher profiles stay readable by a same-school teacher (the Your school card)', async () => {
     await assertSucceeds(getDoc(doc(ctx(FOREIGN_TEACHER), 'users', OWN_TEACHER)))
+  })
+
+  it('refuses a different-school teacher the same read (T-213, audit F-13)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', FOREIGN_TEACHER), {
+        role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-9',
+      })
+    })
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'users', OWN_TEACHER)))
   })
 
   it('quiz attempts, risk snapshots and remediations: the class owner, through a class_id filter', async () => {
@@ -1419,5 +1434,112 @@ describe('T-203 — an admin may act only within their own school (audit F-02)',
 
   it('refuses a foreign-school admin deleting a notification', async () => {
     await assertFails(deleteDoc(doc(ctx(ADMIN), 'notifications', 'notif-foreign')))
+  })
+})
+
+/**
+ * T-213 (audit F-13): three reads with no relationship check at all.
+ * `/users/{uid}`'s teacher-profile clause was bare `resource.data.role ==
+ * 'teacher'`; `/syllabi` and `/announcements` were bare `signedIn()`. Any
+ * signed-in account, any school, any role, could read any teacher's full
+ * profile (including email), any syllabus, any announcement (free text that
+ * routinely names students).
+ *
+ * Fix scopes each to: a student actually taught by that teacher (via the
+ * student's own teacher_ids -- NOT a school_id compare, since a solo
+ * teacher and their self-enrolled students have no school_id at all and
+ * that compare would have denied the single most common account shape on
+ * the platform), the owning teacher, and a same-school admin.
+ * `announcements` additionally still allows isParent() -- a documented,
+ * deliberate known-breadth gap (see the comment above the rule): there is
+ * no student_id on that document to scope a guardian against.
+ */
+describe('T-213 — teacher profiles, syllabi and announcements are scoped to who actually needs them (audit F-13)', () => {
+  const OTHER_TEACHER = 'teacher-20'
+  const SAME_SCHOOL_ADMIN = 'admin-20'
+  const FOREIGN_SCHOOL_ADMIN = 'admin-21'
+  const PARENT = 'guardian-20'
+  const UNRELATED_STUDENT = 'student-20'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      // seedRoles() already gives STUDENT (and OTHER_STUDENT) teacher_ids:
+      // [TEACHER] -- the "this really is my teacher" case this fix must
+      // keep working. OTHER_TEACHER is a stranger: nobody's teacher_ids
+      // names them. UNRELATED_STUDENT is taught by OTHER_TEACHER only, so
+      // TEACHER's documents are a stranger's to them too.
+      await setDoc(doc(db, 'users', OTHER_TEACHER), { role: 'teacher', first_name: 'O', last_name: 'T' })
+      await setDoc(doc(db, 'users', UNRELATED_STUDENT), { role: 'student', first_name: 'U', last_name: 'S', teacher_ids: [OTHER_TEACHER] })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', SAME_SCHOOL_ADMIN), { role: 'admin', first_name: 'S', last_name: 'A', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_SCHOOL_ADMIN), { role: 'admin', first_name: 'F', last_name: 'A', school_id: 'school-9' })
+      await setDoc(doc(db, 'users', PARENT), { role: 'parent', first_name: 'P', last_name: 'G' })
+      await setDoc(doc(db, 'syllabi', 'syl-mine'), { teacher_id: TEACHER, title: 'Algebra' })
+      await setDoc(doc(db, 'syllabi', 'syl-stranger'), { teacher_id: OTHER_TEACHER, title: 'Chemistry' })
+      await setDoc(doc(db, 'announcements', 'ann-mine'), {
+        teacher_id: TEACHER, class_id: 'class-1', title: 'Quiz Friday', body: 'Bring a calculator.',
+      })
+    })
+  })
+
+  it('lets a student read the profile of their own teacher', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'users', TEACHER)))
+  })
+
+  it('refuses a student reading the profile of a teacher who does not teach them', async () => {
+    await assertFails(getDoc(doc(ctx(STUDENT), 'users', OTHER_TEACHER)))
+  })
+
+  it('refuses one teacher reading a colleague\'s profile with no relationship at all', async () => {
+    await assertFails(getDoc(doc(ctx(OTHER_TEACHER), 'users', TEACHER)))
+  })
+
+  it('lets a student read the syllabus of the teacher who actually teaches them', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'syllabi', 'syl-mine')))
+  })
+
+  it('refuses a student reading a syllabus from a teacher who does not teach them', async () => {
+    await assertFails(getDoc(doc(ctx(STUDENT), 'syllabi', 'syl-stranger')))
+  })
+
+  it('lets the owning teacher read their own syllabus', async () => {
+    await assertSucceeds(getDoc(doc(ctx(TEACHER), 'syllabi', 'syl-mine')))
+  })
+
+  it('lets a same-school admin read a syllabus', async () => {
+    await assertSucceeds(getDoc(doc(ctx(SAME_SCHOOL_ADMIN), 'syllabi', 'syl-mine')))
+  })
+
+  it('refuses a different-school admin reading a syllabus', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_SCHOOL_ADMIN), 'syllabi', 'syl-mine')))
+  })
+
+  it('lets a student read an announcement from the teacher who actually teaches them', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'announcements', 'ann-mine')))
+  })
+
+  it('refuses a student reading an announcement from a teacher who does not teach them', async () => {
+    await assertFails(getDoc(doc(ctx(UNRELATED_STUDENT), 'announcements', 'ann-mine')))
+  })
+
+  it('refuses an unrelated teacher reading another teacher\'s announcement', async () => {
+    await assertFails(getDoc(doc(ctx(OTHER_TEACHER), 'announcements', 'ann-mine')))
+  })
+
+  it('lets the owning teacher read their own announcement', async () => {
+    await assertSucceeds(getDoc(doc(ctx(TEACHER), 'announcements', 'ann-mine')))
+  })
+
+  it('lets a same-school admin read an announcement', async () => {
+    await assertSucceeds(getDoc(doc(ctx(SAME_SCHOOL_ADMIN), 'announcements', 'ann-mine')))
+  })
+
+  it('refuses a different-school admin reading an announcement', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_SCHOOL_ADMIN), 'announcements', 'ann-mine')))
+  })
+
+  it('still lets a parent read an announcement (documented known breadth, not scoped by this card)', async () => {
+    await assertSucceeds(getDoc(doc(ctx(PARENT), 'announcements', 'ann-mine')))
   })
 })
