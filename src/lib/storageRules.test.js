@@ -68,6 +68,16 @@ async function seedFirestore() {
       student_ids: [STUDENT],
     })
     await setDoc(doc(db, 'syllabi', 'syl-1'), { teacher_id: TEACHER })
+    await setDoc(doc(db, 'class_tasks', 'task-1'), {
+      class_id: 'class-1',
+      teacher_id: TEACHER,
+      status: 'published',
+    })
+    await setDoc(doc(db, 'class_tasks', 'task-draft'), {
+      class_id: 'class-1',
+      teacher_id: TEACHER,
+      status: 'draft',
+    })
   })
 }
 
@@ -187,6 +197,93 @@ describe('contest_files · read (T-205)', () => {
     await seedFile('contest_files/class-1/student-1/assessment-1.pdf')
     await assertSucceeds(
       getBytes(ref(storageCtx(TEACHER), 'contest_files/class-1/student-1/assessment-1.pdf')),
+    )
+  })
+})
+
+/*
+ * T-206 / audit F-12: /task_files/{classId}/{taskId}/submissions/{studentId}/
+ * {fileName} had `allow read: if signedIn()` -- any signed-in user could
+ * read any student's hand-in, wider than the Firestore task_submissions
+ * read rule for the same document. Scoped to: the owning student, the
+ * class's teacher, or an admin -- the same pattern as T-205.
+ *
+ * Unflagged by the audit but the same mistake one level up:
+ * /task_files/{classId}/{taskId}/{fileName} (the teacher's hand-outs) was
+ * also `if signedIn()`. Scoped to mirror the Firestore class_tasks read
+ * rule instead: the class's teacher, an admin, or an enrolled student once
+ * the task is published.
+ */
+describe('task_files · submission read (T-206)', () => {
+  it("refuses another student reading this student's hand-in", async () => {
+    await seedFile('task_files/class-1/task-1/submissions/student-1/essay.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_STUDENT), 'task_files/class-1/task-1/submissions/student-1/essay.pdf')),
+    )
+  })
+
+  it('refuses a teacher who does not teach this class', async () => {
+    await seedFile('task_files/class-1/task-1/submissions/student-1/essay.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_TEACHER), 'task_files/class-1/task-1/submissions/student-1/essay.pdf')),
+    )
+  })
+
+  it('allows the owning student to read their own hand-in', async () => {
+    await seedFile('task_files/class-1/task-1/submissions/student-1/essay.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(STUDENT), 'task_files/class-1/task-1/submissions/student-1/essay.pdf')),
+    )
+  })
+
+  it("allows the class's own teacher to read it", async () => {
+    await seedFile('task_files/class-1/task-1/submissions/student-1/essay.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(TEACHER), 'task_files/class-1/task-1/submissions/student-1/essay.pdf')),
+    )
+  })
+
+  it('allows an admin to read it', async () => {
+    await seedFile('task_files/class-1/task-1/submissions/student-1/essay.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(ADMIN), 'task_files/class-1/task-1/submissions/student-1/essay.pdf')),
+    )
+  })
+})
+
+describe('task_files · hand-out read (T-206, the sibling at :53)', () => {
+  it('refuses a student not enrolled in the class', async () => {
+    await seedFile('task_files/class-1/task-1/worksheet.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(OTHER_STUDENT), 'task_files/class-1/task-1/worksheet.pdf')),
+    )
+  })
+
+  it('refuses an enrolled student while the task is still a draft', async () => {
+    await seedFile('task_files/class-1/task-draft/worksheet.pdf')
+    await assertFails(
+      getBytes(ref(storageCtx(STUDENT), 'task_files/class-1/task-draft/worksheet.pdf')),
+    )
+  })
+
+  it('allows an enrolled student to read it once the task is published', async () => {
+    await seedFile('task_files/class-1/task-1/worksheet.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(STUDENT), 'task_files/class-1/task-1/worksheet.pdf')),
+    )
+  })
+
+  it("allows the class's own teacher to read it even in draft", async () => {
+    await seedFile('task_files/class-1/task-draft/worksheet.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(TEACHER), 'task_files/class-1/task-draft/worksheet.pdf')),
+    )
+  })
+
+  it('allows an admin to read it', async () => {
+    await seedFile('task_files/class-1/task-1/worksheet.pdf')
+    await assertSucceeds(
+      getBytes(ref(storageCtx(ADMIN), 'task_files/class-1/task-1/worksheet.pdf')),
     )
   })
 })
