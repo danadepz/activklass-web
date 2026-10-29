@@ -155,6 +155,7 @@ export default function App() {
       <Route element={<ProtectedRoute superAdmin />}>
         <Route path="/superadmin" element={SuperAdminLayout}>
           <Route index element={SuperAdminSubscribersPage} />
+          <Route path="approvals" element={<Navigate to="/superadmin/requests" replace />} />
           <Route path="verifications" element={SuperAdminVerificationsPage} />
           <Route path="requests" element={SuperAdminRequestsPage} />
         </Route>

@@ -39,17 +39,44 @@ export default function SuperAdminLayout() {
     staleTime: 60 * 1000,
   })
 
-  /* Named for who they serve, not for what the mechanism is called. The
-     queues were already separate -- an ID check for a teacher who signed
-     themselves up, an access request from a school -- but "Verifications"
-     and "School requests" made only one of them say so, and the person on
-     this page is deciding about a customer, not about a document. The count
-     rides on the tab so a queue cannot sit unnoticed behind a page nobody
-     opened. */
-  const tabs = [
-    { to: '/superadmin', label: 'Subscribers' },
-    { to: '/superadmin/verifications', label: 'Solo teachers', waiting: pendingTeachers?.length },
-    { to: '/superadmin/requests', label: 'Schools', waiting: pendingRequests?.length },
+  /* Top-level navigation:
+     - Subscribers: active on /superadmin
+     - Approvals: consolidated queue for both Schools and Solo Teachers.
+       Shows total waiting count. When active, exposes sub-navigation pills
+       for Schools and Solo teachers. */
+  const totalPending = (pendingRequests?.length || 0) + (pendingTeachers?.length || 0)
+  const isApprovals =
+    pathname.startsWith('/superadmin/requests') ||
+    pathname.startsWith('/superadmin/verifications') ||
+    pathname.startsWith('/superadmin/approvals')
+
+  const topTabs = [
+    {
+      to: '/superadmin',
+      label: 'Subscribers',
+      active: pathname === '/superadmin',
+    },
+    {
+      to: pathname.startsWith('/superadmin/verifications') ? '/superadmin/verifications' : '/superadmin/requests',
+      label: 'Approvals',
+      waiting: totalPending,
+      active: isApprovals,
+    },
+  ]
+
+  const approvalSubTabs = [
+    {
+      to: '/superadmin/requests',
+      label: 'Schools',
+      waiting: pendingRequests?.length || 0,
+      active: pathname === '/superadmin/requests',
+    },
+    {
+      to: '/superadmin/verifications',
+      label: 'Solo teachers',
+      waiting: pendingTeachers?.length || 0,
+      active: pathname === '/superadmin/verifications',
+    },
   ]
 
   return (
@@ -99,27 +126,50 @@ export default function SuperAdminLayout() {
           </div>
         </div>
 
-        {tabs.length > 1 && (
-          <nav className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 flex gap-1">
-            {tabs.map((tab) => (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={`px-3 py-2 text-xs font-semibold border-b-2 ${
-                  pathname === tab.to
-                    ? 'border-amber-400 text-zinc-100'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                {tab.label}
-                {tab.waiting > 0 && (
-                  <span className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
-                    {tab.waiting}
-                  </span>
-                )}
-              </Link>
-            ))}
-          </nav>
+        <nav aria-label="Superadmin Navigation" className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 flex gap-1">
+          {topTabs.map((tab) => (
+            <Link
+              key={tab.label}
+              to={tab.to}
+              className={`px-3 py-2 text-xs font-semibold border-b-2 transition ${
+                tab.active
+                  ? 'border-amber-400 text-zinc-100'
+                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {tab.label}
+              {tab.waiting > 0 && (
+                <span className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                  {tab.waiting}
+                </span>
+              )}
+            </Link>
+          ))}
+        </nav>
+
+        {isApprovals && (
+          <div className="border-t border-zinc-800/80 bg-zinc-950/40">
+            <nav aria-label="Approvals Queues" className="mx-auto max-w-[1440px] 2xl:max-w-[1600px] px-6 lg:px-8 flex gap-2 py-2">
+              {approvalSubTabs.map((subTab) => (
+                <Link
+                  key={subTab.to}
+                  to={subTab.to}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    subTab.active
+                      ? 'bg-zinc-800 text-zinc-100 shadow-sm border border-zinc-700/80'
+                      : 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200 border border-transparent'
+                  }`}
+                >
+                  <span>{subTab.label}</span>
+                  {subTab.waiting > 0 && (
+                    <span className="rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300">
+                      {subTab.waiting}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </nav>
+          </div>
         )}
       </header>
 
