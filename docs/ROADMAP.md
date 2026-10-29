@@ -10,7 +10,8 @@ panes, in their own words, and are not restated here.
 **Current phase: Phase 7 — defense-demo readiness.**
 **Definition of done for v1: the capstone defense demo runs end to end without a
 recovery, on one machine, with Flask and Vite both up.** Not production hardening —
-this app is not deployed and is not meant to be, yet.
+but the app **is** deployed (frontend on Vercel, API on Cloud Run — see README's
+live links); that release is for the defense, not a substitute for the local-machine demo.
 
 ---
 
@@ -773,9 +774,8 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
 ---
 
 ## What "done" is not
-- **Not deployed.** There is no host, and standing one up is out of scope for the
-  defense. See `docs/OPEN-QUESTIONS.md`.
-- **Not production-hardened.** Blaze only for Storage's free allowance, one dev machine,
+- **Deployed, but not production-hardened.** Frontend on Vercel, API on Cloud Run
+  (`activklass1` — see README's live links); Blaze only for Storage's free allowance,
   seeded pilot data.
 - **Not feature-complete.** A capstone demo shows the system working, not every feature
   a school would eventually want.
