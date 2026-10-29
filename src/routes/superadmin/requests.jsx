@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
-import { approveRequest, declineRequest, resendApprovalNotice } from '@/lib/superadmin'
+import { approveRequest, declineRequest, purgeRequest, resendApprovalNotice } from '@/lib/superadmin'
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import MessageDialog from './MessageDialog'
+import PurgeConfirmDialog from './PurgeConfirmDialog'
 import { PENDING_REQUESTS_KEY, fetchPendingRequests } from './queues'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Dialog, Field, inputCls } from './index'
@@ -69,8 +70,22 @@ export default function SuperAdminRequestsPage() {
   const [declining, setDeclining] = useState(null) // request id whose note box is open
   const [note, setNote] = useState('')
   const [approving, setApproving] = useState(null) // the request open in the approve dialog
+  const [purging, setPurging] = useState(null) // { id, name, email } to purge
   const [message, setMessage] = useState(null) // { school, subject, body } to copy
   const { data: approved } = useQuery({ queryKey: ['sa-requests-approved'], queryFn: fetchApproved })
+
+  const purge = useMutation({
+    mutationFn: (requestId) => purgeRequest(requestId),
+    onSuccess: () => {
+      toast.success('Request and associated test accounts purged.')
+      setPurging(null)
+      queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Could not purge request.')
+    },
+  })
 
   /* Rebuild the notice for a request approved earlier. The trial end lives
      on the subscription, which the superadmin claim may read directly. */
@@ -240,6 +255,14 @@ export default function SuperAdminRequestsPage() {
                     >
                       Decline…
                     </button>
+                    <button
+                      type="button"
+                      disabled={busy || purge.isPending}
+                      onClick={() => setPurging({ id: r.id, name: r.school_name, email: r.email })}
+                      className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      Purge…
+                    </button>
                   </div>
                 </div>
 
@@ -367,11 +390,31 @@ export default function SuperAdminRequestsPage() {
                   >
                     Approval message
                   </button>
+                  <button
+                    type="button"
+                    disabled={purge.isPending}
+                    onClick={() => setPurging({ id: r.id, name: r.school_name, email: r.email })}
+                    className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
+                  >
+                    Purge…
+                  </button>
                 </div>
               </li>
             ))}
           </ul>
         </div>
+      )}
+
+      {purging && (
+        <PurgeConfirmDialog
+          title="Purge School Request & Account"
+          name={purging.name}
+          email={purging.email}
+          detail="This will permanently delete the subscription request, the associated school records (if 0 classes), and the admin's login."
+          isPending={purge.isPending}
+          onClose={() => setPurging(null)}
+          onConfirm={() => purge.mutate(purging.id)}
+        />
       )}
     </div>
   )

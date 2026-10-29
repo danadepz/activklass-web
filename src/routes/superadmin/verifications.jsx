@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Timestamp, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { trialEndsFrom } from '@/lib/pricing'
 import { teacherApprovalMessage } from '@/lib/approvalMessage'
-import { notifyTeacherApproval } from '@/lib/superadmin'
+import { notifyTeacherApproval, purgeTeacher } from '@/lib/superadmin'
 import { db } from '@/lib/firebase'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ID_TYPES } from '@/routes/pending-verification'
 import MessageDialog from './MessageDialog'
+import PurgeConfirmDialog from './PurgeConfirmDialog'
 import {
   APPROVED_TEACHERS_KEY,
   PENDING_TEACHERS_KEY,
@@ -59,7 +60,21 @@ export default function SuperAdminVerificationsPage() {
   })
   const [rejecting, setRejecting] = useState(null) // uid whose note box is open
   const [note, setNote] = useState('')
+  const [purging, setPurging] = useState(null) // { uid, name, email }
   const [message, setMessage] = useState(null) // { name, subject, body } to copy
+
+  const purge = useMutation({
+    mutationFn: (uid) => purgeTeacher(uid),
+    onSuccess: () => {
+      toast.success('Teacher account and credentials purged.')
+      setPurging(null)
+      queryClient.invalidateQueries({ queryKey: PENDING_TEACHERS_KEY })
+      queryClient.invalidateQueries({ queryKey: APPROVED_TEACHERS_KEY })
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Could not purge teacher.')
+    },
+  })
 
   const review = useMutation({
     mutationFn: async ({ uid, status, note }) => {
@@ -210,6 +225,14 @@ export default function SuperAdminVerificationsPage() {
                     >
                       Reject…
                     </button>
+                    <button
+                      type="button"
+                      disabled={busy || purge.isPending}
+                      onClick={() => setPurging({ uid: t.id, name, email: t.email })}
+                      className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      Purge…
+                    </button>
                   </div>
                 </div>
 
@@ -307,12 +330,32 @@ export default function SuperAdminVerificationsPage() {
                     >
                       Welcome notice
                     </button>
+                    <button
+                      type="button"
+                      disabled={purge.isPending}
+                      onClick={() => setPurging({ uid: t.id, name, email: t.email })}
+                      className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
+                    >
+                      Purge…
+                    </button>
                   </div>
                 </li>
               )
             })}
           </ul>
         </div>
+      )}
+
+      {purging && (
+        <PurgeConfirmDialog
+          title="Purge Teacher Account"
+          name={purging.name}
+          email={purging.email}
+          detail="This will permanently delete the teacher profile and Firebase Auth credentials (if 0 classes exist)."
+          isPending={purge.isPending}
+          onClose={() => setPurging(null)}
+          onConfirm={() => purge.mutate(purging.uid)}
+        />
       )}
     </div>
   )

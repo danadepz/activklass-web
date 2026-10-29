@@ -7,10 +7,9 @@ import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
 import {
-  changePlan, describeSubscription, fetchPlans, fetchSubscription, formatBytes, startCheckout,
-  startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
+  changePlan, confirmSeatIncrease, describeSubscription, fetchPlans, fetchSubscription, formatBytes,
+  startCheckout, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
-import { estimateProrated, pesos } from '@/lib/pricing'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -250,23 +249,14 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
 
   async function submit() {
     setErr('')
-    const next = Number.parseInt(value, 10)
-    if (!Number.isInteger(next) || next <= floor) {
-      setErr('Enter a student seat count above what you already have.')
-      return
-    }
-    const added = next - floor
-    const amount = estimateProrated(0, added, paidThroughMs)
-    const ok = await confirmDialog({
-      title: `Add ${added} student seat${added === 1 ? '' : 's'}?`,
-      message:
-        `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
-        + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
-        + 'not this screen.',
-      confirmLabel: `Pay ${pesos(amount)}`,
+    const nextValue = Number.parseInt(value, 10)
+    const next = await confirmSeatIncrease({
+      current: { studentSeats: floor },
+      next: { studentSeats: nextValue },
+      paidThroughMs,
+      onError: setErr,
     })
-    if (!ok) return
-    mut.mutate(next)
+    if (next) mut.mutate(next.studentSeats)
   }
 
   return (

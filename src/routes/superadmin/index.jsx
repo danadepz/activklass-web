@@ -6,6 +6,7 @@ import {
   createSubscriber,
   fetchPlans,
   fetchSubscribers,
+  purgeSubscriber,
   updateSubscriber,
 } from '@/lib/superadmin'
 import { absorbMessage } from '@/lib/approvalMessage'
@@ -13,6 +14,7 @@ import { SEGMENTS, STATUSES, analyticsFor, filterRows } from '@/lib/superadminAn
 import AnalyticsBand from './AnalyticsBand'
 import AbsorbDialog from './AbsorbDialog'
 import MessageDialog from './MessageDialog'
+import PurgeConfirmDialog from './PurgeConfirmDialog'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -133,6 +135,7 @@ export default function SuperAdminSubscribersPage() {
   const [absorbing, setAbsorbing] = useState(null) // the institution row being absorbed into
   const [absorbNotice, setAbsorbNotice] = useState(null) // the copy-ready notice after a successful absorb
   const [banner, setBanner] = useState(null)
+  const [purgingSubscriber, setPurgingSubscriber] = useState(null) // { id, name, type }
   const [segment, setSegment] = useState('all')
   const [status, setStatus] = useState('all')
 
@@ -200,6 +203,16 @@ export default function SuperAdminSubscribersPage() {
       refresh()
     },
     onError: (err) => setBanner(err.message),
+  })
+
+  const purgeSub = useMutation({
+    mutationFn: (ownerId) => purgeSubscriber(ownerId),
+    onSuccess: () => {
+      toast.success('Subscriber and associated records purged.')
+      setPurgingSubscriber(null)
+      refresh()
+    },
+    onError: (err) => toast.error(err.message || 'Could not purge subscriber.'),
   })
 
   if (isLoading) return <SkeletonTable rows={7} cols={6} tone="dark" label="Loading subscribers" />
@@ -418,6 +431,13 @@ export default function SuperAdminSubscribersPage() {
                           Suspend
                         </button>
                       )}
+                      <button
+                        onClick={() => setPurgingSubscriber({ id: sub.id, name: owner?.name || sub.name, type: sub.type })}
+                        disabled={purgeSub.isPending}
+                        className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
+                      >
+                        Purge…
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -484,6 +504,19 @@ export default function SuperAdminSubscribersPage() {
           message={absorbNotice}
           copiedHint="Copied. Paste it into an email to the teacher."
           onClose={() => setAbsorbNotice(null)}
+        />
+      )}
+
+      {purgingSubscriber && (
+        <PurgeConfirmDialog
+          title={`Purge ${purgingSubscriber.type === 'institution' ? 'Institution' : 'Solo Teacher'} Subscription`}
+          name={purgingSubscriber.name}
+          detail={`This will permanently delete the subscription document, associated ${
+            purgingSubscriber.type === 'institution' ? 'school doc and all unassigned accounts' : 'teacher profile and auth credentials'
+          } (if 0 classes exist).`}
+          isPending={purgeSub.isPending}
+          onClose={() => setPurgingSubscriber(null)}
+          onConfirm={() => purgeSub.mutate(purgingSubscriber.id)}
         />
       )}
     </div>

@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
+import { estimateProrated, pesos } from './pricing'
+import { confirmDialog } from '../components/ui/dialogs'
 import { blue, gold, green, red } from '../theme'
 
 /**
@@ -120,6 +122,59 @@ export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats 
   if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
   if (studentSeats !== undefined) body.student_seats = studentSeats
   return api(`/api/subscription/${ownerId}/seats/checkout`, { method: 'POST', body })
+}
+
+/**
+ * Validate a seat-increase input and confirm the charge with the user --
+ * the "build the confirm message, compute the prorated amount" half of the
+ * flow that `SeatIncreaseCard` (institution admin, both seat types) and
+ * `AddStudentSeatsControl` (solo teacher, student seats only) each wrote by
+ * hand, down to the same confirm-dialog sentence. Returns the NEW TOTALS to
+ * pass to `startSeatIncreaseCheckout` once confirmed, or `null` after
+ * calling `onError` (a validation failure) or a cancelled dialog -- the
+ * caller's own `useMutation` still tracks `isPending` and starts the
+ * checkout, since that state belongs to the component, not this helper.
+ *
+ * `current` / `next` are `{ teacherSeats, studentSeats }`; a solo caller
+ * leaves `teacherSeats` out of both, since that seat is fixed on a solo plan.
+ * `ownerPhrase` is the back half of the validation sentence -- "what your
+ * school already has" for an institution, "what you already have" (the
+ * default) for a solo teacher.
+ */
+export async function confirmSeatIncrease({
+  current, next, paidThroughMs, ownerPhrase = 'what you already have', onError,
+}) {
+  const curTeacher = current.teacherSeats ?? 0
+  const curStudent = current.studentSeats ?? 0
+  const nextTeacher = next.teacherSeats ?? curTeacher
+  const nextStudent = next.studentSeats ?? curStudent
+
+  if (!Number.isInteger(nextTeacher) || !Number.isInteger(nextStudent)
+      || nextTeacher < curTeacher || nextStudent < curStudent) {
+    onError(`Enter seat counts at or above ${ownerPhrase}.`)
+    return null
+  }
+  if (nextTeacher === curTeacher && nextStudent === curStudent) {
+    onError(`Raise at least one seat count above ${ownerPhrase}.`)
+    return null
+  }
+
+  const addedTeacher = nextTeacher - curTeacher
+  const addedStudent = nextStudent - curStudent
+  const amount = estimateProrated(addedTeacher, addedStudent, paidThroughMs)
+  const parts = []
+  if (addedTeacher > 0) parts.push(`${addedTeacher} teacher seat${addedTeacher === 1 ? '' : 's'}`)
+  if (addedStudent > 0) parts.push(`${addedStudent} student seat${addedStudent === 1 ? '' : 's'}`)
+  const ok = await confirmDialog({
+    title: `Add ${parts.join(' and ')}?`,
+    message:
+      `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
+      + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
+      + 'not this screen.',
+    confirmLabel: `Pay ${pesos(amount)}`,
+  })
+  if (!ok) return null
+  return { teacherSeats: nextTeacher, studentSeats: nextStudent }
 }
 
 /**

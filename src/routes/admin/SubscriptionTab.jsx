@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  changePlan, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription, formatBytes,
-  startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
+  changePlan, confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
+  formatBytes, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
-import { estimateProrated, pesos } from '@/lib/pricing'
 import {
   fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
 } from '@/lib/institution'
@@ -238,30 +237,14 @@ function SeatIncreaseCard({ ownerId, sub }) {
     setError('')
     const t = Number.parseInt(teacherSeats, 10)
     const s = Number.parseInt(studentSeats, 10)
-    if (!Number.isInteger(t) || !Number.isInteger(s) || t < curTeacher || s < curStudent) {
-      setError('Enter seat counts at or above what your school already has.')
-      return
-    }
-    if (t === curTeacher && s === curStudent) {
-      setError('Raise at least one seat count above what you already have.')
-      return
-    }
-    const addedTeacher = t - curTeacher
-    const addedStudent = s - curStudent
-    const amount = estimateProrated(addedTeacher, addedStudent, toMillis(sub.paid_through))
-    const parts = []
-    if (addedTeacher > 0) parts.push(`${addedTeacher} teacher seat${addedTeacher === 1 ? '' : 's'}`)
-    if (addedStudent > 0) parts.push(`${addedStudent} student seat${addedStudent === 1 ? '' : 's'}`)
-    const ok = await confirmDialog({
-      title: `Add ${parts.join(' and ')}?`,
-      message:
-        `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
-        + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
-        + 'not this screen.',
-      confirmLabel: `Pay ${pesos(amount)}`,
+    const next = await confirmSeatIncrease({
+      current: { teacherSeats: curTeacher, studentSeats: curStudent },
+      next: { teacherSeats: t, studentSeats: s },
+      paidThroughMs: toMillis(sub.paid_through),
+      ownerPhrase: 'what your school already has',
+      onError: setError,
     })
-    if (!ok) return
-    mut.mutate({ teacherSeats: t, studentSeats: s })
+    if (next) mut.mutate(next)
   }
 
   return (

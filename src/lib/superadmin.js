@@ -146,6 +146,30 @@ export function updateSubscriber(ownerId, { plan, status, limits } = {}) {
   return api(`/api/superadmin/subscribers/${ownerId}`, { method: 'PATCH', body })
 }
 
+/**
+ * Permanently purge a school request and its unverified/test data.
+ * Guarded server-side: refuses if the institution already has active classes.
+ */
+export function purgeRequest(requestId) {
+  return api(`/api/superadmin/requests/${requestId}/purge`, { method: 'POST' })
+}
+
+/**
+ * Permanently purge a solo teacher or unverified user.
+ * Guarded server-side: refuses if the user owns active classes or is enrolled.
+ */
+export function purgeTeacher(uid) {
+  return api(`/api/superadmin/teachers/${uid}/purge`, { method: 'POST' })
+}
+
+/**
+ * Permanently purge a subscriber (institution or solo teacher).
+ * Guarded server-side: refuses if classes exist.
+ */
+export function purgeSubscriber(ownerId) {
+  return api(`/api/superadmin/subscribers/${ownerId}/purge`, { method: 'POST' })
+}
+
 export const SUBSCRIBER_STATUSES = ['trial', 'active', 'suspended', 'cancelled']
 
 export const SEAT_KEYS = [
