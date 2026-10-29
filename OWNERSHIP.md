@@ -130,6 +130,22 @@ updated on submit. Anything that counts attempts must count *finished* ones —
 they are in. `firestore.rules` was widened to match, narrowly: a student may
 update their own attempt only while it is still `in_progress`.
 
+**Finishing an attempt is a server call now, not a direct write (T-208, audit
+F-06).** `useAttemptSession.js`'s `finishAttempt()` used to grade the attempt
+with `lib/quizGrading.js` on the client and write the result straight to
+Firestore -- nothing stopped a student submitting any `total_score` they
+liked. It now POSTs the raw answers to `POST /api/quiz_attempts/<id>/submit`
+(activklass-backend `app/api/quizzes.py`, graded by
+`app/services/quiz_attempt_grading.py`, a fresh port of `gradeAnswer`/
+`gradeQuiz` against the Firestore question shape) and uses the server's
+response. `firestore.rules`' `quiz_attempts` update rule was narrowed to
+match: a student's own write must now keep `status` at `in_progress`, so
+finishing one by hand is refused. Ported to `activklass-mobile`'s
+`src/lib/attemptSession.ts` + `app/student/quiz-player.tsx` the same way --
+same endpoint, same body shape, and `src/lib/api.ts` there already had the
+Flask-calling plumbing (built for the parent portal's attendance reads), so
+nothing new needed inventing on that side.
+
 `gradebook.js` holds `loadBundle` and `syncEntries`, lifted out of the record
 page once it stopped being the only writer of scores. `entries` is the only
 grade document a student may read and it is derived — anything that changes a

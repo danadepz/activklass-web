@@ -22,7 +22,7 @@ import {
   recordReopen,
   startAttempt,
 } from '@/hooks/useAttemptSession'
-import { gradeQuiz, matchingChoices } from '@/lib/quizGrading'
+import { matchingChoices } from '@/lib/quizGrading'
 import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
 import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono } from '@/theme'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -365,10 +365,10 @@ function Runner({ quiz, attempt, isResume }) {
     setSubmitting(true)
     setError(null)
     try {
-      // The drawn paper, not the whole pool: grading `quiz` directly would
-      // mark a pooled student against 30 questions they never saw.
-      const result = gradeQuiz({ ...quiz, questions }, answers)
-      await finishAttempt(attempt.id, { result, answers, expired })
+      // T-208 (audit F-06): grading moved server-side -- the server already
+      // knows the drawn paper from the attempt's own question_ids, so there
+      // is no client-side gradeQuiz() call here to go stale against it.
+      await finishAttempt(attempt.id, { answers, expired })
       try { sessionStorage.removeItem(draftKey) } catch { /* nothing to clean up */ }
       navigate(`/student/quizzes/${attempt.id}/result`)
     } catch (err) {

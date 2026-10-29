@@ -129,9 +129,19 @@ describe('quiz_attempts · creating an attempt', () => {
 describe('quiz_attempts · finishing your own attempt', () => {
   beforeEach(() => seedAttempt('a1'))
 
-  it('lets the student submit the sitting they started', async () => {
-    // The whole reason the rule was widened.
-    await assertSucceeds(
+  /**
+   * T-208 (audit F-06): this used to be `assertSucceeds` -- "the whole
+   * reason the rule was widened" -- because nothing stopped a student
+   * writing ANY total_score on their own attempt once the rest of the
+   * update's guards passed. Finishing an attempt is now reachable only
+   * through POST /api/quiz_attempts/<id>/submit (app/api/quizzes.py),
+   * which grades from the quiz's own answer key via the Admin SDK and
+   * bypasses this file entirely -- a direct client write that tries to
+   * move status off 'in_progress' is refused here, whatever score it
+   * claims.
+   */
+  it('refuses the student finishing the attempt by writing the score directly', async () => {
+    await assertFails(
       updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), {
         answers: { q1: 'o2' },
         total_score: 8,
@@ -139,6 +149,18 @@ describe('quiz_attempts · finishing your own attempt', () => {
         total_possible: 10,
         status: 'graded',
         submitted_at: new Date(),
+      }),
+    )
+  })
+
+  it('still lets the student save answers while staying in_progress (autosave)', async () => {
+    // Mirrors mobile's saveAnswers() and the reopen/deadline writes below --
+    // none of these touch `status`, so it stays 'in_progress' and the
+    // T-208 guard above does not apply to them.
+    await assertSucceeds(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), {
+        answers: { q1: 'o2' },
+        answers_saved_at: new Date(),
       }),
     )
   })
@@ -448,7 +470,14 @@ describe('teacher groups and invites are closed to every client', () => {
  * the work, by removing it and watching the protection disappear.
  */
 describe('the guard that stops a submitted attempt being rewritten', () => {
-  const GUARD = "            && resource.data.status == 'in_progress'\n"
+  // T-208 (audit F-06) added the second line: before it, this single line
+  // was the only thing stopping a student rewriting an ALREADY-finished
+  // attempt's score. Both lines now do related but distinct jobs (the
+  // second one is proven separately below), so both come out together to
+  // reopen the specific hole this test is named for.
+  const GUARD =
+    "            && resource.data.status == 'in_progress'\n" +
+    "            && request.resource.data.status == 'in_progress'\n"
   let weakened
 
   beforeAll(async () => {
@@ -460,7 +489,7 @@ describe('the guard that stops a submitted attempt being rewritten', () => {
     // If this throws, the rule was reworded and this proof needs rewriting —
     // which is the correct outcome, not something to paper over.
     if (!source.includes(GUARD)) {
-      throw new Error('The in_progress guard is not where this test expects it; re-check the rule.')
+      throw new Error('The in_progress guards are not where this test expects them; re-check the rule.')
     }
     weakened = await initializeTestEnvironment({
       projectId: 'activklass-rules-weakened',
@@ -496,6 +525,65 @@ describe('the guard that stops a submitted attempt being rewritten', () => {
       }),
     )
     // And the real ruleset, tested above, refuses exactly this.
+  })
+})
+
+/**
+ * T-208 (audit F-06): the guard above stops REWRITING an attempt that is
+ * already finished. This is the narrower, newer line that stops a student
+ * FINISHING one themselves in the first place — before it, nothing kept
+ * `request.resource.data.status` from leaving 'in_progress' at all, so the
+ * student-written `finishAttempt()` could set status straight to 'graded'
+ * with any total_score it liked. Proven the same way: strip only this one
+ * line (leaving the older guard above untouched) and show that a student
+ * can finish their own OPEN attempt directly, with a self-chosen score,
+ * exactly the hole this ticket closes.
+ */
+describe('the guard that stops a student finishing their own attempt directly', () => {
+  const GUARD = "            && request.resource.data.status == 'in_progress'\n"
+  let weakened
+
+  beforeAll(async () => {
+    const source = readFileSync(RULES_PATH, 'utf8').replace(/\r\n/g, '\n')
+    if (!source.includes(GUARD)) {
+      throw new Error('The request.resource status guard is not where this test expects it; re-check the rule.')
+    }
+    weakened = await initializeTestEnvironment({
+      projectId: 'activklass-rules-weakened-2',
+      firestore: {
+        rules: source.replace(GUARD, ''),
+        host: '127.0.0.1',
+        port: 8080,
+      },
+    })
+  })
+
+  afterAll(async () => {
+    await weakened?.cleanup()
+  })
+
+  it('is the only thing preventing a student grading themselves — remove it and the write goes through', async () => {
+    await weakened.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student' })
+      await setDoc(doc(db, 'quiz_attempts', 'open-1'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'in_progress',
+        started_at: new Date('2026-04-10T09:00:00Z'),
+      })
+    })
+
+    // Without this guard, a student can finish their own attempt and name
+    // their own score -- no server grading involved at all.
+    await assertSucceeds(
+      updateDoc(doc(weakened.authenticatedContext(STUDENT).firestore(), 'quiz_attempts', 'open-1'), {
+        status: 'graded',
+        total_score: 9999,
+      }),
+    )
+    // And the real ruleset refuses this -- see "refuses the student
+    // finishing the attempt by writing the score directly" above.
   })
 })
 

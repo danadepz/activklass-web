@@ -14,6 +14,10 @@
  * firestore.rules was widened to match, narrowly: a student may update their
  * own attempt only while it is still `in_progress`, and may not change
  * `student_id`, `quiz_id` or `started_at`.
+ *
+ * T-208 (audit F-06): that same rule now also requires the attempt to STAY
+ * `in_progress` through any client-written update, so finishing one is no
+ * longer a direct write -- see finishAttempt() below.
  */
 import {
   addDoc,
@@ -26,6 +30,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import { FOCUS_EVENT_CAP, expiryFrom } from '@/lib/quizAttempts'
 
 /**
@@ -110,21 +115,21 @@ export function recordFocusEvent(attemptId, event, storedCount = 0) {
  * Submit. Both produce a real, graded attempt -- an expired attempt is still
  * the student's work and still counts -- but a teacher looking at a low score
  * should be able to see which of the two happened.
+ *
+ * T-208 (audit F-06): this used to grade the attempt client-side
+ * (lib/quizGrading.js's gradeQuiz) and write the result straight to
+ * Firestore -- nothing stopped a student submitting any score they liked.
+ * It now POSTs the raw answers to the server, which re-reads the quiz's own
+ * answer key through the Admin SDK and grades authoritatively
+ * (app/services/quiz_attempt_grading.py); firestore.rules refuses a direct
+ * client write that tries to finish the attempt itself, so this endpoint is
+ * now the only path. Returns the server's result in the same shape
+ * gradeQuiz() used to produce, so callers render feedback the same way.
  */
-export function finishAttempt(attemptId, { result, answers, expired = false }) {
-  return updateDoc(doc(db, 'quiz_attempts', attemptId), {
-    answers,
-    per_question: result.per_question,
-    // total_score is what every teacher view reads; `score` mirrors the
-    // documented quiz_attempts schema. Both are required.
-    total_score: result.total_score,
-    score: result.total_score,
-    total_possible: result.total_possible,
-    score_ratio: result.score_ratio,
-    has_essays_pending: result.has_essays,
-    status: result.has_essays ? 'submitted' : 'graded',
-    expired_at_submit: expired,
-    submitted_at: serverTimestamp(),
+export function finishAttempt(attemptId, { answers, expired = false }) {
+  return api(`/quiz_attempts/${attemptId}/submit`, {
+    method: 'POST',
+    body: { answers, expired },
   })
 }
 
