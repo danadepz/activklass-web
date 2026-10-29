@@ -287,3 +287,65 @@ describe('task_files · hand-out read (T-206, the sibling at :53)', () => {
     )
   })
 })
+
+/*
+ * T-207 / audit F-11: /syllabi/{classId}/{fileName} and
+ * /learning_materials/{syllabusId}/{fileName} both had
+ * `allow delete: if signedIn()` -- any signed-in user, at any school, could
+ * delete any teacher's syllabus attachment or learning material. Gated on
+ * the owning teacher (the class's teacher for /syllabi/, the syllabus
+ * document's teacher_id for /learning_materials/) or an admin, reusing the
+ * ownsClass() and isAdmin() helpers T-205/T-206 already established.
+ */
+describe('syllabi · delete (T-207)', () => {
+  it('refuses a teacher who does not own the class', async () => {
+    await seedFile('syllabi/class-1/outline.pdf')
+    await assertFails(
+      deleteObject(ref(storageCtx(OTHER_TEACHER), 'syllabi/class-1/outline.pdf')),
+    )
+  })
+
+  it("refuses a student, even the class's own", async () => {
+    await seedFile('syllabi/class-1/outline.pdf')
+    await assertFails(
+      deleteObject(ref(storageCtx(STUDENT), 'syllabi/class-1/outline.pdf')),
+    )
+  })
+
+  it("allows the class's own teacher to delete it", async () => {
+    await seedFile('syllabi/class-1/outline.pdf')
+    await assertSucceeds(
+      deleteObject(ref(storageCtx(TEACHER), 'syllabi/class-1/outline.pdf')),
+    )
+  })
+
+  it('allows an admin to delete it', async () => {
+    await seedFile('syllabi/class-1/outline.pdf')
+    await assertSucceeds(
+      deleteObject(ref(storageCtx(ADMIN), 'syllabi/class-1/outline.pdf')),
+    )
+  })
+})
+
+describe('learning_materials · delete (T-207)', () => {
+  it('refuses a teacher who does not own the syllabus', async () => {
+    await seedFile('learning_materials/syl-1/handout.pdf')
+    await assertFails(
+      deleteObject(ref(storageCtx(OTHER_TEACHER), 'learning_materials/syl-1/handout.pdf')),
+    )
+  })
+
+  it('allows the owning teacher to delete it', async () => {
+    await seedFile('learning_materials/syl-1/handout.pdf')
+    await assertSucceeds(
+      deleteObject(ref(storageCtx(TEACHER), 'learning_materials/syl-1/handout.pdf')),
+    )
+  })
+
+  it('allows an admin to delete it', async () => {
+    await seedFile('learning_materials/syl-1/handout.pdf')
+    await assertSucceeds(
+      deleteObject(ref(storageCtx(ADMIN), 'learning_materials/syl-1/handout.pdf')),
+    )
+  })
+})
