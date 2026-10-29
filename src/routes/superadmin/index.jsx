@@ -10,7 +10,7 @@ import {
   updateSubscriber,
 } from '@/lib/superadmin'
 import { absorbMessage } from '@/lib/approvalMessage'
-import { SEGMENTS, STATUSES, analyticsFor, filterRows } from '@/lib/superadminAnalytics'
+import { SEGMENTS, STATUSES, analyticsFor, filterRows, segmentOf } from '@/lib/superadminAnalytics'
 import AnalyticsBand from './AnalyticsBand'
 import AbsorbDialog from './AbsorbDialog'
 import MessageDialog from './MessageDialog'
@@ -136,6 +136,7 @@ export default function SuperAdminSubscribersPage() {
   const [absorbNotice, setAbsorbNotice] = useState(null) // the copy-ready notice after a successful absorb
   const [banner, setBanner] = useState(null)
   const [purgingSubscriber, setPurgingSubscriber] = useState(null) // { id, name, type }
+  const [searchQuery, setSearchQuery] = useState('')
   const [segment, setSegment] = useState('all')
   const [status, setStatus] = useState('all')
 
@@ -171,6 +172,27 @@ export default function SuperAdminSubscribersPage() {
   // The slice everything on the page is scoped to.
   const visible = useMemo(() => filterRows(rows, { segment, status }), [rows, segment, status])
   const analytics = useMemo(() => analyticsFor(visible), [visible])
+
+  const institutionCount = useMemo(
+    () => rows.filter((r) => segmentOf(r) === 'institution').length,
+    [rows],
+  )
+  const teacherCount = useMemo(
+    () => rows.filter((r) => segmentOf(r) === 'teacher').length,
+    [rows],
+  )
+
+  const displayRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return visible
+    return visible.filter(({ subscription: sub, owner }) => {
+      const name = String(owner?.name || sub?.name || '').toLowerCase()
+      const email = String(owner?.contact_email || owner?.email || '').toLowerCase()
+      const plan = String(sub?.plan || '').toLowerCase()
+      const id = String(sub?.id || '').toLowerCase()
+      return name.includes(q) || email.includes(q) || plan.includes(q) || id.includes(q)
+    })
+  }, [visible, searchQuery])
 
   // Tab counts come from the UNFILTERED rows for the axis being chosen, so a
   // tab always says how many it would show — a count that changed as you
@@ -302,14 +324,106 @@ export default function SuperAdminSubscribersPage() {
       {/* The table renders even with no rows. An empty console should still
           show what it will hold, and headers make it obvious the page loaded
           rather than failed. */}
-      <div className="mt-8 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-400">
-          Subscribers
-        </h2>
-        <span className="font-mono text-[11px] text-zinc-600 tabular-nums">
-          {visible.length}
-          {filtered && ` of ${rows.length}`} shown
-        </span>
+      <div className="mt-8 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Clickable tabs for Institution vs Solo Teacher */}
+          <div className="flex items-center gap-1.5" role="tablist" aria-label="Subscriber Types">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={segment === 'institution'}
+              onClick={() => setSegment('institution')}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                segment === 'institution'
+                  ? 'border border-amber-400/40 bg-amber-400/10 text-amber-300 shadow-sm'
+                  : 'border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+              }`}
+            >
+              <span>Institutions</span>
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                  segment === 'institution' ? 'bg-amber-400/20 text-amber-300' : 'bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                {institutionCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={segment === 'teacher'}
+              onClick={() => setSegment('teacher')}
+              className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                segment === 'teacher'
+                  ? 'border border-amber-400/40 bg-amber-400/10 text-amber-300 shadow-sm'
+                  : 'border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+              }`}
+            >
+              <span>Solo Teachers</span>
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                  segment === 'teacher' ? 'bg-amber-400/20 text-amber-300' : 'bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                {teacherCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={segment === 'all'}
+              onClick={() => setSegment('all')}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                segment === 'all'
+                  ? 'border border-zinc-700 bg-zinc-800 text-zinc-100 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <span>All</span>
+              <span className="font-mono text-[10px] text-zinc-500">{rows.length}</span>
+            </button>
+          </div>
+
+          {/* Search bar and counter */}
+          <div className="flex flex-1 flex-wrap items-center justify-end gap-3 sm:flex-initial">
+            <div className="relative w-full sm:w-64">
+              <svg
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth="2"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search subscribers…"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-8 pr-7 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-amber-400/50 focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 px-1 text-xs font-bold text-zinc-500 hover:text-zinc-300"
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <span className="font-mono text-[11px] text-zinc-600 tabular-nums">
+              {displayRows.length}
+              {(filtered || searchQuery) && ` of ${rows.length}`} shown
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-800">
@@ -324,17 +438,29 @@ export default function SuperAdminSubscribersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {visible.length === 0 ? (
+            {displayRows.length === 0 ? (
               <tr>
-                {/* An empty filter result is not an empty console — saying "no
-                    subscribers yet" to someone who just clicked Suspended reads
-                    as data loss. */}
                 <td colSpan={5} className="px-4 py-14 text-center">
-                  <p className="text-sm font-semibold text-zinc-300">
-                    {filtered ? 'No subscribers match this filter' : 'No subscribers yet'}
-                  </p>
-                  {filtered ? (
+                  {searchQuery ? (
                     <>
+                      <p className="text-sm font-semibold text-zinc-300">
+                        No subscribers match &ldquo;{searchQuery}&rdquo;
+                      </p>
+                      <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
+                        No {segment === 'institution' ? 'institution' : segment === 'teacher' ? 'solo teacher' : 'subscriber'} found matching your search query.
+                      </p>
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="mt-4 rounded-lg border border-zinc-700 px-4 py-1.5 text-xs font-bold text-zinc-300 hover:border-zinc-600"
+                      >
+                        Clear search
+                      </button>
+                    </>
+                  ) : filtered ? (
+                    <>
+                      <p className="text-sm font-semibold text-zinc-300">
+                        No subscribers match this filter
+                      </p>
                       <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
                         {rows.length} subscriber{rows.length === 1 ? '' : 's'} exist, none in this
                         slice.
@@ -351,6 +477,9 @@ export default function SuperAdminSubscribersPage() {
                     </>
                   ) : (
                     <>
+                      <p className="text-sm font-semibold text-zinc-300">
+                        No subscribers yet
+                      </p>
                       <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
                         Provisioning an institution creates its school, its first admin account and
                         its subscription together, so the customer has something to sign into. A
@@ -367,7 +496,7 @@ export default function SuperAdminSubscribersPage() {
                 </td>
               </tr>
             ) : (
-              visible.map(({ subscription: sub, owner, usage }) => (
+              displayRows.map(({ subscription: sub, owner, usage }) => (
                 <tr key={sub.id} className="align-middle hover:bg-zinc-900/30">
                   <td className="px-4 py-4">
                     <div className="text-sm font-semibold text-zinc-100">{owner?.name}</div>
