@@ -1094,6 +1094,11 @@ describe('T-125 — admin guardian access restored; role-escalation block untouc
       // Overrides seedRoles()'s school_id-less TEACHER so the "edit a
       // non-role field" check below has a same-school target (T-126).
       await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      // T-203: guardian_codes/guardian_links have no school_id of their own
+      // now, so the admin branch is scoped through the student's -- this
+      // describe's admin-can-act checks need STUDENT at the admin's school,
+      // or sameSchoolAsUser() denies it as a cross-school mismatch.
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T', school_id: 'school-1' })
       await setDoc(doc(db, 'guardian_codes', CODE), {
         student_uid: STUDENT,
         is_minor: true,
@@ -1232,5 +1237,187 @@ describe('announcement_dismissals · a student hides their own, never another\'s
     })
     await assertFails(updateDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`), { student_id: STUDENT }))
     await assertFails(deleteDoc(doc(ctx(STUDENT), 'announcement_dismissals', `ann-1_${STUDENT}`)))
+  })
+})
+
+/**
+ * T-203 (audit F-02): `isAdmin()` is role-only, so an admin of one school
+ * satisfied it for every OTHER school's documents across 20 collections --
+ * `classes/{classId}` was the clearest case, `allow delete: if isAdmin()`
+ * with no scope at all. None of these 20 carry a school_id of their own
+ * (unlike users/subscriptions/payments, already scoped before this card),
+ * so every admin branch below is now scoped through the uid the document
+ * already belongs to -- a class's teacher_id, a submission's student_id --
+ * compared against the CALLER's school_id via the lifted
+ * sameSchoolAsCaller()/sameSchoolAsUser() helpers.
+ *
+ * One fixture per collection, owned by the FOREIGN (school-2) side; ADMIN
+ * (school-1) is refused every one of them. FOREIGN_ADMIN (school-2) gets one
+ * sanity check on `classes` proving a same-school admin still works -- the
+ * fix narrows isAdmin(), it must not zero it out.
+ */
+describe('T-203 — an admin may act only within their own school (audit F-02)', () => {
+  const FOREIGN_ADMIN = 'admin-10'
+  const FOREIGN_TEACHER = 'teacher-10'
+  const FOREIGN_STUDENT = 'student-10'
+  const FOREIGN_GUARDIAN = 'guardian-10'
+  const FOREIGN_CLASS = 'class-10'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'S', last_name: 'T', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_ADMIN), { role: 'admin', first_name: 'F', last_name: 'A', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', FOREIGN_STUDENT), { role: 'student', first_name: 'F', last_name: 'S', school_id: 'school-2' })
+
+      await setDoc(doc(db, 'classes', FOREIGN_CLASS), {
+        teacher_id: FOREIGN_TEACHER, subject: 'Math', student_ids: [FOREIGN_STUDENT],
+      })
+      await setDoc(doc(db, 'gradebooks', FOREIGN_CLASS), { teacher_id: FOREIGN_TEACHER, grading_mode: 'deped_k12' })
+      await setDoc(doc(db, 'gradebooks', FOREIGN_CLASS, 'entries', FOREIGN_STUDENT), {
+        student_id: FOREIGN_STUDENT, final_grade: 90,
+      })
+      await setDoc(doc(db, 'announcements', 'ann-foreign'), {
+        teacher_id: FOREIGN_TEACHER, class_id: FOREIGN_CLASS, title: 'x', body: 'y',
+      })
+      await setDoc(doc(db, 'announcement_dismissals', `ann-foreign_${FOREIGN_STUDENT}`), {
+        announcement_id: 'ann-foreign', student_id: FOREIGN_STUDENT,
+      })
+      await setDoc(doc(db, 'quizzes', 'quiz-foreign'), {
+        teacher_id: FOREIGN_TEACHER, class_id: FOREIGN_CLASS, title: 'Quiz',
+      })
+      await setDoc(doc(db, 'banked_questions', 'bq-foreign'), { teacher_id: FOREIGN_TEACHER, question_text: 'x' })
+      await setDoc(doc(db, 'syllabi', 'syl-foreign'), { teacher_id: FOREIGN_TEACHER, class_id: FOREIGN_CLASS })
+      await setDoc(doc(db, 'class_tasks', 'task-foreign'), {
+        teacher_id: FOREIGN_TEACHER, class_id: FOREIGN_CLASS, status: 'draft',
+      })
+      await setDoc(doc(db, 'task_submissions', 'sub-foreign'), {
+        task_id: 'task-foreign', class_id: FOREIGN_CLASS, student_id: FOREIGN_STUDENT,
+      })
+      await setDoc(doc(db, 'quiz_attempts', 'attempt-foreign'), {
+        quiz_id: 'quiz-foreign', class_id: FOREIGN_CLASS, student_id: FOREIGN_STUDENT,
+        status: 'in_progress', started_at: new Date('2026-04-10T09:00:00Z'),
+      })
+      await setDoc(doc(db, 'remediations', 'rem-foreign'), { student_id: FOREIGN_STUDENT, class_id: FOREIGN_CLASS })
+      await setDoc(doc(db, 'attendance_summaries', `${FOREIGN_CLASS}_${FOREIGN_STUDENT}`), {
+        class_id: FOREIGN_CLASS, student_id: FOREIGN_STUDENT,
+      })
+      await setDoc(doc(db, 'student_performance', 'perf-foreign'), {
+        class_id: FOREIGN_CLASS, student_id: FOREIGN_STUDENT,
+      })
+      await setDoc(doc(db, 'guardian_codes', 'FGN123'), {
+        student_uid: FOREIGN_STUDENT, is_minor: false,
+        default_scopes: {
+          can_view_grades: false, can_view_quiz_scores: false,
+          can_view_attendance: false, can_view_analytics: false,
+        },
+      })
+      await setDoc(doc(db, 'guardian_links', `${FOREIGN_STUDENT}_${FOREIGN_GUARDIAN}`), {
+        student_uid: FOREIGN_STUDENT, guardian_uid: FOREIGN_GUARDIAN, status: 'pending', is_minor: false,
+        scopes: {
+          can_view_grades: false, can_view_quiz_scores: false,
+          can_view_attendance: false, can_view_analytics: false,
+        },
+      })
+      await setDoc(doc(db, 'consent_records', FOREIGN_STUDENT), {
+        student_id: FOREIGN_STUDENT, parent_id: FOREIGN_GUARDIAN, is_minor: false, status: 'approved',
+      })
+      await setDoc(doc(db, 'attendance_contests', 'ac-foreign'), {
+        student_id: FOREIGN_STUDENT, class_id: FOREIGN_CLASS, status: 'pending',
+      })
+      await setDoc(doc(db, 'grade_contests', 'gc-foreign'), {
+        student_id: FOREIGN_STUDENT, class_id: FOREIGN_CLASS, status: 'pending',
+      })
+      await setDoc(doc(db, 'notifications', 'notif-foreign'), {
+        user_id: FOREIGN_STUDENT, class_id: FOREIGN_CLASS, created_by: FOREIGN_TEACHER, read: false,
+      })
+    })
+  })
+
+  it('refuses a foreign-school admin deleting a class', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'classes', FOREIGN_CLASS)))
+  })
+
+  it('lets the class\'s own-school admin delete it', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(FOREIGN_ADMIN), 'classes', FOREIGN_CLASS)))
+  })
+
+  it('refuses a foreign-school admin deleting a gradebook', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'gradebooks', FOREIGN_CLASS)))
+  })
+
+  it('refuses a foreign-school admin reading a gradebook entry', async () => {
+    await assertFails(getDoc(doc(ctx(ADMIN), 'gradebooks', FOREIGN_CLASS, 'entries', FOREIGN_STUDENT)))
+  })
+
+  it('refuses a foreign-school admin deleting an announcement', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'announcements', 'ann-foreign')))
+  })
+
+  it('refuses a foreign-school admin reading an announcement dismissal', async () => {
+    await assertFails(getDoc(doc(ctx(ADMIN), 'announcement_dismissals', `ann-foreign_${FOREIGN_STUDENT}`)))
+  })
+
+  it('refuses a foreign-school admin deleting a quiz', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'quizzes', 'quiz-foreign')))
+  })
+
+  it('refuses a foreign-school admin reading a banked question', async () => {
+    await assertFails(getDoc(doc(ctx(ADMIN), 'banked_questions', 'bq-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a syllabus', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'syllabi', 'syl-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a class task', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'class_tasks', 'task-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a task submission', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'task_submissions', 'sub-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a quiz attempt', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'quiz_attempts', 'attempt-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a remediation', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'remediations', 'rem-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting an attendance summary', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'attendance_summaries', `${FOREIGN_CLASS}_${FOREIGN_STUDENT}`)))
+  })
+
+  it('refuses a foreign-school admin deleting a student_performance snapshot', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'student_performance', 'perf-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a guardian code', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'guardian_codes', 'FGN123')))
+  })
+
+  it('refuses a foreign-school admin deleting a guardian link', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'guardian_links', `${FOREIGN_STUDENT}_${FOREIGN_GUARDIAN}`)))
+  })
+
+  it('refuses a foreign-school admin deleting a consent record', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'consent_records', FOREIGN_STUDENT)))
+  })
+
+  it('refuses a foreign-school admin deleting an attendance contest', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'attendance_contests', 'ac-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a grade contest', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'grade_contests', 'gc-foreign')))
+  })
+
+  it('refuses a foreign-school admin deleting a notification', async () => {
+    await assertFails(deleteDoc(doc(ctx(ADMIN), 'notifications', 'notif-foreign')))
   })
 })
