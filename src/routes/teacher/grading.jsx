@@ -11,7 +11,6 @@ import {
   POINT_SCALE_DIRECTIONS,
   gradePolicy,
   pointScaleBands,
-  rebalanceWeights,
   redistributeWeights,
   weightsValid,
 } from '@/lib/grading'
@@ -42,14 +41,18 @@ function Banner({ tone, children }) {
   )
 }
 
-function WeightBadge({ ok, children }) {
+const WEIGHT_BADGE_PALETTE = {
+  ok: { color: green, background: 'rgba(31,138,91,0.10)', border: '1px solid rgba(31,138,91,0.4)' },
+  warn: { color: '#8A6400', background: 'rgba(245,197,24,0.16)', border: '1px solid rgba(245,197,24,0.6)' },
+  bad: { color: red, background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.35)' },
+}
+
+function WeightBadge({ tone = 'ok', children }) {
   return (
     <span
       style={{
         display: 'inline-flex', alignItems: 'center', padding: '4px 12px', fontSize: 12, fontWeight: 700, borderRadius: 999,
-        ...(ok
-          ? { color: green, background: 'rgba(31,138,91,0.10)', border: '1px solid rgba(31,138,91,0.4)' }
-          : { color: red, background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.35)' }),
+        ...WEIGHT_BADGE_PALETTE[tone],
       }}
     >
       {children}
@@ -81,6 +84,13 @@ function presetRows(rows) {
 // the check that gates the save.
 function weightSum(rows) {
   return rows.reduce((sum, r) => sum + (Number(r.weight_percent) || 0), 0)
+}
+
+// Whole percents print bare, halves and other fractions keep two decimals —
+// the same rule the badge total always used, now shared with the
+// remaining/over amounts beside it.
+function fmtPct(n) {
+  return n.toFixed(n % 1 === 0 ? 0 : 2)
 }
 
 /* namedRows (./gradePreview.js): the rows that survive the save. withIds()
@@ -142,15 +152,13 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
   const sum = weightSum(counted)
   const ok = balanced(rows)
   const ignored = rows.length - counted.length
+  const tone = ok ? 'ok' : sum > 100 ? 'bad' : 'warn'
 
-  /* Weights are reactive: setting one rescales the others so the card always
-     totals 100 (rebalanceWeights in lib/grading.js). Names edit normally. */
+  // Every weight is typed, not dragged into place — no row's change ever
+  // touches another row's value. The one place weights still move each
+  // other is the explicit "Split evenly" button below.
   const update = (index, key, value) =>
-    setRows(
-      key === 'weight_percent'
-        ? rebalanceWeights(rows, index, value)
-        : rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)),
-    )
+    setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
 
   return (
     <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
@@ -159,11 +167,17 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
           <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>{title}</h3>
           <p style={{ fontSize: 12, color: faint, margin: 0 }}>{hint}</p>
         </div>
-        <WeightBadge ok={ok}>{sum.toFixed(sum % 1 === 0 ? 0 : 2)}%</WeightBadge>
+        <WeightBadge tone={tone}>
+          {ok
+            ? `${fmtPct(sum)}%`
+            : sum > 100
+              ? `${fmtPct(sum)}% · ${fmtPct(sum - 100)}% over`
+              : `${fmtPct(sum)}% · ${fmtPct(100 - sum)}% remaining`}
+        </WeightBadge>
       </div>
 
       <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
-        Change one weight and the others rescale so the total stays 100%.
+        Enter weights manually. Total must equal 100% to save.
       </p>
 
       {ignored > 0 && (
@@ -179,10 +193,9 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
         {rows.map((row, i) => (
           /* Rows must never poke out of the card: the name input is the only
              piece allowed to shrink (minWidth: 0 beats the browser's built-in
-             input minimum), the slider gives ground next, and the number box
-             and × stay fixed. Before this, the × sat outside the card edge
-             whenever the two-column grid left the card narrower than the
-             fixed widths added up to. */
+             input minimum); the number box and × stay fixed. Before this, the
+             × sat outside the card edge whenever the two-column grid left the
+             card narrower than the fixed widths added up to. */
           <div key={row.id ?? `new-${i}`} className="flex items-center gap-2">
             <input
               className="ak-input"
@@ -190,15 +203,6 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
               value={row.name}
               onChange={(e) => update(i, 'name', e.target.value)}
               style={{ ...fieldStyle, flex: '1 1 90px', minWidth: 0 }}
-            />
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={parseFloat(row.weight_percent) || 0}
-              onChange={(e) => update(i, 'weight_percent', e.target.value)}
-              style={{ flex: '0 1 112px', minWidth: 64, accentColor: navy }}
             />
             <div className="relative" style={{ flexShrink: 0 }}>
               <input
@@ -215,7 +219,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
               <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
             </div>
             <IconButton
-              onClick={() => setRows(redistributeWeights(rows.filter((_, j) => j !== i)))}
+              onClick={() => setRows(rows.filter((_, j) => j !== i))}
               disabled={rows.length === 1 || busy}
               label="Remove"
               className="transition hover:text-[#C0392B] disabled:cursor-not-allowed"
@@ -227,15 +231,30 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setRows([...rows, newRow()])}
-        disabled={busy}
-        className="mt-3 transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
-      >
-        <span style={{ color: gold }}>+</span> {addLabel}
-      </button>
+      <div className="mt-3 flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setRows([...rows, newRow()])}
+          disabled={busy}
+          className="transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
+        >
+          <span style={{ color: gold }}>+</span> {addLabel}
+        </button>
+
+        {/* Convenience only -- the one place this card still moves more than
+            one row's weight at once, and only on a click the teacher asked
+            for, not as a side effect of typing. */}
+        <button
+          type="button"
+          onClick={() => setRows(redistributeWeights(rows))}
+          disabled={busy || rows.length === 0}
+          className="transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ fontSize: 13, fontWeight: 700, fontFamily: sans, color: muted, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
+        >
+          Split evenly
+        </button>
+      </div>
 
       {onSave && (
         /* This card's own Save & Sync -- it still saves the whole grading
@@ -439,7 +458,7 @@ export function PreviewPanel({ components, mode, policy, initialSamples }) {
                   <span style={{ ...serif, fontSize: 36, lineHeight: 1, color: sim.passed ? green : red }} data-testid="preview-final">
                     {fmtFinal(sim.final, mode)}
                   </span>
-                  <WeightBadge ok={Boolean(sim.passed)}>{sim.passed ? 'Passed' : 'Failed'}</WeightBadge>
+                  <WeightBadge tone={sim.passed ? 'ok' : 'bad'}>{sim.passed ? 'Passed' : 'Failed'}</WeightBadge>
                   {mode === 'deped_k12' && sim.descriptor && (
                     <span style={{ fontSize: 12.5, color: muted }}>{sim.descriptor}</span>
                   )}

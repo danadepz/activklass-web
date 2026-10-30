@@ -3,10 +3,15 @@
  * others with nothing on the card saying it would, and the rescaled halves
  * (67.5, 22.5) rendered clipped as "67.!" / "22." in a 76-px number box.
  *
- * The rebalance itself stays -- the owner decided the card keeps itself at
- * 100% (rebalanceWeights, covered in lib/grading.test.js). What is pinned
- * here is what the tester SAW: both weight cards say that changing one
- * rescales the others, and the weight box is wide enough for a half-step.
+ * Later reversed: the owner found the auto-rebalance itself the problem --
+ * typing one weight kept knocking previously set weights into awkward
+ * fractions (whack-a-mole). Weights are now manual: typing a number updates
+ * only that row, the draggable range slider is gone, and a weight group
+ * saves only once it totals exactly 100% (still `weightsValid`, covered in
+ * lib/grading.test.js). `redistributeWeights` survives only behind the
+ * explicit "Split evenly" button. What is pinned here now: both weight
+ * cards say weights are manual, and the weight box is still wide enough for
+ * a half-step like the tester's own 67.5.
  *
  * The box width is checked as the rendered inline style. 92 px leaves 52 px
  * of text room after the padding and the % suffix -- measured in headless
@@ -49,7 +54,7 @@ vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.f
 
 import GlobalGradingSetupPage from './grading.jsx'
 
-const HINT = 'Change one weight and the others rescale so the total stays 100%.'
+const HINT = 'Enter weights manually. Total must equal 100% to save.'
 
 /* The weight boxes: number inputs stepping by halves (the Preview card's
    sample inputs are number inputs too, but not step 0.5). */
@@ -69,8 +74,12 @@ describe('T-65 — Grade Config says the weights rebalance, and shows a half-ste
     expect(values).toEqual(['49', '32', '9', '10', '67.5', '10', '22.5'])
   })
 
-  it('tells the teacher on BOTH cards that changing one weight rescales the others', () => {
+  it('tells the teacher on BOTH cards that weights are typed manually', () => {
     expect(html.split(HINT).length - 1).toBe(2)
+  })
+
+  it('no longer renders a draggable range slider', () => {
+    expect(html).not.toContain('type="range"')
   })
 
   it('makes every weight box wide enough for a half-step like 67.5 (not the 76 px that clipped it)', () => {
