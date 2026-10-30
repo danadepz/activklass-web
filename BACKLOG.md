@@ -3819,3 +3819,145 @@ other — `teacher/announcements.jsx` carries T-193 and T-194; `classes/$classId
 T-191 and T-197; `teacher/quizzes.$quizId.jsx` carries T-199 and T-200; `login.jsx` carries T-182,
 T-198 and T-201; `student/classes/**` carries T-189, T-190 and T-195. Five files, thirteen issues.
 Group before dispatching.
+
+## Code audit — 2026-10-29, 22 findings triaged (T-202 … T-223)
+
+Source: `2-ActivKlass_Audit_Tickets.txt`, an engineering/security audit written from an
+earlier read-only review. **Not Discord tickets** — no tester is waiting and no reply is
+owed, so these have Issues rows only, with `audit F-NN` as provenance in place of a ticket
+name. Cards under `C:/CAPSTONE/_tools/discord/tickets/_dispatch/`.
+
+The audit asked that every finding be re-verified against current code before fixing. That
+was right, and it was done: **17 of 22 confirmed at file:line**, one is not a defect, and
+three need a verification step before any fix. Spans all three repos.
+
+**The shape of it:** the Firestore and Storage rules are broadly "any signed-in user may
+read, and often delete, almost anything", across a deployment that hosts more than one
+school. Thirteen findings are the same root cause wearing different hats — scope is
+optional where it should be mandatory.
+
+### Act first
+1. **T-202 (F-09) — demo passwords in a PUBLIC repo** · `bug · security` · mobile.
+   `danadepz/activklass-mobile` is public; `MOBILE_SETUP_INSTRUCTIONS.txt` has been on
+   `origin/main` since 2026-09-29 and `TESTER_APK_AND_MIRRORING_GUIDE.txt` since
+   2026-10-01, both with literal 8–9 character passwords, a real Gmail address and two
+   student login IDs. **Rotation is the remedy and it is the owner's to do** — the values
+   are already in history and in every clone. `.env` has never been committed in any repo,
+   so the bot token and service account are clean.
+
+2. **T-203 (F-02) — cross-school admin access** · `bug · security` · `firestore.rules`.
+   `sameSchoolAsCaller()` is defined at `:147` *inside* `/users/{uid}`, so it is not in
+   scope anywhere else. **20 of the 23 collections that call `isAdmin()` contain no
+   reference to `school_id` at all.** `/classes/{classId}:273` ends `allow delete: if
+   isAdmin()` — one school's admin can delete another school's classes. Wider than the
+   audit stated. (The audit filed it under "Area: Web"; the rules live in
+   `activklass-backend/`.)
+
+3. **T-209 (F-01) — web and backend grade differently** · `bug · wrong data`.
+   `grading.js` uses DepEd Order 015 s.2026 Table 4 (owner-supplied source, "replaces DO 8
+   s.2015"); `grade_service.py` still uses DO 8 s.2015 Table 1. Initial grade 65 → **73 /
+   fail** on web, **78 / pass** on backend. Same child, same moment, opposite verdicts.
+   **The owner must confirm which order is policy before either side is changed.**
+
+### Storage rules — all confirmed, one pass fixes them
+4. **T-204 (F-07)** — `storage.rules:31` is `allow read: if true` on learning materials:
+   public, no authentication. `:33` lets any signed-in user delete them.
+5. **T-205 (F-10)** — `:85` excuse letters and `:92` grade-contest files are readable by
+   any signed-in user. The product invites a medical note into the first of those.
+6. **T-206 (F-12)** — `:68` every student's submitted work, readable by any signed-in user;
+   `:53` the same for task files, which the audit did not flag.
+7. **T-207 (F-11)** — `:27` and `:33`, any signed-in user may delete syllabus attachments
+   and learning materials.
+
+### Firestore rules and quiz integrity
+8. **T-208 (F-06)** — `/quizzes:416` `allow read: if signedIn()` with the answer key inside
+   the document; the rule's own comment concedes it (*"a hardened split … is a follow-up
+   task in docs/05"*). And `:533` constrains only `student_id` on attempt create, not
+   `total_score`, so a student can claim any score. The only finding that lets a student
+   change their own grade.
+9. **T-213 (F-13)** — `:170` ends `|| resource.data.role == 'teacher'`, so every teacher's
+   full profile including email is readable platform-wide; `:380` announcements and `:438`
+   syllabi likewise. The same rule school-scopes its *admin* branch, so the care was there
+   and the trailing clause undoes it.
+
+### Backend authorization
+10. **T-210 (F-04)** — `middleware/auth.py:68-74` refreshes uid and status for an existing
+    user and never assigns `user.role`; the role at `:59` is used only when creating a new
+    one. A demotion never reaches PostgreSQL.
+11. **T-211 (F-05)** — `api/guardians.py:212` commits the revoke, then calls
+    `remove_link_mirror` with no try/except, retry or success check. Rules read the mirror,
+    so a failed removal leaves a revoked guardian with live access while every screen says
+    revoked. The Postgres-first ordering is deliberate and fine; the unhandled consequence
+    is not.
+12. **T-212 (F-08)** — all five AI routes carry `@require_token` and nothing else.
+    `app/services/ai/gate.py` exists and `ai.py` references `gate` **zero** times. The
+    guards were written and never attached; `/remediate` writes using caller-supplied ids.
+13. **T-214 (F-17)** — `api/auth.py:64` `School.query.first()`, unordered and without tenant
+    context, on the new-user path. The PostgreSQL counterpart of T-203.
+14. **T-215 (F-15)** — six sites return `str(e)` to clients, including `ai.py:38` inside a
+    401.
+15. **T-216 (F-16)** — exactly eight auth guards exist. Cause behind T-210 and T-212 rather
+    than a hole itself; **do it after those two**, not before.
+
+### Verify before fixing
+16. **T-217 (F-03)** — the PayMongo webhook handler's own docstring says *"nothing ever
+    calls it"* and points at `/checkout/<reference>/confirm`, which re-checks against
+    PayMongo. **Not confirmed as filed.** Establish which path is live first.
+17. **T-218 (F-14)** — the two collections are already inside T-203's sweep; what is not
+    covered is whether the teacher and owner branches are correctly narrowed. Do it after.
+18. **T-219 (F-22)** — the audit's own blind spots. Two closed while triaging: the repo is
+    public (T-202), and `_archive/activklass-monorepo/firestore.rules` (349 lines,
+    2026-08-18) is **not** the live file (`activklass-backend/firestore.rules`, 1128
+    lines) — do not fix findings there. **Still open and it matters: are the DEPLOYED rules
+    the repo's rules?** That answer decides whether seven cards above are latent or live.
+
+### Documentation
+19. **T-220 (F-18)** — `CLAUDE.md` says 446 tests; the web suite reported **1,833 passing**
+    on 2026-10-24. Pick one definition and quote it with a date.
+20. **T-221 (F-19)** — ROADMAP says not deployed. A tester screenshot shows
+    `https://activklass.vercel.app/teacher` (`andecobs-293`) and mobile commit `1058112`
+    reads *"update API URL to live Cloud Run backend"*.
+21. **T-222 (F-20)** — one production URL and one local URL, each labelled.
+    `http://10.0.2.2:5000` is the Android emulator alias and is **correct**; keep it with a
+    note or someone will "fix" it.
+
+### Not a defect
+22. **T-223 (F-21)** — the Firebase **web** API key in the docs is a public project
+    identifier that ships in every client bundle, including the APK testers already hold.
+    It authorises nothing; the rules do. Recorded as `not-a-bug` so it is not re-raised and
+    nobody rotates it in a panic alongside T-202's real credentials. The one genuine action
+    is confirming API restrictions in the Google Cloud console.
+
+**Band note:** `security` was added to `priority_band()` on 2026-10-29. Without it an
+exposed credential matched nothing in a tester-centric vocabulary and fell to P4
+"unranked", below a cosmetic typo. It shares P0 with `blocks testing`, and is reserved for
+findings confirmed and exploitable now — an unverified rule gap stays lower until someone
+has reproduced it, or every audit finding becomes P0 and the ranking stops meaning
+anything.
+
+### 2026-10-30 — F-06 split: T-208 closed its score half, T-225 carries the answer key
+
+`a0e0114` (2026-10-29) closed **one** of audit F-06's two halves, and the owner recorded it
+as partial on 2026-10-30. Re-checked against the code the same day:
+
+- **Closed — a student writing their own score.** Grading moved to
+  `POST /api/quiz_attempts/<id>/submit` (`app/services/quiz_attempt_grading.py`), which
+  reads the key through the Admin SDK and bypasses the rules. Client writes are now pinned
+  to `request.resource.data.status == 'in_progress'`, so a student may save progress but can
+  never flip an attempt to `submitted` or `graded`. **T-208** holds this, `awaiting
+  verification`, commit `a0e0114`.
+- **Still open — a student reading the answer key.** `firestore.rules` `/quizzes/{quizId}`
+  is unchanged: `allow read: if signedIn();` with the key a field on that document, and the
+  old "a hardened split … is a follow-up task in docs/05" comment still in place. Now
+  **T-225**, `bug · security`.
+
+**The split got easier and that is the thing to check first.** Since grading is server-side,
+the client may no longer need the key — but `activklass-web/src/lib/quizGrading.js` (:38,
+:42, :50, :98) and `activklass-mobile/src/lib/quizGrading.ts` (:62, :66, :74) both still read
+it. Whether they are dead for scoring or still drive instant feedback decides whether T-225
+is mostly deletion or real work. `portParity.test.js` fails if the two drift, so they change
+together.
+
+T-208 was left at `awaiting verification` rather than held open: the commit is real and
+deserves checking for what it did. The state cell names the scope so the board cannot read as
+"F-06 closed" while half the hole is open.

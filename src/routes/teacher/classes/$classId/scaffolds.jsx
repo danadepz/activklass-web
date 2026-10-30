@@ -47,16 +47,38 @@ async function loadScaffolds(classId) {
   // remediation must carry topic ids from the document the student reads, or
   // the student's card can never find the module it came from.
   const { data: syl } = await resolveSyllabus(classId, clazz)
-  const topics = (syl?.modules ?? []).flatMap((m) =>
-    (m.topics ?? []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      moduleTitle: m.title,
-      // The practice quiz is fenced to these, the same as a quiz from the
-      // Quizzes page: a remediation must not drill what the module never taught.
-      objectives: (t.learning_objectives ?? t.objectives ?? []).filter((o) => typeof o === 'string' && o.trim()),
-    })),
-  )
+  let extraTopics = []
+  if (clazz?.syllabus_id) {
+    const curSnap = await getDoc(doc(db, 'classes', classId, 'syllabus', 'current')).catch(() => null)
+    if (curSnap?.exists()) {
+      const curSyl = curSnap.data()
+      extraTopics = (curSyl?.modules ?? []).flatMap((m) =>
+        (m.topics ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          moduleTitle: m.title,
+          objectives: (t.learning_objectives ?? t.objectives ?? []).filter((o) => typeof o === 'string' && o.trim()),
+        })),
+      )
+    }
+  }
+  const knownTopicIds = new Set()
+  const topics = []
+  const allTopicSources = [
+    ...(syl?.modules ?? []).flatMap((m) => (m.topics ?? []).map((t) => ({ ...t, moduleTitle: m.title }))),
+    ...extraTopics,
+  ]
+  for (const t of allTopicSources) {
+    if (t.id && !knownTopicIds.has(t.id)) {
+      knownTopicIds.add(t.id)
+      topics.push({
+        id: t.id,
+        title: t.title,
+        moduleTitle: t.moduleTitle,
+        objectives: (t.learning_objectives ?? t.objectives ?? []).filter((o) => typeof o === 'string' && o.trim()),
+      })
+    }
+  }
 
   // class_ids (array) is the canonical link -- a quiz can belong to several
   // classes. Older docs carried a scalar class_id; both are queried until the
@@ -78,6 +100,10 @@ async function loadScaffolds(classId) {
     }),
   )
 
+  // Gradebook assessments (so teacher-entered scores on quizzes and topics are counted too)
+  const aDocsSnap = await getDocs(collection(db, 'gradebooks', classId, 'assessments')).catch(() => ({ docs: [] }))
+  const recordAssessments = aDocsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
   const ids = clazz ? clazz.student_ids ?? [] : []
   const users = ids.length ? await fetchUsersByIds(ids) : []
   const nameById = {}
@@ -86,7 +112,10 @@ async function loadScaffolds(classId) {
   const rows = []
   for (const topic of topics) {
     const tq = quizzes.filter((q) => q.topic_id === topic.id)
-    if (!tq.length) continue
+    const raList = recordAssessments.filter(
+      (a) => a.topic_id === topic.id || (a.source_quiz_id && tq.some((q) => q.id === a.source_quiz_id)),
+    )
+    if (!tq.length && !raList.length) continue
     const bestByStudent = {}
     let attemptCount = 0
     for (const q of tq) {
@@ -100,6 +129,20 @@ async function loadScaffolds(classId) {
         if (prev == null || pct > prev) bestByStudent[a.student_id] = pct
       }
     }
+    for (const ra of raList) {
+      const maxPts = Number(ra.total_points) || 0
+      if (maxPts <= 0) continue
+      const scores = ra.scores || {}
+      for (const [sid, entry] of Object.entries(scores)) {
+        const raw = typeof entry === 'object' ? entry?.raw_score : entry
+        if (raw != null && Number.isFinite(Number(raw))) {
+          const pct = (Number(raw) / maxPts) * 100
+          attemptCount++
+          const prev = bestByStudent[sid]
+          if (prev == null || pct > prev) bestByStudent[sid] = pct
+        }
+      }
+    }
     const pcts = Object.values(bestByStudent)
     if (!pcts.length) continue // no graded submissions yet — can't compute mastery
     const mastery = Math.round(pcts.reduce((s, x) => s + x, 0) / pcts.length)
@@ -109,7 +152,7 @@ async function loadScaffolds(classId) {
     rows.push({
       ...topic,
       mastery,
-      quizCount: tq.length,
+      quizCount: tq.length + raList.length,
       attemptCount,
       studentsAffected: affectedIds.length,
       affectedNames: affectedIds.map((sid) => nameById[sid] ?? sid),
@@ -687,13 +730,16 @@ export default function ScaffoldTopicsPage() {
     setBusy(topic.id)
     setError(null)
     try {
+      const targets = focusId && !(topic.affectedIds ?? []).includes(focusId)
+        ? [...(topic.affectedIds ?? []), focusId]
+        : (topic.affectedIds ?? [])
       const ref = await createRemediationPlan({
         classId,
         teacherId: profile.id,
         topicId: topic.id,
         topicTitle: topic.title,
-        targetStudentIds: topic.affectedIds ?? [],
-        mastery: topic.mastery,
+        targetStudentIds: targets,
+        mastery: topic.mastery ?? 0,
       })
       await refresh()
       setEditingPlan({
@@ -704,7 +750,7 @@ export default function ScaffoldTopicsPage() {
         title: `Remediation · ${topic.title}`,
         guidance: '',
         recommended_quiz_id: null,
-        target_student_ids: topic.affectedIds ?? [],
+        target_student_ids: targets,
         status: 'draft',
         assignments: [],
       })
@@ -816,36 +862,42 @@ export default function ScaffoldTopicsPage() {
      student is one of the targets, never the only one. */
   const focusId = searchParams.get('student')
   const focusName = focusId ? data.nameById?.[focusId] : null
-  const allRows = data.rows
-  const rows = focusName ? allRows.filter((r) => (r.affectedIds ?? []).includes(focusId)) : allRows
+  const allRows = data.rows ?? []
+  const matchingRows = focusName ? allRows.filter((r) => (r.affectedIds ?? []).includes(focusId)) : allRows
+  const hasMatching = focusName ? matchingRows.length > 0 : true
+  const rows = hasMatching ? matchingRows : allRows
   const { linkedQuizzes } = data
   const focusBanner = focusName && (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3" style={{ background: 'rgba(245,197,24,0.1)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 12, padding: '10px 14px' }}>
       <span style={{ fontSize: 13.5, color: ink }}>
-        Showing the {rows.length} topic{rows.length === 1 ? '' : 's'} where <strong>{focusName}</strong> is below mastery
-        {rows.length === 0 && allRows.length > 0 ? ' — none; this student is at or above mastery on every tracked topic' : ''}.
+        {hasMatching ? (
+          <>
+            Showing the {rows.length} topic{rows.length === 1 ? '' : 's'} where <strong>{focusName}</strong> is below mastery (score under 75%).
+          </>
+        ) : (
+          <>
+            <strong>{focusName}</strong> has a grade under 75% in the class record, with no recorded quiz failures on tracked topics yet. Showing all {allRows.length} topic{allRows.length === 1 ? '' : 's'} so you can create a remediation for them.
+          </>
+        )}
       </span>
       <button onClick={() => setSearchParams({})} style={{ fontSize: 12.5, fontWeight: 700, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-        Show all topics
+        {hasMatching ? 'Show all topics' : 'Clear filter'}
       </button>
     </div>
   )
-  const needs = rows.filter((r) => bucketOf(r.mastery) === 'needs').sort((a, b) => a.mastery - b.mastery)
-  const developing = rows.filter((r) => bucketOf(r.mastery) === 'developing').sort((a, b) => a.mastery - b.mastery)
-  const mastered = rows.filter((r) => bucketOf(r.mastery) === 'mastered').sort((a, b) => b.mastery - a.mastery)
+  // When a student is focused, any topic where they are affected belongs in "needs" for that student!
+  const needs = rows.filter((r) => (focusName && (r.affectedIds ?? []).includes(focusId)) || bucketOf(r.mastery) === 'needs').sort((a, b) => a.mastery - b.mastery)
+  const developing = rows.filter((r) => !(focusName && (r.affectedIds ?? []).includes(focusId)) && bucketOf(r.mastery) === 'developing').sort((a, b) => a.mastery - b.mastery)
+  const mastered = rows.filter((r) => !(focusName && (r.affectedIds ?? []).includes(focusId)) && bucketOf(r.mastery) === 'mastered').sort((a, b) => b.mastery - a.mastery)
 
-  if (rows.length === 0 && allRows.length > 0) {
+  // Topics in the syllabus that do not yet have quiz/assessment attempts:
+  const untrackedSyllabusTopics = (data.topics ?? []).filter((t) => !allRows.some((r) => r.id === t.id))
+
+  if (rows.length === 0 && untrackedSyllabusTopics.length === 0) {
     return (
       <div>
         {header}
         {focusBanner}
-      </div>
-    )
-  }
-  if (rows.length === 0) {
-    return (
-      <div>
-        {header}
         <div className="text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40 }}>
           <p style={{ color: muted, margin: '0 0 6px' }}>No topic mastery yet.</p>
           <p style={{ fontSize: 13, color: faint, margin: 0, maxWidth: 520, marginInline: 'auto', lineHeight: 1.5 }}>
@@ -987,6 +1039,40 @@ export default function ScaffoldTopicsPage() {
         </div>
       )}
 
+      {/* untracked syllabus topics ready to scaffold */}
+      {untrackedSyllabusTopics.length > 0 && rows.length === 0 && (
+        <div className="mb-[22px]">
+          <SectionHead dot={blueText} title="Syllabus topics" note={`${untrackedSyllabusTopics.length} topic${untrackedSyllabusTopics.length === 1 ? '' : 's'} · ready for remediation`} />
+          <div className="flex flex-col gap-3">
+            {untrackedSyllabusTopics.map((t) => (
+              <div key={t.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: ink }}>{t.title}</div>
+                    <div className="mt-1 flex items-center gap-2.5" style={{ fontSize: 12, color: muted }}>
+                      <span style={{ ...mono, color: blueText, fontWeight: 600 }}>{t.moduleTitle}</span>
+                      <span>·</span>
+                      <span>No quiz scores tracked yet</span>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => startRemediation(t)}
+                      disabled={busy === t.id}
+                      className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ padding: '9px 16px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }}
+                    >
+                      {busy === t.id ? 'Creating…' : 'Create remediation'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* remediation plans — the edit/publish surface */}
       <RemediationPanel
         plans={data.remediation?.plans ?? []}
@@ -1072,12 +1158,23 @@ export default function ScaffoldTopicsPage() {
           <SectionHead dot={green} title="Mastered" note={`${mastered.length} topic${mastered.length === 1 ? '' : 's'} · on track`} />
           <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
             {mastered.map((t) => (
-              <div key={t.id} className="grid items-center gap-4 min-w-[640px]" style={{ gridTemplateColumns: '1fr 180px 80px 140px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
+              <div key={t.id} className="grid items-center gap-4 min-w-[720px]" style={{ gridTemplateColumns: '1fr 180px 80px 120px 90px', padding: '14px 22px', borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>{t.title}</div>
                 <div style={{ ...mono, fontSize: 12, color: blueText, fontWeight: 600 }}>{t.moduleTitle}</div>
                 <div style={{ ...mono, fontSize: 13, fontWeight: 700, color: green, textAlign: 'right' }}>{t.mastery}%</div>
                 <div style={{ height: 6, background: 'rgba(14,42,92,0.07)', borderRadius: 999, overflow: 'hidden' }}>
                   <div style={{ width: `${t.mastery}%`, height: '100%', background: green, borderRadius: 999 }} />
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => startRemediation(t)}
+                    disabled={busy === t.id}
+                    className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ padding: '6px 12px', fontSize: 11.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1px solid ${navy}`, borderRadius: 8, cursor: 'pointer' }}
+                  >
+                    Scaffold
+                  </button>
                 </div>
               </div>
             ))}
