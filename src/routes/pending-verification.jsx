@@ -7,6 +7,7 @@ import { linkError, verificationIdError } from '@/lib/validation'
 import AuthLayout, { SubmitButton, AuthError, AuthNotice } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import SignOutButton from '@/components/SignOutButton'
+import { SUPPORT_EMAIL } from '@/routes/admin/SubscriptionTab'
 import { ink, muted, navy, line } from '@/theme'
 
 export const ID_TYPES = [
@@ -122,7 +123,7 @@ export default function PendingVerification() {
             </p>
             <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
               Questions? Reach the ActivKlass team at{' '}
-              <a href="mailto:danadepz13@gmail.com" style={{ color: navy, fontWeight: 600 }}>danadepz13@gmail.com</a>.
+              <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: navy, fontWeight: 600 }}>{SUPPORT_EMAIL}</a>.
             </p>
           </>
         )}

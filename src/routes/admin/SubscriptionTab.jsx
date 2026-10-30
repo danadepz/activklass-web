@@ -24,7 +24,7 @@ const GB = 1024 ** 3
  * product points teachers to. Plan changes get refused with the same
  * "handled by ActivKlass support" sentence and deserve the same route.
  */
-export const SUPPORT_EMAIL = 'danadepz13@gmail.com'
+export const SUPPORT_EMAIL = 'activklassteam.2026@gmail.com'
 
 /** T-172: the backend's plan-change refusal names support, not a way to reach it. */
 export const isSupportOnlyError = (message) => /handled by ActivKlass support/i.test(message || '')

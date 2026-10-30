@@ -11,7 +11,7 @@
  * upgrade/downgrade and an in-app request form are both out of scope; what
  * ships is the one sentence naming how to reach that support.
  *
- * The address is not invented: `danadepz13@gmail.com` is the same inbox
+ * The address is not invented: `activklassteam.2026@gmail.com` is the same inbox
  * already named on the "Verifying your account" hold screen
  * (`pending-verification.jsx`, T-78) as "the ActivKlass team" -- a real,
  * monitored route that already exists in this product, reused rather than
@@ -29,7 +29,7 @@ const REFUSAL = 'Plan changes are handled by ActivKlass support'
 
 describe('T-172 — the plan-change refusal names a way to reach support', () => {
   it('is the real, already-used ActivKlass contact, not an invented mailbox', () => {
-    expect(SUPPORT_EMAIL).toBe('danadepz13@gmail.com')
+    expect(SUPPORT_EMAIL).toBe('activklassteam.2026@gmail.com')
   })
 
   it('recognises the backend\'s exact refusal sentence', () => {
