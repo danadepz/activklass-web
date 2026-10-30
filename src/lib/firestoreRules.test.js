@@ -1631,3 +1631,86 @@ describe('T-213 — teacher profiles, syllabi and announcements are scoped to wh
     await assertSucceeds(getDoc(doc(ctx(PARENT), 'announcements', 'ann-mine')))
   })
 })
+
+/**
+ * T-218 (audit F-14, verified 2026-10-29) — "verify first" ticket. The
+ * audit claimed teacher access to guardian_links might be school-wide and
+ * guardian_codes deletion might not be scoped to the right owner/role.
+ *
+ * What was actually true: a comment above guardian_codes' delete rule
+ * (and, by its own cross-reference, guardian_links' read rule) said
+ * "KNOWN BREADTH: isTeacher() is unscoped" -- accurate on 2026-08-21
+ * (f275eee) when that really was the code, but stale after 2026-08-31
+ * (87cad2f, "a teacher reads only the students they handle") replaced
+ * every bare isTeacher() in both blocks with handlesStudent() -- scoped
+ * to a teacher who actually has this student in a class via
+ * users.teacher_ids. Grepping the live rule text for `isTeacher()` inside
+ * either match block today finds zero calls outside handlesStudent()'s
+ * own definition. The audit likely read the stale comment, not the code
+ * -- which is exactly why an undocumented-but-also-un-updated note is
+ * worse than no note.
+ *
+ * No rule changed here (firestore.rules only got the comment corrected).
+ * These tests pin the access matrix the corrected comment now describes,
+ * so a future change that reintroduces a bare isTeacher() fails loudly
+ * instead of drifting silently again.
+ */
+describe('T-218 — guardian_codes delete and guardian_links read/update/delete scope to the HANDLING teacher, not any teacher (audit F-14)', () => {
+  const HANDLING_TEACHER = 'teacher-30'
+  const OTHER_TEACHER = 'teacher-31'
+  const GUARDIAN_STUDENT = 'student-30'
+  const GUARDIAN_UID = 'guardian-30'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', HANDLING_TEACHER), { role: 'teacher', first_name: 'H', last_name: 'T' })
+      await setDoc(doc(db, 'users', OTHER_TEACHER), { role: 'teacher', first_name: 'O', last_name: 'T' })
+      // teacher_ids is what handlesStudent() actually reads -- HANDLING_TEACHER
+      // is really this student's teacher; OTHER_TEACHER is a stranger.
+      await setDoc(doc(db, 'users', GUARDIAN_STUDENT), {
+        role: 'student', first_name: 'G', last_name: 'S', teacher_ids: [HANDLING_TEACHER],
+      })
+      await setDoc(doc(db, 'guardian_codes', 'GRD030'), {
+        student_uid: GUARDIAN_STUDENT, is_minor: false,
+        default_scopes: { can_view_grades: false, can_view_quiz_scores: false, can_view_attendance: false, can_view_analytics: false },
+      })
+      await setDoc(doc(db, 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`), {
+        student_uid: GUARDIAN_STUDENT, guardian_uid: GUARDIAN_UID, status: 'approved', is_minor: false,
+        scopes: { can_view_grades: true, can_view_quiz_scores: true, can_view_attendance: true, can_view_analytics: true },
+      })
+    })
+  })
+
+  it('lets the handling teacher delete the student\'s guardian code', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(HANDLING_TEACHER), 'guardian_codes', 'GRD030')))
+  })
+
+  it('refuses a teacher who does not handle this student deleting their guardian code', async () => {
+    await assertFails(deleteDoc(doc(ctx(OTHER_TEACHER), 'guardian_codes', 'GRD030')))
+  })
+
+  it('lets the handling teacher read the student\'s guardian link', async () => {
+    await assertSucceeds(getDoc(doc(ctx(HANDLING_TEACHER), 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`)))
+  })
+
+  it('refuses a teacher who does not handle this student reading their guardian link', async () => {
+    await assertFails(getDoc(doc(ctx(OTHER_TEACHER), 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`)))
+  })
+
+  it('lets the handling teacher revoke a guardian on the student\'s behalf', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(HANDLING_TEACHER), 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`)))
+  })
+
+  it('refuses a teacher who does not handle this student revoking their guardian', async () => {
+    await assertFails(deleteDoc(doc(ctx(OTHER_TEACHER), 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`)))
+  })
+
+  it('refuses an unrelated teacher updating the student\'s guardian link scopes', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(OTHER_TEACHER), 'guardian_links', `${GUARDIAN_STUDENT}_${GUARDIAN_UID}`), {
+        scopes: { can_view_grades: false, can_view_quiz_scores: false, can_view_attendance: false, can_view_analytics: false },
+      }),
+    )
+  })
+})
