@@ -42,7 +42,7 @@ const TABS = [
 const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number(q.points) || 0), 0)
 
 
-async function loadClassDetail(classId, profile) {
+export async function loadClassDetail(classId, profile) {
   const studentUid = profile?.id ?? profile?.uid
   if (!studentUid) throw new Error('not_enrolled')
 
@@ -56,6 +56,9 @@ async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
+  let announcementsError = null
+  let quizzesError = null
+
   const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, dismissalsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
       loadStudentEntry(classId, studentUid),
@@ -64,23 +67,43 @@ async function loadClassDetail(classId, profile) {
       loadStudentGradeContests(classId, studentUid),
       loadSyllabus(classId),
       getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId)))
-        .catch((err) => { console.error('Announcement load error', err); return { docs: [] } }),
+        .catch((err) => {
+          console.error('Announcement load error:', err.code ?? '', err.message ?? err)
+          announcementsError = err
+          return { docs: [] }
+        }),
       // T-195: which of this student's own announcements they have already
       // dismissed. Best-effort -- a failed read just means nothing is
       // filtered out yet, not a broken page.
       getDocs(query(collection(db, 'announcement_dismissals'), where('student_id', '==', studentUid)))
         .catch((err) => { console.error('Announcement dismissals did not load', err); return null }),
       clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
-      Promise.all([
-        getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))).catch(() => ({ docs: [] })),
-        getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))).catch(() => ({ docs: [] })),
-      ]).then(([arr, sca]) => {
+      Promise.allSettled([
+        getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
+        getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+      ]).then(([arrResult, scaResult]) => {
+        const docs = []
+        if (arrResult.status === 'fulfilled') {
+          docs.push(...(arrResult.value?.docs ?? []))
+        } else {
+          console.error('Quizzes (class_ids) load error:', arrResult.reason)
+          quizzesError = arrResult.reason
+        }
+        if (scaResult.status === 'fulfilled') {
+          docs.push(...(scaResult.value?.docs ?? []))
+        } else {
+          console.error('Quizzes (class_id) load error:', scaResult.reason)
+          if (!quizzesError) quizzesError = scaResult.reason
+        }
         const byId = new Map()
-        ;[...(arr?.docs ?? []), ...(sca?.docs ?? [])].forEach((d) => byId.set(d.id, d))
+        docs.forEach((d) => byId.set(d.id, d))
         return { docs: [...byId.values()] }
       }),
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', studentUid)))
-        .catch((err) => { console.error('Quiz attempts load error', err); return { docs: [] } }),
+        .catch((err) => {
+          console.error('Quiz attempts load error:', err.code ?? '', err.message ?? err)
+          return { docs: [] }
+        }),
       // Same query the Remediation page runs, filtered to this class below. It
       // only marks which sub-modules have a review guide; if it fails, the
       // Modules tab loses the markers and nothing else.
@@ -155,6 +178,10 @@ async function loadClassDetail(classId, profile) {
     scaffoldedTopicIds,
     tasks,
     submissionByTask,
+    queryErrors: {
+      announcements: announcementsError,
+      quizzes: quizzesError,
+    },
     // T-70: a per-class Disable, not an account one -- the student stays
     // enrolled (student_ids untouched) and keeps reading grades and
     // materials, but nothing in the class can be started, submitted or
@@ -1719,7 +1746,7 @@ export default function StudentClassDetail() {
   const [tab, setTab] = useState(TABS.some((t) => t.key === requestedTab) ? requestedTab : 'topics')
   const focusTopicId = searchParams.get('topic')
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['student-class-detail', classId, profile?.id],
     queryFn: () => loadClassDetail(classId, profile),
     enabled: !!classId && !!profile?.id,
@@ -1729,15 +1756,30 @@ export default function StudentClassDetail() {
   if (isLoading) return <p style={{ color: faint }}>Loading class…</p>
   if (isError) {
     const notEnrolled = error?.message === 'not_enrolled'
+    const notFound = error?.message === 'Class not found'
     return (
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
         <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>
-          {notEnrolled ? "You're not enrolled in this class" : 'Class not found'}
+          {notEnrolled ? "You're not enrolled in this class" : notFound ? 'Class not found' : 'Could not load class'}
         </h3>
         <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
-          {notEnrolled ? 'You can only view classes you have been added to.' : 'This class may have been removed.'}
+          {notEnrolled
+            ? 'You can only view classes you have been added to.'
+            : notFound
+              ? 'This class may have been removed.'
+              : error?.message || 'We encountered an error loading this class.'}
         </p>
-        <Link to="/student/classes" style={{ fontSize: 13, fontWeight: 700, color: navy }}>← Back to My Classes</Link>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
+          <Link to="/student/classes" style={{ fontSize: 13, fontWeight: 700, color: navy }}>← Back to My Classes</Link>
+          {!notEnrolled && !notFound && (
+            <button
+              onClick={() => refetch()}
+              style={{ padding: '7px 14px', fontSize: 13, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 8, cursor: 'pointer' }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
       </div>
     )
   }

@@ -285,7 +285,7 @@ function StartCard({ quiz, attempts, classId, onStarted }) {
  * Only the discarded case can be named with certainty; everything else is
  * reported as itself rather than guessed at.
  */
-async function explainSubmitFailure(attemptId, err) {
+export async function explainSubmitFailure(attemptId, err) {
   try {
     const snap = await getDoc(doc(db, 'quiz_attempts', attemptId))
     const status = snap.data()?.status
@@ -617,12 +617,13 @@ export default function QuizPlayer() {
      read during render, and it only ever flips once per mount. */
   const [startedNow, setStartedNow] = useState(false)
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['quiz-player', quizId, profile.id],
-    queryFn: () => loadPlayerData(classId, quizId, profile.id),
+    queryKey: ['quiz-player', quizId, profile?.id],
+    queryFn: () => loadPlayerData(classId, quizId, profile?.id),
+    enabled: !!quizId && !!profile?.id,
     retry: false,
     refetchOnWindowFocus: false,
   })
-  const refetch = () => queryClient.invalidateQueries({ queryKey: ['quiz-player', quizId, profile.id] })
+  const refetch = () => queryClient.invalidateQueries({ queryKey: ['quiz-player', quizId, profile?.id] })
 
   if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
   if (isError) {
@@ -637,7 +638,7 @@ export default function QuizPlayer() {
 
   /* One shared decision, from lib/quizAttempts, rather than four checks
      written out here and a different four in the phone app. */
-  const gate = canStart({ quiz, attempts, studentId: profile.id })
+  const gate = canStart({ quiz, attempts, studentId: profile?.id })
   if (!gate.ok) {
     const resultLink = last && (
       <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your result</Link>.</>
@@ -654,7 +655,7 @@ export default function QuizPlayer() {
     if (gate.reason === 'closed') {
       return <Gate title="Quiz closed" classId={classId}>The window for this quiz has passed.</Gate>
     }
-    const allowed = attemptsAllowedFor(quiz, profile.id)
+    const allowed = attemptsAllowedFor(quiz, profile?.id)
     return (
       <Gate title="No attempts left" classId={classId}>
         You&apos;ve used all {allowed} attempt{allowed === 1 ? '' : 's'} for this quiz. Ask your

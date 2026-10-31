@@ -449,8 +449,9 @@ export default function StudentRemediation() {
     useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Practice note' })
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['student-scaffolding', profile.id],
-    queryFn: () => loadScaffolding(profile.id),
+    queryKey: ['student-scaffolding', profile?.id],
+    queryFn: () => loadScaffolding(profile?.id),
+    enabled: !!profile?.id,
   })
 
   const list = data?.remediations ?? []

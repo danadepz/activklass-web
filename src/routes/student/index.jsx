@@ -111,11 +111,10 @@ function Banner({ tone, icon, title, children, action }) {
   )
 }
 
-async function loadDashboard(profile) {
+export async function loadDashboard(profile) {
   const studentUid = profile?.id ?? profile?.uid
-  if (!studentUid) return { classes: [], remediations: [], consent: null }
+  if (!studentUid) throw new Error('not_authenticated')
   const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', studentUid)))
-    .catch((err) => { console.error('Classes load failed', err); return { docs: [] } })
   const rawClasses = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
 
   // Teacher names in one batched read.
@@ -154,8 +153,14 @@ async function loadDashboard(profile) {
 
   // Remediations + consent (parallel, independent of classes).
   const [remSnap, consentSnap] = await Promise.all([
-    getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentUid))).catch(() => ({ docs: [] })),
-    getDoc(doc(db, 'consent_records', studentUid)).catch(() => null),
+    getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentUid))).catch((err) => {
+      console.warn('Remediations load warning:', err)
+      return { docs: [] }
+    }),
+    getDoc(doc(db, 'consent_records', studentUid)).catch((err) => {
+      console.warn('Consent record load warning:', err)
+      return null
+    }),
   ])
   const remediations = (remSnap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
   const consent = consentSnap?.exists?.() ? consentSnap.data() : null
@@ -164,12 +169,37 @@ async function loadDashboard(profile) {
 }
 
 export default function StudentDashboard() {
-  const { profile } = useAuth()
-  const { data, isLoading } = useQuery({
+  const { profile, status } = useAuth()
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['student-dashboard', profile?.id],
     queryFn: () => loadDashboard(profile),
     enabled: !!profile?.id,
   })
+
+  if (status === 'loading' || !profile?.id) {
+    return (
+      <div style={{ color: faint, padding: 32 }}>
+        Loading student dashboard…
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 36, textAlign: 'center' }}>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could not load dashboard</h3>
+        <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
+          {error?.message || 'We ran into a problem loading your classes. Please try again.'}
+        </p>
+        <button
+          onClick={() => refetch()}
+          style={{ padding: '9px 18px', fontSize: 13.5, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 9, cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   const classes = data?.classes ?? []
   // The gauge speaks percent; a 1.0–5.0 point grade goes in through its band.
@@ -184,7 +214,7 @@ export default function StudentDashboard() {
   const consent = data?.consent
   // Consent banner is for adult data-subjects (>= 18) per docs/06 §2; a minor's
   // guardian access is staff-managed and isn't theirs to approve.
-  const age = ageFromBirthdate(profile.birthdate) ?? profile.age ?? null
+  const age = ageFromBirthdate(profile?.birthdate) ?? profile?.age ?? null
   const isAdult = age != null ? age >= 18 : consent?.is_minor === false
   const consentPending = isAdult && consent?.status === 'pending'
 

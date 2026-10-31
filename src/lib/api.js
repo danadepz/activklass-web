@@ -4,6 +4,49 @@ import { auth } from './firebase'
 // (see vite.config.js). Set VITE_API_URL only to point at a deployed API.
 const BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
+/**
+ * Normalizes relative API endpoint paths so that backend requests consistently
+ * route through the `/api` prefix expected by the Vite proxy and Vercel rewrites.
+ *
+ * Rules:
+ * - If path is not a string or empty, throws TypeError.
+ * - Absolute external URLs (http://, https://, //) are returned untouched.
+ * - An existing /api prefix (/api/, /api, /api?, /api#) is not duplicated.
+ * - Relative paths missing /api (e.g. /quiz_attempts/123/submit or quiz_attempts/123/submit)
+ *   are safely prefixed to /api/quiz_attempts/123/submit.
+ * - Query strings, URL-encoded parameters, and trailing slashes are strictly preserved.
+ */
+export function normalizeApiPath(path) {
+  if (typeof path !== 'string' || !path.trim()) {
+    throw new TypeError('Path must be a non-empty string')
+  }
+
+  // Preserve absolute external URLs and protocol-relative URLs
+  if (/^(?:[a-z]+:)?\/\//i.test(path)) {
+    return path
+  }
+
+  const trimmed = path.trim()
+
+  // Already prefixed with /api
+  if (trimmed === '/api' || trimmed.startsWith('/api/') || trimmed.startsWith('/api?') || trimmed.startsWith('/api#')) {
+    return trimmed
+  }
+
+  // Prefixed with api without leading slash (e.g. "api/quiz_attempts/...")
+  if (trimmed === 'api' || trimmed.startsWith('api/') || trimmed.startsWith('api?') || trimmed.startsWith('api#')) {
+    return `/${trimmed}`
+  }
+
+  // Relative path with leading slash (e.g. "/quiz_attempts/123/submit")
+  if (trimmed.startsWith('/')) {
+    return `/api${trimmed}`
+  }
+
+  // Relative path without leading slash (e.g. "quiz_attempts/123/submit")
+  return `/api/${trimmed}`
+}
+
 export class ApiError extends Error {
   constructor(status, code, message, body = null, cause = undefined) {
     super(message)
@@ -23,6 +66,7 @@ export class ApiError extends Error {
  * `keepalive` lets the browser finish sending the request even if the tab is
  * closed right after it fires — for saves that must land once started. */
 export async function api(path, { method = 'GET', body, requireAuth = true, keepalive = false } = {}) {
+  const normalizedPath = normalizeApiPath(path)
   const headers = { 'Content-Type': 'application/json' }
   if (requireAuth) {
     const user = auth.currentUser
@@ -30,8 +74,10 @@ export async function api(path, { method = 'GET', body, requireAuth = true, keep
     headers.Authorization = `Bearer ${await user.getIdToken()}`
   }
   let res
+  const isExternal = /^(?:[a-z]+:)?\/\//i.test(normalizedPath)
+  const url = isExternal ? normalizedPath : `${BASE_URL}${normalizedPath}`
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(url, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,

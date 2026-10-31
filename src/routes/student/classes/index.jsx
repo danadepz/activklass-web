@@ -19,11 +19,10 @@ function classBadge(c) {
   return base.replace(/[^A-Z0-9]/g, '').slice(0, 3) || '—'
 }
 
-async function loadClasses(profile) {
+export async function loadClasses(profile) {
   const studentUid = profile?.id ?? profile?.uid
-  if (!studentUid) return []
+  if (!studentUid) throw new Error('not_authenticated')
   const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', studentUid)))
-    .catch((err) => { console.error('Classes load failed', err); return { docs: [] } })
   const raw = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
   const teacherIds = [...new Set(raw.map((c) => c.teacher_id).filter(Boolean))]
   const teachers = teacherIds.length ? await fetchUsersByIds(teacherIds).catch(() => []) : []
@@ -42,12 +41,33 @@ async function loadClasses(profile) {
 }
 
 export default function StudentClassesIndex() {
-  const { profile } = useAuth()
-  const { data: classes, isLoading } = useQuery({
+  const { profile, status } = useAuth()
+  const { data: classes, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['student-classes', profile?.id],
     queryFn: () => loadClasses(profile),
     enabled: !!profile?.id,
   })
+
+  if (status === 'loading' || !profile?.id) {
+    return <SkeletonCards count={3} label="Loading your classes" />
+  }
+
+  if (isError) {
+    return (
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could not load your classes</h3>
+        <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
+          {error?.message || 'We encountered an error loading your enrolled classes.'}
+        </p>
+        <button
+          onClick={() => refetch()}
+          style={{ padding: '9px 18px', fontSize: 13.5, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 9, cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   const list = classes ?? []
 

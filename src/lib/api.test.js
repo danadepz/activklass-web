@@ -20,7 +20,7 @@ vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: async () => 'test-token' } },
 }))
 
-const { api, ApiError } = await import('./api')
+const { api, ApiError, normalizeApiPath } = await import('./api')
 
 const jsonResponse = (status, payload) => ({
   ok: status >= 200 && status < 300,
@@ -123,5 +123,95 @@ describe('before the request is made', () => {
     expect(err.code).toBe('no_session')
     expect(fetchSpy).not.toHaveBeenCalled()
     auth.currentUser = original
+  })
+})
+
+describe('path normalization (normalizeApiPath)', () => {
+  it('prepends /api to relative paths missing the prefix', () => {
+    expect(normalizeApiPath('/quiz_attempts/123/submit')).toBe('/api/quiz_attempts/123/submit')
+    expect(normalizeApiPath('quiz_attempts/123/submit')).toBe('/api/quiz_attempts/123/submit')
+    expect(normalizeApiPath('api/quiz_attempts/123/submit')).toBe('/api/quiz_attempts/123/submit')
+  })
+
+  it('does not duplicate an existing /api prefix', () => {
+    expect(normalizeApiPath('/api/quiz_attempts/123/submit')).toBe('/api/quiz_attempts/123/submit')
+    expect(normalizeApiPath('/api')).toBe('/api')
+    expect(normalizeApiPath('/api/')).toBe('/api/')
+    expect(normalizeApiPath('/api?foo=bar')).toBe('/api?foo=bar')
+    expect(normalizeApiPath('/api#hash')).toBe('/api#hash')
+  })
+
+  it('preserves query strings and URL-encoded identifiers', () => {
+    const path = '/students/lookup?email=user%2B1%40test.com&name=A%26B'
+    expect(normalizeApiPath(path)).toBe('/api/students/lookup?email=user%2B1%40test.com&name=A%26B')
+
+    const unprefixed = 'students/lookup?student_number=ABC%20123'
+    expect(normalizeApiPath(unprefixed)).toBe('/api/students/lookup?student_number=ABC%20123')
+  })
+
+  it('preserves trailing slashes consistently', () => {
+    expect(normalizeApiPath('/quizzes/')).toBe('/api/quizzes/')
+    expect(normalizeApiPath('/api/quizzes/')).toBe('/api/quizzes/')
+  })
+
+  it('preserves absolute external URLs and protocol-relative URLs without rewriting', () => {
+    expect(normalizeApiPath('https://example.com/api/test')).toBe('https://example.com/api/test')
+    expect(normalizeApiPath('http://localhost:5000/api/health')).toBe('http://localhost:5000/api/health')
+    expect(normalizeApiPath('//cdn.example.com/lib.js')).toBe('//cdn.example.com/lib.js')
+  })
+
+  it('rejects invalid or empty path arguments with TypeError', () => {
+    expect(() => normalizeApiPath('')).toThrow(TypeError)
+    expect(() => normalizeApiPath('   ')).toThrow(TypeError)
+    expect(() => normalizeApiPath(null)).toThrow(TypeError)
+    expect(() => normalizeApiPath(undefined)).toThrow(TypeError)
+    expect(() => normalizeApiPath(123)).toThrow(TypeError)
+  })
+})
+
+describe('api client integration with normalized paths', () => {
+  it('routes an unprefixed relative path through fetch with /api', async () => {
+    let capturedUrl = null
+    let capturedOptions = null
+    vi.stubGlobal('fetch', vi.fn(async (url, opts) => {
+      capturedUrl = url
+      capturedOptions = opts
+      return jsonResponse(200, { ok: true })
+    }))
+
+    const body = { answers: { q1: 'b' }, expired: false }
+    const result = await api('/quiz_attempts/attempt-456/submit', {
+      method: 'POST',
+      body,
+    })
+
+    expect(capturedUrl).toBe('/api/quiz_attempts/attempt-456/submit')
+    expect(capturedOptions.method).toBe('POST')
+    expect(JSON.parse(capturedOptions.body)).toEqual(body)
+    expect(capturedOptions.headers.Authorization).toBe('Bearer test-token')
+    expect(capturedOptions.headers['Content-Type']).toBe('application/json')
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('does not double-prefix when path already has /api', async () => {
+    let capturedUrl = null
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      capturedUrl = url
+      return jsonResponse(200, { ok: true })
+    }))
+
+    await api('/api/quiz_attempts/attempt-789/submit')
+    expect(capturedUrl).toBe('/api/quiz_attempts/attempt-789/submit')
+  })
+
+  it('fetches external URLs directly without prepending /api or base url', async () => {
+    let capturedUrl = null
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      capturedUrl = url
+      return jsonResponse(200, { external: true })
+    }))
+
+    await api('https://external-service.com/webhook')
+    expect(capturedUrl).toBe('https://external-service.com/webhook')
   })
 })
