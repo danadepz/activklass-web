@@ -6,7 +6,7 @@ import {
   createUser, resetPassword, setAccountDisabled,
   adminSchoolKey, fetchSchoolSettings, saveSchoolSettings,
 } from '@/lib/admin'
-import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
+import { issuedLoginId } from '@/lib/logins'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep, blueText } from '@/theme'
 import { School, CalendarCheck, UserPlus, Users } from '@/components/icons'
@@ -307,7 +307,13 @@ function CreateUserForm({ onCreated, settings, users, role }) {
     mutationFn: createUser,
     onSuccess: (res) => {
       const login = res.user.login_id ?? res.user.email
-      const pw = form.password || DEFAULT_PASSWORD
+      // Audit F-03: this used to be `form.password || DEFAULT_PASSWORD` -- the
+      // client GUESSING the server's fallback. Now that a blank field mints a
+      // password unique to this account, only the server knows it, and it says
+      // so in `initial_password` (returned once, never stored). Falling back to
+      // the typed value covers the case where the admin chose one themselves,
+      // which the server deliberately does not echo back.
+      const pw = res.user.initial_password ?? form.password
       // The password half of this line is what an admin questions: the field
       // accepts it on length alone (tempPasswordError), which reads as no rule
       // at all unless the screen says why. The weakness is bounded --
@@ -532,15 +538,13 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           Temporary Password <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
                  onChange={set('password')} />
-          {/* The placeholder used to say this ("defaults to pass1234"), which
-              reads as a suggested value to type rather than what happens if
-              the field is left blank -- the fact survives here instead,
-              matching every account actually created this way (createUser
-              falls back to DEFAULT_PASSWORD server-side on an empty string,
-              the same fallback BulkUpload's row spec and this form's own
-              success message both already assume). */}
+          {/* This used to name the shared fallback value. Audit F-03 replaced
+              that with one generated password per account, so there is no
+              value to print ahead of time -- the success message shows the
+              one the server actually minted. */}
           <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-            Leave blank and they start on {DEFAULT_PASSWORD}, usable immediately — have them change it.
+            Leave blank and we generate a password for this account — it is shown
+            to you once, here, when the account is created.
           </span>
         </label>
       </div>
@@ -771,7 +775,9 @@ function UserRow({ user, isSelf, onChanged }) {
       title: 'Set a new password',
       message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they will be asked to choose a new password the next time they sign in.`,
       label: 'New password',
-      placeholder: `e.g. ${DEFAULT_PASSWORD}`,
+      // No example value: the one that used to sit here was the real shared
+      // starting password, which made it a suggestion to actually type.
+      placeholder: 'at least 8 characters',
       confirmLabel: 'Set password',
       required: true,
       trim: false,

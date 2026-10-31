@@ -2,7 +2,7 @@ import { Fragment, useMemo, useRef, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
 import { emailError } from '@/lib/validation'
 import { bulkCreateUsers } from '@/lib/admin'
-import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
+import { issuedLoginId } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
@@ -54,14 +54,14 @@ const ROW_SPEC = {
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
     ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. Students can also add or update it later from their profile. Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
-    ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
+    ['password', 'Optional. Blank generates a different password for each account, listed per row in the result — so you can hand each one over.'],
   ],
   teacher: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
     ['department', 'Optional.'],
     ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
-    ['password', `Optional. Blank starts them on ${DEFAULT_PASSWORD}, usable immediately — so have them change it.`],
+    ['password', 'Optional. Blank generates a different password for each account, listed per row in the result — so you can hand each one over.'],
   ],
 }
 

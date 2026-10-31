@@ -70,7 +70,14 @@ export function approvalMessage({
     '',
     'First steps once you are in:',
     '1. Set your school’s login prefix (Users tab, "Login prefix" card). Every teacher and student login starts with it.',
-    '2. Add your teachers, one at a time or from a file. Each gets a login of prefix-last 6 digits of their employee ID, starting password pass1234, which they change on first sign-in.',
+    // Audit F-03: this used to name the starting password in full. The mail
+    // goes out over SMTP to an address we have not verified, and the same
+    // sentence is mirrored in the backend's own template
+    // (services/email_templates.py) -- so the credential every provisioned
+    // teacher starts on was published to anyone who saw the message. The
+    // admin is shown it in the app when they create the account; the mail
+    // only has to say that it exists.
+    '2. Add your teachers, one at a time or from a file. Each gets a login of prefix-last 6 digits of their employee ID, plus a starting password the app shows you once when the account is created, which they change on first sign-in.',
     '3. Add students the same way, using the last 6 digits of the LRN (or student number for college).',
     '',
     'Reply to this email if anything does not look right.',

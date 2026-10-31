@@ -58,8 +58,11 @@ export function passwordError(value) {
 
 /**
  * Admin-ISSUED temporary passwords: length only. The person must replace it
- * anyway (is_temp_password gates them), and the full character-class rule
- * above would forbid the standing default `pass1234`. User-chosen passwords
+ * anyway (is_temp_password gates them), and an admin typing one by hand should
+ * not be held to the character-class rule above on a value its owner is about
+ * to discard. (It also used to be what let the old shared default through;
+ * audit F-03 removed that, and a GENERATED password passes the full rule
+ * anyway -- see backend services/initial_password.py.) User-chosen passwords
  * keep going through passwordError.
  */
 export function tempPasswordError(value, { required = true } = {}) {

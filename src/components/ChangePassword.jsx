@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import { useAuth } from '@/context/useAuth'
 import { MIN_PASSWORD, PASSWORD_RULE, passwordError } from '@/lib/validation'
 import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy } from '@/theme'
@@ -21,14 +21,23 @@ import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy
  * keeps existing tokens valid. An admin disabling an account is what forces
  * everyone out.
  *
- * `is_temp_password` on the profile means "still on the password staff issued"
- * -- pass1234 for a roster-provisioned account, whatever an admin typed for one
- * made in the console. Both apps gate on it: mobile in app/login.tsx, web in
- * components/ProtectedRoute, which sends anyone carrying it to
- * /change-password. This is where it stops being true, so this is where it is
- * cleared -- in Firestore for the next sign-in, and in the auth context for
- * this one. The password itself is never written to Firestore: Firebase Auth
- * holds it hashed, and a profile document is readable by staff.
+ * "Still on the password staff issued" is tracked in two places, and only one
+ * of them is authority:
+ *
+ *   - `must_change_password`, a Firebase custom claim, is the real gate. It is
+ *     set by every provisioning path (Admin SDK only) and enforced by the
+ *     backend on EVERY authenticated request
+ *     (checked in `app/middleware/auth.py:verify_bearer`, the one helper all
+ *     eight backend guards funnel through), which refuses all but a short
+ *     allowlist with `password_change_required`. A client cannot write it.
+ *   - `is_temp_password` on the profile is a mirror, for the route guards
+ *     (mobile `app/login.tsx`, web `components/ProtectedRoute`). It is now
+ *     written only by the server.
+ *
+ * So this screen no longer clears anything itself: it reauthenticates, posts
+ * the new password to `/api/auth/initial-password`, and refreshes the ID token
+ * so the lifted claim is in hand. The password is never written to Firestore --
+ * Firebase Auth holds it hashed, and a profile document is readable by staff.
  */
 export default function ChangePassword({ compact = false }) {
   const { markPasswordChanged } = useAuth()
@@ -63,24 +72,34 @@ export default function ChangePassword({ compact = false }) {
     setBusy(true)
     try {
       const user = auth.currentUser
+      /* Still reauthenticate, and still with the CURRENT password: it proves
+         the person at the keyboard owns this session rather than having walked
+         up to it, and on the first-login path it is the one moment we can tell
+         the intended holder from someone who merely knows the shared starting
+         password. Firebase does this check, so it stays client-side. */
       await reauthenticateWithCredential(
         user, EmailAuthProvider.credential(user.email, form.current),
       )
-      await updatePassword(user, form.next)
-      /* Best effort, and deliberately after the fact: the password HAS changed
-         by now, so a failed flag write must not be reported as a failed change.
-         A stale flag is a wrong badge in a console; telling someone their
-         password did not change when it did is a lockout. */
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          is_temp_password: false,
-          password_changed_at: serverTimestamp(),
-        })
-      } catch (flagErr) {
-        console.warn('[ChangePassword] password state not recorded:', flagErr)
-      }
-      /* Outside that try on purpose: the password changed, so the gate must
-         lift whether or not the flag write landed. */
+      /* The change itself moved to the server. This used to call the Firebase
+         client SDK's own password-update function here, then write the
+         first-login mirror flag straight into Firestore -- which meant the
+         server never learned whether a password had actually changed, and
+         firestore.rules let a student write that flag directly, so the gate
+         could be cleared without changing anything. The endpoint below
+         performs the update through the Admin SDK and only then clears the
+         `must_change_password` claim, so the state that gates every API
+         request is something the server observed rather than something a
+         client asserted. The server writes the mirror too, so this screen no
+         longer touches Firestore at all. */
+      await api('/api/auth/initial-password', {
+        method: 'POST',
+        body: { new_password: form.next, confirm_password: form.confirm },
+      })
+      /* The claim rides inside the ID token, so the token in memory still says
+         "restricted" until it is refreshed. Without this the next request
+         would 403 with password_change_required even though the change
+         succeeded. */
+      await user.getIdToken(true)
       markPasswordChanged()
       setForm({ current: '', next: '', confirm: '' })
       setMsg('Password changed. You stay signed in on this device.')

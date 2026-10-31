@@ -326,27 +326,29 @@ function firstReason(rows) {
 /**
  * Announce the accounts that were just minted.
  *
- * The initial password is the student's ID number and it is emailed to nobody,
- * so this response is the only place it exists -- the toast stays until it is
- * dismissed, and a roster-sized import gets the list as a CSV rather than a
- * wall of text in a toast.
+ * Each account's starting password is generated for it alone (audit F-03,
+ * backend services/initial_password.py), is emailed to nobody and is never
+ * stored, so this response is the only place it will ever exist -- the toast
+ * stays until it is dismissed, and a roster-sized import gets the list as a
+ * CSV rather than a wall of text in a toast.
  */
 function announceLogins(created) {
   const logins = created.filter((c) => c.login_created && c.initial_password)
   if (!logins.length) return
-  const password = logins[0].initial_password
   if (logins.length === 1) {
     const one = logins[0]
     const who = `${one.first_name ?? ''} ${one.last_name ?? ''}`.trim() || one.email
     toast.success(
       `Account created for ${who}. They sign in with ${one.email} and the password ` +
-        `${password}. Nothing is emailed, so pass it on — and tell them to change it.`,
+        `${one.initial_password}. Nothing is emailed, so pass it on — and tell them to change it.`,
       { duration: 0 },
     )
     return
   }
+  // No single password to name any more: each row carries its own, so the
+  // download is the only way to hand them out.
   toast.success(
-    `${logins.length} sign-in accounts created, all on the starting password ${password}. ` +
+    `${logins.length} sign-in accounts created, each with its own starting password. ` +
       'Nothing is emailed — download the list so you know who still has to change theirs.',
     {
       duration: 0,
@@ -983,7 +985,8 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                       the hand-it-over instruction this used to carry now
                       lives in announceLogins()'s post-create success
                       message instead -- either both change, or neither. */}
-                  Creates the student's account and adds them to this class. A temporary password (<code className="bg-slate-100 px-1 rounded text-[11px]">pass1234</code>) will be assigned.
+                  Creates the student's account and adds them to this class. A temporary
+                  password is generated for them and shown to you once, right after.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>

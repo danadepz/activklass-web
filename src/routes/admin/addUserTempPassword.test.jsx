@@ -9,12 +9,14 @@
  *    one, so it has room not to wrap -- "Middle Name (Optional)" and
  *    "Department (optional)" fit their single column; "Temporary Password
  *    (Optional)" is longer and did not.
- * 2. The placeholder "defaults to pass1234" is gone. It is NOT simply
- *    deleted: `app/api/admin.py:267`, read directly for this card, shows
- *    `password = data.get("password") or DEFAULT_PASSWORD` -- a blank
- *    submit really does create the account on pass1234, so that fact now
- *    lives as a helper line under the field instead of a placeholder that
- *    looked like a value to type.
+ * 2. The placeholder "defaults to pass1234" is gone, and so, since audit
+ *    F-03, is the shared fallback it described: `_prepare_user` in
+ *    `app/api/admin.py` now reads
+ *    `password = typed_password or generate_initial_password()`, so a blank
+ *    submit mints a password for that account alone and returns it once as
+ *    `initial_password`. The helper line under the field says that instead of
+ *    naming a value, because naming one is how the old literal reached the
+ *    production bundle.
  * 3. The sign-in callout drops "— this exact form, not the full employee
  *    number / LRN / student number", leaving just "They will sign in as
  *    <login>".
@@ -91,15 +93,29 @@ describe('T-173 — the placeholder is gone, the fact survives as a helper line'
     expect(html).not.toMatch(/placeholder="defaults to pass1234"/)
   })
 
-  it('still tells the admin what a blank submit does, as text under the field', () => {
+  /* Audit F-03 changed what a blank submit DOES, so this pair changed with it.
+     It used to assert the helper line named the shared value ("Leave blank and
+     they start on pass1234") -- true at the time: api/admin.py really did fall
+     back to one literal for every account. It no longer does; a blank field
+     mints a password for that account alone, which no screen can know ahead of
+     time. The helper line now promises where the admin will see it, and the
+     literal must not reappear anywhere in this form -- it was published in the
+     web production bundle precisely because screens like this one printed it. */
+  it('tells the admin a password will be generated and shown to them once', () => {
     const html = render('teacher')
-    expect(html).toMatch(/Leave blank and they start on pass1234/)
+    expect(html).toMatch(/Leave blank and we generate a password for this account/)
+    expect(html).toMatch(/shown to you once/)
+  })
+
+  it('never names a starting password anywhere in the form', () => {
+    expect(render('teacher')).not.toMatch(/pass1234/)
+    expect(render('student')).not.toMatch(/pass1234/)
   })
 
   it('holds for the student form too', () => {
     const html = render('student')
     expect(html).not.toMatch(/placeholder="defaults to pass1234"/)
-    expect(html).toMatch(/Leave blank and they start on pass1234/)
+    expect(html).toMatch(/Leave blank and we generate a password for this account/)
   })
 })
 

@@ -25,7 +25,7 @@ import { resetPassword, setAccountDisabled } from '@/lib/admin'
 import { fetchUsersByIds, parseCsv } from '@/lib/roster'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { issuedLoginId, DEFAULT_PASSWORD } from '@/lib/logins'
+import { issuedLoginId } from '@/lib/logins'
 import { tempPasswordError, MIN_PASSWORD, nameError, lrnError, idNumberError, emailError, birthdateError, BIRTHDATE_HINT } from '@/lib/validation'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -104,7 +104,11 @@ async function provisionInto(classId, rows) {
   const minted = (res.created ?? []).filter((c) => c.login_created)
   if (minted.length) {
     toast.success(
-      `${minted.length} sign-in account${minted.length === 1 ? '' : 's'} created, all on the starting password ${minted[0].initial_password}. ` +
+      // Audit F-03: this used to read "all on the starting password X" from
+      // the first row. Each account now has its own, so there is no single
+      // value to name -- the per-row download is the only way to hand them
+      // out, which is what the CSV below has always carried.
+      `${minted.length} sign-in account${minted.length === 1 ? '' : 's'} created, each with its own starting password. ` +
         'Nothing is emailed — download the list and hand each student their login.',
       {
         duration: 0,
@@ -280,7 +284,7 @@ function ManualCreate({ classes, prefix, onDone }) {
           <span style={{ fontSize: 13.5, fontWeight: 600, color: ink }}>They will sign in as</span>
           <strong style={{ ...mono, fontSize: 19, fontWeight: 800, color: navy, letterSpacing: '0.03em' }}>{loginPreview}</strong>
           <span style={{ fontSize: 12.5, color: faint }}>
-            — this exact form, not the full {isG12 ? 'LRN' : 'student number'} · starting password <span style={mono}>{DEFAULT_PASSWORD}</span>
+            — this exact form, not the full {isG12 ? 'LRN' : 'student number'} · we generate their starting password and show it to you once
           </span>
         </div>
       ) : (
@@ -454,7 +458,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
         Columns: <span style={mono}>first_name, last_name, student_number, birthdate</span> (as YYYY-MM-DD — needed for guardian access) — optional{' '}
         <span style={mono}>lrn, email, grade_level, section</span>.{' '}
         {prefix
-          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); everyone starts on <span style={mono}>{DEFAULT_PASSWORD}</span> and is asked to change it.</>
+          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); each student gets their own generated starting password, listed in the download, and is asked to change it.</>
           : <>No school abbreviation is on your account, so each row needs an <span style={mono}>email</span>, which becomes the login.</>}
       </p>
       {parseError && <p style={{ fontSize: 13, color: red, margin: '10px 0 0' }}>{parseError}</p>}
@@ -673,7 +677,7 @@ export function AccountRow({ user, classes, onChanged }) {
       title: 'Set a new password',
       message: resetCopy.prompt(user.login_id ?? user.email),
       label: 'New password',
-      placeholder: `e.g. ${DEFAULT_PASSWORD}`,
+      placeholder: 'at least 8 characters',
       confirmLabel: 'Set password',
       required: true,
       trim: false,

@@ -12,8 +12,12 @@
  */
 export const INTERNAL_LOGIN_SUFFIX = '@activklass.internal'
 
-/** What admin-issued accounts start on unless the admin types another. */
-export const DEFAULT_PASSWORD = 'pass1234'
+// Audit F-03: `DEFAULT_PASSWORD = 'pass1234'` was exported from here and
+// printed by three screens, so it reached the web production bundle -- which
+// is served to anyone, signed in or not. It is gone: the server now generates
+// one password per account (backend services/initial_password.py) and returns
+// it once, as `initial_password`, to whoever created the account. No client
+// can know a starting password ahead of time any more, which is the point.
 
 /**
  * 'snhs-789012' from the prefix + the last 6 digits of an id number.
