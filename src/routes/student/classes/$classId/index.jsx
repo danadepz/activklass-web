@@ -43,36 +43,48 @@ const quizPoints = (quiz) => (quiz.questions ?? []).reduce((s, q) => s + (Number
 
 
 async function loadClassDetail(classId, profile) {
+  const studentUid = profile?.id ?? profile?.uid
+  if (!studentUid) throw new Error('not_enrolled')
+
   const classSnap = await getDoc(doc(db, 'classes', classId))
   if (!classSnap.exists()) throw new Error('Class not found')
   const clazz = { id: classSnap.id, ...classSnap.data() }
 
   // Authorization mirror of the security rule: a student may only open a class
   // they are enrolled in.
-  if (!(clazz.student_ids ?? []).includes(profile.id)) {
+  if (!(clazz.student_ids ?? []).includes(studentUid)) {
     throw new Error('not_enrolled')
   }
 
   const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, dismissalsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
-      loadStudentEntry(classId, profile.id),
-      loadStudentAttendance(classId, profile.id),
-      loadStudentContests(classId, profile.id),
-      loadStudentGradeContests(classId, profile.id),
+      loadStudentEntry(classId, studentUid),
+      loadStudentAttendance(classId, studentUid),
+      loadStudentContests(classId, studentUid),
+      loadStudentGradeContests(classId, studentUid),
       loadSyllabus(classId),
-      getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId))),
+      getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId)))
+        .catch((err) => { console.error('Announcement load error', err); return { docs: [] } }),
       // T-195: which of this student's own announcements they have already
       // dismissed. Best-effort -- a failed read just means nothing is
       // filtered out yet, not a broken page.
-      getDocs(query(collection(db, 'announcement_dismissals'), where('student_id', '==', profile.id)))
+      getDocs(query(collection(db, 'announcement_dismissals'), where('student_id', '==', studentUid)))
         .catch((err) => { console.error('Announcement dismissals did not load', err); return null }),
       clazz.teacher_id ? fetchUsersByIds([clazz.teacher_id]).catch(() => []) : Promise.resolve([]),
-      getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
-      getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', profile.id))),
+      Promise.all([
+        getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))).catch(() => ({ docs: [] })),
+      ]).then(([arr, sca]) => {
+        const byId = new Map()
+        ;[...(arr?.docs ?? []), ...(sca?.docs ?? [])].forEach((d) => byId.set(d.id, d))
+        return { docs: [...byId.values()] }
+      }),
+      getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', studentUid)))
+        .catch((err) => { console.error('Quiz attempts load error', err); return { docs: [] } }),
       // Same query the Remediation page runs, filtered to this class below. It
       // only marks which sub-modules have a review guide; if it fails, the
       // Modules tab loses the markers and nothing else.
-      getDocs(query(collection(db, 'remediations'), where('student_id', '==', profile.id))).catch(() => null),
+      getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentUid))).catch(() => null),
       // This class's published tasks (activities, assignments, paper exams).
       // Both filters are what the student branch of the class_tasks rule
       // reads; without `status` the whole query is refused. Its own catch:
@@ -90,19 +102,19 @@ async function loadClassDetail(classId, profile) {
   const dismissedAnnouncementIds = new Set(
     (dismissalsSnap?.docs ?? []).map((d) => d.data().announcement_id),
   )
-  const announcementsTotal = announcementsSnap.docs.length
-  const announcements = announcementsSnap.docs
+  const announcementsTotal = announcementsSnap?.docs?.length ?? 0
+  const announcements = (announcementsSnap?.docs ?? [])
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((a) => !dismissedAnnouncementIds.has(a.id))
     .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
 
   // Students see only published/closed quizzes (never drafts).
-  const quizzes = quizzesSnap.docs
+  const quizzes = (quizzesSnap?.docs ?? [])
     .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((q) => (q.status === 'published' || q.status === 'closed') && assignedToStudent(q, profile.id))
+    .filter((q) => (q.status === 'published' || q.status === 'closed') && assignedToStudent(q, studentUid))
     .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
   const attemptsByQuiz = {}
-  attemptsSnap.docs.forEach((d) => {
+  ;(attemptsSnap?.docs ?? []).forEach((d) => {
     const a = { id: d.id, ...d.data() }
     if (a.class_id !== classId) return
     ;(attemptsByQuiz[a.quiz_id] ??= []).push(a)
@@ -1708,8 +1720,9 @@ export default function StudentClassDetail() {
   const focusTopicId = searchParams.get('topic')
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['student-class-detail', classId, profile.id],
+    queryKey: ['student-class-detail', classId, profile?.id],
     queryFn: () => loadClassDetail(classId, profile),
+    enabled: !!classId && !!profile?.id,
     retry: false,
   })
 

@@ -112,8 +112,11 @@ function Banner({ tone, icon, title, children, action }) {
 }
 
 async function loadDashboard(profile) {
-  const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', profile.id)))
-  const rawClasses = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const studentUid = profile?.id ?? profile?.uid
+  if (!studentUid) return { classes: [], remediations: [], consent: null }
+  const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', studentUid)))
+    .catch((err) => { console.error('Classes load failed', err); return { docs: [] } })
+  const rawClasses = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
 
   // Teacher names in one batched read.
   const teacherIds = [...new Set(rawClasses.map((c) => c.teacher_id).filter(Boolean))]
@@ -128,8 +131,8 @@ async function loadDashboard(profile) {
   const classes = await Promise.all(
     rawClasses.map(async (c) => {
       const [entry, attendance, syllabus] = await Promise.all([
-        loadStudentEntry(c.id, profile.id),
-        loadStudentAttendance(c.id, profile.id),
+        loadStudentEntry(c.id, studentUid),
+        loadStudentAttendance(c.id, studentUid),
         loadSyllabus(c.id),
       ])
       return {
@@ -144,18 +147,18 @@ async function loadDashboard(profile) {
         module_count: syllabus?.modules?.length ?? 0,
         // T-70: a per-class Disable, not an account one -- the class still
         // lists, it just reads as inactive for this student.
-        dropped: isDroppedFromClass(c, profile.id),
+        dropped: isDroppedFromClass(c, studentUid),
       }
     }),
   )
 
   // Remediations + consent (parallel, independent of classes).
   const [remSnap, consentSnap] = await Promise.all([
-    getDocs(query(collection(db, 'remediations'), where('student_id', '==', profile.id))),
-    getDoc(doc(db, 'consent_records', profile.id)),
+    getDocs(query(collection(db, 'remediations'), where('student_id', '==', studentUid))).catch(() => ({ docs: [] })),
+    getDoc(doc(db, 'consent_records', studentUid)).catch(() => null),
   ])
-  const remediations = remSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  const consent = consentSnap.exists() ? consentSnap.data() : null
+  const remediations = (remSnap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
+  const consent = consentSnap?.exists?.() ? consentSnap.data() : null
 
   return { classes, remediations, consent }
 }
@@ -163,8 +166,9 @@ async function loadDashboard(profile) {
 export default function StudentDashboard() {
   const { profile } = useAuth()
   const { data, isLoading } = useQuery({
-    queryKey: ['student-dashboard', profile.id],
+    queryKey: ['student-dashboard', profile?.id],
     queryFn: () => loadDashboard(profile),
+    enabled: !!profile?.id,
   })
 
   const classes = data?.classes ?? []

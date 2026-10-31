@@ -29,7 +29,7 @@ const { finishAttempt } = await import('./useAttemptSession')
 describe('finishAttempt', () => {
   it('posts the raw answers to the server-grading endpoint, never a client-computed score', async () => {
     const result = await finishAttempt('attempt-1', { answers: { q1: 'b' }, expired: false })
-    expect(apiMock).toHaveBeenCalledWith('/quiz_attempts/attempt-1/submit', {
+    expect(apiMock).toHaveBeenCalledWith('/api/quiz_attempts/attempt-1/submit', {
       method: 'POST',
       body: { answers: { q1: 'b' }, expired: false },
     })
@@ -43,7 +43,7 @@ describe('finishAttempt', () => {
 
   it('defaults expired to false when the caller omits it', async () => {
     await finishAttempt('attempt-2', { answers: {} })
-    expect(apiMock).toHaveBeenCalledWith('/quiz_attempts/attempt-2/submit', {
+    expect(apiMock).toHaveBeenCalledWith('/api/quiz_attempts/attempt-2/submit', {
       method: 'POST',
       body: { answers: {}, expired: false },
     })

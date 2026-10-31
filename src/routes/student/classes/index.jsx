@@ -20,8 +20,11 @@ function classBadge(c) {
 }
 
 async function loadClasses(profile) {
-  const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', profile.id)))
-  const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  const studentUid = profile?.id ?? profile?.uid
+  if (!studentUid) return []
+  const snap = await getDocs(query(collection(db, 'classes'), where('student_ids', 'array-contains', studentUid)))
+    .catch((err) => { console.error('Classes load failed', err); return { docs: [] } })
+  const raw = (snap?.docs ?? []).map((d) => ({ id: d.id, ...d.data() }))
   const teacherIds = [...new Set(raw.map((c) => c.teacher_id).filter(Boolean))]
   const teachers = teacherIds.length ? await fetchUsersByIds(teacherIds).catch(() => []) : []
   const teacherName = (id) => {
@@ -30,7 +33,7 @@ async function loadClasses(profile) {
   }
   return Promise.all(
     raw.map(async (c) => {
-      const entry = await loadStudentEntry(c.id, profile.id)
+      const entry = await loadStudentEntry(c.id, studentUid)
       // grade_policy is the entry itself: it carries the gradebook's pass mark
       // and point-scale direction beside its mode, and gradeDisplay reads them.
       return { ...c, teacher_name: teacherName(c.teacher_id), current_grade: entry?.final_grade ?? null, grade_mode: entry?.mode ?? null, grade_policy: entry ?? null }
@@ -41,8 +44,9 @@ async function loadClasses(profile) {
 export default function StudentClassesIndex() {
   const { profile } = useAuth()
   const { data: classes, isLoading } = useQuery({
-    queryKey: ['student-classes', profile.id],
+    queryKey: ['student-classes', profile?.id],
     queryFn: () => loadClasses(profile),
+    enabled: !!profile?.id,
   })
 
   const list = classes ?? []

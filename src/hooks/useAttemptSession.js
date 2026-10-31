@@ -127,7 +127,7 @@ export function recordFocusEvent(attemptId, event, storedCount = 0) {
  * gradeQuiz() used to produce, so callers render feedback the same way.
  */
 export function finishAttempt(attemptId, { answers, expired = false }) {
-  return api(`/quiz_attempts/${attemptId}/submit`, {
+  return api(`/api/quiz_attempts/${attemptId}/submit`, {
     method: 'POST',
     body: { answers, expired },
   })
