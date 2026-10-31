@@ -9,13 +9,13 @@ import { syncAttendanceSummaries } from '@/lib/attendanceMirror'
 import { scheduleMeetings } from '@/lib/schedule'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { useAuth } from '@/context/useAuth'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { promptDialog } from '@/components/ui/dialogs'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 
 const STATUS_META = {
-  present: { short: 'P', label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)', fillBg: green, fillFg: '#FFFFFF' },
+  present: { short: 'P', label: 'Present', fg: greenDeep, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)', fillBg: greenDeep, fillFg: '#FFFFFF' },
   late: { short: 'L', label: 'Late', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)', fillBg: gold, fillFg: navy },
   absent: { short: 'A', label: 'Absent', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)', fillBg: red, fillFg: '#FFFFFF' },
   excused: { short: 'E', label: 'Excused', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.45)', fillBg: blueText, fillFg: '#FFFFFF' },

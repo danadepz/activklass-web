@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
 import { isPassingGrade } from '@/lib/grading'
-import { navy, navyDeep, ink, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { navy, navyDeep, ink, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
 import { useMySubscription } from '@/hooks/useMySubscription'
 import StudentAccounts from './StudentAccounts'
@@ -71,7 +71,7 @@ function riskLevel(probability) {
 const RISK_LEVEL_STYLE = {
   high: { label: 'High risk', color: red, bg: 'rgba(192,57,43,0.1)', border: 'rgba(192,57,43,0.28)' },
   medium: { label: 'Medium risk', color: goldDeep, bg: 'rgba(245,197,24,0.12)', border: 'rgba(245,197,24,0.35)' },
-  low: { label: 'Low risk', color: green, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
+  low: { label: 'Low risk', color: greenDeep, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
 }
 
 function RiskBadge({ probability, training }) {

@@ -34,11 +34,14 @@ export const ink = '#0A1733'
  * other panes -- see BACKLOG #10.
  */
 export const inkMuted = '#3A4A6B'
-export const muted = '#6A7A95'
-export const faint = '#9AA6BD'
+export const muted = '#4E5D78'
+export const faint = '#5A6B82'
 
 // Status
 export const green = '#1F8A5B'
+/** Accessible high-contrast green for text and indicators on white/tinted surfaces. */
+export const greenDeep = '#166534'
+export const greenText = greenDeep
 export const red = '#C0392B'
 /** Slab under a filled danger button, as navyDeep is to navy. */
 export const redDeep = '#922B21'
@@ -134,6 +137,8 @@ export const palette = {
   muted,
   faint,
   green,
+  greenDeep,
+  greenText,
   red,
   redDeep,
   blue,

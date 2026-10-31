@@ -30,7 +30,7 @@ import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
 import { ArrowRight, Check, Clock, X, Lock } from '@/components/icons'
-import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
+import { navy, navyDeep, ink, inkMuted, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -255,7 +255,7 @@ function cellInputStyle(dirty, locked, recovered) {
     // Unsaved edits win the border: a teacher mid-edit needs to see what they
     // have not committed more than they need to see where the mark came from.
     border: dirty
-      ? '1.5px solid #F5C518'
+      ? '1.5px solid #8B6A00'
       : recovered
         ? '1.5px solid rgba(39,174,96,0.55)'
         : '1.5px solid rgba(14,42,92,0.14)',
@@ -289,7 +289,7 @@ const thHead = {
   padding: '10px 12px',
   fontSize: 11,
   fontWeight: 700,
-  color: muted,
+  color: inkMuted,
   letterSpacing: '0.05em',
   textTransform: 'uppercase',
   background: 'rgba(14,42,92,0.03)',
@@ -622,7 +622,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
               </th>
               {byComponent.map((component) => (
                 <th key={component.id} colSpan={component.assessments.length + 1} style={{ padding: '10px 12px', textAlign: 'center', fontSize: 12, fontWeight: 700, color: ink, background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', borderRight: '1px solid rgba(14,42,92,0.07)' }}>
-                  {component.name} <span style={{ fontWeight: 600, color: faint }}>({fmt(component.weight_percent)}%)</span>
+                  {component.name} <span style={{ fontWeight: 600, color: inkMuted }}>({fmt(component.weight_percent)}%)</span>
                 </th>
               ))}
               {labGraded && (
@@ -645,7 +645,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
             <tr>
               {byComponent.flatMap((component) => [
                 ...component.assessments.map((a) => (
-                  <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: muted, minWidth: 128 }}>
+                  <th key={a.id} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 600, color: ink, minWidth: 128 }}>
                     <div className="flex items-start justify-center gap-1.5">
                       {/* Marks a column the teacher did not type: its scores
                           come from quiz attempts and are re-posted from the
@@ -691,7 +691,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
                         </button>
                       )}
                     </div>
-                    <span style={{ ...mono, fontSize: 10, color: faint, fontWeight: 400 }}>/{fmt(a.total_points)}</span>
+                    <span style={{ ...mono, fontSize: 10, color: inkMuted, fontWeight: 500 }}>/{fmt(a.total_points)}</span>
                   </th>
                 )),
                 <th key={`${component.id}-pct`} style={{ padding: '8px 8px', background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)', borderRight: '1px solid rgba(14,42,92,0.07)', fontSize: 11, fontWeight: 700, color: navy, minWidth: 56 }}>
@@ -741,7 +741,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
                             {recovered && !isDirty && (
                               <div
                                 title={`Recovered after remediation: was ${recovered.original_score}/${a.total_points}, practice quiz ${Math.round(recovered.remediation_pct)}%, ceiling ${recovered.cap}%. Typing over this cell clears the recovery.`}
-                                style={{ ...mono, fontSize: 9.5, color: green, marginTop: 2, cursor: 'help', whiteSpace: 'nowrap' }}
+                                style={{ ...mono, fontSize: 9.5, color: greenDeep, marginTop: 2, cursor: 'help', whiteSpace: 'nowrap' }}
                               >
                                 &#8635; was {recovered.original_score}
                               </div>
@@ -816,7 +816,7 @@ function SummaryView({ summary }) {
             {summary.periods.map((p) => (
               <th key={p.id} style={{ ...thHead, textAlign: 'center' }}>
                 {p.name} {p.locked && <Lock title="Locked" className="h-3 w-3 inline-block" />}
-                <span style={{ ...mono, display: 'block', fontWeight: 600, color: faint, marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>{fmt(p.weight_percent)}%</span>
+                <span style={{ ...mono, display: 'block', fontWeight: 600, color: inkMuted, marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>{fmt(p.weight_percent)}%</span>
               </th>
             ))}
             <th style={{ ...thHead, color: navy, textAlign: 'center' }}>Final Grade</th>
@@ -878,12 +878,12 @@ function pillStyle(active) {
 
 const GC_STATUS = {
   pending: { label: 'Pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
-  approved: { label: 'Accepted', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  approved: { label: 'Accepted', fg: greenDeep, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   rejected: { label: 'Rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
 }
 
 const GC_ITEM = {
-  correct: { fg: green, bg: 'rgba(31,138,91,0.12)', Icon: Check, label: 'Correct' },
+  correct: { fg: greenDeep, bg: 'rgba(31,138,91,0.12)', Icon: Check, label: 'Correct' },
   pending: { fg: blueText, bg: 'rgba(63,169,245,0.12)', Icon: Clock, label: 'Awaiting your review' },
   incorrect: { fg: red, bg: 'rgba(192,57,43,0.10)', Icon: X, label: 'Wrong' },
 }

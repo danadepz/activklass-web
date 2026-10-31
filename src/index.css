@@ -269,7 +269,7 @@
 
 /* Marketing/auth text inputs — navy focus ring (the !important overrides the
    inline base border these fields carry). Used by the Login/Register shell. */
-.ak-input::placeholder { color: #9AA6BD; }
+.ak-input::placeholder { color: #5A6B82; }
 .ak-input:focus {
   outline: none;
   border-color: #0E2A5C !important;

@@ -7,7 +7,7 @@ import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, isDroppedFromClass } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
 import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
-import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
+import { navy, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono } from '@/theme'
 import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicAnchorId, topicMastery } from '../../scaffolding'
 import { formatGrade, gradeColor, isPointScale, passNote } from '../../gradeDisplay'
@@ -24,7 +24,7 @@ import Markdown from '@/components/Markdown'
 import { WindowChip, toneOf } from '../../deliverables/WindowChip'
 
 const ATT_META = {
-  present: { label: 'Present', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  present: { label: 'Present', fg: greenDeep, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   late: { label: 'Late', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
   absent: { label: 'Absent', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
   excused: { label: 'Excused', fg: blueText, bg: 'rgba(63,169,245,0.12)', border: 'rgba(63,169,245,0.45)' },
@@ -954,7 +954,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
 
 const CONTEST_TONE = {
   pending: { label: 'Contest pending', fg: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.55)' },
-  approved: { label: 'Contest approved', fg: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  approved: { label: 'Contest approved', fg: greenDeep, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   rejected: { label: 'Contest rejected', fg: red, bg: 'rgba(192,57,43,0.08)', border: 'rgba(192,57,43,0.38)' },
 }
 
