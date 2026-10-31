@@ -30,6 +30,74 @@ export const GRADING_MODES = [
 ]
 
 /**
+ * Course structure, separate from the institution's grading standard above
+ * (PDF reference §2 "Lecture with Laboratory"). A DepEd class and a CHED
+ * class can each be lecture-only or lecture-with-lab, so the two choices are
+ * independent fields rather than six combined grading modes.
+ *
+ * A component's `track` says which half it belongs to. ABSENT MEANS LECTURE:
+ * every component saved before this field existed is a lecture component, so
+ * an untouched gradebook computes exactly as it always has. The track, not
+ * the name, is the identity -- a component called "Lab Exam" with no track is
+ * a lecture component, and renaming "Lab Exercise" to "Exercises" does not
+ * move it out of the laboratory.
+ */
+export const LECTURE = 'lecture'
+export const LAB = 'lab'
+export const LECTURE_ONLY = 'lecture_only'
+export const LECTURE_LAB = 'lecture_lab'
+
+export const GRADING_STRUCTURES = [
+  {
+    value: LECTURE_ONLY,
+    label: 'Lecture only',
+    hint: 'One set of components. How every class is graded today.',
+  },
+  {
+    value: LECTURE_LAB,
+    label: 'Lecture with Laboratory',
+    hint: 'Lecture and laboratory are weighted separately, then combined.',
+  },
+]
+
+/**
+ * The laboratory's share of the combined grade, as a percent; lecture takes
+ * the rest. The reference profile is lecture twice, laboratory once -- 2/3
+ * and 1/3 -- so the default is 100/3 exactly rather than a rounded 33.33,
+ * which would put the reference example's combined grade 0.0002 off.
+ *
+ * Configurable because the ratio is a school policy, not arithmetic: see
+ * `labWeightError` for the range a teacher may set.
+ */
+export const DEFAULT_LAB_WEIGHT = 100 / 3
+
+/** The two components the reference laboratory template requires. */
+export const LAB_COMPONENT_PRESET = [
+  { name: 'Lab Exercise', weight_percent: 70, track: LAB, required: true },
+  { name: 'Lab Exam', weight_percent: 30, track: LAB, required: true },
+]
+
+/** A component's track, defaulting to lecture (see the note above). */
+export function componentTrack(component) {
+  return component?.track === LAB ? LAB : LECTURE
+}
+
+/**
+ * Why this laboratory share cannot be saved, or null. Both halves must carry
+ * real weight: a 0 or a 100 is one of the two tracks switched off, which is
+ * Lecture only / Laboratory only said in a way that still demands laboratory
+ * components be configured and graded.
+ */
+export function labWeightError(value) {
+  const n = Number(value)
+  if (value === '' || value == null || !Number.isFinite(n)) {
+    return 'Enter the laboratory share of the combined grade.'
+  }
+  if (!(n > 0) || !(n < 100)) return 'The laboratory share must be above 0% and below 100%.'
+  return null
+}
+
+/**
  * What passes, and which way the point scale runs (T-45, from a tester's
  * description of his school's grading module). Two settings on the gradebook:
  * - `passing_percent`: the lowest weighted percent that passes in the CHED
@@ -54,10 +122,23 @@ export const POINT_SCALE_DIRECTIONS = [
 
 export function gradePolicy(source) {
   const pct = Number(source?.passing_percent)
+  /* The course structure rides along on the same object for one reason: every
+     screen in the system already threads `policy` from the gradebook (or from
+     the student's own entry doc) into the computation. Carrying the structure
+     here means the record, the reports, the preview, the student pages and the
+     parent app all learned laboratory grading without a new argument. */
+  const lab = Number(source?.lab_weight_percent)
   return {
     passing_percent: Number.isFinite(pct) && pct > 0 && pct < 100 ? pct : DEFAULT_PASSING_PERCENT,
     point_scale_direction: source?.point_scale_direction === 'inverted' ? 'inverted' : 'ched',
+    grading_structure: source?.grading_structure === LECTURE_LAB ? LECTURE_LAB : LECTURE_ONLY,
+    lab_weight_percent: Number.isFinite(lab) && lab > 0 && lab < 100 ? lab : DEFAULT_LAB_WEIGHT,
   }
+}
+
+/** Whether `source` (a gradebook, preset, entry or policy) grades a laboratory. */
+export function hasLab(source) {
+  return gradePolicy(source).grading_structure === LECTURE_LAB
 }
 
 // DepEd K-12 preset component weights (DepEd Order No. 8, s. 2015 — core
@@ -73,7 +154,7 @@ export const DEPED_COMPONENT_PRESET = [
 export const GRADING_PRESETS = [
   {
     key: 'deped_k12',
-    label: 'DepEd K-12 — 4 Quarters',
+    label: 'DepEd K-12 — 4 Quarters (DO 8, s. 2015 weights)',
     periods: [
       { name: 'Quarter 1', weight_percent: 25 },
       { name: 'Quarter 2', weight_percent: 25 },
@@ -81,6 +162,68 @@ export const GRADING_PRESETS = [
       { name: 'Quarter 4', weight_percent: 25 },
     ],
     components: DEPED_COMPONENT_PRESET,
+  },
+  {
+    /*
+     * The structure DepEd Order No. 015, s. 2026 is REPORTED to introduce for
+     * SY 2026-2027: three terms instead of four quarters, and 20 / 50 / 30 in
+     * place of DO 8 s. 2015's 30 / 50 / 20.
+     *
+     * Offered as a preset a teacher must deliberately pick, and NOT made the
+     * default, on purpose. The transmutation table this app already ships
+     * (DEPED_TRANSMUTATION_BANDS) came from the owner's own copy of the
+     * official Table 4; the weights and the three-term structure did not. Two
+     * independent secondary sources agree on 20/50/30 and on three terms, but
+     * no deped.gov.ph URL for the order could be retrieved (2026-10-31) --
+     * a search of deped.gov.ph returns only Advisory No. 015 s. 2026, a
+     * different document about a Math Camp.
+     *
+     * So: available to a school that has the order in hand, invisible to
+     * everyone else, and changing nothing for a class already configured.
+     * Switching an existing class to it would move every recorded grade, which
+     * is exactly what an unverified policy claim must not do.
+     *
+     * TLE / MAPEH / EPP are reported as 20 / 60 / 20 -- edit the weights after
+     * applying this preset for those subjects.
+     */
+    key: 'deped_k12_do015',
+    label: 'DepEd K-12 — 3 Terms (DO 015, s. 2026 weights)',
+    note: 'Reported structure for SY 2026-2027 — confirm against your school’s copy of the order before applying.',
+    periods: [
+      { name: 'Term 1', weight_percent: 100 / 3 },
+      { name: 'Term 2', weight_percent: 100 / 3 },
+      { name: 'Term 3', weight_percent: 100 / 3 },
+    ],
+    components: [
+      { name: 'Written Works', weight_percent: 20 },
+      { name: 'Performance Tasks', weight_percent: 50 },
+      { name: 'Examinations', weight_percent: 30 },
+    ],
+  },
+  {
+    /* The reference profile from Grading_Configuration_Analysis (§2): lecture
+       and laboratory graded apart, combined lecture-twice-laboratory-once.
+       Periods are the two the reference example actually computes.
+
+       Heads-up on "Prelim Exam": components repeat in EVERY period in this
+       data model, so a component named after one period reads oddly in the
+       others. The weights are the reference's (40/20/40) and are valid within
+       a period; a school that runs Prelim as its own period should rename this
+       row to "Prelim/Periodic Exam" or fold it into Class Standing. */
+    key: 'lecture_lab',
+    label: 'College — Lecture with Laboratory',
+    grading_structure: LECTURE_LAB,
+    lab_weight_percent: DEFAULT_LAB_WEIGHT,
+    periods: [
+      { name: 'Midterm', weight_percent: 50 },
+      { name: 'Finals', weight_percent: 50 },
+    ],
+    components: [
+      { name: 'Class Standing', weight_percent: 40, track: LECTURE },
+      { name: 'Prelim Exam', weight_percent: 20, track: LECTURE },
+      { name: 'Major Exam', weight_percent: 40, track: LECTURE },
+      ...LAB_COMPONENT_PRESET,
+    ],
   },
   {
     key: 'college_terms',
@@ -132,23 +275,123 @@ export function componentPercent(assessments, studentScores) {
   return (earned / possible) * 100
 }
 
-/** Weighted period grade (pre-transmutation "Initial Grade"), or null. */
-export function periodGrade(components, studentScores) {
+/**
+ * One track's weighted percent, UNROUNDED, plus what it was built from.
+ *
+ * Unrounded on purpose: with a laboratory this is an intermediate value that
+ * gets combined with the other track before anything is reported, and rounding
+ * both halves first moves the combined grade. `periodGrade` rounds once, at
+ * the end, exactly where it always did.
+ *
+ * `graded` / `total` are how many of the track's components have any recorded
+ * data, which is what tells a required-but-unassessed laboratory apart from a
+ * laboratory that simply is not configured.
+ */
+function trackPercent(components, studentScores) {
   let weighted = 0
   let weightTotal = 0
+  let graded = 0
+  let total = 0
   const breakdown = {}
   for (const component of components ?? []) {
+    total += 1
     const pct = componentPercent(component.assessments, studentScores)
     const usable = pct != null && Number.isFinite(pct)
     breakdown[component.id] = usable ? round2(pct) : null
     const weight = Number(component.weight_percent)
     if (usable && Number.isFinite(weight)) {
+      graded += 1
       weighted += weight * pct
       weightTotal += weight
     }
   }
-  if (weightTotal === 0) return { grade: null, breakdown }
-  return { grade: round2(weighted / weightTotal), breakdown }
+  return {
+    raw: weightTotal === 0 ? null : weighted / weightTotal,
+    breakdown,
+    graded,
+    total,
+  }
+}
+
+/**
+ * How far along one track's grading is. The states the teacher has to be able
+ * to tell apart (§8D): a track with no components at all is not the same as
+ * one whose components exist but have never been scored, and neither is the
+ * same as a half-graded one.
+ */
+function trackStatus({ graded, total }) {
+  if (total === 0) return 'no_components'
+  if (graded === 0) return 'ungraded'
+  return graded < total ? 'partial' : 'complete'
+}
+
+/**
+ * Weighted period grade (pre-transmutation "Initial Grade"), or null.
+ *
+ * Lecture only -- the default, and every gradebook saved before laboratory
+ * grading existed -- is the original single weighted mean, unchanged.
+ *
+ * Lecture with laboratory weights each track's components among themselves
+ * (so each group's weights total 100% on their own), then combines the two
+ * track results by the configured share. A track with no recorded data is
+ * left out and the other re-weighted -- the same rule an ungraded component
+ * has always followed, so a laboratory nobody has graded yet does NOT land as
+ * a zero. `tracks.*_status` is what makes that visible instead of silent.
+ */
+export function periodGrade(components, studentScores, policy) {
+  const { grading_structure, lab_weight_percent } = gradePolicy(policy)
+  const rows = components ?? []
+
+  if (grading_structure !== LECTURE_LAB) {
+    const { raw, breakdown } = trackPercent(rows, studentScores)
+    return { grade: raw == null ? null : round2(raw), breakdown, tracks: null }
+  }
+
+  const lecture = trackPercent(rows.filter((c) => componentTrack(c) === LECTURE), studentScores)
+  const lab = trackPercent(rows.filter((c) => componentTrack(c) === LAB), studentScores)
+  const breakdown = { ...lecture.breakdown, ...lab.breakdown }
+
+  const lectureWeight = 100 - lab_weight_percent
+  let weighted = 0
+  let weightTotal = 0
+  if (lecture.raw != null) {
+    weighted += lectureWeight * lecture.raw
+    weightTotal += lectureWeight
+  }
+  if (lab.raw != null) {
+    weighted += lab_weight_percent * lab.raw
+    weightTotal += lab_weight_percent
+  }
+
+  const tracks = {
+    lecture: lecture.raw == null ? null : round2(lecture.raw),
+    lab: lab.raw == null ? null : round2(lab.raw),
+    lecture_status: trackStatus(lecture),
+    lab_status: trackStatus(lab),
+    lab_weight_percent,
+    lecture_weight_percent: lectureWeight,
+    // The combined percent before any rounding, for a caller that needs the
+    // full-precision number (the formula lines, a regression test).
+    combined_raw: weightTotal === 0 ? null : weighted / weightTotal,
+  }
+  return {
+    grade: weightTotal === 0 ? null : round2(weighted / weightTotal),
+    breakdown,
+    tracks,
+  }
+}
+
+/**
+ * The tracks whose grade is missing although the track is configured --
+ * `['lab']` for a laboratory class whose laboratory has never been scored.
+ * Empty for a lecture-only class, so a caller can render it unconditionally.
+ */
+export function incompleteTracks(tracks) {
+  if (!tracks) return []
+  const out = []
+  if (tracks.lecture_status === 'ungraded' || tracks.lecture_status === 'partial') out.push(LECTURE)
+  if (tracks.lab_status === 'ungraded' || tracks.lab_status === 'partial') out.push(LAB)
+  return out
 }
 
 /**
@@ -265,18 +508,22 @@ export function isPassingGrade(final, mode, policy) {
  * defaults reproduce every grade computed before the fields existed.
  */
 export function computeFinalGrade(components, studentScores, mode = 'deped_k12', policy) {
-  const { grade: initial, breakdown } = periodGrade(components, studentScores)
+  /* The lecture and laboratory halves are combined as RAW percents inside
+     periodGrade, and the official conversion below runs once on the combined
+     number. Converting each track and then averaging official grades would
+     transmute twice and is not what any of the three standards describe. */
+  const { grade: initial, breakdown, tracks } = periodGrade(components, studentScores, policy)
   if (initial == null || !Number.isFinite(initial)) {
-    return { initial: null, final: null, descriptor: null, breakdown }
+    return { initial: null, final: null, descriptor: null, breakdown, tracks }
   }
   if (mode === 'deped_k12') {
     const final = transmuteDepEd(initial)
-    return { initial, final, descriptor: final == null ? null : depEdDescriptor(final), breakdown }
+    return { initial, final, descriptor: final == null ? null : depEdDescriptor(final), breakdown, tracks }
   }
   if (mode === 'ched_point') {
     const final = chedPointEquivalent(initial, policy)
-    if (final == null) return { initial, final: null, descriptor: null, breakdown }
-    return { initial, final, descriptor: isPassingGrade(final, mode, policy) ? 'Passed' : 'Failed', breakdown }
+    if (final == null) return { initial, final: null, descriptor: null, breakdown, tracks }
+    return { initial, final, descriptor: isPassingGrade(final, mode, policy) ? 'Passed' : 'Failed', breakdown, tracks }
   }
   // ched_percentage: the weighted percent is the final grade.
   return {
@@ -284,6 +531,7 @@ export function computeFinalGrade(components, studentScores, mode = 'deped_k12',
     final: initial,
     descriptor: isPassingGrade(initial, 'ched_percentage', policy) ? 'Passed' : 'Failed',
     breakdown,
+    tracks,
   }
 }
 

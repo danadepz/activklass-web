@@ -103,6 +103,33 @@ not started from a ticket:
   design pass first — never from a ticket. The one thing to collect before that pass is a
   photo of a real record sheet with per-term weights and real numbers.
 
+
+### 9a. Item-level weighting — NOT built (Phase 2 decision, 2026-10-31)
+
+The grading analysis lists per-item weights (Quiz 1 vs Quiz 2, Seatwork 1 vs Seatwork 2)
+as something the screenshots did not show. Phase 2 evaluated it and **deliberately did not
+build it**, because the capability already exists in a different shape:
+
+- An assessment's contribution is already weighted by its **points**. `componentPercent`
+  sums `earned / possible` across a component's assessments, so a 50-point exam already
+  counts five times a 10-point quiz. A teacher who wants Quiz 2 to matter more raises its
+  total points — no new concept, no new field.
+- Where a teacher wants a *named* split, the flat component list already expresses it:
+  "Class Standing 60, split 40/30/30" is Quiz 24 / Assignment 18 / Seatwork 18 as three
+  components. Identical arithmetic (T-45 dispatch card reached the same conclusion).
+
+What genuinely does not exist is the **hierarchy** — a component with sub-weights that
+roll up — and that is presentation over the same numbers, not a missing calculation.
+
+Building explicit item weights on top of points-based weighting would introduce the one
+failure §8 warns about: **double counting**. A 50-point assessment carrying an explicit
+30% item weight has two answers to "how much does this count", and every screen, export
+and the mobile port would have to agree on which wins.
+
+**Reopen if** a school's real record sheet shows per-item percentages that are *not*
+expressible as points — that is the evidence that would change the answer. Until then the
+cost is a data-model change across three repos for arithmetic the system already does.
+
 ---
 
 ## DECIDED ✅

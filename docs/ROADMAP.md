@@ -762,6 +762,61 @@ Still open at this altitude:
   superadmin/support conversation); enforcing the new seat count anywhere (same as every
   other seat limit in this app — a display and a bill, never a block).
 
+- `[~]` **A course can be graded as Lecture with Laboratory, with the two halves weighted
+  separately and combined once** (2026-10-31, from the tester's
+  `Grading_Configuration_Analysis_Reference_and_Ours.pdf` §2 — the reference LMS supports a
+  lecture/laboratory structure and ActivKlass had no notion of one; a laboratory score could
+  only be filed into an ordinary lecture component). **The course structure is a separate
+  field from the grading standard**, deliberately: a DepEd class and a CHED class can each
+  have a laboratory, and folding the two into six combined `grading_mode` values would have
+  made every existing mode a special case. `gradebooks.grading_structure`
+  (`'lecture_only'` default / `'lecture_lab'`) and `lab_weight_percent` ride on
+  **`gradePolicy()`** — the same object the two T-45 fields ride on — which is why the class
+  record, the cross-class reports, the performance tab, the student directory, the student's
+  own screens and the parent/mobile app all became laboratory-aware with no change at their
+  call sites. Each component carries a `track`; **absent means lecture**, so every gradebook
+  written before this computes to the identical number, and the track (not the editable
+  name) is the component's identity. `periodGrade` now weights each track among its own
+  components, then combines the two **raw** results by the configured share, and the
+  official conversion (DepEd transmutation / CHED percentage / CHED 1.0–5.0) runs **once**,
+  on the combined number — never per track. A track with no recorded scores is left out and
+  the other re-weighted, the rule an ungraded component has always followed, so **an
+  unassessed laboratory is never read as a zero**; the record grid shows the state with an
+  amber `!` and a per-cell explanation rather than an em dash. Grade Config gains a Course
+  Structure card, a separate Laboratory Components editor (with `Lab Exercise` / `Lab Exam`
+  locked against rename and delete), the ratio input and a combined-weight summary; the
+  Preview spells out all three steps. **Publish Quiz no longer guesses the mapping**: it
+  used to open on `suggestMapping`'s name match, which on a laboratory class silently filed
+  a laboratory quiz into a lecture component — it now opens empty unless the quiz already
+  carries a mapping for that class whose component *and* period still exist, offers
+  laboratory components only to classes that have them (in a labelled `optgroup`), and
+  validates each class's pick against that class's own gradebook. *Verified:*
+  `lib/gradingLab.test.js` (23 — the PDF's own worked example at full precision: midterm
+  laboratory 89.40, combined 84.7333…, finals 84.40 / 80.6666…, overall **82.70**, plus
+  display rounding, custom ratios, perfect-score normalisation, the five missing-score
+  states, and three "lecture-only is untouched" guards), `lib/gradebookLab.test.js` (7, the
+  record/summary/entry path end to end), `lib/publishMappingSafety.test.js` (8),
+  `routes/teacher/gradingLabConfig.test.jsx` (8). Cross-repo: `grade_service.py` got the
+  same track rule and `tests/test_grade_service_lab.py` holds it against the **same**
+  reference numbers, because `api/parent.py` recomputes grades rather than reading the saved
+  entry — the second implementation `grade_service.py`'s own header warns about;
+  `tests/smoke_grading.py` (+22) covers the new fields, the per-track weight check, and a
+  pre-laboratory payload still saving unchanged; `grade_components` gained a nullable
+  `track` column (migration `d3f1a90c4b27`, no backfill — NULL reads as lecture).
+  `npm run test` **1951/1951**, `npm run build` clean, `npm run lint` unchanged at 104
+  problems / 100 errors; the full backend suite re-run, all green. **Not done:** no browser
+  walkthrough — nothing in the live project is configured with a laboratory yet, so the
+  end-to-end click-through (configure → publish a laboratory quiz → record scores → check
+  the student's and the parent's screens) is owed; the manual QA checklist for it is in the
+  implementation report. **Known limitation, flagged in code:** the SQLite record path
+  (`api/records.py` `/record`, `/final-grades`) computes lecture-only — the structure lives
+  on the Firestore gradebook and no shipping client calls those endpoints, so they carry a
+  `shortcut:` comment rather than a guessed ratio. **Left as the reference gave it:** the
+  `College — Lecture with Laboratory` preset's lecture row named "Prelim Exam" (40/20/40 is
+  the reference's split and is valid within a period, but components repeat in *every*
+  period in this data model, so a school running Prelim as its own period should rename it —
+  noted in the preset's own comment).
+
 ## Phase 8 — After the defense `[ ]` not started
 Deliberately not built now. Recorded so it does not get started early:
 ~~deployment and a real host~~ (**pulled forward 2026-09-14 — the defense requires a

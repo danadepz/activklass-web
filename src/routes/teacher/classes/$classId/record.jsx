@@ -23,7 +23,8 @@ import { buildPeriodRecord, buildSummary, loadBundle, syncEntries } from '@/lib/
 import { describeSweepResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { useQuizzes } from '@/hooks/useQuizzes'
 import { useAutoPostScores, useSweepOrphanedQuizzes } from '@/hooks/useQuizRecordSync'
-import { isPassingGrade } from '@/lib/grading'
+import { LAB, componentTrack, hasLab, isPassingGrade } from '@/lib/grading'
+import { describeReadiness, periodReadiness } from '@/lib/gradeReadiness'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { questionsOfAttempt } from '@/lib/quizPool'
@@ -264,6 +265,26 @@ function cellInputStyle(dirty, locked, recovered) {
   }
 }
 
+/* One track's result for one student. A blank is not a zero and must not be
+   read as one, so an unassessed-but-configured track says so in the cell
+   rather than printing an em dash that looks like every other missing value. */
+function TrackCell({ value, status, label }) {
+  const incomplete = status === 'ungraded' || status === 'partial'
+  const note = status === 'ungraded'
+    ? `${label} has components but no recorded scores yet — it is left out of this period's grade, not counted as zero.`
+    : status === 'partial'
+      ? `${label} is only part-graded — the components with scores are re-weighted among themselves.`
+      : status === 'no_components'
+        ? `No ${label.toLowerCase()} components are configured for this class.`
+        : undefined
+  return (
+    <td style={{ ...mono, padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: incomplete ? goldDeep : navy }} title={note}>
+      {fmt(value)}
+      {incomplete && <span style={{ color: goldDeep }} aria-label="incomplete"> !</span>}
+    </td>
+  )
+}
+
 const thHead = {
   padding: '10px 12px',
   fontSize: 11,
@@ -275,7 +296,67 @@ const thHead = {
   borderBottom: '1px solid rgba(14,42,92,0.07)',
 }
 
-function RecordGrid({ classId, record, refetch }) {
+/*
+ * What still needs attention before this period's grades are finished
+ * (Phase 2 §5). Computed by lib/gradeReadiness.js from the same bundle the
+ * grades come from -- it reports, it never scores.
+ *
+ * Deliberately NOT a blocker: a teacher mid-term has an incomplete period by
+ * definition, and a panel that refused to let them work would be wrong. It
+ * collapses to a single line once there is nothing left to say.
+ */
+function ReadinessPanel({ bundle, periodId }) {
+  const [open, setOpen] = useState(false)
+  const readiness = periodReadiness(bundle, periodId)
+  const summary = describeReadiness(readiness)
+  if (!summary) return null
+
+  const errors = readiness.findings.filter((f) => f.level === 'error')
+  const tone = errors.length
+    ? { fg: red, bg: 'rgba(192,57,43,0.06)', bd: 'rgba(192,57,43,0.3)' }
+    : { fg: '#8A6400', bg: 'rgba(245,197,24,0.1)', bd: 'rgba(245,197,24,0.55)' }
+
+  return (
+    <div
+      style={{ marginBottom: 14, background: tone.bg, border: `1px solid ${tone.bd}`, borderRadius: 12, padding: '12px 16px' }}
+      data-testid="readiness-panel"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="transition hover:opacity-80"
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: sans }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 700, color: tone.fg }}>{summary}</span>
+        <span style={{ fontSize: 12, color: muted, fontWeight: 500 }}>
+          · {readiness.counts.fullyScored} of {readiness.counts.students} students fully scored
+        </span>
+        <span aria-hidden="true" style={{ marginLeft: 'auto', color: muted, fontSize: 12 }}>{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6 }}>
+          {readiness.findings.map((f) => (
+            <li
+              key={`${f.code}-${f.componentId ?? f.assessmentId ?? f.track ?? ''}-${f.text.slice(0, 24)}`}
+              style={{ color: f.level === 'error' ? red : f.level === 'warn' ? '#6B5200' : muted }}
+            >
+              {f.text}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!open && (
+        <p style={{ fontSize: 11.5, color: muted, margin: '6px 0 0' }}>
+          A blank cell is not a zero — it is left out and the rest are re-weighted. Open for details.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function RecordGrid({ classId, record, bundle, refetch }) {
   const { profile } = useAuth()
   const [dirty, setDirty] = useState({})
   const [dirtyOverrides, setDirtyOverrides] = useState({})
@@ -284,10 +365,17 @@ function RecordGrid({ classId, record, refetch }) {
   const [showAdd, setShowAdd] = useState(false)
   const locked = record.period.locked
 
-  const byComponent = record.components.map((component) => ({
-    ...component,
-    assessments: record.assessments.filter((a) => a.component_id === component.id),
-  }))
+  /* Lecture components first, laboratory after, so the grid reads in the same
+     order the grade is computed. Stable for a lecture-only class: every
+     component is a lecture component there, so nothing moves. */
+  const byComponent = record.components
+    .map((component) => ({
+      ...component,
+      track: componentTrack(component),
+      assessments: record.assessments.filter((a) => a.component_id === component.id),
+    }))
+    .sort((a, b) => (a.track === b.track ? 0 : a.track === LAB ? 1 : -1))
+  const labGraded = hasLab(record.policy)
   const dirtyCount =
     Object.values(dirty).reduce((n, cells) => n + Object.keys(cells).length, 0) +
     Object.keys(dirtyOverrides).length
@@ -471,6 +559,8 @@ function RecordGrid({ classId, record, refetch }) {
         </div>
       )}
 
+      {bundle && <ReadinessPanel bundle={bundle} periodId={record.period.id} />}
+
       <div className="flex flex-wrap items-center justify-between gap-3" style={{ marginBottom: 14 }}>
         <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
           Enter a score, <strong style={{ color: ink }}>M</strong> for missing (counts as 0),{' '}
@@ -506,7 +596,24 @@ function RecordGrid({ classId, record, refetch }) {
         </div>
       )}
 
-      <div className="overflow-x-auto" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}>
+      {/* The grid is wider than the viewport by design (a frozen Student
+          column plus one column per assessment), so it scrolls sideways. A
+          mouse or trackpad can do that; a keyboard could not — the div was
+          not focusable, so the only way to reach the right-hand columns
+          without a pointer was to tab through every input in a row and let
+          the browser scroll to follow focus. tabIndex makes the region a
+          stop of its own, where the arrow keys scroll it. role="region" +
+          aria-label is what gives that stop a name when it is announced;
+          the <table> inside keeps its own semantics untouched. The focus
+          ring comes free from the [tabindex] arm of the global
+          :focus-visible rule in index.css. */}
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Class record grid"
+        style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}
+      >
         <table style={{ borderCollapse: 'collapse', fontSize: 13, minWidth: '100%' }}>
           <thead>
             <tr>
@@ -518,11 +625,21 @@ function RecordGrid({ classId, record, refetch }) {
                   {component.name} <span style={{ fontWeight: 600, color: faint }}>({fmt(component.weight_percent)}%)</span>
                 </th>
               ))}
+              {labGraded && (
+                <>
+                  <th rowSpan={2} style={{ ...thHead, minWidth: 72, textAlign: 'center' }} title="Lecture components, weighted among themselves">
+                    Lecture
+                  </th>
+                  <th rowSpan={2} style={{ ...thHead, minWidth: 72, textAlign: 'center' }} title="Laboratory components, weighted among themselves">
+                    Lab
+                  </th>
+                </>
+              )}
               <th rowSpan={2} style={{ ...thHead, minWidth: 80 }}>Override</th>
               <th rowSpan={2} style={{ ...thHead, color: navy, textAlign: 'center' }}>
                 {record.period.name}
                 <br />
-                Grade
+                {labGraded ? 'Combined' : 'Grade'}
               </th>
             </tr>
             <tr>
@@ -636,6 +753,12 @@ function RecordGrid({ classId, record, refetch }) {
                         {fmt(grade?.components?.[component.id])}
                       </td>,
                     ])}
+                    {labGraded && (
+                      <>
+                        <TrackCell value={grade?.tracks?.lecture} status={grade?.tracks?.lecture_status} label="Lecture" />
+                        <TrackCell value={grade?.tracks?.lab} status={grade?.tracks?.lab_status} label="Laboratory" />
+                      </>
+                    )}
                     <td style={{ padding: 4, textAlign: 'center' }}>
                       <input
                         className="ak-input"
@@ -1227,16 +1350,31 @@ export default function ClassRecordPage() {
              Summary -- hidden on the Summary tab itself, same as before
              (RecordGrid, and so these buttons, never rendered there). */
           function exportCsv() {
-            const byComponent = record.components.map((component) => ({
-              ...component,
-              assessments: record.assessments.filter((a) => a.component_id === component.id),
-            }))
+            const byComponent = record.components
+              .map((component) => ({
+                ...component,
+                track: componentTrack(component),
+                assessments: record.assessments.filter((a) => a.component_id === component.id),
+              }))
+              .sort((a, b) => (a.track === b.track ? 0 : a.track === LAB ? 1 : -1))
+            const labGraded = hasLab(record.policy)
             const header = ['Student']
             for (const component of byComponent) {
               for (const a of component.assessments) header.push(`${a.title} (/${fmt(a.total_points)})`)
-              header.push(`${component.name} % (${fmt(component.weight_percent)}%)`)
+              header.push(
+                `${component.name} % (${fmt(component.weight_percent)}%${component.track === LAB ? ', laboratory' : ''})`,
+              )
             }
-            header.push('Override', `${record.period.name} grade`)
+            // Labelled, not implied: an export that shows a combined grade
+            // without its two halves cannot be checked by whoever reads it.
+            if (labGraded) {
+              const labW = record.policy.lab_weight_percent
+              header.push(
+                `Lecture % (${fmt(100 - labW)}% of grade)`,
+                `Laboratory % (${fmt(labW)}% of grade)`,
+              )
+            }
+            header.push('Override', `${record.period.name} ${labGraded ? 'combined grade' : 'grade'}`)
             const rows = record.students.map((student) => {
               const grade = record.grades[student.student_id]
               const row = [`${student.last_name}, ${student.first_name}`]
@@ -1244,6 +1382,7 @@ export default function ClassRecordPage() {
                 for (const a of component.assessments) row.push(cellText(record.scores[a.id]?.[student.student_id]))
                 row.push(fmt(grade?.components?.[component.id]))
               }
+              if (labGraded) row.push(fmt(grade?.tracks?.lecture), fmt(grade?.tracks?.lab))
               row.push(grade?.override != null ? fmt(grade.override) : '', fmt(grade?.grade))
               return row
             })
@@ -1324,6 +1463,7 @@ export default function ClassRecordPage() {
                   key={`${classId}-${record.period.id}-${record.period.locked}`}
                   classId={classId}
                   record={record}
+                  bundle={bundle}
                   refetch={refetch}
                 />
               )}

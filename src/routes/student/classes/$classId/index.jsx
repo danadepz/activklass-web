@@ -839,9 +839,17 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
 
       {!hasDetail
         ? periods.map((p) => (
-            <div key={p.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 20px', display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 700, color: ink }}>{p.name}</span>
-              <span style={{ fontWeight: 700, color: gradeColor(p.grade, entry.mode, entry) }}>{formatGrade(p.grade, entry.mode)}</span>
+            <div key={p.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '16px 20px' }}>
+              <div className="flex justify-between">
+                <span style={{ fontWeight: 700, color: ink }}>{p.name}</span>
+                <span style={{ fontWeight: 700, color: gradeColor(p.grade, entry.mode, entry) }}>{formatGrade(p.grade, entry.mode)}</span>
+              </div>
+              {p.tracks && (
+                <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>
+                  Lecture {p.tracks.lecture == null ? '—' : `${p.tracks.lecture}%`} · Laboratory{' '}
+                  {p.tracks.lab == null ? 'not yet graded' : `${p.tracks.lab}%`}
+                </div>
+              )}
             </div>
           ))
         : periods.map((period) => {
@@ -850,11 +858,25 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
             return (
               <div key={period.id} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
                 {/* Period header */}
-                <div className="flex items-center justify-between" style={{ padding: '14px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
-                  <span style={{ ...serif, fontSize: 18, color: ink }}>{period.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade, entry.mode, entry) }}>
-                    Grade {formatGrade(period.grade, entry.mode)}
-                  </span>
+                <div style={{ padding: '14px 20px', borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
+                  <div className="flex items-center justify-between">
+                    <span style={{ ...serif, fontSize: 18, color: ink }}>{period.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: gradeColor(period.grade, entry.mode, entry) }}>
+                      Grade {formatGrade(period.grade, entry.mode)}
+                    </span>
+                  </div>
+                  {/* The two halves behind that grade, for a class graded as
+                      Lecture with Laboratory. Read from the entry the teacher
+                      saved -- never recomputed here, so this can never disagree
+                      with the record. Absent on a lecture-only class. */}
+                  {period.tracks && (
+                    <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>
+                      Lecture {period.tracks.lecture == null ? '—' : `${period.tracks.lecture}%`}
+                      {' '}({Math.round(period.tracks.lecture_weight_percent)}%) · Laboratory{' '}
+                      {period.tracks.lab == null ? 'not yet graded' : `${period.tracks.lab}%`}
+                      {' '}({Math.round(period.tracks.lab_weight_percent)}%)
+                    </div>
+                  )}
                 </div>
 
                 {usedComponents.length === 0 ? (
@@ -877,7 +899,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
                           return [
                             <tr key={`h-${c.id}`} style={{ background: 'rgba(14,42,92,0.012)', borderTop: `1px solid ${line}` }}>
                               <td colSpan={2} style={{ padding: '11px 20px', fontSize: 13.5, fontWeight: 700, color: ink }}>
-                                {c.name} <span style={{ color: faint, fontWeight: 500 }}>({c.weight_percent}%)</span>
+                                {c.name} <span style={{ color: faint, fontWeight: 500 }}>({c.weight_percent}%{c.track === 'lab' ? ' · Laboratory' : ''})</span>
                               </td>
                               <td style={{ ...mono, padding: '11px 8px', textAlign: 'right', fontSize: 13, fontWeight: 700, color: pct == null ? faint : gradeColor(pct) }}>
                                 {pct == null ? '—' : `${pct}%`}

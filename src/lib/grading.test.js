@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_LAB_WEIGHT,
   DEPED_COMPONENT_PRESET,
   chedPointEquivalent,
   computeFinalGrade,
@@ -467,7 +468,12 @@ describe('gradePolicy — the pass mark and scale direction, with defaults', () 
       { passing_percent: 100 },
       { passing_percent: -5, point_scale_direction: null },
     ]) {
-      expect(gradePolicy(source)).toEqual({ passing_percent: 75, point_scale_direction: 'ched' })
+      expect(gradePolicy(source)).toEqual({
+        passing_percent: 75,
+        point_scale_direction: 'ched',
+        grading_structure: 'lecture_only',
+        lab_weight_percent: DEFAULT_LAB_WEIGHT,
+      })
     }
   })
 
@@ -475,6 +481,8 @@ describe('gradePolicy — the pass mark and scale direction, with defaults', () 
     expect(gradePolicy({ passing_percent: 60, point_scale_direction: 'inverted' })).toEqual({
       passing_percent: 60,
       point_scale_direction: 'inverted',
+      grading_structure: 'lecture_only',
+      lab_weight_percent: DEFAULT_LAB_WEIGHT,
     })
     expect(gradePolicy({ passing_percent: '60' }).passing_percent).toBe(60)
   })

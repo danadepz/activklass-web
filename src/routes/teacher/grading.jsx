@@ -8,25 +8,70 @@ import { syncEntries } from '@/lib/gradebook'
 import {
   GRADING_MODES,
   GRADING_PRESETS,
+  GRADING_STRUCTURES,
+  LAB,
+  LAB_COMPONENT_PRESET,
+  LECTURE,
+  LECTURE_LAB,
   POINT_SCALE_DIRECTIONS,
+  componentTrack,
   gradePolicy,
+  labWeightError,
   pointScaleBands,
   redistributeWeights,
   weightsValid,
 } from '@/lib/grading'
 import { passingPercentError } from '@/lib/validation'
-import { describeFormula, fmtFinal, fmtPoint, namedRows, simulateGrade } from './gradePreview'
+import {
+  TEMPLATE_SCOPES,
+  countClassesUsing,
+  createTemplate,
+  deleteTemplate,
+  describeTemplate,
+  duplicateTemplate,
+  listTemplates,
+  setupFromTemplate,
+  templateFromSetup,
+  updateTemplate,
+} from '@/lib/gradingTemplates'
+import { fmtFinal, fmtPoint, namedRows, previewWarnings, simulateAllPeriods } from './gradePreview'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
 import { navy, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
-import { confirmDialog } from '@/components/ui/dialogs'
+import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 
 const fieldStyle = {
   padding: '10px 12px', fontSize: 13, fontFamily: sans, color: ink, background: '#FFFFFF',
   border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+
+/* The chip-style choice button the Grading Type, point scale and course
+   structure selectors all use. It existed three times inline before the
+   structure selector would have made it four. */
+function ChoiceButton({ active, disabled, onClick, label, hint, testId }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      data-testid={testId}
+      className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{
+        padding: '11px 18px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11,
+        cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
+        ...(active
+          ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
+          : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+      }}
+    >
+      <div>{label}</div>
+      {hint && <div style={{ fontSize: 11, fontWeight: 500, color: muted, marginTop: 2 }}>{hint}</div>}
+    </button>
+  )
 }
 
 function Banner({ tone, children }) {
@@ -77,11 +122,24 @@ function presetRows(rows) {
     id: null,
     name: r.name,
     weight_percent: String(r.weight_percent),
+    track: componentTrack(r),
+    /* A template-required component: the teacher may change its weight but
+       not delete it or rename it away, or the laboratory half silently stops
+       being the thing the template promised. */
+    required: Boolean(r.required),
   }))
 }
 
+/* Saved components split into the two editors. A component with no track is a
+   lecture component (lib/grading.js), so a gradebook saved before laboratory
+   grading existed loads entirely into the lecture card. */
+const rowsForTrack = (rows, track) =>
+  (rows ?? []).filter((r) => componentTrack(r) === track)
+
 // Same coercion weightsValid uses, so the badge total can never disagree with
 // the check that gates the save.
+const round2 = (n) => Math.round(n * 100) / 100
+
 function weightSum(rows) {
   return rows.reduce((sum, r) => sum + (Number(r.weight_percent) || 0), 0)
 }
@@ -136,10 +194,16 @@ function describeSkips(skipped, classes) {
     .join(', ')
 }
 
-function withIds(rows, extraKeys = []) {
+function withIds(rows, extraKeys = [], track = null) {
   return namedRows(rows)
     .map((r) => {
       const out = { id: r.id || newId(), name: String(r.name).trim(), weight_percent: Number(r.weight_percent) || 0 }
+      /* The id is what a track, a quiz mapping and a score record all hang
+         off; it is generated once and kept, so renaming "Lab Exercise" moves
+         nothing and a laboratory component can never be mistaken for a
+         lecture one that happens to share a label. */
+      if (track) out.track = track
+      if (r.required) out.required = true
       for (const k of extraKeys) out[k] = r[k] ?? false
       return out
     })
@@ -160,6 +224,11 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
   const update = (index, key, value) =>
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
 
+  /* A template-required row keeps its name and its place; its weight is still
+     the teacher's to set. Enforced again in persist(), since disabling an
+     input is a hint, not a rule. */
+  const removable = rows.filter((r) => !r.required).length
+
   return (
     <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
       <div className="flex items-start justify-between gap-3">
@@ -179,6 +248,13 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
       <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
         Enter weights manually. Total must equal 100% to save.
       </p>
+
+      {rows.some((r) => r.required) && (
+        <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
+          Greyed rows are required by this grading template — set their weights, but they cannot be
+          renamed or removed. Add optional components alongside them.
+        </p>
+      )}
 
       {ignored > 0 && (
         <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0' }}>
@@ -202,7 +278,12 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
               placeholder="Name"
               value={row.name}
               onChange={(e) => update(i, 'name', e.target.value)}
-              style={{ ...fieldStyle, flex: '1 1 90px', minWidth: 0 }}
+              readOnly={!!row.required}
+              title={row.required ? 'Required by this grading template — its weight can change, its name cannot.' : undefined}
+              style={{
+                ...fieldStyle, flex: '1 1 90px', minWidth: 0,
+                ...(row.required ? { background: 'rgba(14,42,92,0.04)', color: muted } : null),
+              }}
             />
             <div className="relative" style={{ flexShrink: 0 }}>
               <input
@@ -220,10 +301,11 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
             </div>
             <IconButton
               onClick={() => setRows(rows.filter((_, j) => j !== i))}
-              disabled={rows.length === 1 || busy}
+              disabled={row.required || removable === 0 || (rows.length === 1) || busy}
               label="Remove"
+              title={row.required ? 'Required by this grading template.' : 'Remove'}
               className="transition hover:text-[#C0392B] disabled:cursor-not-allowed"
-              style={{ color: faint, fontSize: 18, flexShrink: 0, opacity: rows.length === 1 || busy ? 0.3 : 1 }}
+              style={{ color: faint, fontSize: 18, flexShrink: 0, opacity: row.required || rows.length === 1 || busy ? 0.3 : 1 }}
             >
               ×
             </IconButton>
@@ -388,97 +470,464 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
   )
 }
 
-/*
- * The Preview card (T-45 Tier 2): a read-only simulation of the setup above,
- * computed by simulateGrade (./gradePreview.js) -- the record's own function
- * on the typed numbers, so what it says is what the record will say.
- */
-export function PreviewPanel({ components, mode, policy, initialSamples }) {
-  const rows = namedRows(components)
-  // Keyed by row position; a removed row shifts the ones after it, which a
-  // simulation can live with. `initialSamples` exists for the test, which
-  // renders static markup and cannot type.
-  const [samples, setSamples] = useState(initialSamples ?? {})
-  const sim = simulateGrade(components, samples, mode, policy)
-  const formula = describeFormula(sim, mode, policy)
+/* One period's column in the simulator: its sample inputs and its result. */
+function PreviewPeriod({ period, mode, labOn, onSample, samples }) {
+  const lecture = period.contributions.filter((c) => c.track !== LAB)
+  const lab = period.contributions.filter((c) => c.track === LAB)
+  const groups = labOn ? [['Lecture', lecture], ['Laboratory', lab]] : [[null, period.contributions]]
 
   return (
-    <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }} data-testid="preview-panel">
+    <div style={{ border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px', background: '#FFFFFF' }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2" style={{ marginBottom: 10 }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: ink }}>{period.name}</span>
+        <span style={{ fontSize: 11.5, color: faint }}>{fmtPct(period.weight)}% of the course</span>
+      </div>
+
+      {groups.map(([label, rows]) => (
+        <div key={label ?? 'all'} style={{ marginBottom: 8 }}>
+          {label && rows.length > 0 && (
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: muted, margin: '6px 0 4px' }}>
+              {label}
+            </div>
+          )}
+          {rows.map((c) => (
+            <label key={c.id} className="flex items-center gap-2" style={{ marginBottom: 5 }}>
+              <span style={{ flex: '1 1 90px', minWidth: 0, fontSize: 12.5, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.name}
+                <span style={{ color: faint }}> · {fmtPct(c.weight)}%</span>
+              </span>
+              <span className="relative" style={{ flexShrink: 0 }}>
+                <input
+                  className="ak-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  placeholder="—"
+                  aria-label={`Sample score for ${c.name} in ${period.name}`}
+                  value={samples?.[c.id.slice(1)] ?? ''}
+                  onChange={(e) => onSample(Number(c.id.slice(1)), e.target.value)}
+                  style={{ ...fieldStyle, width: 78, padding: '7px 22px 7px 8px', textAlign: 'right' }}
+                />
+                <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 12 }}>%</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      ))}
+
+      {/* This period's result: the two track halves, then the combined grade. */}
+      <div style={{ borderTop: '1px solid rgba(14,42,92,0.06)', marginTop: 8, paddingTop: 10 }} aria-live="polite">
+        {period.countedCount === 0 ? (
+          <p style={{ fontSize: 12, color: faint, margin: 0 }}>No samples typed — this period is left out.</p>
+        ) : (
+          <>
+            {labOn && (
+              <div style={{ fontSize: 12, color: muted, marginBottom: 6, lineHeight: 1.5 }}>
+                Lecture{' '}
+                <strong style={{ color: period.tracks?.lecture == null ? faint : ink }}>
+                  {period.tracks?.lecture == null ? 'not yet graded' : period.tracks.lecture}
+                </strong>{' '}
+                × {fmtPct(round2(period.tracks?.lecture_weight_percent ?? 0))}%
+                {' · '}Laboratory{' '}
+                <strong style={{ color: period.tracks?.lab == null ? faint : ink }}>
+                  {period.tracks?.lab == null ? 'not yet graded' : period.tracks.lab}
+                </strong>{' '}
+                × {fmtPct(round2(period.tracks?.lab_weight_percent ?? 0))}%
+              </div>
+            )}
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span style={{ ...serif, fontSize: 26, lineHeight: 1, color: period.passed ? green : red }}>
+                {fmtFinal(period.final, mode)}
+              </span>
+              <span style={{ fontSize: 11.5, color: muted }}>
+                {labOn ? 'combined' : 'period grade'}
+                {mode !== 'ched_percentage' && period.initial != null && ` · raw ${period.initial}`}
+              </span>
+            </div>
+            {mode === 'deped_k12' && period.descriptor && (
+              <div style={{ fontSize: 11.5, color: muted, marginTop: 3 }}>{period.descriptor}</div>
+            )}
+            {period.countedCount < period.componentCount && (
+              <div style={{ fontSize: 11, color: '#8A6400', marginTop: 4 }}>
+                {period.countedCount} of {period.componentCount} components counted — the rest are re-weighted.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/*
+ * The Preview card: a read-only simulation of the WHOLE course -- every
+ * configured grading period, each one's lecture and laboratory halves, and
+ * the overall grade the student would be given.
+ *
+ * It computes nothing itself. `simulateAllPeriods` (./gradePreview.js) runs
+ * the record's own `computeFinalGrade` per period and `finalAcrossPeriods`
+ * over them -- the same pair lib/gradebook.js uses -- so what this card says
+ * is what the record will say. `previewMatchesGradebook.test.js` holds the
+ * two against each other and fails if they ever drift.
+ */
+export function PreviewPanel({ periods, components, mode, policy, labOn = false, initialSamples }) {
+  /* Keyed by period index, then component index; a removed row shifts the
+     ones after it, which a simulation can live with. `initialSamples` exists
+     for the tests, which render static markup and cannot type. */
+  const [samples, setSamples] = useState(initialSamples ?? {})
+  const sim = simulateAllPeriods(periods, components, samples, mode, policy)
+  const warnings = previewWarnings(sim, { labOn })
+
+  const setSample = (periodIndex, componentIndex, value) =>
+    setSamples((s) => ({ ...s, [periodIndex]: { ...(s[periodIndex] ?? {}), [componentIndex]: value } }))
+
+  const noRows = sim.periods.length === 0 || sim.periods[0].componentCount === 0
+
+  return (
+    <div className="mt-6" style={{ background: 'rgba(14,42,92,0.025)', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }} data-testid="preview-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Preview</h3>
-          <p style={{ fontSize: 12, color: faint, margin: 0, maxWidth: 560 }}>
-            Type a sample percent per component to see the grade this setup gives for one grading period.
-            Components left blank are not counted and the rest are re-weighted, as in the record.
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Preview the whole course</h3>
+          <p style={{ fontSize: 12, color: faint, margin: 0, maxWidth: 600 }}>
+            Type a sample percent per component, per period, to see the grade this setup gives —
+            each period and the overall grade. A blank is <strong>not</strong> a zero: it is left out and
+            the rest are re-weighted, exactly as ungraded work is in the class record.
           </p>
         </div>
         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', borderRadius: 999, color: muted, background: 'rgba(14,42,92,0.06)', border: `1px solid ${line}` }}>
-          Simulation · nothing is saved
+          Simulation · sample scores · nothing is saved
         </span>
       </div>
 
       <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
 
-      {rows.length === 0 ? (
-        <p style={{ fontSize: 13, color: faint, margin: 0 }}>Name at least one component above to preview a grade.</p>
+      {noRows ? (
+        <p style={{ fontSize: 13, color: faint, margin: 0 }}>
+          Name at least one grading period and one component above to preview a grade.
+        </p>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <div className="flex flex-col gap-2.5">
-            {rows.map((row, i) => (
-              <label key={row.id ?? `sample-${i}`} className="flex items-center gap-3">
-                <span style={{ flex: '1 1 120px', minWidth: 0, fontSize: 13, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {String(row.name).trim()}
-                  <span style={{ color: faint }}> · {Number(row.weight_percent) || 0}%</span>
-                </span>
-                <span className="relative" style={{ flexShrink: 0 }}>
-                  <input
-                    className="ak-input"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    placeholder="—"
-                    aria-label={`Sample score for ${String(row.name).trim()}`}
-                    value={samples[i] ?? ''}
-                    onChange={(e) => setSamples((s) => ({ ...s, [i]: e.target.value }))}
-                    style={{ ...fieldStyle, width: 88, paddingRight: 26, textAlign: 'right' }}
-                  />
-                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
-                </span>
-              </label>
+        <>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+            {sim.periods.map((p) => (
+              <PreviewPeriod
+                key={p.id}
+                period={p}
+                mode={mode}
+                labOn={labOn}
+                samples={samples[p.index]}
+                onSample={(ci, v) => setSample(p.index, ci, v)}
+              />
             ))}
           </div>
 
-          <div style={{ background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px' }} aria-live="polite">
-            {sim.final == null ? (
-              <p style={{ fontSize: 13, color: faint, margin: 0 }}>Type a sample score to see the grade.</p>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-3 flex-wrap">
-                  <span style={{ ...serif, fontSize: 36, lineHeight: 1, color: sim.passed ? green : red }} data-testid="preview-final">
-                    {fmtFinal(sim.final, mode)}
-                  </span>
-                  <WeightBadge tone={sim.passed ? 'ok' : 'bad'}>{sim.passed ? 'Passed' : 'Failed'}</WeightBadge>
-                  {mode === 'deped_k12' && sim.descriptor && (
-                    <span style={{ fontSize: 12.5, color: muted }}>{sim.descriptor}</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: muted, marginTop: 6 }}>
-                  Weighted percent {sim.initial}
-                  {sim.weightUsed !== 100 && ` · ${sim.used.length} of ${rows.length} components counted`}
-                </div>
-                {formula && (
-                  <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12.5, color: ink, lineHeight: 1.5 }}>
-                    {formula.map((l) => (
-                      <li key={l}>{l}</li>
-                    ))}
-                  </ul>
-                )}
-              </>
+          {/* The overall grade -- the number the course actually ends on. */}
+          <div
+            className="mt-4 flex flex-wrap items-center justify-between gap-3"
+            style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 18px' }}
+            aria-live="polite"
+            data-testid="preview-overall"
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: muted }}>
+                Overall course grade
+              </div>
+              <div style={{ fontSize: 12, color: faint, marginTop: 3 }}>
+                {sim.overall == null
+                  ? 'Type a sample score in any period to see it.'
+                  : `Periods weighted ${sim.periods.map((p) => `${p.name} ${fmtPct(p.weight)}%`).join(' · ')}`}
+              </div>
+            </div>
+            {sim.overall != null && (
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <span style={{ ...serif, fontSize: 38, lineHeight: 1, color: sim.overallPassed ? green : red }} data-testid="preview-final">
+                  {fmtFinal(sim.overall, mode)}
+                </span>
+                <WeightBadge tone={sim.overallPassed ? 'ok' : 'bad'}>
+                  {sim.overallPassed ? 'Passed' : 'Failed'}
+                </WeightBadge>
+              </div>
             )}
           </div>
+
+          {warnings.length > 0 && (
+            <ul style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.55 }} data-testid="preview-warnings">
+              {warnings.map((w) => (
+                <li key={w.text} style={{ color: w.level === 'error' ? red : '#8A6400' }}>{w.text}</li>
+              ))}
+            </ul>
+          )}
+
+          <p style={{ fontSize: 11.5, color: faint, margin: '12px 0 0' }}>
+            {mode === 'deped_k12'
+              ? 'Each period grade is transmuted per DepEd Order No. 015, s. 2026, then the periods are averaged by their weights.'
+              : mode === 'ched_point'
+                ? 'Each period grade is mapped onto the point scale, then the periods are averaged by their weights.'
+                : 'Each period grade is the weighted percent, and the periods are averaged by their weights.'}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+/*
+ * Saved grading templates (Phase 2 §3).
+ *
+ * A template is a named configuration, not a link to a class. "Use" loads it
+ * into the editors below; nothing reaches a class until the teacher presses
+ * Save & Sync, which already names the affected classes and warns that
+ * recorded grades are recomputed. So editing a template never silently
+ * changes a class configured from it earlier -- a class holds its own copy.
+ */
+function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
+  const queryClient = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['fs-grading-templates'],
+    queryFn: listTemplates,
+  })
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const templates = data?.templates ?? []
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['fs-grading-templates'] })
+
+  const run = async (fn) => {
+    setSaving(true)
+    setError(null)
+    try {
+      await fn()
+      refresh()
+    } catch (err) {
+      setError(err.message)
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveAsTemplate() {
+    const name = await promptDialog({
+      title: 'Save this setup as a template',
+      message: 'Templates are configurations you can reuse on other classes. Saving one changes no class.',
+      label: 'Template name',
+      placeholder: 'e.g. College — Lecture with Laboratory',
+      confirmLabel: 'Save template',
+    })
+    if (!name?.trim()) return
+    const body = buildBody(name.trim())
+    if (!body) return // the form is invalid; buildBody has already said so
+    await run(() => createTemplate(body))
+    toast.success(`Saved "${name.trim()}" to your templates.`)
+  }
+
+  async function use(t) {
+    const ok = await confirmDialog({
+      title: `Use "${t.name}"?`,
+      message:
+        'This replaces the grading periods, components and settings in the form below with the '
+        + 'template\u2019s. No class changes until you press Save & Sync.',
+      confirmLabel: 'Load into the form',
+    })
+    if (ok) {
+      onUse(setupFromTemplate(t))
+      toast.success(`Loaded "${t.name}". Tick target classes and Save & Sync to apply it.`)
+    }
+  }
+
+  async function rename(t) {
+    const name = await promptDialog({
+      title: 'Rename template',
+      label: 'Template name',
+      defaultValue: t.name,
+      confirmLabel: 'Rename',
+    })
+    if (!name?.trim() || name.trim() === t.name) return
+    await run(() => updateTemplate(t.id, { ...t, name: name.trim() }))
+  }
+
+  async function remove(t) {
+    const ok = await confirmDialog({
+      title: `Delete "${t.name}"?`,
+      message:
+        'The template is removed from your list. Classes already configured from it keep their '
+        + 'grading setup and their grades — a class holds its own copy.',
+      confirmLabel: 'Delete template',
+      tone: 'danger',
+    })
+    if (ok) await run(() => deleteTemplate(t.id))
+  }
+
+  async function share(t) {
+    const next = t.scope === 'school' ? 'private' : 'school'
+    await run(() => updateTemplate(t.id, { ...t, scope: next }))
+  }
+
+  return (
+    <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }} data-testid="templates-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Saved Templates</h3>
+          <p style={{ fontSize: 12.5, color: muted, margin: 0, maxWidth: 620 }}>
+            Reusable grading setups. <strong style={{ color: ink }}>Use</strong> loads one into the form
+            below — nothing reaches a class until you press Save &amp; Sync.
+          </p>
+        </div>
+        <Button onClick={saveAsTemplate} disabled={busy || saving} radius={11}>
+          Save current setup
+          <GoldArrowDot><ArrowRight className="h-3 w-3" /></GoldArrowDot>
+        </Button>
+      </div>
+
+      {error && <Banner tone="err">{error}</Banner>}
+
+      <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
+
+      {isLoading ? (
+        <p style={{ fontSize: 13, color: faint, margin: 0 }}>Loading templates…</p>
+      ) : data?.available === false ? (
+        <p style={{ fontSize: 13, color: faint, margin: 0 }}>
+          Templates are unavailable right now. Your grading setup still saves normally.
+        </p>
+      ) : templates.length === 0 ? (
+        <p style={{ fontSize: 13, color: faint, margin: 0 }}>
+          No templates yet. Set up the periods and components below, then <strong>Save current setup</strong> to
+          reuse them on another class.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {templates.map((t) => {
+            const used = countClassesUsing(t, classGradebooks)
+            return (
+              <div key={t.id} style={{ border: `1px solid ${line}`, borderRadius: 12, padding: '12px 14px' }}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span style={{ fontSize: 14, fontWeight: 800, color: ink }}>{t.name}</span>
+                      {t.scope === 'school' && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: navy, background: 'rgba(245,197,24,0.18)', border: `1px solid ${gold}`, borderRadius: 999, padding: '2px 8px' }}>
+                          Shared with school
+                        </span>
+                      )}
+                      {!t.is_owner && (
+                        <span style={{ fontSize: 11, color: muted }}>· from a colleague</span>
+                      )}
+                    </div>
+                    {t.description && (
+                      <p style={{ fontSize: 12, color: muted, margin: '3px 0 0' }}>{t.description}</p>
+                    )}
+                    <p style={{ fontSize: 11.5, color: faint, margin: '3px 0 0' }}>
+                      {describeTemplate(t)}
+                      {used > 0 && ` · ${used} class${used === 1 ? '' : 'es'} use it`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2" style={{ flexShrink: 0 }}>
+                    <button type="button" onClick={() => use(t)} disabled={busy || saving} style={templateBtn(navy)}>
+                      Use
+                    </button>
+                    <button type="button" onClick={() => run(() => duplicateTemplate(t.id))} disabled={busy || saving} style={templateBtn(muted)}>
+                      Duplicate
+                    </button>
+                    {t.is_owner && (
+                      <>
+                        <button type="button" onClick={() => rename(t)} disabled={busy || saving} style={templateBtn(muted)}>
+                          Rename
+                        </button>
+                        <button type="button" onClick={() => share(t)} disabled={busy || saving} style={templateBtn(muted)}>
+                          {t.scope === 'school' ? 'Make private' : 'Share with school'}
+                        </button>
+                        <button type="button" onClick={() => remove(t)} disabled={busy || saving} style={templateBtn(red)}>
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
+
+      <p style={{ fontSize: 11.5, color: faint, margin: '12px 0 0' }}>
+        Editing a template never changes a class that already uses it — each class keeps its own copy of
+        the setup, written when you pressed Save &amp; Sync.
+        {' '}{TEMPLATE_SCOPES[1].hint}
+      </p>
+    </div>
+  )
+}
+
+const templateBtn = (color) => ({
+  fontSize: 12,
+  fontWeight: 700,
+  fontFamily: sans,
+  color,
+  background: 'none',
+  border: 'none',
+  padding: '2px 0',
+  cursor: 'pointer',
+})
+
+/*
+ * The lecture-to-laboratory ratio, plus the combined-weight summary §6 asks
+ * for. One input, not two: the two shares always total 100%, so a second box
+ * would only be a way to type a pair that does not.
+ */
+function LabRatio({ value, setValue, busy }) {
+  const error = labWeightError(value)
+  const lab = Number(value)
+  const lecture = error ? null : round2(100 - lab)
+  return (
+    <div style={{ marginTop: 16, borderTop: '1px solid rgba(14,42,92,0.06)', paddingTop: 14 }}>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+        <label style={{ display: 'block' }}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>
+            Laboratory share of the grade
+          </span>
+          <span className="relative" style={{ display: 'inline-block' }}>
+            <input
+              className="ak-input"
+              type="number"
+              min="1"
+              max="99"
+              step="0.01"
+              value={value}
+              disabled={busy}
+              onChange={(e) => setValue(e.target.value)}
+              aria-invalid={Boolean(error)}
+              aria-label="Laboratory share of the grade"
+              style={{ ...fieldStyle, width: 110, paddingRight: 26, textAlign: 'right', borderColor: error ? red : undefined }}
+            />
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: faint, fontSize: 13 }}>%</span>
+          </span>
+          <span style={{ display: 'block', fontSize: 11.5, color: error ? red : faint, marginTop: 5 }}>
+            {error || 'Lecture takes the rest. 33.33% is lecture twice, laboratory once.'}
+          </span>
+        </label>
+
+        <div style={{ minWidth: 220 }}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>
+            Combined period grade
+          </span>
+          {error ? (
+            <p style={{ fontSize: 12.5, color: red, margin: 0 }}>Set a valid laboratory share to see the split.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2" data-testid="lab-ratio-summary">
+                <WeightBadge tone="ok">Lecture {fmtPct(lecture)}%</WeightBadge>
+                <WeightBadge tone="ok">Laboratory {fmtPct(round2(lab))}%</WeightBadge>
+                <WeightBadge tone="ok">Total 100%</WeightBadge>
+              </div>
+              <p style={{ fontSize: 11.5, color: faint, margin: '6px 0 0', lineHeight: 1.45 }}>
+                Each period grade = (lecture result × {fmtPct(lecture)}% + laboratory result ×{' '}
+                {fmtPct(round2(lab))}%). The grading standard above is applied once, to that combined
+                result — never to each half separately.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -493,7 +942,18 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
      would only skip. */
   const focusClass = focusClassId ? classes.find((c) => c.id === focusClassId) : null
   const [periods, setPeriods] = useState(setup.periods?.length ? setup.periods : [newRow()])
-  const [components, setComponents] = useState(setup.components?.length ? setup.components : [newRow()])
+  /* Two editors, one saved list. Components are split on their `track` and
+     rejoined at save time; a component saved before laboratory grading existed
+     has no track and loads as lecture, which is what it has always been. */
+  const savedLecture = rowsForTrack(setup.components, LECTURE)
+  const savedLab = rowsForTrack(setup.components, LAB)
+  const initialLab = savedLab.length
+    ? savedLab
+    : (setup.archived_lab_components?.length
+        ? setup.archived_lab_components
+        : presetRows(LAB_COMPONENT_PRESET))
+  const [components, setComponents] = useState(savedLecture.length ? savedLecture : [newRow()])
+  const [labComponents, setLabComponents] = useState(initialLab)
   const [gradingMode, setGradingMode] = useState(setup.grading_mode ?? 'deped_k12')
   /* Pass mark + point-scale direction, seeded from the preset with the
      defaults filled (a preset saved before the fields existed reads 75 and
@@ -502,7 +962,26 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   const savedPolicy = gradePolicy(setup)
   const [passingPercent, setPassingPercent] = useState(String(savedPolicy.passing_percent))
   const [scaleDirection, setScaleDirection] = useState(savedPolicy.point_scale_direction)
+  const [structure, setStructure] = useState(savedPolicy.grading_structure)
+  /* Kept as the input's string, like the pass mark. Seeded rounded, because
+     the default share is 100/3 and a box reading 33.333333333333336 is not a
+     box anyone can edit; saving re-stamps the rounded value, which moves a
+     combined grade by less than 0.001 — below anything displayed. */
+  const [labWeight, setLabWeight] = useState(String(round2(savedPolicy.lab_weight_percent)))
+  const labOn = structure === LECTURE_LAB
   const [selectedClassIds, setSelectedClassIds] = useState(focusClass ? [focusClass.id] : [])
+  /* The teacher's own gradebooks, only so a template can say how many classes
+     use it (§3 "where practical"). One getDoc per class the teacher already
+     has listed -- a handful -- and cached by React Query, so opening this page
+     does not re-read them on every keystroke. */
+  const { data: classGradebooks = [] } = useQuery({
+    queryKey: ['fs-grading-gradebooks', classes.map((c) => c.id).join(',')],
+    queryFn: async () => {
+      const snaps = await Promise.all(classes.map((c) => getDoc(doc(db, 'gradebooks', c.id))))
+      return snaps.filter((snap) => snap.exists()).map((snap) => ({ id: snap.id, ...snap.data() }))
+    },
+    enabled: classes.length > 0,
+  })
   const [error, setError] = useState(null)
   // The message itself, not a flag: what synced varies per save, and the fixed
   // "saved and synced successfully" line was printed even when the API had
@@ -524,9 +1003,31 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     )
   }
 
-  async function persist(nextPeriods, nextComponents, nextMode) {
+  async function persist(nextPeriods, nextComponents, nextMode, opts = {}) {
+    const nextStructure = opts.structure ?? structure
+    const nextLab = opts.labComponents ?? labComponents
+    const nextLabOn = nextStructure === LECTURE_LAB
     if (!balanced(nextPeriods) || !balanced(nextComponents)) {
       throw new Error('Every weight must be above 0%, and each group must total 100%.')
+    }
+    if (nextLabOn && !balanced(nextLab)) {
+      throw new Error('Laboratory component weights must each be above 0% and total 100%.')
+    }
+    const labError = nextLabOn ? labWeightError(labWeight) : null
+    if (labError) throw new Error(labError)
+    if (nextLabOn) {
+      /* The template's required rows have to survive the save, not just the
+         disabled inputs in the editor. A missing one means the laboratory is
+         no longer the structure the template describes. */
+      const missing = LAB_COMPONENT_PRESET.filter(
+        (req) => !namedRows(nextLab).some((r) => String(r.name).trim() === req.name),
+      )
+      if (missing.length) {
+        throw new Error(
+          `Lecture with Laboratory requires ${missing.map((m) => `"${m.name}"`).join(' and ')}.`
+          + ' Restore the component, or switch back to Lecture only.',
+        )
+      }
     }
     /* The pass mark only matters in the CHED modes, and only those show the
        box -- so under DepEd an unfinished value is dropped rather than
@@ -535,7 +1036,12 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     if (nextMode !== 'deped_k12' && passError) throw new Error(passError)
 
     const processedPeriods = withIds(nextPeriods)
-    const processedComponents = withIds(nextComponents)
+    /* One list, each row tagged. The backend validates each track's weights
+       separately and stores the tag, so the record can split them again. */
+    const processedComponents = [
+      ...withIds(nextComponents, [], LECTURE),
+      ...(nextLabOn ? withIds(nextLab, [], LAB) : []),
+    ]
 
     /* One request; the backend does the whole save — the preset doc, the
        per-class SQLite rows, and the per-class gradebook docs. Those last two
@@ -556,6 +1062,13 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         // read them back through gradePolicy (lib/grading.js).
         passing_percent: passError ? undefined : Number(passingPercent),
         point_scale_direction: scaleDirection,
+        grading_structure: nextStructure,
+        // Only meaningful with a laboratory; sent regardless so switching the
+        // structure back and forth does not lose the teacher's ratio.
+        lab_weight_percent: nextLabOn ? Number(labWeight) : undefined,
+        // Preserve laboratory components if switching to Lecture only,
+        // so switching back restores their IDs and reconnects existing assessments.
+        archived_lab_components: !nextLabOn && labComponents.length ? withIds(labComponents, [], LAB) : undefined,
       },
     })
 
@@ -631,10 +1144,23 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   const applyPreset = useMutation({
     mutationFn: async (preset) => {
       const nextP = presetRows(preset.periods)
-      const nextC = presetRows(preset.components)
+      const all = presetRows(preset.components)
+      const nextC = rowsForTrack(all, LECTURE)
+      const nextLab = rowsForTrack(all, LAB)
+      const nextStructure = preset.grading_structure ?? 'lecture_only'
       setPeriods(nextP)
-      setComponents(nextC)
-      return persist(nextP, nextC, gradingMode)
+      setComponents(nextC.length ? nextC : [newRow()])
+      setStructure(nextStructure)
+      if (nextStructure === LECTURE_LAB) {
+        setLabComponents(nextLab.length ? nextLab : presetRows(LAB_COMPONENT_PRESET))
+        if (preset.lab_weight_percent != null) setLabWeight(String(round2(preset.lab_weight_percent)))
+      }
+      /* The setState calls above have not landed yet when persist runs, so the
+         preset's own values are passed in rather than read from state. */
+      return persist(nextP, nextC, gradingMode, {
+        structure: nextStructure,
+        labComponents: nextLab.length ? nextLab : presetRows(LAB_COMPONENT_PRESET),
+      })
     },
     onSuccess: flash,
     onError: (err) => reportError(err.message),
@@ -643,6 +1169,70 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   // Every button on the form keys off this: a second click mid-save would
   // race the request in flight (two saves, last-write-wins on the backend).
   const busy = save.isPending || applyPreset.isPending
+
+  /* --- saved templates (Phase 2 §3) --------------------------------------
+     Loading a template only fills these editors. Nothing reaches a class
+     until Save & Sync, which keeps its existing confirmation. */
+  const applyTemplate = (setup) => {
+    const savedLab = rowsForTrack(setup.components, LAB)
+    setPeriods(setup.periods.length ? setup.periods : [newRow()])
+    setComponents(rowsForTrack(setup.components, LECTURE).length
+      ? rowsForTrack(setup.components, LECTURE)
+      : [newRow()])
+    setStructure(setup.grading_structure)
+    setGradingMode(setup.grading_mode)
+    if (setup.grading_structure === LECTURE_LAB) {
+      setLabComponents(savedLab.length ? savedLab : presetRows(LAB_COMPONENT_PRESET))
+      if (setup.lab_weight_percent != null) setLabWeight(String(round2(setup.lab_weight_percent)))
+    } else if (setup.archived_lab_components?.length) {
+      // Keep the archived pair in hand so switching the structure back on
+      // restores the same component ids (Phase 1 archived_lab_components).
+      setLabComponents(setup.archived_lab_components)
+    }
+    if (setup.passing_percent != null) setPassingPercent(String(setup.passing_percent))
+    if (setup.point_scale_direction) setScaleDirection(setup.point_scale_direction)
+    setError(null)
+    setSaved('')
+  }
+
+  /* The current form as a template body, or null when the form is not valid.
+     Validated with the SAME checks the save runs, so a template can never
+     hold a configuration that Save & Sync would reject. */
+  const buildTemplateBody = (name) => {
+    if (!balanced(periods) || !balanced(components)) {
+      reportError('Every weight must be above 0%, and each group must total 100% before saving a template.')
+      return null
+    }
+    if (labOn && !balanced(labComponents)) {
+      reportError('Laboratory component weights must each be above 0% and total 100%.')
+      return null
+    }
+    const labError = labOn ? labWeightError(labWeight) : null
+    if (labError) {
+      reportError(labError)
+      return null
+    }
+    const passError = gradingMode !== 'deped_k12' ? passingPercentError(passingPercent) : null
+    if (passError) {
+      reportError(passError)
+      return null
+    }
+    return templateFromSetup({
+      name,
+      scope: 'private',
+      gradingMode,
+      passingPercent: passError ? undefined : passingPercent,
+      scaleDirection,
+      structure,
+      labWeight,
+      periods: withIds(periods),
+      components: [
+        ...withIds(components, [], LECTURE),
+        ...(labOn ? withIds(labComponents, [], LAB) : []),
+      ],
+      archivedLabComponents: !labOn && labComponents.length ? withIds(labComponents, [], LAB) : undefined,
+    })
+  }
 
   /* Gates every Save & Sync button on the page (the top one and the one on
      each weight card -- all three save the same whole setup, see the note
@@ -657,19 +1247,45 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       reportError('Every weight must be above 0%, and each group must total 100%.')
       return
     }
+    if (labOn && !balanced(labComponents)) {
+      reportError('Laboratory component weights must each be above 0% and total 100%.')
+      return
+    }
+    const labError = labOn ? labWeightError(labWeight) : null
+    if (labError) {
+      reportError(labError)
+      return
+    }
     const passError = gradingMode !== 'deped_k12' ? passingPercentError(passingPercent) : null
     if (passError) {
       reportError(passError)
       return
     }
+    /* A structure change is the one edit that can move a grade without any
+       weight changing -- a laboratory switched off stops counting laboratory
+       scores entirely -- so it is named in the confirmation rather than
+       folded into "recomputed under the new weights". */
+    const structureChanged = structure !== savedPolicy.grading_structure
+    const structureNote = !structureChanged
+      ? ''
+      : labOn
+        ? ' This class group switches to Lecture with Laboratory: laboratory scores start counting'
+          + ` for ${fmtPct(Number(labWeight))}% of each period.`
+        : ' This class group switches to Lecture only: laboratory components are removed from the'
+          + ' setup and laboratory scores stop counting toward the grade. Existing scores are kept,'
+          + ' not deleted.'
+    const targets = classes
+      .filter((c) => selectedClassIds.includes(c.id))
+      .map(classLabel)
+      .join(', ')
     const ok = await confirmDialog({
       title: 'Save this grading setup?',
       message: selectedClassIds.length
         ? `Saves these grading periods and components, and applies them to ${selectedClassIds.length} `
-          + `selected class${selectedClassIds.length === 1 ? '' : 'es'}. Grades already recorded are `
-          + 'recomputed under the new weights.'
+          + `selected class${selectedClassIds.length === 1 ? '' : 'es'} (${targets}). Grades already `
+          + `recorded are recomputed under the new weights.${structureNote}`
         : 'Saves these grading periods and components as a preset. Tick target classes below to apply '
-          + 'it to a class.',
+          + `it to a class.${structureNote}`,
       confirmLabel: 'Save & Sync',
     })
     if (!ok) return
@@ -732,6 +1348,13 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
               <div style={{ fontSize: 12, color: muted, lineHeight: 1.4 }}>
                 {p.periods.length} period{p.periods.length === 1 ? '' : 's'} · {p.components.length} component{p.components.length === 1 ? '' : 's'}
               </div>
+              {/* A preset whose policy basis we could not verify says so on
+                  its own face, rather than looking as settled as the others. */}
+              {p.note && (
+                <div style={{ fontSize: 11, color: '#8A6400', lineHeight: 1.4, marginTop: 4, maxWidth: 230 }}>
+                  {p.note}
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -739,6 +1362,13 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
 
       {error && <Banner tone="err">{error}</Banner>}
       {saved && <Banner tone="ok">{saved}</Banner>}
+
+      <TemplatesCard
+        busy={busy}
+        onUse={applyTemplate}
+        buildBody={buildTemplateBody}
+        classGradebooks={classGradebooks}
+      />
 
       {/* Target Classes Selection */}
       <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
@@ -822,6 +1452,38 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         />
       </div>
 
+      {/* Course Structure — independent of the grading standard above: a
+          DepEd class and a CHED class can each have a laboratory. */}
+      <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }}>
+        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Course Structure</h3>
+        <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px', maxWidth: 620 }}>
+          Whether this class is graded as one set of components, or as a lecture and a laboratory
+          weighted separately and then combined. This is separate from the grading standard above.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {GRADING_STRUCTURES.map((st) => (
+            <ChoiceButton
+              key={st.value}
+              testId={`structure-${st.value}`}
+              active={structure === st.value}
+              disabled={busy}
+              onClick={() => {
+                setStructure(st.value)
+                // Switching on with nothing configured starts from the
+                // template's required pair rather than an empty card.
+                if (st.value === LECTURE_LAB && !labComponents.length) {
+                  setLabComponents(presetRows(LAB_COMPONENT_PRESET))
+                }
+              }}
+              label={st.label}
+              hint={st.hint}
+            />
+          ))}
+        </div>
+
+        {labOn && <LabRatio value={labWeight} setValue={setLabWeight} busy={busy} />}
+      </div>
+
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <EditorCard
           title="Grading Periods"
@@ -833,22 +1495,44 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           onSave={requestSave}
         />
         <EditorCard
-          title="Grade Components"
-          hint="e.g. Written Works, Performance Tasks, Quarterly Assessment"
+          title={labOn ? 'Lecture Components' : 'Grade Components'}
+          hint={
+            labOn
+              ? 'Weighted among themselves to give the lecture result for each period.'
+              : 'e.g. Written Works, Performance Tasks, Quarterly Assessment'
+          }
           rows={components}
           setRows={setComponents}
-          addLabel="Add component"
+          addLabel={labOn ? 'Add lecture component' : 'Add component'}
           busy={busy}
           onSave={requestSave}
         />
+        {labOn && (
+          <EditorCard
+            title="Laboratory Components"
+            hint="Weighted among themselves to give the laboratory result for each period."
+            rows={labComponents}
+            setRows={setLabComponents}
+            addLabel="Add laboratory component"
+            busy={busy}
+            onSave={requestSave}
+          />
+        )}
       </div>
 
       {/* Reads the unsaved form state on purpose: the point is to try a
           setup before saving it. */}
       <PreviewPanel
-        components={components}
+        periods={periods}
+        components={labOn ? [...components, ...labComponents] : components}
         mode={gradingMode}
-        policy={gradePolicy({ passing_percent: passingPercent, point_scale_direction: scaleDirection })}
+        labOn={labOn}
+        policy={gradePolicy({
+          passing_percent: passingPercent,
+          point_scale_direction: scaleDirection,
+          grading_structure: structure,
+          lab_weight_percent: labWeight,
+        })}
       />
     </div>
   )

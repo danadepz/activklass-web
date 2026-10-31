@@ -1714,3 +1714,28 @@ describe('T-218 — guardian_codes delete and guardian_links read/update/delete 
     )
   })
 })
+
+describe('grading_templates · client access is closed to all roles (Flask Admin SDK only)', () => {
+  it('refuses an unauthenticated client reading or writing a template', async () => {
+    const unauth = testEnv.unauthenticatedContext().firestore()
+    await assertFails(getDoc(doc(unauth, 'grading_templates', 'tpl-1')))
+    await assertFails(setDoc(doc(unauth, 'grading_templates', 'tpl-1'), { name: 'Hack' }))
+  })
+
+  it('refuses a teacher reading, writing, updating, or deleting a template directly via Firestore client', async () => {
+    await assertFails(getDoc(doc(ctx(TEACHER), 'grading_templates', 'tpl-1')))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'grading_templates', 'tpl-1'), { name: 'Direct' }))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'grading_templates', 'tpl-1'), { name: 'Direct' }))
+    await assertFails(deleteDoc(doc(ctx(TEACHER), 'grading_templates', 'tpl-1')))
+  })
+
+  it('refuses an admin reading or writing a template directly via Firestore client', async () => {
+    await assertFails(getDoc(doc(ctx(ADMIN), 'grading_templates', 'tpl-1')))
+    await assertFails(setDoc(doc(ctx(ADMIN), 'grading_templates', 'tpl-1'), { name: 'AdminDirect' }))
+  })
+
+  it('refuses a student reading or writing a template directly via Firestore client', async () => {
+    await assertFails(getDoc(doc(ctx(STUDENT), 'grading_templates', 'tpl-1')))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'grading_templates', 'tpl-1'), { name: 'StudentDirect' }))
+  })
+})

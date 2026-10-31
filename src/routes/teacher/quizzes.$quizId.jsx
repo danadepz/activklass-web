@@ -14,7 +14,7 @@ import { describeBankResult } from '@/lib/questionBank'
 import { SCORING_POLICIES, describePostScoresLine, describeSyncResult, quizzesToAutoPost } from '@/lib/quizToRecord'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { topicOptions, topicPatch } from '@/lib/quizTopics'
-import { suggestMapping } from '@/lib/recordMapping'
+import { LAB, componentTrack, hasLab } from '@/lib/grading'
 import {
   DETAIL_OPTIONS,
   DETAIL_RATIONALE,
@@ -1027,7 +1027,29 @@ function hasGradeConfig(gb) {
   return Boolean(gb?.configured && gb.components?.length && gb.periods?.length)
 }
 
-function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfirm, isPublishing }) {
+/* The component options for one class, split by track so a laboratory
+   component can never be picked out of a list that looks like lecture. A
+   lecture-only class gets one flat list, exactly as before. */
+function ComponentOptions({ gb }) {
+  const opt = (c) => (
+    <option key={c.id} value={c.id}>
+      {c.name} ({c.weight_percent}%)
+    </option>
+  )
+  if (!hasLab(gb)) return <>{gb?.components?.map(opt)}</>
+  const lecture = (gb.components ?? []).filter((c) => componentTrack(c) !== LAB)
+  const lab = (gb.components ?? []).filter((c) => componentTrack(c) === LAB)
+  return (
+    <>
+      <optgroup label="Lecture">{lecture.map(opt)}</optgroup>
+      {/* Only offered because this class is configured with a laboratory --
+          a Lecture only class never sees this group at all. */}
+      <optgroup label="Laboratory">{lab.map(opt)}</optgroup>
+    </>
+  )
+}
+
+function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, existingMappings, onConfirm, isPublishing }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Publish quiz', closeOnBackdrop: false })
   const [mappings, setMappings] = useState({})
   const [error, setError] = useState(null)
@@ -1051,27 +1073,53 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
         blocked = blocked ?? c
         continue
       }
-      // Pre-filled from the component's name -- Quizzes or Written Works
-      // when one is called that, the first unlocked period -- rather than
-      // whatever component happens to be listed first (lib/recordMapping.js,
-      // owner decision 2026-09-13). Still a select the teacher can change.
-      initial[c.id] = suggestMapping(gb, 'quiz')
+      /* No guess. The mapping decides which half of a Lecture with
+         Laboratory course a quiz counts toward, and a name-matched guess sent
+         a laboratory quiz into a lecture component whenever the teacher did
+         not look -- the exact failure §7 asks to remove. The only thing
+         inherited is a mapping this quiz ALREADY has for this class, and only
+         after checking both halves still exist in the class's current
+         configuration: a republish should not make the teacher retype a
+         choice they already made, but a stale id must not ride along either. */
+      const prior = existingMappings?.[c.id]
+      const componentOk = gb.components.some((comp) => comp.id === prior?.component_id)
+      const periodOk = gb.periods.some((per) => per.id === prior?.grading_period_id)
+      initial[c.id] = componentOk && periodOk
+        ? { component_id: prior.component_id, grading_period_id: prior.grading_period_id, inherited: true }
+        : { component_id: '', grading_period_id: '' }
     }
     setMappings(initial)
     setError(err)
     setUnconfigured(blocked)
-  }, [isOpen, assignedClasses, gradebooksMap])
+  }, [isOpen, assignedClasses, gradebooksMap, existingMappings])
 
   if (!isOpen) return null
 
   const handleConfirm = () => {
+    const clean = {}
     for (const c of assignedClasses) {
-      if (!mappings[c.id]?.component_id || !mappings[c.id]?.grading_period_id) {
-        setError(`Please map the grading component and period for "${c.section}".`)
+      const m = mappings[c.id] ?? {}
+      if (!m.component_id || !m.grading_period_id) {
+        setError(`Choose the grading component and period for "${c.section}" — nothing is preselected.`)
         return
       }
+      /* Each class is validated against its OWN gradebook. Classes are mapped
+         independently, so a component id that is valid for one of them says
+         nothing about another -- and a gradebook edited in another tab since
+         this dialog opened can make a shown option stale. */
+      const gb = gradebooksMap?.[c.id]
+      if (!gb?.components?.some((comp) => comp.id === m.component_id)
+        || !gb?.periods?.some((per) => per.id === m.grading_period_id)) {
+        setError(
+          `The grading component or period chosen for "${c.section}" is no longer part of that `
+          + "class's grading setup. Reopen this dialog and choose again.",
+        )
+        return
+      }
+      // `inherited` is a flag for this dialog, not part of the stored mapping.
+      clean[c.id] = { component_id: m.component_id, grading_period_id: m.grading_period_id }
     }
-    onConfirm(mappings)
+    onConfirm(clean)
   }
 
   return (
@@ -1082,7 +1130,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
         </div>
         <div style={{ padding: '24px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
           <p style={{ fontSize: 13.5, color: muted, lineHeight: 1.55, margin: 0 }}>
-            Map this quiz to a grading component and grading period for each assigned class to create score records in their gradebooks.
+            Map this quiz to a grading component and grading period for each assigned class to create score records in their gradebooks. Nothing is chosen for you — the mapping decides which component the scores count toward.
           </p>
           {error && (
             <AlertBox>
@@ -1106,28 +1154,43 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, onConfi
             return (
               <div key={c.id} style={{ border: `1px solid ${line}`, borderRadius: 12, padding: 14 }} className="space-y-3">
                 <div style={{ fontWeight: 700, color: ink, fontSize: 14 }}>{c.section} · {c.subject}</div>
+                {hasLab(gb) && (
+                  <div style={{ fontSize: 11.5, color: muted, lineHeight: 1.45 }}>
+                    This class is graded as <strong style={{ color: ink }}>Lecture with Laboratory</strong> —
+                    pick the half this quiz belongs to. A laboratory quiz placed in a lecture component
+                    counts toward the wrong result.
+                  </div>
+                )}
+                {current.inherited && (
+                  <div style={{ fontSize: 11.5, color: goldDeep, lineHeight: 1.45 }}>
+                    Carried over from the last time this quiz was published to this class — check it still
+                    fits before publishing.
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: muted, marginBottom: 4 }}>Grading Component</label>
                     <select
                       className="ak-input w-full"
+                      aria-label={`Grading component for ${c.section}`}
                       value={current.component_id || ''}
-                      onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, component_id: e.target.value } })}
+                      onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, component_id: e.target.value, inherited: false } })}
                       style={{ ...fieldStyle, fontSize: 13, padding: '8px 10px' }}
                     >
-                      {gb?.components?.map((comp) => (
-                        <option key={comp.id} value={comp.id}>{comp.name} ({comp.weight_percent}%)</option>
-                      ))}
+                      <option value="">Choose a component…</option>
+                      <ComponentOptions gb={gb} />
                     </select>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: muted, marginBottom: 4 }}>Grading Period</label>
                     <select
                       className="ak-input w-full"
+                      aria-label={`Grading period for ${c.section}`}
                       value={current.grading_period_id || ''}
-                      onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, grading_period_id: e.target.value } })}
+                      onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, grading_period_id: e.target.value, inherited: false } })}
                       style={{ ...fieldStyle, fontSize: 13, padding: '8px 10px' }}
                     >
+                      <option value="">Choose a period…</option>
                       {gb?.periods?.map((per) => (
                         <option key={per.id} value={per.id}>{per.name} ({per.weight_percent}%)</option>
                       ))}
@@ -1810,6 +1873,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         onClose={() => setIsPublishModalOpen(false)}
         assignedClasses={assignedClassesList}
         gradebooksMap={gradebooksMap}
+        existingMappings={quiz.class_mappings}
         onConfirm={handleConfirmPublish}
         isPublishing={publishing}
       />

@@ -47,7 +47,12 @@ import GlobalGradingSetupPage from './grading.jsx'
 describe('Grade Config — Save & Sync lives on each weight card too', () => {
   it('renders three Save & Sync buttons: the page header and both weight cards', () => {
     const html = renderToStaticMarkup(<GlobalGradingSetupPage />)
-    const count = (html.match(/Save &amp; Sync/g) || []).length
+    /* Counted as BUTTONS, not as occurrences of the string. The Saved
+       Templates card (Phase 2) explains in prose that nothing reaches a class
+       until you press Save & Sync, so a raw string count now picks up copy
+       that is not a button -- which was never what this test meant. */
+    const buttons = html.match(/<button[\s\S]*?<\/button>/g) || []
+    const count = buttons.filter((b) => b.includes('Save &amp; Sync')).length
     expect(count).toBe(3)
   })
 })

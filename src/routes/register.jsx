@@ -496,6 +496,12 @@ export default function Register() {
     })
 
     if (kind === 'individual') {
+      try {
+        await api('/api/auth/register/welcome', { method: 'POST' })
+      } catch (err) {
+        // Welcome email failure is non-fatal: user account is already created
+        console.warn('Welcome email notice: could not send welcome email:', err)
+      }
       await refreshProfile()
       navigate('/portal')
       return

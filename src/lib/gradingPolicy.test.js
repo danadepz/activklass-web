@@ -35,6 +35,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DEFAULT_LAB_WEIGHT,
   chedPointEquivalent,
   gradePolicy,
   isPassingGrade,
@@ -62,7 +63,12 @@ describe('a gradebook without the fields computes exactly as before (T-45)', () 
 
   it('fills the defaults for absent, empty, or out-of-range values', () => {
     for (const src of [undefined, null, {}, { passing_percent: null }, { passing_percent: 0 }, { passing_percent: 100 }, { passing_percent: 'x' }]) {
-      expect(gradePolicy(src)).toEqual({ passing_percent: 75, point_scale_direction: 'ched' })
+      expect(gradePolicy(src)).toEqual({
+        passing_percent: 75,
+        point_scale_direction: 'ched',
+        grading_structure: 'lecture_only',
+        lab_weight_percent: DEFAULT_LAB_WEIGHT,
+      })
     }
     expect(gradePolicy({ point_scale_direction: 'sideways' }).point_scale_direction).toBe('ched')
     expect(gradePolicy({ passing_percent: '60' }).passing_percent).toBe(60)

@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
-import { computeFinalGrade, finalAcrossPeriods, gradePolicy } from '@/lib/grading'
+import { componentTrack, computeFinalGrade, finalAcrossPeriods, gradePolicy } from '@/lib/grading'
 
 export async function loadBundle(classId) {
   const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
@@ -82,11 +82,16 @@ function gradeForPeriod(bundle, periodAssessments, studentId, periodId) {
     ...c,
     assessments: periodAssessments.filter((a) => a.component_id === c.id),
   }))
-  const { final, breakdown } = computeFinalGrade(componentsWithA, studentScores, bundle.mode, bundle.policy)
+  const { final, breakdown, tracks } = computeFinalGrade(componentsWithA, studentScores, bundle.mode, bundle.policy)
   const override = bundle.overrides?.[periodId]?.[studentId]
   return {
     components: breakdown,
     period_grade: final,
+    /* Lecture / laboratory results and how far each is graded, or null for a
+       lecture-only class. An override still replaces the COMBINED grade -- it
+       is a decision about the period's grade, not about one track -- so the
+       tracks stay as computed and the grid can show both. */
+    tracks,
     override: override ?? null,
     grade: override != null ? override : final,
   }
@@ -154,7 +159,7 @@ export function buildSummary(bundle) {
     for (const p of bundle.periods) {
       const periodAssessments = bundle.assessments.filter((a) => a.period_id === p.id)
       const g = gradeForPeriod(bundle, periodAssessments, s.student_id, p.id)
-      perPeriod[p.id] = { grade: g.grade, computed: g.period_grade, override: g.override }
+      perPeriod[p.id] = { grade: g.grade, computed: g.period_grade, override: g.override, tracks: g.tracks }
       values[p.id] = g.grade
     }
     grades[s.student_id] = {
@@ -190,6 +195,10 @@ export async function syncEntries(classId) {
     id: c.id,
     name: c.name,
     weight_percent: c.weight_percent,
+    // Carried so the student's own screens can label a laboratory component
+    // as one. componentTrack() reads an absent value as lecture, so an entry
+    // written before this field existed needs no migration.
+    track: componentTrack(c),
   }))
 
   const batch = writeBatch(db)
@@ -229,6 +238,13 @@ export async function syncEntries(classId) {
           id: p.id,
           name: p.name,
           grade: g.periods[p.id]?.grade ?? null,
+          /* The lecture and laboratory halves behind that grade, or null for a
+             lecture-only class. Stamped rather than recomputed: the student and
+             guardian apps may read only this document, so a breakdown they
+             compute themselves is a second implementation that can disagree
+             with the teacher's record -- the exact failure parentRecords.ts
+             was written to end. */
+          tracks: g.periods[p.id]?.tracks ?? null,
         })),
         components,
         assessments,
@@ -238,6 +254,10 @@ export async function syncEntries(classId) {
         // teacher's record does. A student may read nothing else of the gradebook.
         passing_percent: bundle.policy.passing_percent,
         point_scale_direction: bundle.policy.point_scale_direction,
+        // The course structure, so the student's screens know whether a
+        // laboratory breakdown is meaningful for this class at all.
+        grading_structure: bundle.policy.grading_structure,
+        lab_weight_percent: bundle.policy.lab_weight_percent,
         updated_at: serverTimestamp(),
       },
       { merge: true },

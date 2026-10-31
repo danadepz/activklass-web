@@ -398,7 +398,7 @@
  * so the two never double up.
  * ------------------------------------------------------------------ */
 :where(button, a[href], summary, [role="button"], [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline: 2px solid #3FA9F5;
+  outline: 2px solid #1E6FB0;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -407,8 +407,30 @@
    is the marketing/auth shell's own language -- this is for the several
    hundred fields that never got that class. */
 :where(input, select, textarea):not(.ak-input):focus-visible {
-  outline: 2px solid #3FA9F5;
+  outline: 2px solid #1E6FB0;
   outline-offset: 1px;
+}
+
+/* The ring above is tuned for the page, which is light everywhere: #1E6FB0
+   (theme.js `blueText`) is 5.31:1 on white and 5.07:1 on the slate-50 ground
+   body actually uses, where the old #3FA9F5 was 2.56:1 — under the 3:1 that
+   WCAG 1.4.11 asks of a focus indicator. The swap is the whole reason this
+   colour changed; nothing else about the ring moved.
+
+   But no single colour clears 3:1 on both grounds, and this app has two:
+   #1E6FB0 drops to 2.63:1 on navy, and 1.83:1 against the nav's own active
+   item (navy under white at 12%). Every <header> in the app is that dark bar
+   — teacher, student and admin paint it `navy`, superadmin `zinc-900` — and
+   it is the only dark chrome there is, which makes `header` the selector
+   rather than a class nobody has applied yet (.ak-nav is declared above and
+   used by no element). Cream reads unambiguously as focus on all four:
+   13.34:1 on navy, 9.28:1 on the active item.
+
+   `header` carries real specificity, so this beats the zero-specificity
+   :where() rules above without !important. */
+header :where(button, a[href], summary, [role="button"], [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible,
+header :where(input, select, textarea):not(.ak-input):focus-visible {
+  outline-color: #FAFAF6;
 }
 
 /* A disabled control should say so under the cursor. Several dozen carry
