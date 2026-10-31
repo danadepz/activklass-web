@@ -1293,7 +1293,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
+    <div className="max-w-7xl mx-auto pb-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink }}>
@@ -1484,7 +1484,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         {labOn && <LabRatio value={labWeight} setValue={setLabWeight} busy={busy} />}
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className={`mt-6 grid grid-cols-1 gap-6 ${labOn ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2'}`}>
         <EditorCard
           title="Grading Periods"
           hint="e.g. Quarters 1–4, or Prelim / Midterm / Finals"

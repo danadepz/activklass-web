@@ -178,7 +178,10 @@ function useRevealOnScroll() {
 }
 
 const primaryBtn =
-  'inline-flex items-center gap-2.5 rounded-xl px-6 py-4 text-[15px] font-bold transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2'
+  'inline-flex items-center gap-2.5 rounded-xl px-6 py-4 text-[15px] font-bold transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2'
+
+const primaryBtnDark =
+  'inline-flex items-center gap-2.5 rounded-xl px-6 py-4 text-[15px] font-bold transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FAFAF6] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0E2A5C]'
 
 // --- page ----------------------------------------------------------------
 
@@ -754,7 +757,7 @@ export default function Landing() {
                 <div className="flex flex-wrap items-center gap-3.5">
                   <Link
                     to="/register"
-                    className={`${primaryBtn} ak-cta-pulse`}
+                    className={`${primaryBtnDark} ak-cta-pulse`}
                     style={{ background: gold, color: navy, boxShadow: `0 3px 0 ${goldDeep}` }}
                   >
                     Create an account

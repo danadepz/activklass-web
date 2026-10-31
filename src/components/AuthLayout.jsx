@@ -37,7 +37,7 @@ export function SubmitButton({ children, ...props }) {
   return (
     <button
       {...props}
-      className="ak-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2 disabled:cursor-not-allowed"
+      className="ak-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2 disabled:cursor-not-allowed"
       style={{
         marginTop: 4,
         width: '100%',
@@ -141,11 +141,14 @@ export function AuthNotice({ children }) {
 // without waiting on a page or a route: the policy exists the moment this
 // ships, not whenever a page gets built around it.
 function PrivacyPolicyLink({ onOpen, dark = false }) {
+  const ringClasses = dark
+    ? 'focus-visible:ring-[#FAFAF6] focus-visible:ring-offset-[#0E2A5C]'
+    : 'focus-visible:ring-[#1E6FB0]'
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      className={`rounded transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${ringClasses}`}
       style={{
         background: 'none',
         border: 'none',

@@ -1063,7 +1063,7 @@ function ChoiceCard({ selected, onClick, icon: Icon, tint, tintText, heading, bo
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className="transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+      className="transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2"
       style={{
         ...authInputStyle,
         textAlign: 'left',

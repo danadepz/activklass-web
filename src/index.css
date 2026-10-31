@@ -414,17 +414,26 @@
 /* The ring above is tuned for the page, which is light everywhere: #1E6FB0
    (theme.js `blueText`) is 5.31:1 on white and 5.07:1 on the slate-50 ground
    body actually uses, where the old #3FA9F5 was 2.56:1 — under the 3:1 that
-   WCAG 1.4.11 asks of a focus indicator. The swap is the whole reason this
-   colour changed; nothing else about the ring moved.
+   WCAG 1.4.11 asks of a focus indicator.
 
-   But no single colour clears 3:1 on both grounds, and this app has two:
-   #1E6FB0 drops to 2.63:1 on navy, and 1.83:1 against the nav's own active
-   item (navy under white at 12%). Every <header> in the app is that dark bar
-   — teacher, student and admin paint it `navy`, superadmin `zinc-900` — and
-   it is the only dark chrome there is, which makes `header` the selector
-   rather than a class nobody has applied yet (.ak-nav is declared above and
-   used by no element). Cream reads unambiguously as focus on all four:
-   13.34:1 on navy, 9.28:1 on the active item.
+   No single colour clears 3:1 on every ground this app paints. #1E6FB0 drops
+   to 2.63:1 on navy and 1.83:1 on the nav's own active item (navy under white
+   at 12%), so the dark chrome needs its own. A brute-force search over the
+   luminance band that would satisfy both (L between 0.275 and 0.300) returns
+   only pink/salmon hues, and the best worst case is 3.05:1 — a 1.7% margin
+   and nothing like a brand colour. Two colours it is.
+
+   THIS RULE USES CREAM (#FAFAF6) for dark header bars (teacher, student
+   and admin paint it `navy`, superadmin `zinc-900`). Cream clears WCAG 1.4.11
+   with wide margin on dark chrome: 12.99:1 on navy, 9.28:1 on the nav's own
+   active item (navy under white at 12%), and 14.3:1 on superadmin zinc-900.
+
+   Light dropdowns and tab faces embedded within these headers explicitly opt
+   out via focus-visible:outline-none and apply their own high-contrast
+   #1E6FB0 rings:
+     routes/teacher/_layout.jsx              notification dropdown & rows
+     components/StudentNotificationBell.jsx  student notification panel & rows
+     routes/admin/index.jsx                  admin tab buttons
 
    `header` carries real specificity, so this beats the zero-specificity
    :where() rules above without !important. */

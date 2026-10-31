@@ -316,7 +316,7 @@ export default function TeacherDashboard() {
           </p>
           <Link
             to="/teacher/classes"
-            className="mt-5 inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+            className="mt-5 inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2"
             style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: '0 3px 0 #061840, 0 10px 24px -12px rgba(14,42,92,0.5)' }}
           >
             <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>

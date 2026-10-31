@@ -92,7 +92,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
         aria-label="Notifications"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5]/40"
+        className={`transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${dark ? 'focus-visible:ring-[#FAFAF6] focus-visible:ring-offset-[#0E2A5C]' : 'focus-visible:ring-[#1E6FB0]'}`}
         style={{ position: 'relative', width: 38, height: 38, borderRadius: 10, border: `1px solid ${btnBorder}`, background: btnBg, color: btnColor, display: 'grid', placeItems: 'center', cursor: 'pointer' }}
       >
         <Bell className="h-[18px] w-[18px]" />
@@ -112,7 +112,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
               Notifications{unread > 0 ? ` (${unread})` : ''}
             </span>
             {unread > 0 && (
-              <button onClick={markAllRead} style={{ fontSize: 12, fontWeight: 700, color: navy, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <button onClick={markAllRead} className="rounded transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-1" style={{ fontSize: 12, fontWeight: 700, color: navy, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
                 Mark all read
               </button>
             )}
@@ -132,7 +132,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
                 <button
                   key={n.id}
                   onClick={() => openNotif(n)}
-                  className="hover:bg-slate-50"
+                  className="hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]"
                   style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid rgba(14,42,92,0.06)', background: n.read ? 'transparent' : 'rgba(63,169,245,0.06)', border: 'none', borderLeft: n.read ? '3px solid transparent' : '3px solid #3FA9F5', cursor: 'pointer' }}
                 >
                   <span style={{ fontSize: 16, marginTop: 1 }}>{ICON_FOR[n.type] ?? '🔔'}</span>

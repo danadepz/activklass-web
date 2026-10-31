@@ -33,7 +33,7 @@ export default function ParentOnMobile() {
     >
       <div className="flex justify-center">
         <SignOutButton
-          className="ak-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3FA9F5] focus-visible:ring-offset-2"
+          className="ak-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2"
           style={{
             padding: '14px 28px',
             fontSize: 15,

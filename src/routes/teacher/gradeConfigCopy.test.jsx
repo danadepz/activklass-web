@@ -33,7 +33,7 @@ import GlobalGradingSetupPage from './grading.jsx'
 describe('Grade Config copy and layout (T-144: triplecookiemonster-202..205)', () => {
   it('centers the layout container with mx-auto (#202)', () => {
     const html = renderToStaticMarkup(<GlobalGradingSetupPage />)
-    expect(html).toContain('max-w-4xl mx-auto')
+    expect(html).toContain('max-w-7xl mx-auto')
   })
 
   it('renders updated Target Classes copy (#203)', () => {

@@ -343,6 +343,7 @@ export default function TeacherLayout() {
                     <button
                       onClick={() => setNotifOpen(false)}
                       aria-label="Close notifications"
+                      className="transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-1"
                       style={{
                         width: 28,
                         height: 28,
@@ -379,7 +380,7 @@ export default function TeacherLayout() {
                             color: '#0A1733',
                             transition: 'background-color 0.15s',
                           }}
-                          className="hover:bg-slate-50"
+                          className="hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]"
                         >
                           <div style={{ fontSize: 16, marginTop: 1 }}>{n.icon ?? '⚠️'}</div>
                           <div style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>

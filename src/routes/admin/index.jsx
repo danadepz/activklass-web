@@ -72,6 +72,11 @@ export default function AdminPage() {
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
+                  className={`transition focus-visible:outline-none ${
+                    on
+                      ? 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]'
+                      : 'focus-visible:ring-2 focus-visible:ring-[#FAFAF6] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0E2A5C]'
+                  }`}
                   style={{
                     padding: '10px 16px', fontSize: 14, fontWeight: 700, fontFamily: sans,
                     color: on ? navy : cream,
