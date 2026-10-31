@@ -349,3 +349,165 @@ describe('learning_materials · delete (T-207)', () => {
     )
   })
 })
+
+/**
+ * Syllabus-attachment and learning-material WRITE (2026-10-31 audit).
+ *
+ * Both paths previously allowed any signed-in user to upload and to OVERWRITE:
+ *
+ *   /syllabi/{classId}/{fileName}            write: signedIn() && isAllowedDoc()
+ *   /learning_materials/{syllabusId}/{file}  write: signedIn() && size < 25MB
+ *
+ * The earlier passes on these same two paths closed READ (T-204) and DELETE
+ * (T-207) and left write open, so a student -- or a teacher at another school
+ * -- could replace any class's syllabus PDF or any syllabus's learning
+ * material with their own file. The file path is predictable, and nothing in
+ * Firestore has to be touched to do it, so the "ownership is enforced where
+ * the reference is written" argument in the old header did not hold.
+ *
+ * The learning-material rule deliberately does NOT require the syllabus to
+ * exist: `SyllabusEditor` writes `syllabi/{id}` only on save while the upload
+ * happens when the file is picked, so a must-exist rule would break every
+ * new-syllabus upload. That workflow is pinned below as a positive test, so
+ * tightening this later cannot silently break it.
+ */
+const PDF = { contentType: 'application/pdf' }
+const HTML = { contentType: 'text/html' }
+const SVG = { contentType: 'image/svg+xml' }
+
+describe('syllabi · write — only the class teacher or an admin', () => {
+  beforeEach(seedFirestore)
+
+  it('denies an unauthenticated upload', async () => {
+    await assertFails(
+      uploadBytes(ref(anonStorage(), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a student uploading into their own class', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(STUDENT), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a teacher who does not own the class', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(OTHER_TEACHER), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a foreign teacher OVERWRITING an existing attachment', async () => {
+    await seedFile('syllabi/class-1/plan.pdf')
+    await assertFails(
+      uploadBytes(ref(storageCtx(OTHER_TEACHER), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies an upload to a class that does not exist', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(TEACHER), 'syllabi/no-such-class/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a disallowed content type even from the owner', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(TEACHER), 'syllabi/class-1/evil.html'), BYTES, HTML),
+    )
+  })
+
+  it('denies an oversized file even from the owner', async () => {
+    // The cap on this path is 10 MB.
+    await assertFails(
+      uploadBytes(ref(storageCtx(TEACHER), 'syllabi/class-1/big.pdf'),
+        new Uint8Array(11 * 1024 * 1024), PDF),
+    )
+  })
+
+  it('allows the owning teacher to upload', async () => {
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(TEACHER), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('allows the owning teacher to overwrite their own attachment', async () => {
+    await seedFile('syllabi/class-1/plan.pdf')
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(TEACHER), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('allows an admin to upload', async () => {
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(ADMIN), 'syllabi/class-1/plan.pdf'), BYTES, PDF),
+    )
+  })
+})
+
+describe('learning_materials · write — only the syllabus owner or an admin', () => {
+  beforeEach(seedFirestore)
+
+  it('denies an unauthenticated upload', async () => {
+    await assertFails(
+      uploadBytes(ref(anonStorage(), 'learning_materials/syl-1/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a student uploading to an existing syllabus', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(STUDENT), 'learning_materials/syl-1/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a student uploading to an UNSAVED syllabus id too', async () => {
+    // The new-syllabus allowance is for teachers only; it must not become a
+    // hole a student can walk through by inventing an id.
+    await assertFails(
+      uploadBytes(ref(storageCtx(STUDENT), 'learning_materials/syl-unsaved/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies a foreign teacher OVERWRITING another teacher’s material', async () => {
+    await seedFile('learning_materials/syl-1/handout.pdf')
+    await assertFails(
+      uploadBytes(ref(storageCtx(OTHER_TEACHER), 'learning_materials/syl-1/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('denies text/html — the stored-XSS shape', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(TEACHER), 'learning_materials/syl-1/evil.html'), BYTES, HTML),
+    )
+  })
+
+  it('denies image/svg+xml for the same reason', async () => {
+    await assertFails(
+      uploadBytes(ref(storageCtx(TEACHER), 'learning_materials/syl-1/evil.svg'), BYTES, SVG),
+    )
+  })
+
+  it('allows the owning teacher to upload to their saved syllabus', async () => {
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(TEACHER), 'learning_materials/syl-1/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('allows a teacher to upload to a syllabus that is not saved yet', async () => {
+    // The workflow guard: SyllabusEditor uploads before the first save.
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(TEACHER), 'learning_materials/syl-unsaved/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('allows an admin to upload', async () => {
+    await assertSucceeds(
+      uploadBytes(ref(storageCtx(ADMIN), 'learning_materials/syl-1/handout.pdf'), BYTES, PDF),
+    )
+  })
+
+  it('still denies an unauthorized delete (unchanged by this pass)', async () => {
+    await seedFile('learning_materials/syl-1/handout.pdf')
+    await assertFails(
+      deleteObject(ref(storageCtx(OTHER_TEACHER), 'learning_materials/syl-1/handout.pdf')),
+    )
+  })
+})

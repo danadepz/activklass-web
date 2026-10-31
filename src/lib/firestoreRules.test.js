@@ -27,7 +27,11 @@ import {
 } from '@firebase/rules-unit-testing'
 import { collection, deleteDoc, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 
-const RULES_PATH = fileURLToPath(
+// ACTIVKLASS_RULES_PATH lets a reviewer point this suite at a modified copy of
+// the rules to prove a test actually discriminates — run it against the rules
+// as they were before a fix and the new cases must go red. Unset in normal use,
+// so the default stays the deployed source of truth below.
+const RULES_PATH = process.env.ACTIVKLASS_RULES_PATH || fileURLToPath(
   new URL('../../../activklass-backend/firestore.rules', import.meta.url),
 )
 
@@ -295,20 +299,172 @@ describe('users · the billing fields no client may move', () => {
   })
 })
 
+/**
+ * Audit F-01 and F-02 — the CREATE path, which both findings turned on.
+ *
+ * `allow update` has pinned role, email and the billing fields for a long
+ * time. `allow create` pinned role and the verification/subscription state and
+ * nothing else, so a client's very first write to its own profile — the one
+ * write that happens before any of those update guards can apply — could
+ * assert someone else's `email` and any `school_id` it liked.
+ *
+ * Why that mattered on the server, not just here:
+ *   F-01  middleware/auth.py resolves the Postgres row by the profile's email
+ *         and relinks `firebase_uid` onto whatever row it finds; the student
+ *         branch then merges a placeholder found by that same email, rewrites
+ *         its class rosters onto this uid and deletes its profile.
+ *   F-02  subscriptions.py:108 resolves a teacher's plan as
+ *         `profile.school_id or uid`, and subscription_usage counts seats as
+ *         `users where school_id == X`.
+ *
+ * Both rules now read one shared `serverOwnedFields()` list, so the create and
+ * update guards cannot drift apart again — the drift was the bug.
+ */
+describe('users · creating a profile (audit F-01, F-02)', () => {
+  const NEWCOMER = 'newcomer-1'
+  const NEW_STUDENT = 'new-student-1'
+  const VICTIM_EMAIL = 'victim@school.edu'
+
+  /** A signed-in context carrying an `email` claim, as a real ID token does. */
+  function ctxEmail(uid, email) {
+    return testEnv.authenticatedContext(uid, { email }).firestore()
+  }
+
+  /** The shape register.jsx actually writes, minus whatever a case overrides. */
+  function profile(overrides = {}) {
+    return { role: 'teacher', first_name: 'N', last_name: 'C', ...overrides }
+  }
+
+  it('lets a teacher self-register with the email Firebase authenticated', async () => {
+    // register.jsx writes `email: auth.currentUser.email` verbatim.
+    await assertSucceeds(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+        profile({ email: 'new@school.edu' })),
+    )
+  })
+
+  it('lets a parent self-register with a lowercased copy of a mixed-case address', async () => {
+    // mobile app/parent/details.tsx writes its own `.toLowerCase()` copy, so
+    // the comparison has to be case-folded or every parent sign-up breaks.
+    await assertSucceeds(
+      setDoc(doc(ctxEmail(NEWCOMER, 'Mixed.Case@Example.com'), 'users', NEWCOMER),
+        profile({ role: 'parent', email: 'mixed.case@example.com' })),
+    )
+  })
+
+  it('refuses a profile claiming an email the token never authenticated', async () => {
+    // The whole of F-01: this is the write that chose which Postgres row the
+    // identity bridge would relink, and which placeholder it would absorb.
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'attacker@elsewhere.com'), 'users', NEWCOMER),
+        profile({ email: VICTIM_EMAIL })),
+    )
+  })
+
+  it('refuses a profile that omits the email field entirely', async () => {
+    // Absent must not read as "matches": auth.py falls back to the profile
+    // field only when the token carries no claim at all.
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER), profile()),
+    )
+  })
+
+  it('refuses a self-registering teacher granting themselves a school_id', async () => {
+    // F-02: this is the seat on a school's paid plan, and the read of every
+    // teacher profile there through sameTeachingSchool().
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+        profile({ email: 'new@school.edu', school_id: 'school-1' })),
+    )
+  })
+
+  it('refuses a self-registering teacher granting themselves a teacher_group_id', async () => {
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+        profile({ email: 'new@school.edu', teacher_group_id: 'group-9' })),
+    )
+  })
+
+  it('refuses a self-registering teacher writing their own teacher_ids', async () => {
+    // teacher_ids decides which teacher may READ a student; it is
+    // server-written by roster_sync.py and nothing else.
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+        profile({ email: 'new@school.edu', teacher_ids: [TEACHER] })),
+    )
+  })
+
+  it('still refuses anyone self-registering as an admin', async () => {
+    await assertFails(
+      setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+        profile({ email: 'new@school.edu', role: 'admin' })),
+    )
+  })
+
+  it('lets a teacher create a STUDENT profile carrying the student’s own email', async () => {
+    // The email pin is deliberately NOT applied to this branch: the row
+    // carries the student's address, never the teacher's. Breaking this would
+    // break teacher-side provisioning.
+    await assertSucceeds(
+      setDoc(doc(ctxEmail(TEACHER, 'teacher@school.edu'), 'users', NEW_STUDENT),
+        { role: 'student', first_name: 'S', last_name: 'T', email: 'pupil@school.edu' }),
+    )
+  })
+
+  it('refuses a teacher stamping a school_id onto a student they create', async () => {
+    // School isolation at create: a student's school_id is the Admin SDK's to
+    // write (api/classes.py), because it is what bills.
+    await assertFails(
+      setDoc(doc(ctxEmail(TEACHER, 'teacher@school.edu'), 'users', NEW_STUDENT),
+        { role: 'student', first_name: 'S', last_name: 'T', email: 'pupil@school.edu', school_id: 'school-1' }),
+    )
+  })
+})
+
 describe('users · what a student may write about their own password', () => {
   beforeEach(seedRoles)
 
-  /* The change-password screen clears is_temp_password right after Firebase
-     accepts the new password. Without this allowance the write is denied, the
-     password changes anyway, and the console keeps reporting the student as
-     still on the one the school issued -- which is the stale badge the flag
-     exists to prevent. Found by changing a password in the browser and watching
-     the flag stay true. */
-  it('lets a student record that they chose their own password', async () => {
-    await assertSucceeds(
+  /* REVERSED 2026-10-31, and this is the important one.
+
+     This used to assert that a student MAY clear `is_temp_password` on their
+     own profile, because the web change-password screen wrote it from the
+     client right after Firebase accepted a new password, and denying the write
+     left a stale badge in the console.
+
+     That allowance was the first-login bypass. Both route guards (web
+     ProtectedRoute, mobile app/login.tsx) read this one field and nothing
+     else, so a student who set it to false walked into the app still holding
+     the shared onboarding password, having changed nothing. A field that gates
+     access cannot be writable by the person it restricts.
+
+     The write moved to the server: `POST /api/auth/initial-password` performs
+     the password change through the Admin SDK and only then clears both this
+     mirror and the `must_change_password` custom claim that the backend
+     actually enforces. So the stale-badge problem the old allowance solved is
+     still solved -- by the server, which is the only party that can know a
+     password really changed. */
+  it('refuses a student clearing their own first-login flag', async () => {
+    await assertFails(
       updateDoc(doc(ctx(STUDENT), 'users', STUDENT), {
         is_temp_password: false,
         password_changed_at: new Date(),
+      }),
+    )
+  })
+
+  it('refuses it even on its own, with nothing else in the write', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'users', STUDENT), { is_temp_password: false }),
+    )
+  })
+
+  /* The two fields a student still owns, so the narrowing did not overshoot
+     into the self-service edits that were never part of the gate. */
+  it('still lets a student set their own photo and personal email', async () => {
+    await assertSucceeds(
+      updateDoc(doc(ctx(STUDENT), 'users', STUDENT), {
+        photo_url: 'data:image/png;base64,iVBORw0KGgo=',
+        personal_email: 'pupil@example.com',
       }),
     )
   })
@@ -1737,5 +1893,73 @@ describe('grading_templates · client access is closed to all roles (Flask Admin
   it('refuses a student reading or writing a template directly via Firestore client', async () => {
     await assertFails(getDoc(doc(ctx(STUDENT), 'grading_templates', 'tpl-1')))
     await assertFails(setDoc(doc(ctx(STUDENT), 'grading_templates', 'tpl-1'), { name: 'StudentDirect' }))
+  })
+})
+
+/**
+ * quizzes · read — pins the CURRENT (deliberately wide) behaviour.
+ *
+ * `allow read: if signedIn()` lets any signed-in account read and LIST every
+ * quiz, answer keys included. That is a known, documented exposure, not an
+ * oversight: scoping it by `teacher_id` against `users/{student}.teacher_ids`
+ * was implemented and DENIED the `class_ids array-contains` query the student
+ * class pages actually issue (single gets passed, the list failed; not a
+ * read-limit problem -- a one-read variant failed identically). Shipping that
+ * would have blanked every student's class page, so the rule stayed as it is
+ * and the real fix -- denormalising onto the quiz, or moving the answer key
+ * out of the student-readable document -- is an approval decision.
+ *
+ * These tests exist so the exposure is VISIBLE and measured rather than
+ * assumed, and so that whoever implements the fix has the exact query shapes
+ * that must keep working. When the fix lands, the two `assertSucceeds` cases
+ * marked WIDE below are the ones that must flip to assertFails.
+ */
+describe('quizzes · read (current behaviour, exposure pinned)', () => {
+  const QUIZ_TEACHER = 'quiz-teacher-1'
+  const UNRELATED_STUDENT = 'quiz-student-2'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', QUIZ_TEACHER), { role: 'teacher', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', UNRELATED_STUDENT), {
+        role: 'student', school_id: 'school-2', teacher_ids: [],
+      })
+      await setDoc(doc(db, 'quizzes', 'quiz-1'), {
+        teacher_id: QUIZ_TEACHER,
+        class_ids: ['class-1'],
+        questions: [{ id: 'q1', type: 'true_false', answer_key: { value: true } }],
+      })
+    })
+  })
+
+  it('the student class-page query shape works (must keep working)', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(ctx(STUDENT), 'quizzes'),
+      where('class_ids', 'array-contains', 'class-1'),
+    )))
+  })
+
+  it('the teacher’s own-quizzes query shape works (must keep working)', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(ctx(QUIZ_TEACHER), 'quizzes'),
+      where('teacher_id', '==', QUIZ_TEACHER),
+    )))
+  })
+
+  it('WIDE: an unrelated student at another school can read the answer key', async () => {
+    // Flip to assertFails when the answer-key fix lands.
+    await assertSucceeds(getDoc(doc(ctx(UNRELATED_STUDENT), 'quizzes', 'quiz-1')))
+  })
+
+  it('WIDE: the whole collection is enumerable by any signed-in account', async () => {
+    // Flip to assertFails when the answer-key fix lands.
+    await assertSucceeds(getDocs(collection(ctx(UNRELATED_STUDENT), 'quizzes')))
+  })
+
+  it('writes are already scoped: a foreign teacher cannot edit the quiz', async () => {
+    await assertFails(
+      updateDoc(doc(ctx(TEACHER), 'quizzes', 'quiz-1'), { title: 'hijacked' }),
+    )
   })
 })
