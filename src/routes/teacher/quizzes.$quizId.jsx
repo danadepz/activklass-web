@@ -611,9 +611,10 @@ function GrantAttemptButton({ quizId, studentId, refetch }) {
   )
 }
 
-function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
+export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
   const [detailsFor, setDetailsFor] = useState(null)
-  const { data, isLoading } = useQuery({
+  const queryClient = useQueryClient()
+  const { data, isLoading, refetch: refetchResults } = useQuery({
     queryKey: ['fs-quiz-results', classId, quizId, Array.isArray(assignedTo) ? assignedTo.join(',') : 'all'],
     queryFn: async () => {
       const classSnap = await getDoc(doc(db, 'classes', classId))
@@ -677,7 +678,8 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
             const finished = finishedAttempts(studentAttempts)
             const scores = finished.filter((a) => a.total_score != null).map((a) => a.total_score)
             const best = scores.length ? Math.max(...scores) : null
-            const pendingEssay = finished.some((a) => a.status === 'submitted')
+            const pendingAttempt = finished.find((a) => a.status === 'submitted')
+            const pendingEssay = !!pendingAttempt
             const live = openAttempt(studentAttempts)
             /* The attempt worth reporting on: the one still open if there is
                one, otherwise the most recent finished one. */
@@ -725,7 +727,34 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
                         </span>
                       )}
                     </>
-                  ) : finished.length === 0 ? 'Not taken' : pendingEssay ? 'Essay pending review' : 'Graded'}
+                  ) : finished.length === 0 ? (
+                    'Not taken'
+                  ) : pendingEssay ? (
+                    <button
+                      type="button"
+                      onClick={() => setDetailsFor({ student: s, allowed, best, attempts: finished, initialAttemptId: pendingAttempt?.id })}
+                      className="transition hover:opacity-80"
+                      title="Review and grade submitted essay"
+                      style={{
+                        background: 'rgba(217,119,6,0.1)',
+                        border: '1px solid rgba(217,119,6,0.3)',
+                        color: goldDeep,
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <span>Essay pending review</span>
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  ) : (
+                    <span style={{ color: green, fontWeight: 600 }}>Graded</span>
+                  )}
                 </td>
                 {/* Reopens and away-events, stated as observations. A dropped
                     connection and a deliberate walk-away look identical from
@@ -735,6 +764,30 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
                 </td>
                 <td style={{ padding: '12px 18px', textAlign: 'right' }}>
                   <div className="flex items-center justify-end gap-1.5">
+                    {pendingEssay && (
+                      <button
+                        type="button"
+                        onClick={() => setDetailsFor({ student: s, allowed, best, attempts: finished, initialAttemptId: pendingAttempt?.id })}
+                        className="transition hover:brightness-95"
+                        title="Review and score essay"
+                        style={{
+                          background: 'rgba(14,42,92,0.06)',
+                          border: `1px solid ${line}`,
+                          color: ink,
+                          borderRadius: 8,
+                          padding: '5px 10px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Review essay
+                      </button>
+                    )}
                     {/* Only for an attempt that is actually open — there is
                         nothing to discard otherwise, and the button would read
                         as "delete this result". */}
@@ -760,7 +813,11 @@ function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }
           quiz={quiz}
           totalPoints={totalPoints}
           onClose={() => setDetailsFor(null)}
-          refetchResults={refetch}
+          refetchResults={() => {
+            refetchResults?.()
+            queryClient.invalidateQueries({ queryKey: ['fs-quiz-results', classId, quizId] })
+            refetch?.()
+          }}
         />
       )}
     </div>
@@ -805,7 +862,7 @@ async function saveEssayMarks(attempt, marks) {
  * student -- each attempt row already opens its own answers independently,
  * which covers the ordinary case of one open attempt at a time.
  */
-function AttemptAnswers({ attempt, quiz, onMarked }) {
+export function AttemptAnswers({ attempt, quiz, onMarked }) {
   const [drafts, setDrafts] = useState({})
   const [error, setError] = useState(null)
   const questions = quiz?.questions ?? []
@@ -817,9 +874,28 @@ function AttemptAnswers({ attempt, quiz, onMarked }) {
   const [save, savingAction] = useAsyncAction(async () => {
     const marks = {}
     for (const [qid, d] of Object.entries(drafts)) {
-      if (d?.touched) marks[qid] = { earned: d.earned, feedback: d.feedback }
+      if (d?.touched) {
+        if (d.earned === '' || d.earned === null || isNaN(Number(d.earned))) {
+          setError('Please enter a valid numeric score.')
+          return
+        }
+        const val = Number(d.earned)
+        const pq = perQById[qid]
+        if (val < 0) {
+          setError('Score cannot be negative.')
+          return
+        }
+        if (pq && val > pq.possible) {
+          setError(`Score cannot exceed maximum of ${pq.possible}.`)
+          return
+        }
+        marks[qid] = { earned: val, feedback: d.feedback }
+      }
     }
-    if (!Object.keys(marks).length) return
+    if (!Object.keys(marks).length) {
+      setError('Please enter a score before saving.')
+      return
+    }
     setError(null)
     try {
       const result = await saveEssayMarks(attempt, marks)
@@ -846,9 +922,16 @@ function AttemptAnswers({ attempt, quiz, onMarked }) {
               Q{i + 1}. <span style={{ fontWeight: 400, color: '#3A4A6B' }}>{q.text}</span>
               <span style={{ color: faint, fontWeight: 400 }}> · {TYPE_LABELS[q.qtype] || q.qtype} · {q.points} pts</span>
             </p>
-            <p style={{ fontSize: 12.5, color: '#3A4A6B', margin: '4px 0 0' }}>
-              <strong>Answer: </strong>{studentAnswerText(q, given)}
-            </p>
+            <div style={{ fontSize: 12.5, color: '#3A4A6B', margin: '4px 0 0' }}>
+              <strong>Answer: </strong>
+              {q.qtype === 'essay' ? (
+                <div style={{ marginTop: 4, padding: '8px 10px', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 6, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {studentAnswerText(q, given)}
+                </div>
+              ) : (
+                <span>{studentAnswerText(q, given)}</span>
+              )}
+            </div>
             {q.qtype !== 'essay' && (
               <p style={{ fontSize: 11.5, margin: '2px 0 0', color: pq?.correct ? green : red }}>
                 {pq?.correct ? 'Correct' : 'Incorrect'}
@@ -913,15 +996,19 @@ function AttemptAnswers({ attempt, quiz, onMarked }) {
  * plus this quiz's attempts for that student. Never a password -- the
  * fields kept on the row (see ResultsView above) do not include one.
  */
-function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, onClose, refetchResults }) {
-  const { student: s, allowed } = detailsFor
+export function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, onClose, refetchResults }) {
+  const { student: s, allowed, initialAttemptId } = detailsFor
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: `${s.last_name}, ${s.first_name}` })
   // A local copy so marking an essay updates this dialog immediately, without
   // waiting on the results table's own refetch (still triggered, for when
   // this closes) -- detailsFor is a snapshot taken at the moment "View
   // details" was clicked and does not update on its own.
-  const [attempts, setAttempts] = useState(detailsFor.attempts)
-  const [openAttemptId, setOpenAttemptId] = useState(null)
+  const [attempts, setAttempts] = useState(detailsFor.attempts ?? [])
+  const [openAttemptId, setOpenAttemptId] = useState(() => {
+    if (initialAttemptId) return initialAttemptId
+    const pending = (detailsFor.attempts ?? []).find((a) => a.status === 'submitted')
+    return pending?.id ?? null
+  })
   const scores = attempts.filter((a) => a.total_score != null).map((a) => a.total_score)
   const best = scores.length ? Math.max(...scores) : null
 
@@ -942,7 +1029,7 @@ function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, onClose, 
 
   return (
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
-      <div {...panelProps} style={{ width: '100%', maxWidth: 420, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 540, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div className="flex items-start justify-between gap-3" style={{ padding: '22px 26px 16px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
           <h2 style={{ ...serif, fontSize: 20, margin: 0, color: ink }}>{s.last_name}, {s.first_name}</h2>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: faint, cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
