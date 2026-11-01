@@ -265,3 +265,22 @@ export async function syncEntries(classId) {
   }
   await batch.commit()
 }
+
+/** Refuse a setup that would hide existing assessment columns and scores.
+ * Configuration replacement is not an assessment migration. Keep the original
+ * identifiers, or move/remove assessments explicitly in the class record first.
+ */
+export async function assertAssessmentBindings(classId, periods, components) {
+  const snap = await getDocs(collection(db, 'gradebooks', classId, 'assessments'))
+  const periodIds = new Set(periods.map((p) => p.id))
+  const componentIds = new Set(components.map((c) => c.id))
+  const disconnected = snap.docs.map((d) => d.data()).filter(
+    (a) => !periodIds.has(a.period_id) || !componentIds.has(a.component_id),
+  )
+  if (disconnected.length) {
+    throw new Error(
+      `This setup would hide existing assessments (${disconnected.map((a) => a.title ?? 'Untitled').join(', ')}). `
+      + 'Keep their grading periods and components, or move the assessments in the Class Record before saving.',
+    )
+  }
+}

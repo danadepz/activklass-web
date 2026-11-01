@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
-import { computeFinalGrade, gradePolicy, isPassingGrade } from '@/lib/grading'
+import { computeFinalGrade, gradePolicy, isPassingGrade, pointScaleBands } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
 import { MetricCard, Panel } from '@/components/ui/Card'
@@ -179,6 +179,14 @@ export default function PerformancePage() {
   const rows = buildRows(bundle, period)
   const graded = rows.filter((r) => r.grade != null)
   const vals = graded.map((r) => r.grade)
+  const pointScale = bundle.mode === 'ched_point'
+  const lowerIsBetter = pointScale && bundle.policy.point_scale_direction !== 'inverted'
+  const bestFirst = (a, b) => lowerIsBetter ? a.grade - b.grade : b.grade - a.grade
+  // Point grades use the existing conversion bands, never percentage cutoffs.
+  const bands = pointScale ? pointScaleBands(bundle.policy) : []
+  const performancePercent = (grade) => pointScale
+    ? (bands.find((b) => lowerIsBetter ? grade <= b.point : grade >= b.point)?.from ?? 0)
+    : grade
 
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
   // The gradebook's own pass mark and point-scale direction, not a fixed 75:
@@ -194,11 +202,11 @@ export default function PerformancePage() {
      A teacher reading them as the same claim trusts the wrong number, so the
      two past-tense ones now say what they measure and only the forecast keeps
      the word "risk". See BACKLOG #3. */
-  const belowVsCount = vals.filter((v) => v < 85).length
-  const hi = vals.length ? Math.max(...vals) : null
+  const belowVsCount = vals.filter((v) => performancePercent(v) < 85).length
+  const hi = vals.length ? (lowerIsBetter ? Math.min(...vals) : Math.max(...vals)) : null
 
   // distribution
-  const dist = BINS.map((b) => ({ ...b, count: graded.filter((r) => r.grade >= b.min && r.grade <= b.max).length }))
+  const dist = BINS.map((b) => ({ ...b, count: graded.filter((r) => performancePercent(r.grade) >= b.min && performancePercent(r.grade) <= b.max).length }))
   const distMax = Math.max(1, ...dist.map((d) => d.count))
 
   // component averages (class mean of each component's percentage)
@@ -208,8 +216,8 @@ export default function PerformancePage() {
     return { id: c.id, name: c.name, value }
   })
 
-  const top = [...graded].sort((a, b) => b.grade - a.grade).slice(0, 3)
-  const belowVs = [...graded].filter((r) => r.grade < 85).sort((a, b) => a.grade - b.grade)
+  const top = [...graded].sort(bestFirst).slice(0, 3)
+  const belowVs = [...graded].filter((r) => performancePercent(r.grade) < 85).sort((a, b) => bestFirst(b, a))
 
   const weakestComponent = (r) => {
     let lowest = null
@@ -268,8 +276,8 @@ export default function PerformancePage() {
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <MetricCard label="Class Average" value={fmt(avg)} sub={`${graded.length} of ${bundle.students.length} assessed`} Icon={BarChart} tint="rgba(14,42,92,0.07)" iconColor={navy} />
         <MetricCard label="Passing Rate" value={passingRate} sub={`${passed} of ${vals.length} ${passMark}`} valueColor={green} Icon={Check} tint="rgba(31,138,91,0.1)" iconColor={green} />
-        <MetricCard label="Below VS" value={belowVsCount} sub="grade below 85 this period" valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={belowVsCount > 0} />
-        <MetricCard label="Highest" value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} valueColor={green} Icon={TrendingUp} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
+        <MetricCard label="Below VS" value={belowVsCount} sub={pointScale ? 'below the 85% equivalent band' : 'grade below 85 this period'} valueColor={goldDeep} Icon={AlertCircle} tint="rgba(245,197,24,0.15)" iconColor={goldDeep} highlight={belowVsCount > 0} />
+        <MetricCard label={pointScale ? 'Best Grade' : 'Highest'} value={hi == null ? '—' : fmt(hi)} sub={top[0] ? `${top[0].last_name}, ${top[0].first_name}` : ''} valueColor={green} Icon={TrendingUp} tint="rgba(63,169,245,0.13)" iconColor={blueText} />
       </div>
 
       {graded.length === 0 ? (
@@ -280,7 +288,7 @@ export default function PerformancePage() {
         <>
           {/* Distribution + component averages */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-            <Card title="Grade Distribution" sub={`${graded.length} graded students`}>
+            <Card title="Grade Distribution" sub={`${graded.length} graded students${pointScale ? ' · percentage equivalent bands' : ''}`}>
               <div className="grid items-end" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, height: 180, padding: '0 8px', borderBottom: '1px solid rgba(14,42,92,0.08)' }}>
                 {dist.map((d) => (
                   <div key={d.label} className="flex flex-col items-center justify-end" style={{ height: '100%', gap: 6 }}>
@@ -324,7 +332,7 @@ export default function PerformancePage() {
                       <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>{r.last_name}, {r.first_name}</div>
                       {r.lrn && <div style={{ ...mono, fontSize: 11, color: faint, marginTop: 1 }}>{r.lrn}</div>}
                     </div>
-                    <span style={{ ...serif, fontSize: 24, lineHeight: 1, color: gradeColor(r.grade) }}>{fmt(r.grade)}</span>
+                    <span style={{ ...serif, fontSize: 24, lineHeight: 1, color: gradeColor(performancePercent(r.grade)) }}>{fmt(r.grade)}</span>
                   </div>
                 ))}
               </div>
@@ -333,7 +341,7 @@ export default function PerformancePage() {
             <div style={{ background: '#FFFFFF', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 16, padding: '20px 22px', boxShadow: '0 0 0 3px rgba(245,197,24,0.06)' }}>
               <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 4px' }}>Below Very Satisfactory</h3>
               <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px' }}>
-                Grade under 85 — a record of work already marked, not a forecast.
+                {pointScale ? 'Below the point-scale band for 85%' : 'Grade under 85'} — a record of work already marked, not a forecast.
               </p>
               {belowVs.length === 0 ? (
                 <EmptyBox>No students below the Very Satisfactory threshold — nice work.</EmptyBox>

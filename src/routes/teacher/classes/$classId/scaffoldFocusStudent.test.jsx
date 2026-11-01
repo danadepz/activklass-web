@@ -118,3 +118,12 @@ describe('Scaffold Topics — Student Focus Hand-off from Performance', () => {
     expect(html).toContain('Create remediation')
   })
 })
+
+it('TC-SCAF-07: untracked syllabus topics remain actionable alongside tracked topics', () => {
+  const html = render(base)
+  expect(html).toContain('Cell Structure')
+  expect(html).toContain('Syllabus topics')
+  expect(html).toContain('Genetics')
+  const untracked = html.slice(html.indexOf('Syllabus topics'))
+  expect(untracked).toContain('Create remediation')
+})

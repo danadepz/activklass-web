@@ -1047,7 +1047,7 @@ export default function ScaffoldTopicsPage() {
       )}
 
       {/* untracked syllabus topics ready to scaffold */}
-      {untrackedSyllabusTopics.length > 0 && rows.length === 0 && (
+      {untrackedSyllabusTopics.length > 0 && (
         <div className="mb-[22px]">
           <SectionHead dot={blueText} title="Syllabus topics" note={`${untrackedSyllabusTopics.length} topic${untrackedSyllabusTopics.length === 1 ? '' : 's'} · ready for remediation`} />
           <div className="flex flex-col gap-3">

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
-import { syncEntries } from '@/lib/gradebook'
+import { assertAssessmentBindings, syncEntries } from '@/lib/gradebook'
 import {
   GRADING_MODES,
   GRADING_PRESETS,
@@ -680,7 +680,7 @@ export function PreviewPanel({ periods, components, mode, policy, labOn = false,
  * recorded grades are recomputed. So editing a template never silently
  * changes a class configured from it earlier -- a class holds its own copy.
  */
-function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
+export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
   const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['fs-grading-templates'],
@@ -712,6 +712,7 @@ function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
       message: 'Templates are configurations you can reuse on other classes. Saving one changes no class.',
       label: 'Template name',
       placeholder: 'e.g. College — Lecture with Laboratory',
+      required: true,
       confirmLabel: 'Save template',
     })
     if (!name?.trim()) return
@@ -1049,6 +1050,11 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
        mid-save left the stores disagreeing. Now, once this request reaches
        the server, the save completes whether or not this page is still open;
        keepalive lets the browser finish sending it even on unload. */
+    // Check every selected class before the first write. Replacing ids can
+    // orphan assessment columns even though their score documents survive.
+    await Promise.all(selectedClassIds.map((cid) =>
+      assertAssessmentBindings(cid, processedPeriods, processedComponents),
+    ))
     const res = await api('/api/grading-setup', {
       method: 'POST',
       keepalive: true,
@@ -1334,7 +1340,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
               onClick={async () => {
                 if (await confirmDialog({
                   title: `Apply the "${p.label}" preset?`,
-                  message: 'Your current periods and components are replaced by this preset. Grades already recorded are not affected.',
+                  message: 'Your current periods and components are replaced by this preset on the selected classes. Recorded grades are recomputed. A setup that would hide existing assessments is refused.',
                   confirmLabel: 'Apply preset',
                 })) {
                   applyPreset.mutate(p)

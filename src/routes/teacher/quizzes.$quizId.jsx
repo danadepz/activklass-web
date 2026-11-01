@@ -510,8 +510,8 @@ function PostScoresButton({ quiz, classId, auto }) {
   })
   const leadLine = describePostScoresLine({ mapped: !!mapping, auto })
   return (
-    <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-      <p role="status" style={{ fontSize: 11.5, color: auto?.skipped?.length ? goldDeep : faint, margin: 0, textAlign: 'right', maxWidth: 420, lineHeight: 1.45 }}>
+    <div style={{ flex: '1 0 100%', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+      <p role="status" style={{ fontSize: 11.5, color: auto?.skipped?.length ? goldDeep : faint, margin: 0, lineHeight: 1.45 }}>
         {leadLine}
       </p>
       <button
@@ -520,7 +520,7 @@ function PostScoresButton({ quiz, classId, auto }) {
         disabled={posting}
         title="Scores already post on their own — this writes them in right now instead of waiting for the next page open"
         className="transition hover:brightness-105 disabled:opacity-50"
-        style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy }}
+        style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy, whiteSpace: 'nowrap', flexShrink: 0 }}
       >
         {posting ? 'Posting…' : 'Post Scores Now'}
       </button>
@@ -2511,13 +2511,13 @@ export default function QuizBuilderPage() {
           {quiz.status === 'published' && <LiveSettings quiz={quiz} refetch={refetch} />}
           {assignedClasses.length > 0 ? (
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <label style={{ ...labelStyle, marginBottom: 0 }}>View Results For Class:</label>
+              <div className="flex flex-wrap items-start gap-3 mb-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 18, minWidth: 0 }}>
+                <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>View Results For Class:</label>
                 <select
                   className="ak-input"
                   value={selectedResultsClassId}
                   onChange={(e) => setSelectedResultsClassId(e.target.value)}
-                  style={{ ...fieldStyle, width: 'auto', cursor: 'pointer' }}
+                  style={{ ...fieldStyle, width: '100%', maxWidth: '100%', minWidth: 0, flex: '1 1 280px', cursor: 'pointer' }}
                 >
                   {assignedClasses.map((c) => (
                     <option key={c.id} value={c.id}>{c.section} ({c.subject})</option>
