@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   addDoc,
@@ -357,8 +357,25 @@ function ReadinessPanel({ bundle, periodId }) {
   )
 }
 
-function RecordGrid({ classId, record, bundle, refetch }) {
+const UNSAVED_RECORD_LEAVE_PROMPT = {
+  title: 'Unsaved Class Record Changes',
+  message: 'Some score changes have not been saved. Stay and save them, or discard them and leave.',
+  confirmLabel: 'Discard and Leave',
+  cancelLabel: 'Keep Editing',
+  tone: 'danger',
+}
+
+// Dirty values are the input strings, including blanks and M/X. Compare the
+// exact saved strings so completion of an older save cannot erase a newer edit.
+function withoutSavedValues(current, saved) {
+  return Object.fromEntries(Object.entries(current).filter(([key, value]) =>
+    !Object.hasOwn(saved, key) || saved[key] !== value,
+  ))
+}
+
+export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const [dirty, setDirty] = useState({})
   const [dirtyOverrides, setDirtyOverrides] = useState({})
   const [error, setError] = useState(null)
@@ -380,6 +397,43 @@ function RecordGrid({ classId, record, bundle, refetch }) {
   const dirtyCount =
     Object.values(dirty).reduce((n, cells) => n + Object.keys(cells).length, 0) +
     Object.keys(dirtyOverrides).length
+
+  // Same small guard used by the syllabus editor: BrowserRouter cannot use
+  // useBlocker. Protect reload/close and ordinary in-app link clicks without
+  // changing the router. History/programmatic navigation is not intercepted.
+  const hasChanges = dirtyCount > 0
+  // Only the dirty flag leaves this component. The parent needs it before
+  // Summary/period/lock changes unmount this keyed grid; edits stay local.
+  useEffect(() => {
+    onDirtyChange?.(hasChanges)
+    return () => onDirtyChange?.(false)
+  }, [hasChanges, onDirtyChange])
+
+  useEffect(() => {
+    if (!hasChanges) return
+    const warn = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const intercept = (e) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const anchor = e.target?.closest?.('a[href]')
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return
+      const href = anchor.getAttribute('href')
+      if (!href?.startsWith('/') || href.startsWith('//') || href === window.location.pathname) return
+      e.preventDefault()
+      e.stopPropagation()
+      confirmDialog(UNSAVED_RECORD_LEAVE_PROMPT).then((leave) => {
+        if (leave) navigate(href)
+      })
+    }
+    window.addEventListener('beforeunload', warn)
+    document.addEventListener('click', intercept, true)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      document.removeEventListener('click', intercept, true)
+    }
+  }, [hasChanges, navigate])
 
   const getCell = (assessmentId, studentId) =>
     dirty[assessmentId]?.[studentId] ?? cellText(record.scores[assessmentId]?.[studentId])
@@ -415,6 +469,8 @@ function RecordGrid({ classId, record, bundle, refetch }) {
   }
 
   async function saveAll() {
+    const savedDirty = Object.fromEntries(Object.entries(dirty).map(([id, cells]) => [id, { ...cells }]))
+    const savedOverrides = { ...dirtyOverrides }
     setSaving(true)
     setError(null)
     try {
@@ -425,7 +481,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
       // log line, and updated_at (below) still carries the server's.
       const now = new Date().toISOString()
 
-      for (const [assessmentId, cells] of Object.entries(dirty)) {
+      for (const [assessmentId, cells] of Object.entries(savedDirty)) {
         const assessment = record.assessments.find((a) => a.id === assessmentId)
         const updates = {}
         for (const [studentId, text] of Object.entries(cells)) {
@@ -466,7 +522,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
       }
 
       const overrideUpdates = {}
-      for (const [studentId, text] of Object.entries(dirtyOverrides)) {
+      for (const [studentId, text] of Object.entries(savedOverrides)) {
         const value = String(text).trim()
         const path = `overrides.${record.period.id}.${studentId}`
         if (value === '') {
@@ -484,7 +540,7 @@ function RecordGrid({ classId, record, bundle, refetch }) {
         const existing = gbSnap.exists() ? (gbSnap.data().override_changes ?? []) : []
         overrideUpdates.override_changes = [
           ...existing,
-          { at: now, period_id: record.period.id, student_ids: Object.keys(dirtyOverrides), by: profile.id },
+          { at: now, period_id: record.period.id, student_ids: Object.keys(savedOverrides), by: profile.id },
         ].slice(-200)
         batch.update(doc(db, 'gradebooks', classId), overrideUpdates)
       }
@@ -494,8 +550,8 @@ function RecordGrid({ classId, record, bundle, refetch }) {
       try { await syncEntries(classId) } catch { /* entries are derived; next save re-syncs */ }
       // Notify students whose scores changed (best-effort).
       const affected = new Set()
-      for (const cells of Object.values(dirty)) for (const sid of Object.keys(cells)) affected.add(sid)
-      for (const sid of Object.keys(dirtyOverrides)) affected.add(sid)
+      for (const cells of Object.values(savedDirty)) for (const sid of Object.keys(cells)) affected.add(sid)
+      for (const sid of Object.keys(savedOverrides)) affected.add(sid)
       if (affected.size) {
         notifyStudents({
           studentIds: [...affected],
@@ -506,8 +562,16 @@ function RecordGrid({ classId, record, bundle, refetch }) {
           link: `/student/classes/${classId}`,
         }).catch(() => {})
       }
-      setDirty({})
-      setDirtyOverrides({})
+      setDirty((current) => {
+        const next = { ...current }
+        for (const [id, cells] of Object.entries(savedDirty)) {
+          const remaining = withoutSavedValues(current[id] ?? {}, cells)
+          if (Object.keys(remaining).length) next[id] = remaining
+          else delete next[id]
+        }
+        return next
+      })
+      setDirtyOverrides((current) => withoutSavedValues(current, savedOverrides))
       refetch()
     } catch (err) {
       setError(err.message)
@@ -1246,6 +1310,8 @@ export default function ClassRecordPage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState(null) // period id, 'summary', or null = first period
+  const gridDirty = useRef(false)
+  const reportGridDirty = useCallback((dirty) => { gridDirty.current = dirty }, [])
 
   const { data: bundle, isLoading, isError } = useQuery({
     queryKey: ['fs-record', classId],
@@ -1253,6 +1319,16 @@ export default function ClassRecordPage() {
   })
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] })
+
+  const canLeaveGrid = async () =>
+    !gridDirty.current || await confirmDialog(UNSAVED_RECORD_LEAVE_PROMPT)
+
+  async function changeTab(next) {
+    const current = tab ?? bundle.periods[0]?.id
+    if (next === current) return // clicking the active period destroys nothing
+    if (!(await canLeaveGrid())) return
+    setTab(next)
+  }
 
   /* Quiz scores post themselves when this page opens (owner decision
      2026-09-13): every published quiz mapped to this class runs the same sync
@@ -1394,6 +1470,7 @@ export default function ClassRecordPage() {
           }
 
           async function toggleLock() {
+            if (!(await canLeaveGrid())) return
             const ask = locked
               ? {
                   title: 'Unlock this period?',
@@ -1424,7 +1501,7 @@ export default function ClassRecordPage() {
                   Grading period
                 </span>
                 {bundle.periods.map((p) => (
-                  <button key={p.id} onClick={() => setTab(p.id)} style={pillStyle(tab !== 'summary' && p.id === record.period.id)}>
+                  <button key={p.id} onClick={() => changeTab(p.id)} style={pillStyle(tab !== 'summary' && p.id === record.period.id)}>
                     {p.name}
                     {p.locked && <Lock aria-hidden className="h-3 w-3 inline-block ml-1 -mb-0.5" />}
                   </button>
@@ -1454,7 +1531,7 @@ export default function ClassRecordPage() {
                       not the active view, instead of the grey a toggle-pill
                       reads as disabled; the gold highlight when selected is
                       unchanged. */}
-                  <button onClick={() => setTab('summary')} style={tab === 'summary' ? pillStyle(true) : { ...btnGhostSm, borderRadius: 999 }}>
+                  <button onClick={() => changeTab('summary')} style={tab === 'summary' ? pillStyle(true) : { ...btnGhostSm, borderRadius: 999 }}>
                     Summary
                   </button>
                 </div>
@@ -1468,6 +1545,7 @@ export default function ClassRecordPage() {
                   record={record}
                   bundle={bundle}
                   refetch={refetch}
+                  onDirtyChange={reportGridDirty}
                 />
               )}
             </>
