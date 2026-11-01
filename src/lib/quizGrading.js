@@ -10,8 +10,22 @@
  *   essay:        rubric: string                           answer = string (teacher-graded)
  *
  * Grades are deterministic and never decided by an LLM (essays are queued for
- * the teacher). Note: answer keys are readable by clients today — hardening that
- * split is a known follow-up (see firestore.rules quizzes comment).
+ * the teacher).
+ *
+ * Group 7 (audit F-06) closed the note that used to be here. Answer keys are no
+ * longer readable by a student client: they live in `quiz_keys/{quizId}`, which
+ * no student rule grants (lib/quizAnswerKey.js). So the functions below that
+ * need a key -- gradeAnswer, gradeQuiz, correctAnswerText -- now only ever run
+ * on a TEACHER's merged copy of a quiz, or on a legacy quiz that still carries
+ * its keys inline. A student's score comes from
+ * `POST /api/quiz_attempts/{id}/submit` and the answers on their feedback page
+ * from `GET /api/quiz_attempts/{id}/review`.
+ *
+ * `matchingChoices` and `matchingLefts` are the exceptions, and the reason a
+ * `matching` field exists on the public question: the player has to draw the
+ * rows and the choices, so the left and right terms are denormalised onto the
+ * quiz document UNPAIRED. Both read that first and fall back to `answer_key`
+ * for a quiz the migration has not reached.
  */
 
 function round2(n) {
@@ -95,11 +109,15 @@ export function correctAnswerText(q) {
     case 'mcq':
       return (q.options ?? []).find((o) => o.is_correct)?.text ?? '—'
     case 'true_false':
-      return q.answer_key?.value ? 'True' : 'False'
+      // No key at all is not an answer of False -- which is what this returned
+      // before Group 7 made a keyless question the normal case on a student
+      // client. See the Python copy for the same guard.
+      if (q.answer_key?.value === undefined) return '—'
+      return q.answer_key.value ? 'True' : 'False'
     case 'short_answer':
       return (q.answer_key?.answers ?? []).join('  /  ') || '—'
     case 'matching':
-      return (q.answer_key?.pairs ?? []).map((p) => `${p.left} → ${p.right}`).join('; ')
+      return (q.answer_key?.pairs ?? []).map((p) => `${p.left} → ${p.right}`).join('; ') || '—'
     case 'essay':
       return q.rubric ? `Rubric: ${q.rubric}` : 'Graded by your teacher'
     default:
@@ -117,8 +135,8 @@ export function studentAnswerText(q, answer) {
     case 'short_answer':
       return String(answer ?? '').trim() ? String(answer) : '— (no answer)'
     case 'matching':
-      return (q.answer_key?.pairs ?? [])
-        .map((p, i) => `${p.left} → ${answer?.[i] || '?'}`)
+      return matchingLefts(q)
+        .map((left, i) => `${left} → ${answer?.[i] || '?'}`)
         .join('; ')
     case 'essay':
       return String(answer ?? '').trim() ? String(answer) : '— (no answer)'
@@ -129,7 +147,21 @@ export function studentAnswerText(q, answer) {
 
 /** Right-hand options for a matching question (deduped). */
 export function matchingChoices(q) {
+  if (q?.matching?.rights) return q.matching.rights
   return [...new Set((q.answer_key?.pairs ?? []).map((p) => p.right))]
+}
+
+/**
+ * Left-hand terms of a matching question, in the order they are asked.
+ *
+ * The player renders one row per entry and the student's answer is keyed by
+ * index, so this order IS the answer's shape. Read from one place rather than
+ * letting each screen pick `matching.lefts` or `answer_key.pairs` for itself
+ * and risk the two disagreeing about which row is row 3.
+ */
+export function matchingLefts(q) {
+  if (q?.matching?.lefts) return q.matching.lefts
+  return (q.answer_key?.pairs ?? []).map((p) => p.left)
 }
 
 /**

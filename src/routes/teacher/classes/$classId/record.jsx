@@ -27,6 +27,7 @@ import { LAB, componentTrack, hasLab, isPassingGrade } from '@/lib/grading'
 import { describeReadiness, periodReadiness } from '@/lib/gradeReadiness'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
+import { loadQuizWithKey } from '@/lib/quizAnswerKey'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
 import { ArrowRight, Check, Clock, X, Lock } from '@/components/icons'
@@ -906,8 +907,10 @@ function ContestReviewModal({ classId, contest, quizId, error, busy, onResolve, 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['fs-contest-attempt', classId, quizId, contest.student_id],
     queryFn: async () => {
-      const qSnap = await getDoc(doc(db, 'quizzes', quizId))
-      const quiz = qSnap.exists() ? { id: qSnap.id, ...qSnap.data() } : null
+      // With its answer key merged back in (Group 7): this panel prints the
+      // correct answer beside the student's, and the quiz document alone no
+      // longer carries it. A teacher may read quiz_keys for their own quiz.
+      const quiz = await loadQuizWithKey(quizId)
       /* Both filters, always. A quiz_id-only read is refused even for the
          teacher who owns the class — the rules cannot prove ownership from
          that query alone (docs/DATA-MODEL.md §4). */

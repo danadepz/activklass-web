@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
+import { writeQuizWithKey } from '@/lib/quizAnswerKey'
 import { db } from '@/lib/firebase'
 import { draftToQuestions, generateQuiz } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
@@ -783,7 +784,11 @@ export default function ScaffoldTopicsPage() {
         difficulty: 'medium',
         hints: { subject: data?.clazz?.subject, targetLevel: 'apply' },
       })
-      const ref = await addDoc(collection(db, 'quizzes'), {
+      // The id is minted here rather than by addDoc: the answer key lands in
+      // `quiz_keys/{id}` (Group 7), so the quiz id has to be known before the
+      // write, not handed back by it.
+      const ref = doc(collection(db, 'quizzes'))
+      const quizFields = {
         // Canonical link. Writing the scalar class_id here is what made
         // remediation quizzes invisible to the student class page, which
         // queries class_ids with array-contains.
@@ -799,11 +804,13 @@ export default function ScaffoldTopicsPage() {
         opens_at: null,
         closes_at: null,
         generated_by: 'ai_generated',
-        questions: draftToQuestions(quiz),
         topic_id: topic.id,
         ai_source: 'anthropic',
         created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
+      }
+      await writeQuizWithKey(ref.id, quizFields, draftToQuestions(quiz), {
+        teacherId: profile.id,
+        schoolId: profile.school_id ?? null,
       })
 
       if (plan) {

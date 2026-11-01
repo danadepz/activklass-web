@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { deleteQuizWithKey, loadQuizWithKey, writeQuizWithKey } from '@/lib/quizAnswerKey'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
@@ -1458,14 +1459,19 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       pool_enabled: !!settings.pool_enabled,
       pool_draw_count: settings.pool_enabled ? Number(settings.pool_draw_count) || null : null,
       class_ids: assignedClassIds,
-      questions: questions.map(toPayload),
       ...topicPatch(settings.topic_id, topicChoices, quiz),
       ...extra,
     }
 
-    await updateDoc(doc(db, 'quizzes', quiz.id), {
-      ...payload,
-      updated_at: serverTimestamp(),
+    // Group 7: the answers never go into the quiz document. writeQuizWithKey
+    // splits `questions` and writes `quizzes/{id}` and `quiz_keys/{id}` in one
+    // batch, so a save cannot leave the key answering the previous paper.
+    await writeQuizWithKey(quiz.id, payload, questions.map(toPayload), {
+      merge: true,
+      teacherId: quiz.teacher_id ?? profile?.id,
+      schoolId: quiz.school_id ?? profile?.school_id ?? null,
+      keyLoaded: quiz._keyLoaded === true,
+      quiz,
     })
   }
 
@@ -1580,7 +1586,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       tone: 'danger',
     }))) return
     try {
-      await deleteDoc(doc(db, 'quizzes', quiz.id))
+      await deleteQuizWithKey(quiz.id)
       navigate(`/teacher/quizzes`)
     } catch (err) {
       setError(err.message)
@@ -2175,7 +2181,17 @@ function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
         setError(problem)
         return
       }
-      await updateDoc(doc(db, 'quizzes', quiz.id), { questions: next, updated_at: serverTimestamp() })
+      // Through the splitter like every other question write: a wording edit
+      // does not touch the answers, but `next` carries them (the builder loads
+      // the key merged in), and writing it back any other way would put them
+      // into the student-readable document.
+      await writeQuizWithKey(quiz.id, {}, next, {
+        merge: true,
+        teacherId: quiz.teacher_id,
+        schoolId: quiz.school_id ?? null,
+        keyLoaded: quiz._keyLoaded === true,
+        quiz,
+      })
       refetch()
       toast.success('Wording updated.')
       onClose()
@@ -2249,12 +2265,15 @@ export default function QuizBuilderPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
 
-  const { data: quiz, isLoading, isError } = useQuery({
+  const { data: quiz, isLoading, isError, error: quizError } = useQuery({
     queryKey: ['fs-quiz', quizId],
     queryFn: async () => {
-      const snap = await getDoc(doc(db, 'quizzes', quizId))
-      if (!snap.exists()) throw new Error('Quiz not found')
-      return { id: snap.id, ...snap.data() }
+      // With the key merged back in: the builder, the preview, the wording
+      // editor and the results panels all read `options[].is_correct` /
+      // `answer_key`, so the split is invisible above this line.
+      const loaded = await loadQuizWithKey(quizId)
+      if (!loaded) throw new Error('Quiz not found')
+      return loaded
     },
   })
 
@@ -2408,7 +2427,18 @@ export default function QuizBuilderPage() {
   }
 
   if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
-  if (isError || !quiz) return <p style={{ color: red }}>Quiz not found.</p>
+  if (isError || !quiz) {
+    if (quizError?.name === 'QuizKeyNotFoundError' || quizError?.name === 'QuizKeyMalformedError' || quizError?.name === 'QuizKeyReadError') {
+      return (
+        <div className="p-6">
+          <AlertBox tone="error">
+            <strong>Unable to load quiz answer key:</strong> {quizError.message}. This quiz cannot be safely edited until its answer key is restored.
+          </AlertBox>
+        </div>
+      )
+    }
+    return <p style={{ color: red }}>Quiz not found.</p>
+  }
 
   const editable = quiz.status === 'draft'
   const questionCount = quiz.questions?.length ?? 0

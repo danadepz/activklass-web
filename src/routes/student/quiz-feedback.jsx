@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
+import { api } from '@/lib/api'
 import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { feedbackVisibility } from '@/lib/quizFeedback'
 import { questionsOfAttempt } from '@/lib/quizPool'
@@ -41,7 +42,25 @@ async function loadFeedback(attemptId) {
     /* Fall back to attempt_number. Failing the page over a count that only
        affects when results unlock would be the worse trade. */
   }
-  return { attempt, quiz, attemptCount }
+  /* Group 7 (audit F-06): the correct answers are no longer in the quiz
+     document -- they are in `quiz_keys/{quizId}`, which no student rule grants.
+     The server hands them over for a finished attempt, and only once this
+     quiz's own release rule allows it (app/services/quiz_feedback.py, the
+     same rule feedbackVisibility() renders below -- this is the first time it
+     is actually ENFORCED rather than merely obeyed by the client).
+
+     Best-effort: a quiz the migration has not reached still carries its keys
+     inline, so correctAnswerText(q) below is the fallback and this page is
+     never blocked on the request. */
+  let correctAnswers = {}
+  try {
+    const review = await api(`/api/quiz_attempts/${attemptId}/review`)
+    correctAnswers = review?.correct_answers ?? {}
+  } catch {
+    /* Left empty; the per-question fallback covers legacy quizzes. */
+  }
+
+  return { attempt, quiz, attemptCount, correctAnswers }
 }
 
 function ResultIcon({ state }) {
@@ -149,6 +168,9 @@ export default function QuizFeedback() {
       <div className="flex flex-col gap-3">
         {questionsOfAttempt(quiz, attempt).map((q, i) => {
           const pq = byId[q.id] ?? {}
+          // The server's answer wins; correctAnswerText(q) only answers for a
+          // legacy quiz whose keys are still in the document it came from.
+          const correctText = data.correctAnswers?.[q.id] ?? correctAnswerText(q)
           const state = pq.pending ? 'pending' : pq.correct ? 'correct' : 'incorrect'
           const studentText = studentAnswerText(q, attempt.answers?.[q.id])
           // The AI rationale restates the correct answer in prose, so it is
@@ -176,7 +198,7 @@ export default function QuizFeedback() {
                     {visible.showCorrectAnswers && state !== 'correct' && q.qtype !== 'essay' && (
                       <div style={{ color: muted, marginTop: 4 }}>
                         <span style={{ fontWeight: 700, color: ink }}>Correct answer:</span>{' '}
-                        <span style={{ color: green }}>{correctAnswerText(q)}</span>
+                        <span style={{ color: green }}>{correctText}</span>
                       </div>
                     )}
                   </div>
@@ -189,7 +211,7 @@ export default function QuizFeedback() {
                           ? (q.rubric ? <><strong style={{ color: ink }}>What we look for:</strong> {q.rubric}</> : 'Your teacher will review and score this response.')
                           : q.explanation
                             ? <><strong style={{ color: ink }}>Explanation:</strong> {q.explanation}</>
-                            : <><strong style={{ color: ink }}>Review:</strong> The correct answer is “{correctAnswerText(q)}”. Revisit this topic in your class materials.</>}
+                            : <><strong style={{ color: ink }}>Review:</strong> The correct answer is “{correctText}”. Revisit this topic in your class materials.</>}
                       </p>
                     </div>
                   )}

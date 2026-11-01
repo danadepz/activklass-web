@@ -68,6 +68,10 @@ vi.mock('@/lib/ai', () => ({
   generateQuiz: (...args) => generateQuiz(...args),
   QUIZ_TYPES: [],
 }))
+/* Group 7: the page writes the quiz through writeBatch now, so the quiz
+   document reaches Firestore as the batch's own `set` -- lib/quizAnswerKey.js
+   puts the answers in `quiz_keys/{id}` in the same batch. Spying on the batch
+   is spying on the same payload this test always checked. */
 const setDoc = vi.fn(async () => {})
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: undefined, isLoading: false, isError: false }),
@@ -80,8 +84,16 @@ vi.mock('react-router-dom', () => ({
 }))
 vi.mock('@/lib/firebase', () => ({ db: {} }))
 vi.mock('firebase/firestore', () => ({
-  doc: vi.fn(), getDoc: vi.fn(), serverTimestamp: vi.fn(),
+  doc: vi.fn((_db, coll) => ({ coll })), getDoc: vi.fn(), serverTimestamp: vi.fn(),
   setDoc: (...args) => setDoc(...args), deleteDoc: vi.fn(),
+  writeBatch: () => ({
+    // Only the quiz document's payload is forwarded to the spy; the key
+    // document is quiz_keys' business and has its own tests.
+    set: (ref, data) => { if (ref?.coll !== 'quiz_keys') setDoc(ref, data) },
+    update: (ref, data) => { if (ref?.coll !== 'quiz_keys') setDoc(ref, data) },
+    delete: vi.fn(),
+    commit: async () => {},
+  }),
 }))
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'T1', role: 'teacher' } }) }))
 vi.mock('@/hooks/useQuizzes', () => ({

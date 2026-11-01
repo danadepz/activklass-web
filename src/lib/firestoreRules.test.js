@@ -25,7 +25,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, deleteDoc, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 
 // ACTIVKLASS_RULES_PATH lets a reviewer point this suite at a modified copy of
 // the rules to prove a test actually discriminates — run it against the rules
@@ -108,8 +108,8 @@ beforeEach(async () => {
   await seedRoles()
 })
 
-describe('quiz_attempts · creating an attempt', () => {
-  it('lets a student open an attempt under their own uid', async () => {
+describe('quiz_attempts · creating an attempt (G7-14 trust boundary)', () => {
+  it('lets a student open an attempt under their own uid in progress', async () => {
     await assertSucceeds(
       setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), {
         quiz_id: 'quiz-1',
@@ -124,6 +124,70 @@ describe('quiz_attempts · creating an attempt', () => {
       setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), {
         quiz_id: 'quiz-1',
         student_id: OTHER_STUDENT,
+        status: 'in_progress',
+      }),
+    )
+  })
+
+  it('refuses an attempt created with forged status submitted or graded (G7-14)', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-forged-1'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'submitted',
+      }),
+    )
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-forged-2'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'graded',
+      }),
+    )
+  })
+
+  it('refuses an attempt created with authoritative total_score or score (G7-14)', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-score-1'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'in_progress',
+        total_score: 100,
+      }),
+    )
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-score-2'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'in_progress',
+        score: 100,
+      }),
+    )
+  })
+
+  it('refuses an attempt created with authoritative per_question or timestamps (G7-14)', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-pq-1'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'in_progress',
+        per_question: [{ id: 'q1', correct: true, earned: 10 }],
+      }),
+    )
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-ts-1'), {
+        quiz_id: 'quiz-1',
+        student_id: STUDENT,
+        status: 'in_progress',
+        submitted_at: serverTimestamp(),
+      }),
+    )
+  })
+
+  it('refuses an attempt created without valid quiz_id (G7-14)', async () => {
+    await assertFails(
+      setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-noquiz'), {
+        student_id: STUDENT,
         status: 'in_progress',
       }),
     )
@@ -228,6 +292,51 @@ describe('quiz_attempts · what the student still must not do', () => {
     await seedAttempt('a1')
     await assertFails(
       updateDoc(doc(ctx(OTHER_STUDENT), 'quiz_attempts', 'a1'), { total_score: 10 }),
+    )
+  })
+
+  it('cannot inject forged total_score or score during in_progress update (V-04)', async () => {
+    await seedAttempt('a1')
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), { total_score: 100 }),
+    )
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), { score: 100 }),
+    )
+  })
+
+  it('cannot inject forged per_question during in_progress update (V-04)', async () => {
+    await seedAttempt('a1')
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), {
+        per_question: [{ id: 'q1', correct: true, earned: 10 }],
+      }),
+    )
+  })
+
+  it('cannot inject forged submitted_at or completed_at during in_progress update (V-04)', async () => {
+    await seedAttempt('a1')
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), { submitted_at: new Date() }),
+    )
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), { completed_at: new Date() }),
+    )
+  })
+
+  it('cannot rewrite question_ids on an open attempt (V-04)', async () => {
+    await seedAttempt('a-pooled', { question_ids: ['q1', 'q2'] })
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-pooled'), {
+        question_ids: ['q1', 'q2', 'q3', 'q4'],
+      }),
+    )
+  })
+
+  it('cannot flip status to submitted directly (V-04)', async () => {
+    await seedAttempt('a1')
+    await assertFails(
+      updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a1'), { status: 'submitted' }),
     )
   })
 
@@ -674,10 +783,10 @@ describe('the guard that stops a submitted attempt being rewritten', () => {
       })
     })
 
-    // Without the guard, a student can rewrite their own finished score.
+    // Without the guard, a student can rewrite their own finished attempt.
     await assertSucceeds(
       updateDoc(doc(weakened.authenticatedContext(STUDENT).firestore(), 'quiz_attempts', 'graded-1'), {
-        total_score: 10,
+        answers: { q1: 'o2' },
       }),
     )
     // And the real ruleset, tested above, refuses exactly this.
@@ -730,12 +839,11 @@ describe('the guard that stops a student finishing their own attempt directly', 
       })
     })
 
-    // Without this guard, a student can finish their own attempt and name
-    // their own score -- no server grading involved at all.
+    // Without this guard, a student can finish their own attempt directly --
+    // no server grading involved at all.
     await assertSucceeds(
       updateDoc(doc(weakened.authenticatedContext(STUDENT).firestore(), 'quiz_attempts', 'open-1'), {
-        status: 'graded',
-        total_score: 9999,
+        status: 'submitted',
       }),
     )
     // And the real ruleset refuses this -- see "refuses the student
@@ -1914,7 +2022,7 @@ describe('grading_templates · client access is closed to all roles (Flask Admin
  * that must keep working. When the fix lands, the two `assertSucceeds` cases
  * marked WIDE below are the ones that must flip to assertFails.
  */
-describe('quizzes · read (current behaviour, exposure pinned)', () => {
+describe('quizzes · read (wide by necessity; the key is no longer in here)', () => {
   const QUIZ_TEACHER = 'quiz-teacher-1'
   const UNRELATED_STUDENT = 'quiz-student-2'
 
@@ -1947,13 +2055,18 @@ describe('quizzes · read (current behaviour, exposure pinned)', () => {
     )))
   })
 
-  it('WIDE: an unrelated student at another school can read the answer key', async () => {
-    // Flip to assertFails when the answer-key fix lands.
+  /* These two stayed `assertSucceeds` after Group 7, deliberately. The fix was
+     not a narrower read -- that was tried, and it denies the student
+     class-page query two tests above, which is the whole reason this rule is
+     so wide (firestore.rules writes out the emulator result). The fix was to
+     take the answers OUT of the document, so what an unrelated account can
+     still read is quiz metadata and question text. The `quiz_keys` block at
+     the end of this file is where the confidentiality is now enforced. */
+  it('WIDE (metadata only): an unrelated student at another school can read a quiz document', async () => {
     await assertSucceeds(getDoc(doc(ctx(UNRELATED_STUDENT), 'quizzes', 'quiz-1')))
   })
 
-  it('WIDE: the whole collection is enumerable by any signed-in account', async () => {
-    // Flip to assertFails when the answer-key fix lands.
+  it('WIDE (metadata only): the whole collection is enumerable by any signed-in account', async () => {
     await assertSucceeds(getDocs(collection(ctx(UNRELATED_STUDENT), 'quizzes')))
   })
 
@@ -1961,5 +2074,252 @@ describe('quizzes · read (current behaviour, exposure pinned)', () => {
     await assertFails(
       updateDoc(doc(ctx(TEACHER), 'quizzes', 'quiz-1'), { title: 'hijacked' }),
     )
+  })
+})
+
+
+/**
+ * quiz_keys - where the answers went (Group 7, audit F-06).
+ *
+ * The point of the collection is that no student clause exists at all. A
+ * student taking a quiz does not need the key (grading is
+ * `POST /api/quiz_attempts/{id}/submit`, server-side) and a student reviewing a
+ * finished one gets the answers from `GET /api/quiz_attempts/{id}/review`,
+ * which checks the release rule first. Granting a read here even "only after
+ * they submit" would hand over the key for every other question in the pool
+ * and for every retake still to come.
+ *
+ * Pointed at the pre-Group-7 rules through ACTIVKLASS_RULES_PATH, every
+ * `assertFails` below passes trivially -- the collection had no rule, so
+ * everything was denied. The cases that prove this block actually works are
+ * therefore the teacher and admin `assertSucceeds` ones; the student denials
+ * are the ones that go red if a later edit ever widens it.
+ */
+describe('quiz_keys · the answer key', () => {
+  const KEY_TEACHER = 'key-teacher-1'
+  const FOREIGN_TEACHER = 'key-teacher-2'
+  const KEY_ADMIN = 'key-admin-1'
+  const FOREIGN_KEY_ADMIN = 'key-admin-2'
+
+  beforeEach(async () => {
+    await testEnv.clearFirestore()
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', KEY_TEACHER), { role: 'teacher', first_name: 'K', last_name: 'T', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', KEY_ADMIN), { role: 'admin', first_name: 'K', last_name: 'A', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_KEY_ADMIN), { role: 'admin', first_name: 'F', last_name: 'A', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B', teacher_ids: [KEY_TEACHER] })
+      await setDoc(doc(db, 'classes', 'class-1'), { teacher_id: KEY_TEACHER, student_ids: [STUDENT] })
+      await setDoc(doc(db, 'quizzes', 'quiz-1'), {
+        teacher_id: KEY_TEACHER, class_ids: ['class-1'],
+        questions: [{ id: 'q1', qtype: 'mcq', options: [{ id: 'o1', text: 'Manila' }] }],
+      })
+      await setDoc(doc(db, 'quizzes', 'quiz-2'), {
+        teacher_id: KEY_TEACHER, class_ids: ['class-1'],
+        questions: [{ id: 'q2', qtype: 'mcq', options: [{ id: 'o1', text: 'Cebu' }] }],
+      })
+      await setDoc(doc(db, 'quizzes', 'foreign-quiz'), {
+        teacher_id: FOREIGN_TEACHER, class_ids: ['class-2'],
+        questions: [{ id: 'q3', qtype: 'mcq', options: [{ id: 'o1', text: 'Davao' }] }],
+      })
+      await setDoc(doc(db, 'quiz_keys', 'quiz-1'), {
+        quiz_id: 'quiz-1', teacher_id: KEY_TEACHER, school_id: 'school-1', class_ids: ['class-1'],
+        keys: { q1: { id: 'q1', qtype: 'mcq', correct_option_ids: ['o1'] } },
+      })
+    })
+  })
+
+  it('a student enrolled in the class cannot read the key', async () => {
+    await assertFails(getDoc(doc(ctx(STUDENT), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('a student cannot enumerate the collection', async () => {
+    await assertFails(getDocs(collection(ctx(STUDENT), 'quiz_keys')))
+  })
+
+  it('a student cannot enumerate it filtered by their own class either', async () => {
+    // The shape they would reach for, given class_ids is on the document.
+    await assertFails(getDocs(query(
+      collection(ctx(STUDENT), 'quiz_keys'),
+      where('class_ids', 'array-contains', 'class-1'),
+    )))
+  })
+
+  it('a student cannot write a key', async () => {
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_keys', 'quiz-2'), { teacher_id: STUDENT, keys: {} }))
+  })
+
+  it('a student cannot overwrite an existing key to read it back', async () => {
+    await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_keys', 'quiz-1'), { keys: {} }))
+  })
+
+  it('a student cannot delete a key', async () => {
+    await assertFails(deleteDoc(doc(ctx(STUDENT), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('the owning teacher can read their own quiz key', async () => {
+    await assertSucceeds(getDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('the owning teacher can create, update and delete their own quiz key (G7-03)', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'quiz-1'), { keys: {} }))
+    await assertSucceeds(setDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'quiz-2'), {
+      quiz_id: 'quiz-2', teacher_id: KEY_TEACHER, keys: {},
+    }))
+    await assertSucceeds(deleteDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('a teacher cannot squat a key for a quiz owned by another teacher (G7-03)', async () => {
+    // Teacher A attempts to create a key document for Teacher B's quiz naming themselves
+    await assertFails(setDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'foreign-quiz'), {
+      quiz_id: 'foreign-quiz', teacher_id: KEY_TEACHER, keys: {},
+    }))
+  })
+
+  it('a teacher cannot create a key for a non-existent quiz (G7-03)', async () => {
+    await assertFails(setDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'unreal-quiz'), {
+      quiz_id: 'unreal-quiz', teacher_id: KEY_TEACHER, keys: {},
+    }))
+  })
+
+  it('a teacher at another school cannot read the key', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_TEACHER), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('a teacher cannot plant a key document naming someone else as its owner', async () => {
+    await assertFails(setDoc(doc(ctx(FOREIGN_TEACHER), 'quiz_keys', 'quiz-3'), {
+      quiz_id: 'quiz-3', teacher_id: KEY_TEACHER, keys: {},
+    }))
+  })
+
+  it('a teacher cannot reassign an existing key away from themselves', async () => {
+    await assertFails(updateDoc(doc(ctx(KEY_TEACHER), 'quiz_keys', 'quiz-1'), { teacher_id: FOREIGN_TEACHER }))
+  })
+
+  it('a same-school admin can read the key', async () => {
+    await assertSucceeds(getDoc(doc(ctx(KEY_ADMIN), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('a same-school admin can update the key while preserving teacher_id (G7-04)', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(KEY_ADMIN), 'quiz_keys', 'quiz-1'), {
+      keys: { q1: { id: 'q1', qtype: 'mcq', correct_option_ids: ['o1'] } },
+      teacher_id: KEY_TEACHER,
+    }))
+  })
+
+  it('an admin CANNOT reassign a key to a teacher at another school (G7-04)', async () => {
+    await assertFails(updateDoc(doc(ctx(KEY_ADMIN), 'quiz_keys', 'quiz-1'), {
+      teacher_id: FOREIGN_TEACHER,
+    }))
+  })
+
+  it('an admin at another school is refused reading or updating the key (tenant isolation)', async () => {
+    await assertFails(getDoc(doc(ctx(FOREIGN_KEY_ADMIN), 'quiz_keys', 'quiz-1')))
+    await assertFails(updateDoc(doc(ctx(FOREIGN_KEY_ADMIN), 'quiz_keys', 'quiz-1'), { keys: {} }))
+  })
+
+  it('an unauthenticated caller cannot read the key', async () => {
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'quiz_keys', 'quiz-1')))
+  })
+
+  it('nobody can enumerate the collection, the owning teacher included', async () => {
+    // `list` is `if false` on purpose: the document id IS the quiz id, so every
+    // legitimate access is a direct get and no query shape has to be provable.
+    // A list rule here would be surface with no reader.
+    await assertFails(getDocs(collection(ctx(KEY_TEACHER), 'quiz_keys')))
+  })
+
+  // =========================================================================
+  // V-09 REAL SAME-BATCH FIRESTORE WRITE TESTS
+  // =========================================================================
+
+  it('A. Teacher creates their own new quiz + key in SAME batch (V-09): ALLOW', async () => {
+    const db = ctx(KEY_TEACHER)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'quizzes', 'brand-new-quiz'), {
+      teacher_id: KEY_TEACHER,
+      class_ids: ['class-1'],
+      title: 'New Quiz',
+      questions: [{ id: 'q1', text: 'Q1' }],
+    })
+    batch.set(doc(db, 'quiz_keys', 'brand-new-quiz'), {
+      quiz_id: 'brand-new-quiz',
+      teacher_id: KEY_TEACHER,
+      school_id: 'school-1',
+      keys: { q1: { id: 'q1', correct_option_ids: ['o1'] } },
+    })
+    await assertSucceeds(batch.commit())
+  })
+
+  it('B. Teacher attempts to create/squat a key for another teacher\'s quiz in same batch (V-09): DENY', async () => {
+    const db = ctx(KEY_TEACHER)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'quizzes', 'squatted-quiz'), {
+      teacher_id: FOREIGN_TEACHER,
+      class_ids: ['class-2'],
+      title: 'Foreign Quiz',
+      questions: [],
+    })
+    batch.set(doc(db, 'quiz_keys', 'squatted-quiz'), {
+      quiz_id: 'squatted-quiz',
+      teacher_id: KEY_TEACHER,
+      school_id: 'school-1',
+      keys: {},
+    })
+    await assertFails(batch.commit())
+  })
+
+  it('C. Foreign-school teacher cannot create key for another school\'s quiz (V-09): DENY', async () => {
+    const db = ctx(FOREIGN_TEACHER)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'quiz_keys', 'quiz-1'), {
+      quiz_id: 'quiz-1',
+      teacher_id: FOREIGN_TEACHER,
+      school_id: 'school-2',
+      keys: {},
+    })
+    await assertFails(batch.commit())
+  })
+
+  it('D. Student cannot create quiz_keys in same batch or singly (V-09): DENY', async () => {
+    const db = ctx(STUDENT)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'quiz_keys', 'student-forged-key'), {
+      quiz_id: 'student-forged-key',
+      teacher_id: STUDENT,
+      keys: {},
+    })
+    await assertFails(batch.commit())
+  })
+
+  it('E. Same-school admin can create key for teacher\'s quiz in same batch (V-09): ALLOW', async () => {
+    const db = ctx(KEY_ADMIN)
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'quizzes', 'quiz-2'), { title: 'Admin Updated Title' })
+    batch.set(doc(db, 'quiz_keys', 'quiz-2'), {
+      quiz_id: 'quiz-2',
+      teacher_id: KEY_TEACHER,
+      school_id: 'school-1',
+      keys: { q2: { id: 'q2', correct_option_ids: ['o1'] } },
+    })
+    await assertSucceeds(batch.commit())
+  })
+
+  it('admin creating key with mismatched teacher_id is refused (V-09): DENY', async () => {
+    const db = ctx(KEY_ADMIN)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'quizzes', 'admin-mismatched-quiz'), {
+      teacher_id: KEY_TEACHER,
+      school_id: 'school-1',
+      questions: [],
+    })
+    batch.set(doc(db, 'quiz_keys', 'admin-mismatched-quiz'), {
+      quiz_id: 'admin-mismatched-quiz',
+      teacher_id: FOREIGN_TEACHER,
+      school_id: 'school-1',
+      keys: {},
+    })
+    await assertFails(batch.commit())
   })
 })

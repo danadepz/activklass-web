@@ -22,7 +22,7 @@ import {
   recordReopen,
   startAttempt,
 } from '@/hooks/useAttemptSession'
-import { matchingChoices } from '@/lib/quizGrading'
+import { matchingChoices, matchingLefts } from '@/lib/quizGrading'
 import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
 import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono } from '@/theme'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -150,13 +150,16 @@ function QuestionView({ q, answer, setAnswer }) {
     )
   }
   if (q.qtype === 'matching') {
-    const pairs = q.answer_key?.pairs ?? []
+    // Group 7: the rows come from the quiz document's unpaired `matching.lefts`
+    // (matchingLefts falls back to answer_key for a quiz the migration has not
+    // reached). The pairing itself is in quiz_keys, which this client cannot read.
+    const lefts = matchingLefts(q)
     const choices = matchingChoices(q)
     return (
       <div className="flex flex-col gap-2.5">
-        {pairs.map((p, i) => (
+        {lefts.map((left, i) => (
           <div key={i} className="flex items-center gap-3" style={{ background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '11px 14px' }}>
-            <span style={{ flex: 1, fontSize: 14.5, color: ink }}>{p.left}</span>
+            <span style={{ flex: 1, fontSize: 14.5, color: ink }}>{left}</span>
             <span style={{ color: faint }}>→</span>
             <select
               value={answer?.[i] ?? ''}

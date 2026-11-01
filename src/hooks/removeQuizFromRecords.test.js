@@ -73,7 +73,11 @@ describe('T-73 — the Quizzes page removes the column before deleting the quiz'
     expect(guard, 'the removal is no longer guarded by "the quiz was assigned somewhere"').toBeGreaterThan(-1)
     expect(remove).toBeGreaterThan(guard)
     const stop = body.indexOf('if (locked.length)')
-    const del = body.indexOf("deleteDoc(doc(db, 'quizzes', quizId))")
+    // Group 7: the quiz and its `quiz_keys/{id}` answer key are deleted in one
+    // batch now (lib/quizAnswerKey.js's deleteQuizWithKey). Same position in
+    // the sequence -- after the record removal and after the locked-period
+    // stop -- which is what this test exists to pin.
+    const del = body.indexOf('deleteQuizWithKey(quizId)')
     expect(remove).toBeGreaterThan(-1)
     expect(stop).toBeGreaterThan(remove)
     expect(del).toBeGreaterThan(stop)

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { doc, getDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { draftToQuestions, generateQuiz, QUIZ_TYPES } from '@/lib/ai'
+import { deleteQuizWithKey, writeQuizWithKey } from '@/lib/quizAnswerKey'
 import {
   bankQuestions,
   deleteBankedQuestion,
@@ -279,11 +280,16 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
         },
       })
 
-      await setDoc(doc(db, 'quizzes', quizId), {
-        ...payload,
-        id: quizId,
-        updated_at: serverTimestamp(),
-      })
+      // Group 7: the questions and their answer key go to two documents in
+      // one batch -- `questions` is stripped on the way into `quizzes/{id}`
+      // and the answers land in `quiz_keys/{id}` (lib/quizAnswerKey.js).
+      const { questions: _q, ...quizFields } = payload
+      await writeQuizWithKey(
+        quizId,
+        { ...quizFields, id: quizId },
+        questions,
+        { teacherId: profile.id, schoolId: profile.school_id ?? null },
+      )
 
       // After the quiz doc, never before: the quiz is what the teacher asked
       // for, and a bank write that fails must not cost them the generation.
@@ -541,11 +547,17 @@ export function CreateQuizModal({ classes, onClose }) {
         title: title.trim(),
       })
 
-      await setDoc(doc(db, 'quizzes', quizId), {
-        ...payload,
-        id: quizId,
-        updated_at: serverTimestamp(),
-      })
+      // No questions yet, but the key document is created anyway: it is what
+      // carries the `teacher_id` the rules scope every later read and write
+      // off, and an editor that had to create it on first save would have one
+      // more failure mode than it needs.
+      const { questions: _q, ...quizFields } = payload
+      await writeQuizWithKey(
+        quizId,
+        { ...quizFields, id: quizId },
+        [],
+        { teacherId: profile.id, schoolId: profile.school_id ?? null },
+      )
 
       navigate(`/teacher/quizzes/${quizId}`)
     } catch (err) {
@@ -1319,7 +1331,7 @@ export default function QuizzesIndexPage() {
           return
         }
       }
-      await deleteDoc(doc(db, 'quizzes', quizId))
+      await deleteQuizWithKey(quizId)
       refetch()
       toast.success('Quiz deleted.')
     } catch {
