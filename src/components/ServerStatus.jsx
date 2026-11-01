@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { gold, goldDeep, ink, navy } from '@/theme'
 
 /**
@@ -21,10 +21,12 @@ import { gold, goldDeep, ink, navy } from '@/theme'
  */
 const HEALTH_URL = `${import.meta.env.VITE_API_URL ?? ''}/api/health`
 const POLL_MS = 30000
+const RETRY_MS = 2000
+const TIMEOUT_MS = 4000
 
-async function ping() {
+async function ping(signal) {
   try {
-    const res = await fetch(HEALTH_URL, { cache: 'no-store' })
+    const res = await fetch(HEALTH_URL, { cache: 'no-store', signal })
     /* A 502 from the Vite proxy means Vite is up and Flask is not -- which is
        exactly the case this banner exists for, and it arrives as a perfectly
        successful fetch. Anything that is not a 2xx JSON answer counts as down. */
@@ -41,24 +43,58 @@ export default function ServerStatus() {
   // answer never flashes a warning at someone whose server is fine.
   const [up, setUp] = useState(null)
 
-  const check = useCallback(async () => {
-    setUp(await ping())
-  }, [])
+  const checkRef = useRef(() => {})
 
   useEffect(() => {
     let alive = true
-    const run = async () => {
-      const ok = await ping()
-      if (alive) setUp(ok)
+    let running = false
+    let controller
+    let timeout
+    let retryTimer
+    let finishWait
+    let pollTimer
+    const request = async () => {
+      controller = new AbortController()
+      timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+      try {
+        return await ping(controller.signal)
+      } finally {
+        clearTimeout(timeout)
+      }
     }
+    const run = async () => {
+      if (!alive || running) return
+      running = true
+      clearTimeout(pollTimer)
+      try {
+        let ok = await request()
+        if (!ok && alive) {
+          await new Promise((resolve) => {
+            finishWait = resolve
+            retryTimer = setTimeout(resolve, RETRY_MS)
+          })
+          finishWait = undefined
+          if (alive) ok = await request()
+        }
+        if (alive) setUp(ok)
+      } finally {
+        running = false
+        if (alive) pollTimer = setTimeout(run, POLL_MS)
+      }
+    }
+    checkRef.current = run
     run()
-    const timer = setInterval(run, POLL_MS)
     // Coming back to the tab is the moment someone is about to try again.
     const onFocus = () => run()
     window.addEventListener('focus', onFocus)
     return () => {
       alive = false
-      clearInterval(timer)
+      clearTimeout(pollTimer)
+      clearTimeout(retryTimer)
+      clearTimeout(timeout)
+      controller?.abort()
+      finishWait?.()
+      checkRef.current = () => {}
       window.removeEventListener('focus', onFocus)
     }
   }, [])
@@ -91,7 +127,7 @@ export default function ServerStatus() {
       </span>
       <button
         type="button"
-        onClick={check}
+        onClick={() => checkRef.current()}
         style={{
           background: navy,
           color: '#FAFAF6',
