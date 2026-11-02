@@ -875,6 +875,7 @@ export default function Register() {
                 <TrialLine />
                 <div style={{ fontSize: 12, color: '#9AA6BD', marginTop: 10, lineHeight: 1.45 }}>
                   Teacher seats carry the AI generation and records; student seats are records only.
+                  These numbers are an estimate and capacity can change later.
                   Your final quote follows from these numbers and comes with your setup.
                 </div>
               </div>

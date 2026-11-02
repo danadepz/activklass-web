@@ -886,3 +886,17 @@ describe('T-186 — both Back controls lose the left arrow, Next keeps its own',
     expect(registerSource.match(/>\s*Back\s*</g)?.length).toBe(2)
   })
 })
+
+/* T-240 (andecobs-316, Derickk 2026-10-28): the institution seats step asks
+   for teacher and student counts without explaining that the numbers are an
+   estimate and capacity can be adjusted later after subscribing. */
+describe('T-240 — institution seat selection notes counts are an estimate and capacity can change later', () => {
+  it('says the numbers are an estimate and capacity can change later within the institution seats step', () => {
+    const institutionStepAt = registerSource.indexOf("step === 5 && kind === 'institution'")
+    expect(institutionStepAt).toBeGreaterThan(-1)
+    const institutionStepEnd = registerSource.indexOf('</AuthNotice>', institutionStepAt)
+    expect(institutionStepEnd).toBeGreaterThan(institutionStepAt)
+    const institutionStep = registerSource.slice(institutionStepAt, institutionStepEnd)
+    expect(institutionStep).toMatch(/These numbers are an estimate and capacity can change later\./)
+  })
+})
