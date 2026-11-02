@@ -238,42 +238,25 @@ describe('T-109 — Gender is gone; Position locks to Admin on the institution p
     expect(registerSource).not.toMatch(/\bGENDERS\s*=/)
   })
 
-  it('seeds Position to admin the moment the institution path is entered by URL', () => {
-    expect(registerSource).toMatch(/position: preset === 'institution' \? 'admin' : ''/)
+  it('seeds Position to admin on institution path, or teacher on individual path by URL', () => {
+    expect(registerSource).toMatch(/position: preset === 'institution' \? 'admin' : 'teacher'/)
   })
 
-  it('seeds Position to admin the moment Institution is chosen from the chooser', () => {
-    expect(registerSource).toMatch(/position: next === 'institution'\s*\n\s*\?\s*'admin'/)
+  it('seeds Position to admin on institution path, or teacher on individual path from chooser', () => {
+    expect(registerSource).toMatch(/position: next === 'institution' \? 'admin' : 'teacher'/)
   })
 
-  /* Superseded 2026-10-08 by T-129 (maykel_64440-158, andecobs-164): the
-     owner's decision moved from locking the institution Position field
-     (disabled, Admin the only option) to dropping it from the screen
-     outright -- the next two tests below this one now pin that removal
-     instead of the lock. Kept pinned here: `position` is still seeded to
-     'admin' the moment the institution path is entered (by URL or by
-     picking the card), which is what actually keeps a bad value out of
-     the write -- see the two tests directly above this block. */
-  it('the individual path still offers an open Position select, backed by positionsFor(kind)', () => {
-    const fieldAt = registerSource.indexOf('<Field id="reg-position"')
-    const fieldEnd = registerSource.indexOf('</Field>', fieldAt)
-    const field = registerSource.slice(fieldAt, fieldEnd)
-    expect(field).toMatch(/value={form\.position} onChange={set\('position'\)}/)
-    expect(field).toMatch(/positionsFor\(kind\)/)
+  /* Superseded 2026-10-08 by T-129 (institution path) and 2026-11-02 by T-242
+     (triplecookiemonster-319, Kristine): the Position dropdown has been
+     removed from individual signup as well, defaulting position to 'teacher'.
+     Neither path renders a Position dropdown anymore. */
+  it('T-242: neither path renders a Position dropdown — reg-position is gone from markup', () => {
+    expect(registerSource).not.toMatch(/<Field id="reg-position"/)
+    expect(registerSource).not.toMatch(/<select id="reg-position"/)
   })
 
-  it('T-129: the institution path no longer renders a Position field at all -- not locked, gone', () => {
-    // Exactly one <Field id="reg-position"> in the whole file (the
-    // individual-path one tested above), and it is guarded so it never
-    // renders for kind === 'institution'.
-    expect(registerSource.match(/<Field id="reg-position"/g)).toHaveLength(1)
-    const fieldAt = registerSource.indexOf('<Field id="reg-position"')
-    const calendarFieldEnd = registerSource.indexOf('</Field>', registerSource.indexOf('<Field id="reg-calendar"'))
-    const between = registerSource.slice(calendarFieldEnd, fieldAt)
-    expect(between).toMatch(/\{kind !== 'institution' && \(/)
-    // the disabled, locked-to-Admin select and its helper text are gone
-    expect(registerSource).not.toMatch(/<select id="reg-position"[^>]*\bdisabled\b/)
-    expect(registerSource).not.toMatch(/Whoever sets up a school.s subscription is its admin\./)
+  it('T-242: step 3 validation no longer asks to select a position', () => {
+    expect(registerSource).not.toMatch(/Select your position\./)
   })
 
   it('the three wording fixes land exactly where Kristine found them', () => {
@@ -754,7 +737,7 @@ describe('T-129 — generic sample values', () => {
   })
 
   it('the new-school name sample reads "Name of your School", not a real school', () => {
-    expect(registerSource).toContain('placeholder="Name of your School"')
+    expect(registerSource).toContain('placeholder="Name of Your School"')
     expect(registerSource).not.toContain('University of Cebu')
   })
 })

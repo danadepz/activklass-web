@@ -154,9 +154,7 @@ export default function Register() {
     setKind(next)
     setForm((f) => ({
       ...f,
-      position: next === 'institution'
-        ? 'admin'
-        : (positionsFor(next).some((p) => p.value === f.position) ? f.position : ''),
+      position: next === 'institution' ? 'admin' : 'teacher',
     }))
   }
   // 1 = chooser, 2…N = the steps in STEPS[kind], 'sent' = request confirmed.
@@ -173,7 +171,7 @@ export default function Register() {
     campus: '',
     schoolType: '',
     calendar: '',
-    position: preset === 'institution' ? 'admin' : '',
+    position: preset === 'institution' ? 'admin' : 'teacher',
     email: '',
     password: '',
     confirm: '',
@@ -248,8 +246,7 @@ export default function Register() {
             ? schoolNameError(form.newSchoolName) || schoolAbbrError(form.newSchoolAbbr)
             : '') ||
         (form.schoolType ? '' : 'Is it a private or a public school?') ||
-        (form.calendar ? '' : 'How is the academic year divided?') ||
-        (form.position ? '' : 'Select your position.')
+        (form.calendar ? '' : 'How is the academic year divided?')
       )
     }
     if (n === 4) {
@@ -677,30 +674,17 @@ export default function Register() {
                   </select>
                 </Field>
               </div>
-              <div className={kind === 'institution' ? '' : 'grid gap-3.5 md:grid-cols-2'}>
-                <Field id="reg-calendar" label="Academic Calendar">
-                  <select id="reg-calendar" className="ak-input" required value={form.calendar} onChange={set('calendar')} style={selectStyle(form.calendar)}>
-                    <option value="" disabled>Select</option>
-                    {CALENDARS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </Field>
-                {/* T-129 (maykel_64440-158, andecobs-164): the institution path's
-                    Position field used to render here, locked to Admin and
-                    disabled (T-109) -- the owner's decision on 2026-10-08 was to
-                    drop the field outright rather than keep showing a value
-                    nobody can change. `position: 'admin'` is still submitted;
-                    chooseKind() and the ?type=institution preset both seed it
-                    the moment the institution path is entered, with no UI path
-                    that could ever set it to anything else. */}
-                {kind !== 'institution' && (
-                  <Field id="reg-position" label="Position">
-                    <select id="reg-position" className="ak-input" required value={form.position} onChange={set('position')} style={selectStyle(form.position)}>
-                      <option value="" disabled>Select</option>
-                      {positionsFor(kind).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
-                  </Field>
-                )}
-              </div>
+              {/* T-129 (maykel_64440-158, andecobs-164): dropped the institution
+                  Position field, locked to admin.
+                  T-242 (triplecookiemonster-319, Kristine): dropped the individual
+                  Position dropdown too, defaulting to 'teacher' in state.
+                  Academic Calendar is now the sole field in this row. */}
+              <Field id="reg-calendar" label="Academic Calendar">
+                <select id="reg-calendar" className="ak-input" required value={form.calendar} onChange={set('calendar')} style={selectStyle(form.calendar)}>
+                  <option value="" disabled>Select</option>
+                  {CALENDARS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </Field>
             </>
           )}
 
