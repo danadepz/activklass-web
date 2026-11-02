@@ -31,11 +31,13 @@ const ROLE_TINT = {
   parent: { fg: '#8B6A00', bg: 'rgba(245,197,24,0.18)' },
 }
 
-function Pill({ tint, children }) {
+function Pill({ tint, style, children }) {
   return (
     <span style={{
       fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
       color: tint.fg, background: tint.bg, borderRadius: 20, padding: '3px 10px',
+      whiteSpace: 'nowrap',
+      ...style,
     }}>
       {children}
     </span>
@@ -838,19 +840,24 @@ export function UserRow({ user, isSelf, onChanged }) {
         )}
       </td>
 
-      <td style={{ padding: '12px 14px' }}>
-        <Pill tint={active ? { fg: green, bg: 'rgba(31,138,91,0.10)' } : { fg: red, bg: 'rgba(192,57,43,0.08)' }}>
-          {active ? 'active' : 'inactive'}
-        </Pill>
-        {/* Every account staff create starts on a password staff chose -- and
-            an admin resetting one puts it back there. This says who has not
-            replaced it yet, which is the question behind "can they log in?".
-            The password is not stored anywhere readable; only this fact is. */}
-        {user.is_temp_password && (
-          <div style={{ marginTop: 6 }}>
-            <Pill tint={{ fg: goldDeep, bg: 'rgba(245,197,24,0.16)' }}>issued password</Pill>
-          </div>
-        )}
+      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Pill tint={active ? { fg: green, bg: 'rgba(31,138,91,0.10)' } : { fg: red, bg: 'rgba(192,57,43,0.08)' }}>
+            {active ? 'active' : 'inactive'}
+          </Pill>
+          {/* Every account staff create starts on a password staff chose -- and
+              an admin resetting one puts it back there. This says who has not
+              replaced it yet, which is the question behind "can they log in?".
+              The password is not stored anywhere readable; only this fact is. */}
+          {user.is_temp_password && (
+            <Pill
+              tint={{ fg: goldDeep, bg: 'rgba(245,197,24,0.16)' }}
+              style={{ fontSize: 10, padding: '2px 7px' }}
+            >
+              default password
+            </Pill>
+          )}
+        </div>
       </td>
 
       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
