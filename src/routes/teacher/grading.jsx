@@ -680,7 +680,15 @@ export function PreviewPanel({ periods, components, mode, policy, labOn = false,
  * recorded grades are recomputed. So editing a template never silently
  * changes a class configured from it earlier -- a class holds its own copy.
  */
-export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
+export function TemplatesCard({
+  busy,
+  onUse,
+  buildBody,
+  classGradebooks,
+  loadedTemplate,
+  onClearLoadedTemplate,
+  onLoadedTemplateUpdated,
+}) {
   const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['fs-grading-templates'],
@@ -698,12 +706,31 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
     try {
       await fn()
       refresh()
+      return true
     } catch (err) {
       setError(err.message)
       toast.error(err.message)
+      return false
     } finally {
       setSaving(false)
     }
+  }
+
+  async function saveToTemplate(t) {
+    if (!t?.id || !t.is_owner) return
+    const body = buildBody(t.name)
+    if (!body) return
+    const payload = {
+      ...body,
+      description: t.description || '',
+      scope: t.scope || 'private',
+    }
+    const saved = await run(() => updateTemplate(t.id, payload))
+    if (!saved) return
+    if (loadedTemplate?.id === t.id && onLoadedTemplateUpdated) {
+      onLoadedTemplateUpdated({ ...t, ...payload })
+    }
+    toast.success(`Saved "${t.name}" with current percentages.`)
   }
 
   async function saveAsTemplate() {
@@ -716,10 +743,23 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
       confirmLabel: 'Save template',
     })
     if (!name?.trim()) return
-    const body = buildBody(name.trim())
+    const trimmed = name.trim()
+    const existing = templates.find((t) => t.is_owner && t.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) {
+      const overwrite = await confirmDialog({
+        title: `Update "${existing.name}"?`,
+        message: `A template named "${existing.name}" already exists. Do you want to update it with your current percentages?`,
+        confirmLabel: 'Update template',
+      })
+      if (overwrite) {
+        return saveToTemplate(existing)
+      }
+      return
+    }
+    const body = buildBody(trimmed)
     if (!body) return // the form is invalid; buildBody has already said so
-    await run(() => createTemplate(body))
-    toast.success(`Saved "${name.trim()}" to your templates.`)
+    const saved = await run(() => createTemplate(body))
+    if (saved) toast.success(`Saved "${trimmed}" to your templates.`)
   }
 
   async function use(t) {
@@ -731,7 +771,7 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
       confirmLabel: 'Load into the form',
     })
     if (ok) {
-      onUse(setupFromTemplate(t))
+      onUse(setupFromTemplate(t), t)
       toast.success(`Loaded "${t.name}". Tick target classes and Save & Sync to apply it.`)
     }
   }
@@ -782,6 +822,72 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
 
       {error && <Banner tone="err">{error}</Banner>}
 
+      {loadedTemplate && (
+        <div
+          data-testid="loaded-template-banner"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 14px',
+            marginBottom: 14,
+            borderRadius: 10,
+            background: 'rgba(245,197,24,0.12)',
+            border: `1px solid ${gold}`,
+          }}
+        >
+          <div style={{ fontSize: 13, color: ink }}>
+            Loaded template: <strong>{loadedTemplate.name}</strong>
+            <span style={{ fontSize: 12, color: muted, marginLeft: 8 }}>
+              (Editing this form does not change a saved template until you save to it)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {loadedTemplate.is_owner && (
+              <button
+                type="button"
+                data-testid="save-loaded-template-btn"
+                disabled={busy || saving}
+                onClick={() => saveToTemplate(loadedTemplate)}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: sans,
+                  color: '#FAFAF6',
+                  background: navy,
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: busy || saving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Save to “{loadedTemplate.name}”
+              </button>
+            )}
+            {onClearLoadedTemplate && (
+              <button
+                type="button"
+                data-testid="clear-loaded-template-btn"
+                onClick={onClearLoadedTemplate}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: muted,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={{ height: 1, background: 'rgba(14,42,92,0.06)', margin: '14px 0' }} />
 
       {isLoading ? (
@@ -799,12 +905,39 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
         <div className="flex flex-col gap-2.5">
           {templates.map((t) => {
             const used = countClassesUsing(t, classGradebooks)
+            const isLoaded = loadedTemplate?.id === t.id
             return (
-              <div key={t.id} style={{ border: `1px solid ${line}`, borderRadius: 12, padding: '12px 14px' }}>
+              <div
+                key={t.id}
+                style={{
+                  border: isLoaded ? `1.5px solid ${gold}` : `1px solid ${line}`,
+                  borderRadius: 12,
+                  padding: '12px 14px',
+                  background: isLoaded ? 'rgba(245,197,24,0.04)' : undefined,
+                }}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div style={{ minWidth: 0 }}>
                     <div className="flex flex-wrap items-center gap-2">
                       <span style={{ fontSize: 14, fontWeight: 800, color: ink }}>{t.name}</span>
+                      {isLoaded && (
+                        <span
+                          data-testid="loaded-badge"
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            textTransform: 'uppercase',
+                            color: navy,
+                            background: 'rgba(245,197,24,0.22)',
+                            border: `1px solid ${gold}`,
+                            borderRadius: 999,
+                            padding: '2px 8px',
+                          }}
+                        >
+                          Active in form
+                        </span>
+                      )}
                       {t.scope === 'school' && (
                         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: navy, background: 'rgba(245,197,24,0.18)', border: `1px solid ${gold}`, borderRadius: 999, padding: '2px 8px' }}>
                           Shared with school
@@ -826,6 +959,17 @@ export function TemplatesCard({ busy, onUse, buildBody, classGradebooks }) {
                     <button type="button" onClick={() => use(t)} disabled={busy || saving} style={templateBtn(navy)}>
                       Use
                     </button>
+                    {t.is_owner && (
+                      <button
+                        type="button"
+                        data-testid="save-template-row-btn"
+                        onClick={() => saveToTemplate(t)}
+                        disabled={busy || saving}
+                        style={templateBtn(navy)}
+                      >
+                        Save to template
+                      </button>
+                    )}
                     <button type="button" onClick={() => run(() => duplicateTemplate(t.id))} disabled={busy || saving} style={templateBtn(muted)}>
                       Duplicate
                     </button>
@@ -942,6 +1086,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
      own classes so a stale or hand-typed id cannot preselect something the API
      would only skip. */
   const focusClass = focusClassId ? classes.find((c) => c.id === focusClassId) : null
+  const [loadedTemplate, setLoadedTemplate] = useState(null)
   const [periods, setPeriods] = useState(setup.periods?.length ? setup.periods : [newRow()])
   /* Two editors, one saved list. Components are split on their `track` and
      rejoined at save time; a component saved before laboratory grading existed
@@ -1179,7 +1324,8 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   /* --- saved templates (Phase 2 §3) --------------------------------------
      Loading a template only fills these editors. Nothing reaches a class
      until Save & Sync, which keeps its existing confirmation. */
-  const applyTemplate = (setup) => {
+  const applyTemplate = (setup, template = null) => {
+    setLoadedTemplate(template)
     const savedLab = rowsForTrack(setup.components, LAB)
     setPeriods(setup.periods.length ? setup.periods : [newRow()])
     setComponents(rowsForTrack(setup.components, LECTURE).length
@@ -1374,6 +1520,9 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         onUse={applyTemplate}
         buildBody={buildTemplateBody}
         classGradebooks={classGradebooks}
+        loadedTemplate={loadedTemplate}
+        onClearLoadedTemplate={() => setLoadedTemplate(null)}
+        onLoadedTemplateUpdated={(updated) => setLoadedTemplate(updated)}
       />
 
       {/* Target Classes Selection */}

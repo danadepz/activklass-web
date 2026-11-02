@@ -834,3 +834,18 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
   seeded pilot data.
 - **Not feature-complete.** A capstone demo shows the system working, not every feature
   a school would eventually want.
+
+
+## T-228 implementation check — 2026-11-02
+- [x] Explicit template save and active-template indicator implemented. Saving the
+  copy targets its ID; rejected saves report an error without success; other-row
+  saves preserve the active selection and sharing scope.
+- Local evidence: 218 test files / 2,179 tests pass; production build passes;
+  focused 8-test suite passes. Deliberately directing the save to the original ID
+  fails the copy-isolation assertion; restoring the code passes.
+- Headless Chrome exercised duplicate, load, edit, save and reopen against fixture
+  storage (original 40/60, copy 70/30), plus a rejected save. This isolated component
+  fixture does not establish full-page styling or production document integrity.
+- [ ] Independent teacher-session verification against actual stored templates and
+  deployment remain pending. The tester's original data-corruption report is not
+  yet resolved by live evidence.
