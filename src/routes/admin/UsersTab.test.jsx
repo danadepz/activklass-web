@@ -46,7 +46,8 @@ vi.mock('@/lib/csv', () => ({ downloadCsv: vi.fn(), stampedName: (p) => `${p}.cs
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true), promptDialog: vi.fn() }))
 vi.mock('./BulkUpload', () => ({ default: () => null }))
 
-import UsersTab from './UsersTab.jsx'
+import UsersTab, { resetPasswordPromptSpec } from './UsersTab.jsx'
+import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 
 const html = renderToStaticMarkup(<UsersTab />)
 
@@ -84,5 +85,28 @@ describe('Users list ID / LRN column (T-30)', () => {
 
   it('tells the admin the search box takes an ID now', () => {
     expect(html).toMatch(/placeholder="Search name, email, login or ID"/)
+  })
+})
+
+describe('T-231 — Admin reset-password modal and row button copy (maykel_64440-307, -308)', () => {
+  it('row button reads "Reset Password" in Title Case', () => {
+    const row = rowOf('srnhs-200011')
+    expect(row).toContain('Reset Password')
+    expect(row).not.toContain('Reset password')
+  })
+
+  it('prompt dialog spec has the simplified message, title, label, placeholder and requirements list', () => {
+    const spec = resetPasswordPromptSpec({ login_id: 'srnhs-200011' })
+    expect(spec.title).toBe('Reset User Password')
+    expect(spec.confirmLabel).toBe('Reset Password')
+    expect(spec.label).toBe('Temporary Password')
+    expect(spec.placeholder).toBe('Enter a temporary password')
+
+    const messageHtml = renderToStaticMarkup(spec.message)
+    expect(messageHtml).toContain('Set a temporary password for this user. They will be asked to create a new password when they sign in.')
+    expect(messageHtml).toContain('Requirements:')
+    for (const req of PASSWORD_REQUIREMENTS) {
+      expect(messageHtml).toContain(req.label)
+    }
   })
 })

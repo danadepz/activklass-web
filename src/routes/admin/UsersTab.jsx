@@ -20,6 +20,7 @@ import Notice from './Notice'
 import RolePicker from './RolePicker'
 import CardHead from './CardHead'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
+import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 
@@ -30,11 +31,13 @@ const ROLE_TINT = {
   parent: { fg: '#8B6A00', bg: 'rgba(245,197,24,0.18)' },
 }
 
-function Pill({ tint, children }) {
+function Pill({ tint, style, children }) {
   return (
     <span style={{
       fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
       color: tint.fg, background: tint.bg, borderRadius: 20, padding: '3px 10px',
+      whiteSpace: 'nowrap',
+      ...style,
     }}>
       {children}
     </span>
@@ -717,7 +720,27 @@ export function filterUsers(users, roleView, search) {
   })
 }
 
-function UserRow({ user, isSelf, onChanged }) {
+export function resetPasswordPromptSpec(user) {
+  return {
+    title: 'Reset User Password',
+    message: (
+      <>
+        <span>Set a temporary password for this user. They will be asked to create a new password when they sign in.</span>
+        <span style={{ display: 'block', marginTop: 8, fontSize: 12.5, color: faint }}>
+          Requirements: {PASSWORD_REQUIREMENTS.map((r) => r.label).join(', ')}
+        </span>
+      </>
+    ),
+    label: 'Temporary Password',
+    placeholder: 'Enter a temporary password',
+    confirmLabel: 'Reset Password',
+    required: true,
+    trim: false,
+    validate: tempPasswordError,
+  }
+}
+
+export function UserRow({ user, isSelf, onChanged }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
@@ -763,26 +786,7 @@ function UserRow({ user, isSelf, onChanged }) {
   }
 
   async function doReset() {
-    // The length rule now blocks inside the dialog instead of failing after
-    // it closes — the old prompt() sent you back to the row with an error and
-    // an empty field, having thrown the typed password away.
-    // "should change it" undersold what actually happens: the reset endpoint
-    // stamps is_temp_password back on (backend app/api/admin.py:700), so the
-    // holder is held on /change-password until they pick their own. Saying
-    // "should" leaves the admin thinking a weak reset stays weak -- the same
-    // silence that made the create form read as having no rule at all (T-16).
-    const pw = await promptDialog({
-      title: 'Set a new password',
-      message: `This replaces the password for ${user.login_id ?? user.email} immediately. At least ${MIN_PASSWORD} characters — they will be asked to choose a new password the next time they sign in.`,
-      label: 'New password',
-      // No example value: the one that used to sit here was the real shared
-      // starting password, which made it a suggestion to actually type.
-      placeholder: 'at least 8 characters',
-      confirmLabel: 'Set password',
-      required: true,
-      trim: false,
-      validate: tempPasswordError,
-    })
+    const pw = await promptDialog(resetPasswordPromptSpec(user))
     if (pw == null) return
     run('password', () => resetPassword(user.id, pw))
   }
@@ -836,19 +840,24 @@ function UserRow({ user, isSelf, onChanged }) {
         )}
       </td>
 
-      <td style={{ padding: '12px 14px' }}>
-        <Pill tint={active ? { fg: green, bg: 'rgba(31,138,91,0.10)' } : { fg: red, bg: 'rgba(192,57,43,0.08)' }}>
-          {active ? 'active' : 'inactive'}
-        </Pill>
-        {/* Every account staff create starts on a password staff chose -- and
-            an admin resetting one puts it back there. This says who has not
-            replaced it yet, which is the question behind "can they log in?".
-            The password is not stored anywhere readable; only this fact is. */}
-        {user.is_temp_password && (
-          <div style={{ marginTop: 6 }}>
-            <Pill tint={{ fg: goldDeep, bg: 'rgba(245,197,24,0.16)' }}>issued password</Pill>
-          </div>
-        )}
+      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Pill tint={active ? { fg: green, bg: 'rgba(31,138,91,0.10)' } : { fg: red, bg: 'rgba(192,57,43,0.08)' }}>
+            {active ? 'active' : 'inactive'}
+          </Pill>
+          {/* Every account staff create starts on a password staff chose -- and
+              an admin resetting one puts it back there. This says who has not
+              replaced it yet, which is the question behind "can they log in?".
+              The password is not stored anywhere readable; only this fact is. */}
+          {user.is_temp_password && (
+            <Pill
+              tint={{ fg: goldDeep, bg: 'rgba(245,197,24,0.16)' }}
+              style={{ fontSize: 10, padding: '2px 7px' }}
+            >
+              default password
+            </Pill>
+          )}
+        </div>
       </td>
 
       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -858,7 +867,7 @@ function UserRow({ user, isSelf, onChanged }) {
             the school. The API refuses both too (parent_protected). */}
         {!isParent && (
           <button style={btnGhost} onClick={doReset} disabled={!!busy}>
-            {busy === 'password' ? '…' : 'Reset password'}
+            {busy === 'password' ? '…' : 'Reset Password'}
           </button>
         )}
         {isParent ? (
