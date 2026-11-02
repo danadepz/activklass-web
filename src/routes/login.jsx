@@ -230,7 +230,7 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout title="Welcome!" subtitle="Sign in to your ActivKlass account.">
+    <AuthLayout title="Welcome!" subtitle="Sign in to your ActivKlass account." dotBackground>
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {!settingPassword && (
           <DevQuickLogin
