@@ -883,3 +883,17 @@ describe('T-240 — institution seat selection notes counts are an estimate and 
     expect(institutionStep).toMatch(/These numbers are an estimate and capacity can change later\./)
   })
 })
+
+
+/* T-232 (maykel_64440-320, maykel 2026-10-29): Title Case on institution signup school fields */
+describe('T-232 — Title Case on institution signup school fields', () => {
+  it('renders "Full Name of School" in Title Case', () => {
+    expect(registerSource).toContain('label="Full Name of School"')
+    expect(registerSource).not.toContain('label="Full name of school"')
+  })
+
+  it('renders "Name of Your School" placeholder in Title Case', () => {
+    expect(registerSource).toContain('placeholder="Name of Your School"')
+    expect(registerSource).not.toContain('placeholder="Name of your School"')
+  })
+})

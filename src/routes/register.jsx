@@ -654,8 +654,8 @@ export default function Register() {
                 </select>
                 {addingSchool && (
                   <div className="grid gap-3.5 md:grid-cols-[1fr_140px]" style={{ marginTop: 12 }}>
-                    <Field id="reg-school-name" label="Full name of school">
-                      <input id="reg-school-name" className="ak-input" required maxLength={120} placeholder="Name of your School" value={form.newSchoolName} onChange={set('newSchoolName')} style={authInputStyle} />
+                    <Field id="reg-school-name" label="Full Name of School">
+                      <input id="reg-school-name" className="ak-input" required maxLength={120} placeholder="Name of Your School" value={form.newSchoolName} onChange={set('newSchoolName')} style={authInputStyle} />
                     </Field>
                     <Field id="reg-school-abbr" label="Abbreviation">
                       <input id="reg-school-abbr" className="ak-input" required maxLength={12} placeholder="e.g. ABC" value={form.newSchoolAbbr} onChange={set('newSchoolAbbr')} style={{ ...authInputStyle, textTransform: 'uppercase' }} />
