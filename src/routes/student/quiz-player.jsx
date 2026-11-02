@@ -75,12 +75,41 @@ function fmtTime(secs) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function Gate({ title, children, classId }) {
+export function Gate({ icon, title, children, note, classId }) {
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 44, textAlign: 'center' }}>
+      {icon && (
+        <div style={{ display: 'inline-grid', placeItems: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(14,42,92,0.08)', color: navy, margin: '0 auto 16px' }}>
+          {icon}
+        </div>
+      )}
       <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '0 0 8px' }}>{title}</h2>
-      <p style={{ fontSize: 14, color: muted, margin: '0 0 18px' }}>{children}</p>
-      <Link to={`/student/classes/${classId}`} style={{ fontSize: 13, fontWeight: 700, color: navy }}>← Back to class</Link>
+      <p style={{ fontSize: 14, color: muted, margin: note ? '0 0 6px' : '0 0 20px', lineHeight: 1.5 }}>{children}</p>
+      {note && (
+        <p style={{ fontSize: 13, color: faint, margin: '0 0 22px', lineHeight: 1.4 }}>{note}</p>
+      )}
+      <div>
+        <Link
+          to={classId ? `/student/classes/${classId}` : '/student/classes'}
+          className="transition hover:brightness-110"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '10px 22px',
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: '#FAFAF6',
+            background: navy,
+            borderRadius: 10,
+            textDecoration: 'none',
+            boxShadow: `0 2px 0 ${navyDeep}`,
+          }}
+        >
+          ← Back to Class
+        </Link>
+      </div>
     </div>
   )
 }
@@ -630,10 +659,10 @@ export default function QuizPlayer() {
 
   if (isLoading) return <p style={{ color: faint }}>Loading quiz…</p>
   if (isError) {
-    if (error?.message === 'not_enrolled') return <Gate title="Not enrolled" classId={classId}>You can only take quizzes for classes you're enrolled in.</Gate>
-    if (error?.message === 'dropped') return <Gate title="Not active in this class" classId={classId}>You're no longer active in this class, so you can't take quizzes right now. Ask your teacher if this isn't right.</Gate>
-    if (error?.message === 'not_assigned') return <Gate title="Not assigned to you" classId={classId}>Your teacher assigned this quiz to specific students, and you're not on the list.</Gate>
-    return <Gate title="Quiz not found" classId={classId}>This quiz may have been removed.</Gate>
+    if (error?.message === 'not_enrolled') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Enrolled" classId={classId}>You can only take quizzes for classes you're enrolled in.</Gate>
+    if (error?.message === 'dropped') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Active in This Class" classId={classId}>You're no longer active in this class, so you can't take quizzes right now. Ask your teacher if this isn't right.</Gate>
+    if (error?.message === 'not_assigned') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Assigned to You" classId={classId}>Your teacher assigned this quiz to specific students, and you're not on the list.</Gate>
+    return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Quiz Not Found" classId={classId}>This quiz may have been removed.</Gate>
   }
 
   const { quiz, attempts } = data
@@ -647,20 +676,33 @@ export default function QuizPlayer() {
       <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your result</Link>.</>
     )
     if (gate.reason === 'not_published') {
-      return <Gate title="Quiz unavailable" classId={classId}>This quiz isn&apos;t open right now.{resultLink}</Gate>
+      return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Quiz Unavailable" classId={classId}>This quiz isn&apos;t open right now.{resultLink}</Gate>
     }
     if (gate.reason === 'not_assigned') {
-      return <Gate title="Not assigned to you" classId={classId}>Your teacher assigned this quiz to specific students, and you&apos;re not on the list.</Gate>
+      return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Assigned to You" classId={classId}>Your teacher assigned this quiz to specific students, and you&apos;re not on the list.</Gate>
     }
     if (gate.reason === 'not_open') {
-      return <Gate title="Not open yet" classId={classId}>This quiz opens at {new Date(quiz.opens_at).toLocaleString()}.</Gate>
+      return <Gate icon={<Clock className="h-6 w-6" />} title="Not Open Yet" classId={classId}>This quiz opens at {new Date(quiz.opens_at).toLocaleString()}.</Gate>
     }
     if (gate.reason === 'closed') {
-      return <Gate title="Quiz closed" classId={classId}>The window for this quiz has passed.</Gate>
+      return (
+        <Gate
+          icon={<Clock className="h-6 w-6" />}
+          title="Quiz Closed"
+          classId={classId}
+          note="If you believe you should still have access, please contact your teacher."
+        >
+          This quiz is no longer available because the deadline has passed.{resultLink}
+        </Gate>
+      )
     }
     const allowed = attemptsAllowedFor(quiz, profile?.id)
     return (
-      <Gate title="No attempts left" classId={classId}>
+      <Gate
+        icon={<AlertCircle className="h-6 w-6" />}
+        title="No Attempts Left"
+        classId={classId}
+      >
         You&apos;ve used all {allowed} attempt{allowed === 1 ? '' : 's'} for this quiz. Ask your
         teacher if you need another.{resultLink}
       </Gate>
