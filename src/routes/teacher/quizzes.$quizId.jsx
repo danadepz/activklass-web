@@ -1511,6 +1511,29 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
     }
   }
 
+  const [bankingAll, setBankingAll] = useState(false)
+  const handleSaveAllToBank = async () => {
+    if (!questions.length) return
+    setBankingAll(true)
+    try {
+      const result = await bankQuestions({
+        teacherId: profile.id,
+        questions: questions.map(toPayload),
+        topicId: quiz.topic_id || null,
+        syllabusId: quiz.syllabus_id || null,
+        origin: quiz.origin || 'manual',
+        sourceQuizId: quiz.id ?? null,
+      })
+      const message = describeBankResult(result)
+      if (result.saved) toast.success(message)
+      else toast.info(message)
+    } catch (err) {
+      toast.error(`Could not save to the Quiz Bank: ${err.message}`)
+    } finally {
+      setBankingAll(false)
+    }
+  }
+
   const set = (key) => (e) =>
     setSettings((s) => ({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
 
@@ -1933,6 +1956,9 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           </button>
           <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
             <BookOpen className="h-3.5 w-3.5" /> Import from Bank
+          </button>
+          <button onClick={handleSaveAllToBank} disabled={bankingAll || !questions.length} className="transition hover:brightness-105 disabled:opacity-50" style={btnGhost}>
+            <BookOpen className="h-3.5 w-3.5" /> {bankingAll ? 'Saving…' : 'Add to Quiz Bank'}
           </button>
           <button onClick={removeDraft} disabled={removingDraft} className="transition hover:brightness-105 disabled:opacity-50" style={btnDanger}>
             {removingDraft ? 'Deleting…' : 'Delete draft'}
@@ -2419,6 +2445,41 @@ export default function QuizBuilderPage() {
   }
 
   const [isEditWordingOpen, setIsEditWordingOpen] = useState(false)
+  const [selectedQuestionIndices, setSelectedQuestionIndices] = useState(() => new Set())
+  const [bankingQuestions, setBankingQuestions] = useState(false)
+
+  const handleBankQuestions = async (questionsToBank) => {
+    if (!questionsToBank || questionsToBank.length === 0) return
+    setBankingQuestions(true)
+    try {
+      const result = await bankQuestions({
+        teacherId: profile?.id,
+        questions: questionsToBank,
+        topicId: quiz?.topic_id || null,
+        syllabusId: quiz?.syllabus_id || null,
+        origin: quiz?.origin || (quiz?.ai_generated ? 'ai_generated' : 'manual'),
+        sourceQuizId: quiz?.id ?? null,
+      })
+      const message = describeBankResult(result)
+      if (result.saved) toast.success(message)
+      else toast.info(message)
+      setSelectedQuestionIndices(new Set())
+    } catch (err) {
+      toast.error(`Could not save to the Quiz Bank: ${err.message}`)
+    } finally {
+      setBankingQuestions(false)
+    }
+  }
+
+  const handleBankFromHeader = () => {
+    const list = quiz?.questions ?? []
+    if (selectedQuestionIndices.size > 0) {
+      const selected = list.filter((_, idx) => selectedQuestionIndices.has(idx))
+      handleBankQuestions(selected)
+    } else {
+      handleBankQuestions(list)
+    }
+  }
 
   /**
    * Take a published quiz back to draft -- maykel's ask: Publish was a
@@ -2623,56 +2684,119 @@ export default function QuizBuilderPage() {
           )}
 
           <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2" style={{ marginBottom: 12 }}>
-              <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Questions and answer key (read-only)</h3>
-              {quiz.status === 'published' && (
-                <button onClick={() => setIsEditWordingOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
-                  Edit wording
+            <div className="flex flex-wrap items-center justify-between gap-2" style={{ marginBottom: 12 }}>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Questions and answer key (read-only)</h3>
+                {(quiz.questions ?? []).length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedQuestionIndices.size === (quiz.questions ?? []).length) {
+                        setSelectedQuestionIndices(new Set())
+                      } else {
+                        setSelectedQuestionIndices(new Set((quiz.questions ?? []).map((_, i) => i)))
+                      }
+                    }}
+                    className="transition hover:opacity-70"
+                    style={{ ...linkBtn, fontSize: 12, fontWeight: 500, color: faint }}
+                  >
+                    {selectedQuestionIndices.size === (quiz.questions ?? []).length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleBankFromHeader}
+                  disabled={bankingQuestions || !(quiz.questions?.length)}
+                  className="transition hover:opacity-70 disabled:opacity-50"
+                  style={linkBtn}
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  {bankingQuestions
+                    ? 'Saving to Quiz Bank…'
+                    : selectedQuestionIndices.size > 0
+                      ? `Add to Quiz Bank (${selectedQuestionIndices.size})`
+                      : 'Add to Quiz Bank'}
                 </button>
-              )}
+                {quiz.status === 'published' && (
+                  <button onClick={() => setIsEditWordingOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
+                    Edit wording
+                  </button>
+                )}
+              </div>
             </div>
             {(quiz.questions ?? []).map((q, i) => (
-              <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '8px 0' }}>
-                <p style={{ fontSize: 13, color: '#3A4A6B', margin: 0 }}>
-                  <span style={{ fontWeight: 700, color: ink }}>Q{i + 1}.</span> {q.text}
-                  <span style={{ color: faint }}> · {TYPE_LABELS[q.qtype]} · {q.points} pts</span>
-                </p>
-                {/* The key, read off the saved question (T-60). Once a quiz is
-                    published the editor is gone, and this list was the only
-                    place a teacher could look before a student sits it or
-                    disputes an item -- and it showed no answers. What a
-                    student sees after submitting is the quiz's feedback
-                    setting's job (lib/quizFeedback.js), not this card's. */}
-                {q.qtype === 'mcq' && (
-                  <div className="mt-1 space-y-0.5 text-[12px] text-slate-500" style={{ paddingLeft: 22 }}>
-                    {(q.options ?? []).map((o, idx) => (
-                      <div key={o.id || idx} className="flex items-start gap-1.5">
-                        <span className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
-                        <span className={`break-words flex-1 ${o.is_correct ? 'font-semibold text-slate-700' : ''}`}>{o.text}</span>
-                      </div>
-                    ))}
+              <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '10px 0' }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedQuestionIndices.has(i)}
+                      onChange={() => {
+                        setSelectedQuestionIndices((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(i)) next.delete(i)
+                          else next.add(i)
+                          return next
+                        })
+                      }}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
+                      aria-label={`Select question ${i + 1}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p style={{ fontSize: 13, color: '#3A4A6B', margin: 0 }}>
+                        <span style={{ fontWeight: 700, color: ink }}>Q{i + 1}.</span> {q.text}
+                        <span style={{ color: faint }}> · {TYPE_LABELS[q.qtype]} · {q.points} pts</span>
+                      </p>
+                      {/* The key, read off the saved question (T-60). Once a quiz is
+                          published the editor is gone, and this list was the only
+                          place a teacher could look before a student sits it or
+                          disputes an item -- and it showed no answers. What a
+                          student sees after submitting is the quiz's feedback
+                          setting's job (lib/quizFeedback.js), not this card's. */}
+                      {q.qtype === 'mcq' && (
+                        <div className="mt-1 space-y-0.5 text-[12px] text-slate-500">
+                          {(q.options ?? []).map((o, idx) => (
+                            <div key={o.id || idx} className="flex items-start gap-1.5">
+                              <span className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${o.is_correct ? 'bg-green-500' : 'bg-slate-300'}`} />
+                              <span className={`break-words flex-1 ${o.is_correct ? 'font-semibold text-slate-700' : ''}`}>{o.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {q.qtype === 'true_false' && (
+                        <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0' }}>
+                          Answer: <span className="font-semibold text-slate-700">{q.answer_key?.value ? 'True' : 'False'}</span>
+                        </p>
+                      )}
+                      {q.qtype === 'short_answer' && (
+                        <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0' }}>
+                          Accepted answers: <span className="font-semibold text-slate-700">{(q.answer_key?.answers ?? []).join(', ') || '—'}</span>
+                        </p>
+                      )}
+                      {q.qtype === 'matching' && (
+                        <div className="mt-1 space-y-0.5 text-[12px] text-slate-500">
+                          {(q.answer_key?.pairs ?? []).map((pair, idx) => (
+                            <div key={idx} className="break-words">{pair.left} → <span className="font-semibold text-slate-700">{pair.right}</span></div>
+                          ))}
+                        </div>
+                      )}
+                      {q.qtype === 'essay' && (
+                        <p style={{ fontSize: 12, color: faint, margin: '4px 0 0' }}>Marked by hand</p>
+                      )}
+                    </div>
                   </div>
-                )}
-                {q.qtype === 'true_false' && (
-                  <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0', paddingLeft: 22 }}>
-                    Answer: <span className="font-semibold text-slate-700">{q.answer_key?.value ? 'True' : 'False'}</span>
-                  </p>
-                )}
-                {q.qtype === 'short_answer' && (
-                  <p className="mt-1 text-[12px] text-slate-500" style={{ margin: '4px 0 0', paddingLeft: 22 }}>
-                    Accepted answers: <span className="font-semibold text-slate-700">{(q.answer_key?.answers ?? []).join(', ') || '—'}</span>
-                  </p>
-                )}
-                {q.qtype === 'matching' && (
-                  <div className="mt-1 space-y-0.5 text-[12px] text-slate-500" style={{ paddingLeft: 22 }}>
-                    {(q.answer_key?.pairs ?? []).map((pair, idx) => (
-                      <div key={idx} className="break-words">{pair.left} → <span className="font-semibold text-slate-700">{pair.right}</span></div>
-                    ))}
-                  </div>
-                )}
-                {q.qtype === 'essay' && (
-                  <p style={{ fontSize: 12, color: faint, margin: '4px 0 0', paddingLeft: 22 }}>Marked by hand</p>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => handleBankQuestions([q])}
+                    disabled={bankingQuestions}
+                    className="transition hover:opacity-70 disabled:opacity-50 flex-shrink-0 text-slate-500 hover:text-navy"
+                    style={{ ...linkBtn, fontSize: 12 }}
+                  >
+                    Add to Quiz Bank
+                  </button>
+                </div>
               </div>
             ))}
           </div>
