@@ -389,6 +389,36 @@ export default function BulkUpload({ role, onDone, settings, users }) {
           Bulk | Individual, then Teacher | Student, and this component is
           not mounted until a role is chosen, so what follows is already
           role-shaped. */}
+      {!prefix && (
+        <div style={{
+          marginBottom: 16,
+          padding: '12px 16px',
+          background: 'rgba(217, 83, 79, 0.08)',
+          border: '1px solid rgba(217, 83, 79, 0.25)',
+          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}>
+          <p style={{ margin: 0, fontSize: 13, color: red, lineHeight: 1.5, fontWeight: 600 }}>
+            Before uploading users, please set up your school abbreviation first.
+          </p>
+          <a
+            href="#school-login-prefix"
+            style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: navy,
+              textDecoration: 'underline',
+            }}
+          >
+            Set abbreviation in School &amp; Login Prefix ↑
+          </a>
+        </div>
+      )}
+
       <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, maxWidth: 640, margin: '0 0 16px' }}>
         Creates accounts from a spreadsheet — .xlsx or CSV. Fill in the template below and upload it back.
       </p>
@@ -422,8 +452,12 @@ export default function BulkUpload({ role, onDone, settings, users }) {
               A <code style={{ ...mono, fontSize: 12 }}>role</code> column in the file overrides the
               role above, row by row, so one file can mix teachers and students.
             </>
-          : <>No login prefix is set for your school yet — set it in the Login prefix card above,
-              or these rows have nothing to issue a login from.</>}
+          : <>
+              Before uploading users, please set up your school abbreviation first — set it in the{' '}
+              <a href="#school-login-prefix" style={{ color: red, fontWeight: 700, textDecoration: 'underline' }}>
+                School &amp; Login Prefix card above
+              </a>, or these rows have nothing to issue a login from.
+            </>}
       </p>
 
       {/* Same size on purpose — colour alone tells them apart: navy for the
