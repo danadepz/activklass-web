@@ -14,7 +14,11 @@
  * - Therefore, after scoping `users` by `school_id`, `classes` is queried
  *   by `where('teacher_id', 'in', chunk)` for this school's teachers, and
  *   `quiz_attempts` is queried by `where('student_id', 'in', chunk)` for this
- *   school's students (chunked into <=30 ids for Firestore IN limits).
+ *   school's students.
+ * - Chunk size is capped at 10 (not the 30-item array IN limit) because Cloud
+ *   Firestore limits security rule document lookups (`get()`) to under 20 calls
+ *   per query evaluation: an IN query with >15 items causes the rules engine
+ *   to exceed its document access limit and fail with PERMISSION_DENIED.
  * - `quizzes` read rule remains `signedIn()` (metadata-only), so it can still
  *   be enumerated or filtered.
  */
@@ -23,6 +27,10 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 export const adminOverviewKey = ['fs-admin-overview']
+
+// Maximum IDs per IN query: kept at 10 to ensure Cloud Firestore's document
+// lookup limit (get() in security rules) is never exceeded during rule evaluation.
+const CHUNK_SIZE = 10
 
 const all = async (name) => {
   const snap = await getDocs(collection(db, name))
@@ -37,8 +45,8 @@ const usersInSchool = async (schoolId) => {
 const classesForTeachers = async (teacherIds) => {
   if (!teacherIds.length) return []
   const chunks = []
-  for (let i = 0; i < teacherIds.length; i += 30) {
-    chunks.push(teacherIds.slice(i, i + 30))
+  for (let i = 0; i < teacherIds.length; i += CHUNK_SIZE) {
+    chunks.push(teacherIds.slice(i, i + CHUNK_SIZE))
   }
   const snaps = await Promise.all(
     chunks.map((chunk) =>
@@ -51,8 +59,8 @@ const classesForTeachers = async (teacherIds) => {
 const attemptsForStudents = async (studentIds) => {
   if (!studentIds.length) return []
   const chunks = []
-  for (let i = 0; i < studentIds.length; i += 30) {
-    chunks.push(studentIds.slice(i, i + 30))
+  for (let i = 0; i < studentIds.length; i += CHUNK_SIZE) {
+    chunks.push(studentIds.slice(i, i + CHUNK_SIZE))
   }
   const snaps = await Promise.all(
     chunks.map((chunk) =>
