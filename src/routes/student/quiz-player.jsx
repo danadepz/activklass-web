@@ -217,7 +217,23 @@ function QuestionView({ q, answer, setAnswer }) {
  * Every rule that will govern the sitting is listed here, in the same words on
  * both clients, and nothing is written until they press the button.
  */
-function StartCard({ quiz, attempts, classId, onStarted }) {
+export function tabSwitchWarningTitle(count) {
+  if (count === 1) return 'Tab switch warning (1 of 3)'
+  if (count === 2) return 'Tab switch warning (2 of 3)'
+  return `Tab switch warning (${count})`
+}
+
+export function tabSwitchWarningMessage(count) {
+  if (count === 1) {
+    return 'You left the quiz page. One warning has been used. Switching tabs or leaving the page is recorded and visible to your teacher.'
+  }
+  if (count === 2) {
+    return 'You left the quiz page again. Two warnings have been used. Switching tabs or leaving the page is recorded and visible to your teacher.'
+  }
+  return `You have left the quiz page ${count} times. Your teacher sees every time you switch tabs or leave this page.`
+}
+
+export function StartCard({ quiz, attempts, classId, onStarted }) {
   const { profile } = useAuth()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState(null)
@@ -238,6 +254,9 @@ function StartCard({ quiz, attempts, classId, onStarted }) {
     setStarting(true)
     setError(null)
     try {
+      if (typeof document !== 'undefined' && document.documentElement?.requestFullscreen) {
+        document.documentElement?.requestFullscreen().catch(() => {})
+      }
       await startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber })
       onStarted()
     } catch (err) {
@@ -270,6 +289,15 @@ function StartCard({ quiz, attempts, classId, onStarted }) {
               </span>
             </li>
           ))}
+          <li style={{ display: 'flex', gap: 14, padding: '15px 26px', borderBottom: '1px solid rgba(14,42,92,0.06)' }}>
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: gold, flexShrink: 0, marginTop: 7 }} />
+            <span>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: ink }}>Fullscreen and tab switches</span>
+              <span style={{ display: 'block', fontSize: 13, color: muted, marginTop: 2, lineHeight: 1.5 }}>
+                The quiz will open in fullscreen. Switching tabs or leaving the page triggers warnings and is recorded for your teacher.
+              </span>
+            </span>
+          </li>
         </ul>
 
         <div style={{ padding: '20px 26px' }}>
@@ -333,10 +361,23 @@ export async function explainSubmitFailure(attemptId, err) {
   return err.message
 }
 
-function Runner({ quiz, attempt, isResume }) {
+export function Runner({ quiz, attempt, isResume }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const attemptNumber = attempt.attempt_number ?? 1
+  const [isFullscreen, setIsFullscreen] = useState(
+    () => typeof document !== 'undefined' && !!document.fullscreenElement,
+  )
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(typeof document !== 'undefined' && !!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
+  const [tabWarning, setTabWarning] = useState(null)
+  const { overlayProps: warningOverlay, panelProps: warningPanel } =
+    useDialogBehavior(() => setTabWarning(null), { open: tabWarning !== null, label: 'Tab switch warning' })
   /* The paper this student sits: the pool draw, the question order and the
      option order, all derived from (quiz, student, attempt).
 
@@ -509,14 +550,16 @@ function Runner({ quiz, attempt, isResume }) {
       const left = awayRef.current
       awayRef.current = null
       if (!left || submittedRef.current) return
+      const count = focusCountRef.current + 1
+      focusCountRef.current = count
       const event = focusEvent({
         at: new Date(left.at).toISOString(),
         questionIndex: left.index,
         questionId: questionsRef.current[left.index]?.id ?? null,
         awayMs: Date.now() - left.at,
       })
-      recordFocusEvent(attempt.id, event, focusCountRef.current).catch(() => {})
-      focusCountRef.current += 1
+      recordFocusEvent(attempt.id, event, count - 1).catch(() => {})
+      setTabWarning(count)
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
@@ -532,11 +575,38 @@ function Runner({ quiz, attempt, isResume }) {
           <div style={{ ...serif, fontSize: 22, color: ink, lineHeight: 1.1 }}>{quiz.title}</div>
           <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>Question {idx + 1} of {total}</div>
         </div>
-        {remaining != null && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 999, fontWeight: 700, ...mono, fontSize: 14, color: lowTime ? red : navy, background: lowTime ? 'rgba(192,57,43,0.08)' : 'rgba(14,42,92,0.06)', border: `1px solid ${lowTime ? 'rgba(192,57,43,0.35)' : 'rgba(14,42,92,0.12)'}` }}>
-            <Clock className="h-4 w-4" /> {fmtTime(remaining)}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof document !== 'undefined') {
+                if (!document.fullscreenElement) {
+                  document.documentElement?.requestFullscreen?.().catch(() => {})
+                } else {
+                  document.exitFullscreen?.().catch(() => {})
+                }
+              }
+            }}
+            style={{
+              padding: '6px 12px',
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: navy,
+              background: '#FFFFFF',
+              border: '1.5px solid rgba(14,42,92,0.14)',
+              borderRadius: 999,
+              cursor: 'pointer',
+            }}
+            title={isFullscreen ? 'Exit full screen' : 'Enter full screen'}
+          >
+            {isFullscreen ? 'Exit full screen' : 'Full screen'}
+          </button>
+          {remaining != null && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 999, fontWeight: 700, ...mono, fontSize: 14, color: lowTime ? red : navy, background: lowTime ? 'rgba(192,57,43,0.08)' : 'rgba(14,42,92,0.06)', border: `1px solid ${lowTime ? 'rgba(192,57,43,0.35)' : 'rgba(14,42,92,0.12)'}` }}>
+              <Clock className="h-4 w-4" /> {fmtTime(remaining)}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -609,6 +679,40 @@ function Runner({ quiz, attempt, isResume }) {
           )
         })}
       </div>
+
+      {/* Tab switch warning modal */}
+      {tabWarning !== null && (
+        <div {...warningOverlay} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 105, padding: 24 }}>
+          <div {...warningPanel} role="alertdialog" aria-modal="true" style={{ width: '100%', maxWidth: 440, background: '#FFFFFF', borderRadius: 18, padding: 28, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)' }}>
+            <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(192,57,43,0.1)', display: 'grid', placeItems: 'center', color: red, flexShrink: 0 }}>
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <h3 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>
+                {tabSwitchWarningTitle(tabWarning)}
+              </h3>
+            </div>
+            <p style={{ fontSize: 14, color: muted, lineHeight: 1.5, margin: '0 0 16px' }}>
+              {tabSwitchWarningMessage(tabWarning)}
+            </p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setTabWarning(null)
+                  if (typeof document !== 'undefined' && !document.fullscreenElement) {
+                    document.documentElement?.requestFullscreen?.().catch(() => {})
+                  }
+                }}
+                className="transition hover:brightness-110"
+                style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}
+              >
+                Return to quiz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Submit confirmation modal */}
       {confirm && (
