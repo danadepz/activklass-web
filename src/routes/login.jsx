@@ -13,7 +13,7 @@ import {
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { toAuthEmail, wrongCredentialMessage } from '@/lib/logins'
-import { passwordError, MIN_PASSWORD } from '@/lib/validation'
+import { passwordError } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
 import AuthLayout, {
   SubmitButton,
@@ -22,54 +22,12 @@ import AuthLayout, {
   AuthNotice,
 } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
-import { Check } from '@/components/icons'
-import { navy, ink, muted } from '@/theme'
+import { navy, ink } from '@/theme'
+import PasswordChecklist, { PASSWORD_REQUIREMENTS } from '@/components/PasswordChecklist'
 
-/* T-201 (maykel_64440-301, owner decision (b), 2026-10-24): the same five
-   rules passwordError() enforces (lib/validation.js), reported live instead
-   of one message at a time -- a checklist does not DEFINE the rules, it only
-   reports them, so these checks must stay in the same order and match the
-   same regexes passwordError uses. Duplicated here rather than exported from
-   validation.js because nothing else needs a live per-rule check, and this
-   screen owns its own display concern. */
-export const PASSWORD_REQUIREMENTS = [
-  { label: `At least ${MIN_PASSWORD} characters`, test: (v) => v.length >= MIN_PASSWORD },
-  { label: 'An uppercase letter', test: (v) => /[A-Z]/.test(v) },
-  { label: 'A lowercase letter', test: (v) => /[a-z]/.test(v) },
-  { label: 'A number', test: (v) => /\d/.test(v) },
-  { label: 'A special character (like ! @ # $)', test: (v) => /[^A-Za-z0-9\s]/.test(v) },
-]
-
-export function PasswordChecklist({ value }) {
-  return (
-    <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {PASSWORD_REQUIREMENTS.map(({ label, test }) => {
-        const met = test(value)
-        return (
-          <li key={label} className="flex items-center gap-2" style={{ fontSize: 12, color: met ? '#1F8A5B' : muted }}>
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'grid',
-                placeItems: 'center',
-                flexShrink: 0,
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: met ? 'none' : '1.5px solid #C7D0DE',
-                background: met ? '#1F8A5B' : 'transparent',
-                color: '#FFFFFF',
-              }}
-            >
-              {met && <Check className="h-2.5 w-2.5" />}
-            </span>
-            {label}
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
+/* T-201 (maykel_64440-301) / T-234 (maykel_64440-321): lifted to components/
+   for shared use across login, reset-password, and admin password reset prompts. */
+export { PasswordChecklist, PASSWORD_REQUIREMENTS }
 
 const FRIENDLY_ERRORS = {
   'auth/user-not-found': 'No account found with that email or login ID.',

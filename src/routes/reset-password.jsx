@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { INTERNAL_LOGIN_SUFFIX } from '@/lib/logins'
-import { passwordError, PASSWORD_RULE } from '@/lib/validation'
+import { passwordError } from '@/lib/validation'
+import PasswordChecklist from '@/components/PasswordChecklist'
 import { SubmitButton, EyeToggle, AuthError, BrandMark } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { Check } from '@/components/icons'
@@ -64,6 +65,10 @@ export default function ResetPassword() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const hasMinRequirements = !passwordError(password)
+  const passwordsMatch = Boolean(password && confirm && password === confirm)
+  const canSubmit = hasMinRequirements && passwordsMatch
 
   useEffect(() => {
     if (!oobCode) return
@@ -168,7 +173,7 @@ export default function ResetPassword() {
         {state === READY && (
           <>
             <h1 style={{ fontSize: 21, fontWeight: 800, color: navy, margin: '0 0 6px', textAlign: 'center', fontFamily: sans }}>
-              Set a new password
+              Set a New Password
             </h1>
             <p style={{ fontSize: 13.5, color: muted, margin: '0 0 20px', textAlign: 'center' }}>
               for <strong style={{ color: ink }}>{login}</strong>
@@ -178,7 +183,7 @@ export default function ResetPassword() {
               {error && <AuthError>{error}</AuthError>}
 
               <div>
-                <label htmlFor="reset-password" style={authLabelStyle}>New password</label>
+                <label htmlFor="reset-password" style={authLabelStyle}>New Password</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     id="reset-password"
@@ -194,13 +199,11 @@ export default function ResetPassword() {
                   />
                   <EyeToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
                 </div>
-                <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
-                  {PASSWORD_RULE}
-                </p>
+                <PasswordChecklist value={password} />
               </div>
 
               <div>
-                <label htmlFor="reset-confirm" style={authLabelStyle}>Confirm new password</label>
+                <label htmlFor="reset-confirm" style={authLabelStyle}>Confirm New Password</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     id="reset-confirm"
@@ -215,10 +218,46 @@ export default function ResetPassword() {
                   />
                   <EyeToggle shown={showConfirm} onToggle={() => setShowConfirm((s) => !s)} />
                 </div>
+                {confirm && (
+                  <p
+                    data-testid="password-match-indicator"
+                    style={{
+                      fontSize: 12,
+                      margin: '8px 0 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      color: passwordsMatch ? '#1F8A5B' : '#9F1239',
+                    }}
+                  >
+                    {passwordsMatch ? (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'grid',
+                            placeItems: 'center',
+                            flexShrink: 0,
+                            width: 14,
+                            height: 14,
+                            borderRadius: '50%',
+                            background: '#1F8A5B',
+                            color: '#FFFFFF',
+                          }}
+                        >
+                          <Check className="h-2.5 w-2.5" />
+                        </span>
+                        Passwords match
+                      </>
+                    ) : (
+                      'Passwords do not match'
+                    )}
+                  </p>
+                )}
               </div>
 
-              <SubmitButton type="submit" disabled={submitting} aria-busy={submitting}>
-                {submitting ? 'Updating…' : 'Update password'}
+              <SubmitButton type="submit" disabled={submitting || !canSubmit} aria-busy={submitting}>
+                {submitting ? 'Updating…' : 'Update Password'}
               </SubmitButton>
             </form>
           </>
@@ -240,17 +279,28 @@ export default function ResetPassword() {
               <Check className="h-5 w-5" />
             </span>
             <h1 style={{ fontSize: 21, fontWeight: 800, color: navy, margin: 0, fontFamily: sans }}>
-              Password updated
+              Password Updated
             </h1>
             <p style={{ fontSize: 14, color: muted, margin: 0, lineHeight: 1.6 }}>
-              Taking you back to sign in…
+              You will be redirected to the sign-in page shortly.
             </p>
             <Link
               to="/login"
-              className="transition hover:opacity-70"
-              style={{ fontWeight: 700, color: navy, fontSize: 14 }}
+              className="ak-btn-primary flex items-center justify-center gap-2 transition hover:opacity-95"
+              style={{
+                width: '100%',
+                padding: '13px 18px',
+                borderRadius: 12,
+                background: navy,
+                color: '#FFFFFF',
+                fontWeight: 700,
+                fontSize: 14.5,
+                textDecoration: 'none',
+                boxShadow: '0 4px 14px -2px rgba(14,42,92,0.3)',
+                marginTop: 8,
+              }}
             >
-              Sign in now
+              Sign In Now
             </Link>
           </div>
         )}
