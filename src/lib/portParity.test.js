@@ -203,14 +203,40 @@ describe('quizAttempts parity', () => {
       { status: 'published', attempts_allowed: 2, opens_at: '2026-04-11T09:00:00Z' },
       { status: 'published', attempts_allowed: 2, closes_at: '2026-04-09T09:00:00Z' },
       { status: 'published', attempts_allowed: 1, extra_attempts: { s1: 2 } },
+      { status: 'published', attempts_allowed: 2, student_access: { s1: 'closed' } },
+      { status: 'published', closes_at: '2026-04-09T09:00:00Z', student_access: { s1: 'open' } },
+      { status: 'closed', student_access: { s1: 'open' } },
     ]
-    const attemptSets = [[], [done(1)], [done(1), done(2)], [done(1), open(2)], [open(1)]]
+    const attemptSets = [[], [done(1)], [done(1), done(2)], [done(1), open(2)], [open(1)], [open(1, { status: 'locked' })]]
 
     for (const quiz of quizzes) {
       for (const attempts of attemptSets) {
         const w = webAttempts.canStart({ quiz, attempts, studentId: 's1', now: NOW })
         const m = mobileAttempts.canStart({ quiz, attempts, studentId: 's1', now: NOW })
         expect(m).toEqual(w)
+      }
+    }
+  })
+
+  it('agrees on student access status and overrides', () => {
+    expect(typeof webAttempts.studentAccessStatus).toBe('function')
+    expect(typeof webAttempts.hasIndividualAccessOverride).toBe('function')
+    const quizzes = [
+      { status: 'published' },
+      { status: 'draft' },
+      { status: 'closed' },
+      { status: 'published', closes_at: '2026-04-09T09:00:00Z' },
+      { status: 'published', opens_at: '2026-04-11T09:00:00Z' },
+      { status: 'published', student_access: { s1: 'closed' } },
+      { status: 'closed', student_access: { s1: 'open' } },
+    ]
+    const attemptSets = [[], [open(1, { status: 'locked' })], [done(1)]]
+    for (const quiz of quizzes) {
+      for (const attempts of attemptSets) {
+        expect(mobileAttempts.studentAccessStatus({ quiz, studentId: 's1', attempts, now: NOW }))
+          .toBe(webAttempts.studentAccessStatus({ quiz, studentId: 's1', attempts, now: NOW }))
+        expect(mobileAttempts.hasIndividualAccessOverride(quiz, 's1'))
+          .toBe(webAttempts.hasIndividualAccessOverride(quiz, 's1'))
       }
     }
   })

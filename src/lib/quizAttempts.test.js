@@ -32,6 +32,8 @@ import {
   startBriefing,
   summariseFocus,
   unlimitedAttempts,
+  studentAccessStatus,
+  hasIndividualAccessOverride,
 } from './quizAttempts.js'
 
 const NOW = new Date('2026-04-10T09:00:00Z').getTime()
@@ -212,6 +214,59 @@ describe('canStart', () => {
   it('treats "all" and a missing assignment as everyone', () => {
     expect(canStart({ quiz: { ...quiz, assigned_to: 'all' }, studentId: 's1', now: NOW }).ok).toBe(true)
     expect(canStart({ quiz, studentId: 's1', now: NOW }).ok).toBe(true)
+  })
+
+  it('honours per-student closed access without affecting other students', () => {
+    const restricted = { ...quiz, student_access: { s1: 'closed' } }
+    expect(canStart({ quiz: restricted, studentId: 's1', now: NOW }))
+      .toEqual({ ok: false, reason: 'access_closed' })
+    expect(canStart({ quiz: restricted, studentId: 's2', now: NOW }).ok).toBe(true)
+  })
+
+  it('honours per-student open access overriding closed quiz window', () => {
+    const closed = { ...quiz, closes_at: '2026-04-09T09:00:00Z', student_access: { s1: 'open' } }
+    expect(canStart({ quiz: closed, studentId: 's1', now: NOW }).ok).toBe(true)
+    expect(canStart({ quiz: closed, studentId: 's2', now: NOW }))
+      .toEqual({ ok: false, reason: 'closed' })
+
+    const manualClosed = { ...quiz, status: 'closed', student_access: { s1: 'open' } }
+    expect(canStart({ quiz: manualClosed, studentId: 's1', now: NOW }).ok).toBe(true)
+    expect(canStart({ quiz: manualClosed, studentId: 's2', now: NOW }))
+      .toEqual({ ok: false, reason: 'closed' })
+  })
+
+  it('refuses to start when the student has a locked attempt', () => {
+    const attempts = [open(1, { status: 'locked' })]
+    expect(canStart({ quiz, attempts, studentId: 's1', now: NOW }))
+      .toEqual({ ok: false, reason: 'locked' })
+  })
+})
+
+describe('studentAccessStatus and hasIndividualAccessOverride', () => {
+  it('identifies locked attempt status', () => {
+    expect(typeof studentAccessStatus).toBe('function')
+    const attempts = [open(1, { status: 'locked' })]
+    expect(studentAccessStatus({ quiz: { status: 'published' }, studentId: 's1', attempts, now: NOW })).toBe('locked')
+  })
+
+  it('identifies manual closed and open overrides', () => {
+    expect(typeof studentAccessStatus).toBe('function')
+    expect(typeof hasIndividualAccessOverride).toBe('function')
+    expect(studentAccessStatus({ quiz: { status: 'published', student_access: { s1: 'closed' } }, studentId: 's1', now: NOW })).toBe('closed')
+    expect(studentAccessStatus({ quiz: { status: 'closed', student_access: { s1: 'open' } }, studentId: 's1', now: NOW })).toBe('open')
+    expect(hasIndividualAccessOverride({ student_access: { s1: 'closed' } }, 's1')).toBe(true)
+    expect(hasIndividualAccessOverride({ student_access: { s1: 'open' } }, 's1')).toBe(true)
+    expect(hasIndividualAccessOverride({ student_access: { s1: 'open' } }, 's2')).toBe(false)
+    expect(hasIndividualAccessOverride({}, 's1')).toBe(false)
+  })
+
+  it('falls back to quiz lifecycle when no individual override is set', () => {
+    expect(typeof studentAccessStatus).toBe('function')
+    expect(studentAccessStatus({ quiz: { status: 'draft' }, studentId: 's1', now: NOW })).toBe('draft')
+    expect(studentAccessStatus({ quiz: { status: 'closed' }, studentId: 's1', now: NOW })).toBe('closed')
+    expect(studentAccessStatus({ quiz: { status: 'published', closes_at: '2026-04-09T09:00:00Z' }, studentId: 's1', now: NOW })).toBe('closed')
+    expect(studentAccessStatus({ quiz: { status: 'published', opens_at: '2026-04-11T09:00:00Z' }, studentId: 's1', now: NOW })).toBe('scheduled')
+    expect(studentAccessStatus({ quiz: { status: 'published' }, studentId: 's1', now: NOW })).toBe('open')
   })
 })
 

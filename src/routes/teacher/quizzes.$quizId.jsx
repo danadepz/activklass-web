@@ -6,7 +6,7 @@ import { deleteQuizWithKey, loadQuizWithKey, writeQuizWithKey } from '@/lib/quiz
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
-import { ArrowRight, Sparkles, BookOpen } from '@/components/icons'
+import { ArrowRight, Sparkles, BookOpen, Lock } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
@@ -38,8 +38,10 @@ import {
   hasExpired,
   openAttempt,
   openForMs,
+  studentAccessStatus,
+  hasIndividualAccessOverride,
 } from '@/lib/quizAttempts'
-import { discardAttempt, grantExtraAttempt } from '@/hooks/useAttemptSession'
+import { discardAttempt, grantExtraAttempt, setStudentQuizAccess, unlockAttempt } from '@/hooks/useAttemptSession'
 import { removeQuizFromAllRecords, syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { applyWordingEdits, backToDraftRefusal, wordingEditError } from './quizWording'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -587,6 +589,118 @@ function DiscardAttemptButton({ attempt, studentName, refetch }) {
  * to retake. Additive and per-student, so it neither disturbs the rest of the
  * class nor gets wiped by a later change to the class-wide allowance.
  */
+function UnlockAttemptButton({ attempt, quizId, studentId, studentName, refetch, refetchResults }) {
+  const { profile } = useAuth()
+  const [unlock, unlocking] = useAsyncAction(async () => {
+    try {
+      await unlockAttempt(attempt.id, { teacherId: profile?.id })
+      await setStudentQuizAccess(quizId, studentId, 'open')
+      toast.success(`Attempt unlocked for ${studentName}.`)
+      refetch?.()
+      refetchResults?.()
+    } catch (err) {
+      toast.error(`Could not unlock the attempt: ${err.message}`)
+    }
+  })
+  return (
+    <button
+      type="button"
+      onClick={unlock}
+      disabled={unlocking}
+      title="Unlock this student's attempt so they can resume"
+      className="transition hover:brightness-105 disabled:opacity-40"
+      style={{
+        ...mono,
+        fontSize: 11,
+        fontWeight: 700,
+        color: goldDeep,
+        background: '#FFFFFF',
+        border: '1.5px solid rgba(217,119,6,0.3)',
+        borderRadius: 8,
+        padding: '5px 9px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {unlocking ? '…' : 'Reopen attempt'}
+    </button>
+  )
+}
+
+function ToggleStudentAccessButton({ quizId, studentId, studentName, access, hasOverride, refetch, refetchResults }) {
+  const isOpen = access === 'open'
+  const targetAction = isOpen ? 'closed' : 'open'
+
+  const [toggle, toggling] = useAsyncAction(async () => {
+    try {
+      await setStudentQuizAccess(quizId, studentId, targetAction)
+      toast.success(targetAction === 'open' ? `Quiz opened for ${studentName}.` : `Quiz closed for ${studentName}.`)
+      refetch?.()
+      refetchResults?.()
+    } catch (err) {
+      toast.error(`Could not update access: ${err.message}`)
+    }
+  })
+
+  const [reset, resetting] = useAsyncAction(async () => {
+    try {
+      await setStudentQuizAccess(quizId, studentId, 'default')
+      toast.success(`Access for ${studentName} reset to class schedule.`)
+      refetch?.()
+      refetchResults?.()
+    } catch (err) {
+      toast.error(`Could not reset access: ${err.message}`)
+    }
+  })
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={toggling || resetting}
+        title={isOpen ? `Close quiz for ${studentName}` : `Open quiz for ${studentName}`}
+        className="transition hover:brightness-105 disabled:opacity-40"
+        style={{
+          ...mono,
+          fontSize: 11,
+          fontWeight: 700,
+          color: isOpen ? red : navy,
+          background: '#FFFFFF',
+          border: `1.5px solid ${isOpen ? 'rgba(192,57,43,0.3)' : 'rgba(14,42,92,0.2)'}`,
+          borderRadius: 8,
+          padding: '5px 9px',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {toggling ? '…' : isOpen ? 'Close quiz' : 'Open quiz'}
+      </button>
+      {hasOverride && (
+        <button
+          type="button"
+          onClick={reset}
+          disabled={toggling || resetting}
+          title="Reset to class schedule"
+          className="transition hover:opacity-80 disabled:opacity-40"
+          style={{
+            ...mono,
+            fontSize: 10,
+            color: faint,
+            background: 'none',
+            border: 'none',
+            padding: '2px 4px',
+            cursor: 'pointer',
+            textDecoration: 'underline',
+          }}
+        >
+          {resetting ? '…' : 'Reset'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function GrantAttemptButton({ quizId, studentId, refetch }) {
   const [grant, granting] = useAsyncAction(async () => {
     try {
@@ -668,6 +782,7 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
             <th style={{ ...thHead, textAlign: 'center' }}>Attempts</th>
             <th style={{ ...thHead, textAlign: 'center' }}>Best Score</th>
             <th style={thHead}>Status</th>
+            <th style={thHead}>Access</th>
             <th style={thHead}>Activity</th>
             <th style={thHead}></th>
           </tr>
@@ -689,6 +804,9 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
               .join(' · ')
             const allowed = attemptsAllowedFor(quiz, s.student_id)
             const granted = Number(quiz?.extra_attempts?.[s.student_id]) || 0
+            const access = studentAccessStatus({ quiz, studentId: s.student_id, attempts: studentAttempts })
+            const hasOverride = hasIndividualAccessOverride(quiz, s.student_id)
+            const lockedAttempt = studentAttempts.find((a) => a?.status === 'locked')
             return (
               <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <td style={{ padding: '12px 18px', fontWeight: 700 }}>
@@ -756,6 +874,25 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                     <span style={{ color: green, fontWeight: 600 }}>Graded</span>
                   )}
                 </td>
+                <td style={{ padding: '12px 18px', fontSize: 12 }}>
+                  {access === 'locked' ? (
+                    <span style={{ color: red, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Lock aria-hidden className="h-3.5 w-3.5 inline-block" /> Locked
+                    </span>
+                  ) : access === 'closed' ? (
+                    <span style={{ color: '#6B7280', fontWeight: 600 }}>
+                      Closed{hasOverride ? ' · override' : ''}
+                    </span>
+                  ) : access === 'open' ? (
+                    <span style={{ color: green, fontWeight: 600 }}>
+                      Open{hasOverride ? ' · override' : ''}
+                    </span>
+                  ) : access === 'scheduled' ? (
+                    <span style={{ color: goldDeep, fontWeight: 600 }}>Scheduled</span>
+                  ) : (
+                    <span style={{ color: faint, fontWeight: 600 }}>Draft</span>
+                  )}
+                </td>
                 {/* Reopens and away-events, stated as observations. A dropped
                     connection and a deliberate walk-away look identical from
                     here, so the wording describes rather than accuses. */}
@@ -798,6 +935,25 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                         refetch={refetch}
                       />
                     )}
+                    {lockedAttempt && (
+                      <UnlockAttemptButton
+                        attempt={lockedAttempt}
+                        quizId={quizId}
+                        studentId={s.student_id}
+                        studentName={`${s.first_name} ${s.last_name}`}
+                        refetch={refetch}
+                        refetchResults={refetchResults}
+                      />
+                    )}
+                    <ToggleStudentAccessButton
+                      quizId={quizId}
+                      studentId={s.student_id}
+                      studentName={`${s.first_name} ${s.last_name}`}
+                      access={access}
+                      hasOverride={hasOverride}
+                      refetch={refetch}
+                      refetchResults={refetchResults}
+                    />
                     <GrantAttemptButton quizId={quizId} studentId={s.student_id} refetch={refetch} />
                   </div>
                 </td>
@@ -1004,6 +1160,8 @@ export function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, on
   // this closes) -- detailsFor is a snapshot taken at the moment "View
   // details" was clicked and does not update on its own.
   const [attempts, setAttempts] = useState(detailsFor.attempts ?? [])
+  const modalAccess = studentAccessStatus({ quiz, studentId: s.student_id, attempts })
+  const modalHasOverride = hasIndividualAccessOverride(quiz, s.student_id)
   const [openAttemptId, setOpenAttemptId] = useState(() => {
     if (initialAttemptId) return initialAttemptId
     const pending = (detailsFor.attempts ?? []).find((a) => a.status === 'submitted')
@@ -1051,6 +1209,18 @@ export function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, on
             <p style={{ fontSize: 13, color: muted, margin: 0 }}>
               {attempts.length} of {attemptsLabel(allowed)} attempt{attempts.length === 1 ? '' : 's'} used
               {best !== null && <> · Best {best} / {totalPoints}</>}
+              {modalAccess && (
+                <>
+                  {' · Access: '}
+                  <span style={{
+                    fontWeight: 700,
+                    color: modalAccess === 'locked' ? red : modalAccess === 'open' ? green : muted,
+                  }}>
+                    {modalAccess === 'locked' ? 'Locked' : modalAccess === 'open' ? 'Open' : 'Closed'}
+                    {modalHasOverride ? ' (override)' : ''}
+                  </span>
+                </>
+              )}
             </p>
             {attempts.length > 0 && (
               <div className="mt-2 flex flex-col gap-2">

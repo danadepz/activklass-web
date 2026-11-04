@@ -186,7 +186,10 @@ export function expiryFrom(startedAtMs, timeLimitMinutes) {
  * can word them in their own voice while agreeing on the decision.
  */
 export function canStart({ quiz, attempts = [], studentId, now = Date.now() } = {}) {
-  if (quiz?.status && quiz.status !== 'published') {
+  if (quiz?.status === 'draft') {
+    return { ok: false, reason: 'not_published' }
+  }
+  if (quiz?.status && quiz.status !== 'published' && quiz.status !== 'closed') {
     return { ok: false, reason: 'not_published' }
   }
   const assignedTo = quiz?.assigned_to
@@ -197,11 +200,25 @@ export function canStart({ quiz, attempts = [], studentId, now = Date.now() } = 
   ) {
     return { ok: false, reason: 'not_assigned' }
   }
-  if (quiz?.opens_at && now < new Date(quiz.opens_at).getTime()) {
-    return { ok: false, reason: 'not_open' }
+  const locked = attempts.find((a) => a?.status === 'locked')
+  if (locked) {
+    return { ok: false, reason: 'locked' }
   }
-  if (quiz?.closes_at && now > new Date(quiz.closes_at).getTime()) {
-    return { ok: false, reason: 'closed' }
+  const individual = studentId ? quiz?.student_access?.[studentId] : null
+  if (individual === 'closed') {
+    return { ok: false, reason: 'access_closed' }
+  }
+  const isIndividualOpen = individual === 'open'
+  if (!isIndividualOpen) {
+    if (quiz?.status === 'closed') {
+      return { ok: false, reason: 'closed' }
+    }
+    if (quiz?.opens_at && now < new Date(quiz.opens_at).getTime()) {
+      return { ok: false, reason: 'not_open' }
+    }
+    if (quiz?.closes_at && now > new Date(quiz.closes_at).getTime()) {
+      return { ok: false, reason: 'closed' }
+    }
   }
   // Checked before the allowance: someone mid-attempt is resuming, not
   // starting, and telling them they are out of attempts would be both wrong
@@ -213,6 +230,33 @@ export function canStart({ quiz, attempts = [], studentId, now = Date.now() } = 
     return { ok: false, reason: 'no_attempts_left' }
   }
   return { ok: true, resuming: false }
+}
+
+/**
+ * Access status of a student for a quiz: 'locked', 'closed', 'open', 'scheduled', or 'draft'.
+ */
+export function studentAccessStatus({ quiz, studentId, attempts = [], now = Date.now() } = {}) {
+  const locked = attempts.find((a) => a?.status === 'locked')
+  if (locked) return 'locked'
+
+  const individual = studentId ? quiz?.student_access?.[studentId] : null
+  if (individual === 'closed') return 'closed'
+  if (individual === 'open') return 'open'
+
+  if (quiz?.status === 'closed') return 'closed'
+  if (quiz?.closes_at && now > new Date(quiz.closes_at).getTime()) return 'closed'
+  if (quiz?.opens_at && now < new Date(quiz.opens_at).getTime()) return 'scheduled'
+  if (quiz?.status && quiz.status !== 'published') return 'draft'
+
+  return 'open'
+}
+
+/**
+ * Whether this student has an individual access override ('open' or 'closed').
+ */
+export function hasIndividualAccessOverride(quiz, studentId) {
+  const v = studentId ? quiz?.student_access?.[studentId] : null
+  return v === 'open' || v === 'closed'
 }
 
 /**

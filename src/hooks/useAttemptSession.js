@@ -23,6 +23,7 @@ import {
   addDoc,
   arrayUnion,
   collection,
+  deleteField,
   doc,
   getDoc,
   increment,
@@ -171,5 +172,32 @@ export function discardAttempt(attemptId, { teacherId, reason = null } = {}) {
     discarded_at: serverTimestamp(),
     discarded_by: teacherId ?? null,
     discard_reason: reason,
+  })
+}
+
+/**
+ * Override quiz access for an individual student: 'open', 'closed', or default.
+ *
+ * Stored on the quiz document under student_access.{studentId} so that
+ * general quiz settings remain undisturbed for everyone else.
+ */
+export function setStudentQuizAccess(quizId, studentId, access) {
+  const value = access === 'open' || access === 'closed' ? access : deleteField()
+  return updateDoc(doc(db, 'quizzes', quizId), {
+    [`student_access.${studentId}`]: value,
+    updated_at: serverTimestamp(),
+  })
+}
+
+/**
+ * Reopen a locked attempt so the student can resume it.
+ *
+ * Restores the attempt's status to 'in_progress', stamps unlocked_at and unlocked_by.
+ */
+export function unlockAttempt(attemptId, { teacherId = null } = {}) {
+  return updateDoc(doc(db, 'quiz_attempts', attemptId), {
+    status: 'in_progress',
+    unlocked_at: serverTimestamp(),
+    unlocked_by: teacherId ?? null,
   })
 }
