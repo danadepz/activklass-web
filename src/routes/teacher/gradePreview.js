@@ -300,3 +300,101 @@ export function previewWarnings(sim, { labOn = false } = {}) {
   }
   return out
 }
+
+/**
+ * T-243: Plain-words explanation of how a period grade is computed from entered
+ * components and the selected grading mode, with a worked example using the
+ * teacher's current on-screen weights.
+ *
+ * Derived directly from computeFinalGrade and pointScaleBands so the explanation
+ * and the preview arithmetic can never drift.
+ */
+const SAMPLE_EX_SCORES = [85, 80, 90, 75, 88, 82, 92, 78]
+
+export function explainGradeComputation(componentRows, mode, policy = {}) {
+  const rows = namedRows(componentRows)
+  if (!rows.length) {
+    return {
+      hasComponents: false,
+      formula: '',
+      example: '',
+      finalStep: '',
+      summary: 'Add at least one named component to see how grades are computed.',
+    }
+  }
+
+  const { grading_structure, passing_percent, point_scale_direction, lab_weight_percent } = gradePolicy(policy)
+  const isLab = grading_structure === 'lecture_lab'
+  const lectureRows = rows.filter((r) => componentTrack(r) !== LAB)
+  const labRows = rows.filter((r) => componentTrack(r) === LAB)
+
+  // One 100-pt assessment per component, evaluated by computeFinalGrade
+  const simComponents = rows.map((r, i) => ({
+    id: `c${i}`,
+    name: String(r.name).trim(),
+    weight_percent: Number(r.weight_percent) || 0,
+    track: componentTrack(r),
+    assessments: [{ id: `a${i}`, total_points: 100 }],
+  }))
+
+  const scores = {}
+  rows.forEach((_, i) => {
+    scores[`a${i}`] = { status: 'graded', raw_score: SAMPLE_EX_SCORES[i % SAMPLE_EX_SCORES.length] }
+  })
+
+  const sim = computeFinalGrade(simComponents, scores, mode, policy)
+
+  let formula = ''
+  let example = ''
+
+  if (isLab && lectureRows.length > 0 && labRows.length > 0) {
+    const lectureTerms = lectureRows.map((r) => `${r.name} × ${r.weight_percent}%`).join(' + ')
+    const labTerms = labRows.map((r) => `${r.name} × ${r.weight_percent}%`).join(' + ')
+    const lw = round2(sim.tracks?.lecture_weight_percent ?? (100 - (lab_weight_percent ?? 33.33)))
+    const bw = round2(sim.tracks?.lab_weight_percent ?? (lab_weight_percent ?? 33.33))
+    formula = `Period grade = (Lecture × ${lw}%) + (Laboratory × ${bw}%). Where Lecture = (${lectureTerms}) and Laboratory = (${labTerms})`
+
+    const lectureEx = lectureRows
+      .map((r, i) => `(${SAMPLE_EX_SCORES[i % SAMPLE_EX_SCORES.length]} × ${(Number(r.weight_percent) / 100).toFixed(2)})`)
+      .join(' + ')
+    const labEx = labRows
+      .map((r, i) => {
+        const idx = (lectureRows.length + i) % SAMPLE_EX_SCORES.length
+        return `(${SAMPLE_EX_SCORES[idx]} × ${(Number(r.weight_percent) / 100).toFixed(2)})`
+      })
+      .join(' + ')
+
+    example = `Lecture: ${lectureEx} = ${sim.tracks?.lecture ?? '—'}. Laboratory: ${labEx} = ${sim.tracks?.lab ?? '—'}. Combined initial: (${sim.tracks?.lecture ?? '—'} × ${(lw / 100).toFixed(2)}) + (${sim.tracks?.lab ?? '—'} × ${(bw / 100).toFixed(2)}) = ${sim.initial}`
+  } else {
+    const terms = rows.map((r) => `${r.name} × ${r.weight_percent}%`).join(' + ')
+    formula = `Period grade = ${terms}`
+    const exTerms = rows
+      .map((r, i) => `(${SAMPLE_EX_SCORES[i % SAMPLE_EX_SCORES.length]} × ${(Number(r.weight_percent) / 100).toFixed(2)})`)
+      .join(' + ')
+    example = `Example with sample scores: ${exTerms} = ${sim.initial}`
+  }
+
+  let finalStep = ''
+  if (mode === 'deped_k12') {
+    finalStep = `Transmuted per DepEd Order No. 015, s. 2026: initial ${sim.initial} → final grade ${fmtFinal(sim.final, mode)} (${sim.descriptor} · passes at 75).`
+  } else if (mode === 'ched_point') {
+    const bands = pointScaleBands(policy)
+    const band = bands.find((b) => (sim.initial ?? 0) >= b.from) ?? bands[bands.length - 1]
+    const bandLabel = band.to == null ? `${band.from} and above` : `${band.from}–${band.to}`
+    const dirHint = point_scale_direction === 'inverted' ? '5.0 is highest, 3.00 passes' : '1.0 is highest, 3.00 passes'
+    finalStep = `Point-scale table lookup: initial ${sim.initial}% falls in the “${bandLabel}” band → final grade ${fmtPoint(sim.final)} (${sim.descriptor} · ${dirHint}).`
+  } else {
+    finalStep = `Under CHED Raw Percentage, the weighted percent is the period grade: ${fmtFinal(sim.final, mode)}% (${sim.descriptor} · passes at ${passing_percent}% or higher).`
+  }
+
+  return {
+    hasComponents: true,
+    formula,
+    example,
+    finalStep,
+    initial: sim.initial,
+    final: sim.final,
+    descriptor: sim.descriptor,
+    summary: `${formula}\n${example}\n${finalStep}`,
+  }
+}

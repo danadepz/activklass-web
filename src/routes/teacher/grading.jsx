@@ -34,7 +34,7 @@ import {
   templateFromSetup,
   updateTemplate,
 } from '@/lib/gradingTemplates'
-import { fmtFinal, fmtPoint, namedRows, previewWarnings, simulateAllPeriods } from './gradePreview'
+import { explainGradeComputation, fmtFinal, fmtPoint, namedRows, previewWarnings, simulateAllPeriods } from './gradePreview'
 import { useAuth } from '@/context/useAuth'
 import { ArrowRight } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
@@ -466,6 +466,48 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+/*
+ * T-243: Plain-words explanation of how a final grade is computed under the
+ * selected grading type, using the weights currently entered on screen.
+ */
+export function GradingComputationExplanation({ mode, components, policy }) {
+  const explanation = explainGradeComputation(components, mode, policy)
+  if (!explanation || !explanation.hasComponents) return null
+
+  const modeTitle =
+    mode === 'deped_k12'
+      ? 'DepEd K-12'
+      : mode === 'ched_point'
+        ? 'CHED Point Scale'
+        : 'CHED Raw Percentage'
+
+  return (
+    <div
+      data-testid="grading-computation-explanation"
+      style={{
+        marginTop: 16,
+        padding: '14px 16px',
+        background: 'rgba(14,42,92,0.03)',
+        border: '1px solid rgba(14,42,92,0.1)',
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: muted, marginBottom: 6 }}>
+        How grades are computed ({modeTitle})
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: ink, marginBottom: 4 }}>
+        {explanation.formula}
+      </div>
+      <div style={{ fontSize: 12.5, color: muted, marginBottom: 4 }}>
+        {explanation.example}
+      </div>
+      <div style={{ fontSize: 12, color: faint }}>
+        {explanation.finalStep}
+      </div>
     </div>
   )
 }
@@ -1604,6 +1646,16 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           direction={scaleDirection}
           setDirection={setScaleDirection}
           busy={busy}
+        />
+        <GradingComputationExplanation
+          mode={gradingMode}
+          components={labOn ? [...components, ...labComponents] : components}
+          policy={gradePolicy({
+            passing_percent: passingPercent,
+            point_scale_direction: scaleDirection,
+            grading_structure: structure,
+            lab_weight_percent: labWeight,
+          })}
         />
       </div>
 
