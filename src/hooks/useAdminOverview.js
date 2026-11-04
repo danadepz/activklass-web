@@ -2,21 +2,21 @@
  * School-wide data for the admin's oversight and reports.
  *
  * Owned by the logic lane (see OWNERSHIP.md). Firestore reads, joined in
- * memory. firestore.rules lets isAdmin() read `classes`, `quizzes` and
- * `quiz_attempts` unconditionally (none of those three rules reference
- * resource.data in that branch, so an unscoped list is provable and passes)
- * -- but `users/{uid}` was narrowed by T-126 to isAdmin() && sameSchoolAsCaller,
- * which an unscoped `getDocs(collection(db,'users'))` can never prove, and
- * Firestore refuses the whole call (T-167). The users read below carries the
- * same `where('school_id','==',schoolId)` filter `useAdminUsers.js` already
- * uses for exactly that reason.
+ * memory.
  *
- * Reading `classes`/`quizzes`/`quiz_attempts` unscoped is rule-legal for an
- * admin but not what this screen means by "school-wide" -- a class belongs to
- * this oversight view only if its teacher is one of this school's own users,
- * so classes/quizzes/attempts are filtered down to that set after the users
- * read comes back scoped. No change to firestore.rules; this stays a
- * client-side join, same as `rows.map` already did for teacher names.
+ * Scoping history:
+ * - T-126 narrowed `users/{uid}` to sameSchoolAsCaller, so `users` requires
+ *   `where('school_id', '==', schoolId)` (T-167).
+ * - T-203 (audit F-02) narrowed `classes` to `sameSchoolAsUser(teacher_id)`
+ *   and `quiz_attempts` to `sameSchoolAsUser(student_id)`. Unscoped reads of
+ *   `classes` or `quiz_attempts` can no longer be proven by the rules engine
+ *   and Firestore rejects them outright with "Missing or insufficient permissions."
+ * - Therefore, after scoping `users` by `school_id`, `classes` is queried
+ *   by `where('teacher_id', 'in', chunk)` for this school's teachers, and
+ *   `quiz_attempts` is queried by `where('student_id', 'in', chunk)` for this
+ *   school's students (chunked into <=30 ids for Firestore IN limits).
+ * - `quizzes` read rule remains `signedIn()` (metadata-only), so it can still
+ *   be enumerated or filtered.
  */
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
@@ -32,6 +32,34 @@ const all = async (name) => {
 const usersInSchool = async (schoolId) => {
   const snap = await getDocs(query(collection(db, 'users'), where('school_id', '==', schoolId)))
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+const classesForTeachers = async (teacherIds) => {
+  if (!teacherIds.length) return []
+  const chunks = []
+  for (let i = 0; i < teacherIds.length; i += 30) {
+    chunks.push(teacherIds.slice(i, i + 30))
+  }
+  const snaps = await Promise.all(
+    chunks.map((chunk) =>
+      getDocs(query(collection(db, 'classes'), where('teacher_id', 'in', chunk))),
+    ),
+  )
+  return snaps.flatMap((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })))
+}
+
+const attemptsForStudents = async (studentIds) => {
+  if (!studentIds.length) return []
+  const chunks = []
+  for (let i = 0; i < studentIds.length; i += 30) {
+    chunks.push(studentIds.slice(i, i + 30))
+  }
+  const snaps = await Promise.all(
+    chunks.map((chunk) =>
+      getDocs(query(collection(db, 'quiz_attempts'), where('student_id', 'in', chunk))),
+    ),
+  )
+  return snaps.flatMap((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })))
 }
 
 /** A quiz may link to classes by array or by the legacy scalar. */
@@ -50,15 +78,18 @@ const emptyOverview = {
 export async function fetchOverview(schoolId) {
   if (!schoolId) return emptyOverview
 
-  const [users, allClasses, allQuizzes, allAttempts] = await Promise.all([
-    usersInSchool(schoolId),
-    all('classes'),
-    all('quizzes'),
-    all('quiz_attempts'),
-  ])
-
+  const users = await usersInSchool(schoolId)
   const byId = Object.fromEntries(users.map((u) => [u.id, u]))
   const schoolTeacherIds = new Set(users.filter((u) => u.role === 'teacher').map((u) => u.id))
+  const teacherIds = Array.from(schoolTeacherIds)
+  const studentIds = users.filter((u) => u.role === 'student').map((u) => u.id)
+
+  const [allClasses, allQuizzes, allAttempts] = await Promise.all([
+    classesForTeachers(teacherIds),
+    all('quizzes'),
+    attemptsForStudents(studentIds),
+  ])
+
   const classes = allClasses.filter((c) => schoolTeacherIds.has(c.teacher_id))
   const classIds = new Set(classes.map((c) => c.id))
   const quizzes = allQuizzes.filter((q) => classIdsOf(q).some((id) => classIds.has(id)))
