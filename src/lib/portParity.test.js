@@ -207,7 +207,11 @@ describe('quizAttempts parity', () => {
       { status: 'published', closes_at: '2026-04-09T09:00:00Z', student_access: { s1: 'open' } },
       { status: 'closed', student_access: { s1: 'open' } },
     ]
-    const attemptSets = [[], [done(1)], [done(1), done(2)], [done(1), open(2)], [open(1)], [open(1, { status: 'locked' })]]
+    const attemptSets = [
+      [], [done(1)], [done(1), done(2)], [done(1), open(2)], [open(1)], [open(1, { status: 'locked' })],
+      // T-236: a teacher unlock's bounded resume grant, live and lapsed.
+      [open(1, { resume_until_ms: NOW + 60_000 })], [open(1, { resume_until_ms: NOW - 1 })],
+    ]
 
     for (const quiz of quizzes) {
       for (const attempts of attemptSets) {

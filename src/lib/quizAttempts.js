@@ -209,7 +209,11 @@ export function canStart({ quiz, attempts = [], studentId, now = Date.now() } = 
     return { ok: false, reason: 'access_closed' }
   }
   const isIndividualOpen = individual === 'open'
-  if (!isIndividualOpen) {
+  // T-236 / D3: a teacher's unlock grants a bounded resume of the attempt
+  // already open (server-written resume_until_ms), never a new start and
+  // never an open-ended override.
+  const resumeGranted = Number(openAttempt(attempts)?.resume_until_ms) > now
+  if (!isIndividualOpen && !resumeGranted) {
     if (quiz?.status === 'closed') {
       return { ok: false, reason: 'closed' }
     }

@@ -240,6 +240,46 @@ describe('canStart', () => {
     expect(canStart({ quiz, attempts, studentId: 's1', now: NOW }))
       .toEqual({ ok: false, reason: 'locked' })
   })
+
+  // T-236 / D3: an unlock after the quiz closed grants a BOUNDED resume of the
+  // open attempt -- never a new start, never past the deadline it was given.
+  describe('resume_until_ms after a teacher unlock', () => {
+    const closedQuiz = { ...quiz, status: 'closed' }
+    const expiredQuiz = { ...quiz, closes_at: '2026-04-09T09:00:00Z' }
+
+    it('lets the unlocked attempt resume while the grant is live, on a closed or expired quiz', () => {
+      const attempts = [open(1, { resume_until_ms: NOW + 60_000 })]
+      expect(canStart({ quiz: closedQuiz, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: true, resuming: true })
+      expect(canStart({ quiz: expiredQuiz, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: true, resuming: true })
+    })
+
+    it('refuses once the grant has passed', () => {
+      const attempts = [open(1, { resume_until_ms: NOW - 1 })]
+      expect(canStart({ quiz: closedQuiz, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: false, reason: 'closed' })
+    })
+
+    it('never lets a grant start a NEW attempt on a closed quiz', () => {
+      const attempts = [{ ...done(1), resume_until_ms: NOW + 60_000 }]
+      expect(canStart({ quiz: closedQuiz, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: false, reason: 'closed' })
+    })
+
+    it('does not override a teacher closing access for that student', () => {
+      const attempts = [open(1, { resume_until_ms: NOW + 60_000 })]
+      const restricted = { ...closedQuiz, student_access: { s1: 'closed' } }
+      expect(canStart({ quiz: restricted, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: false, reason: 'access_closed' })
+    })
+
+    it('ignores a malformed grant', () => {
+      const attempts = [open(1, { resume_until_ms: 'soon' })]
+      expect(canStart({ quiz: closedQuiz, attempts, studentId: 's1', now: NOW }))
+        .toEqual({ ok: false, reason: 'closed' })
+    })
+  })
 })
 
 describe('studentAccessStatus and hasIndividualAccessOverride', () => {
