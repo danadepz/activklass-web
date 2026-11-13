@@ -190,14 +190,66 @@ export function setStudentQuizAccess(quizId, studentId, access) {
 }
 
 /**
- * Reopen a locked attempt so the student can resume it.
+ * Reopen a locked attempt so the student can resume it (T-236).
  *
- * Restores the attempt's status to 'in_progress', stamps unlocked_at and unlocked_by.
+ * Server-side since T-236: the server checks that the caller is the owner of a
+ * class this quiz is assigned to with the student on its roster (or an admin
+ * of the student's school), gives three fresh warnings, restores a timed
+ * attempt's paused time on its own clock, and bounds the resume of an untimed
+ * one by `extensionMinutes` (15, 30 or 60). firestore.rules refuses a direct
+ * locked -> in_progress write from any client, so this is the only path.
+ * It no longer opens the quiz for the student (`student_access`) -- that was
+ * an open-ended override; the bound now lives on the attempt.
  */
-export function unlockAttempt(attemptId, { teacherId = null } = {}) {
-  return updateDoc(doc(db, 'quiz_attempts', attemptId), {
-    status: 'in_progress',
-    unlocked_at: serverTimestamp(),
-    unlocked_by: teacherId ?? null,
+export function unlockAttempt(attemptId, { extensionMinutes = 15 } = {}) {
+  return api(`/api/quiz_attempts/${attemptId}/unlock`, {
+    method: 'POST',
+    body: { extension_minutes: extensionMinutes },
   })
+}
+
+/**
+ * Report one tab switch (T-236). Returns `{ status, strikes, limit, locked }`.
+ *
+ * `eventId` is made once per away period by the caller and reused on retry, so
+ * the server counts a retried or doubled report once. `sessionId` names this
+ * tab; the answers sent with it are kept under that name only, so a tab that
+ * fell behind can never overwrite what another tab saved.
+ */
+export function reportViolation(attemptId, { eventId, sessionId, answers, awayMs, questionIndex }) {
+  return api(`/api/quiz_attempts/${attemptId}/violation`, {
+    method: 'POST',
+    body: {
+      event_id: eventId,
+      session_id: sessionId,
+      answers: answers ?? {},
+      away_ms: awayMs ?? null,
+      question_index: questionIndex ?? null,
+    },
+  })
+}
+
+/** Save this tab's answers onto a locked attempt without counting anything. */
+export function saveDraftAnswers(attemptId, { sessionId, answers }) {
+  return api(`/api/quiz_attempts/${attemptId}/violation`, {
+    method: 'POST',
+    body: { save_only: true, session_id: sessionId, answers: answers ?? {} },
+  })
+}
+
+/**
+ * The answers to resume with: this tab's own draft wins outright; any question
+ * it has no answer for is filled from the other sessions' server snapshots,
+ * newest first. Pure, so it is tested without a browser.
+ */
+export function mergeDraftAnswers(local, drafts, ownSessionId = null) {
+  const snapshots = drafts && typeof drafts === 'object'
+    ? Object.entries(drafts)
+      .filter(([sid, d]) => sid !== ownSessionId && d && typeof d.answers === 'object')
+      .sort(([, a], [, b]) => (a.saved_at_ms ?? 0) - (b.saved_at_ms ?? 0))
+    : []
+  const own = drafts?.[ownSessionId]?.answers ?? {}
+  let merged = {}
+  for (const [, d] of snapshots) merged = { ...merged, ...d.answers }
+  return { ...merged, ...own, ...(local ?? {}) }
 }

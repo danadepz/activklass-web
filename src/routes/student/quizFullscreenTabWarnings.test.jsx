@@ -57,7 +57,9 @@ describe('T-236 — Fullscreen and tab-switch warnings', () => {
         </MemoryRouter>,
       )
       expect(html).toContain('Fullscreen and tab switches')
-      expect(html).toContain('The quiz will open in fullscreen. Switching tabs or leaving the page triggers warnings and is recorded for your teacher.')
+      // T-236 revision 2: the briefing now says the third switch locks.
+      expect(html).toContain('The quiz will open in fullscreen. Switching tabs or leaving the page is recorded for your teacher.')
+      expect(html).toContain('the third time locks your attempt until your teacher reopens it')
     })
 
     it('requests fullscreen on documentElement when Start is pressed', () => {

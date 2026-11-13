@@ -27,7 +27,14 @@ vi.mock('firebase/firestore', () => ({
 }))
 vi.mock('@/lib/firebase', () => ({ db: {} }))
 
-const { finishAttempt, setStudentQuizAccess, unlockAttempt } = await import('./useAttemptSession')
+const {
+  finishAttempt,
+  mergeDraftAnswers,
+  reportViolation,
+  saveDraftAnswers,
+  setStudentQuizAccess,
+  unlockAttempt,
+} = await import('./useAttemptSession')
 
 describe('finishAttempt', () => {
   it('posts the raw answers to the server-grading endpoint, never a client-computed score', async () => {
@@ -81,14 +88,65 @@ describe('setStudentQuizAccess and unlockAttempt', () => {
     })
   })
 
-  it('unlockAttempt sets attempt status to in_progress and stamps unlocked_by', async () => {
-    expect(typeof unlockAttempt).toBe('function')
+  // T-236 (D2/D3): unlock moved server-side. It used to be a direct Firestore
+  // write from the teacher's browser (T-237); the server now authorises the
+  // caller, restores the paused clock and bounds the resume, and the rules
+  // refuse the direct write. Pinned here so a regression to the old write --
+  // or to a client-chosen deadline -- fails.
+  it('unlockAttempt goes through the server endpoint and writes nothing itself', async () => {
     updateDocMock.mockClear()
-    await unlockAttempt('attempt-locked-1', { teacherId: 'teacher-1' })
-    expect(updateDocMock).toHaveBeenCalledWith('quiz_attempts/attempt-locked-1', {
-      status: 'in_progress',
-      unlocked_at: 'server-timestamp',
-      unlocked_by: 'teacher-1',
+    apiMock.mockClear()
+    await unlockAttempt('attempt-locked-1', { extensionMinutes: 30 })
+    expect(apiMock).toHaveBeenCalledWith('/api/quiz_attempts/attempt-locked-1/unlock', {
+      method: 'POST',
+      body: { extension_minutes: 30 },
     })
+    expect(updateDocMock).not.toHaveBeenCalled()
+  })
+
+  it('unlockAttempt defaults to the 15-minute extension', async () => {
+    apiMock.mockClear()
+    await unlockAttempt('attempt-locked-2')
+    expect(apiMock.mock.calls[0][1].body).toEqual({ extension_minutes: 15 })
+  })
+})
+
+describe('T-236 violation reporting', () => {
+  it('reportViolation sends the event id, session and answers to the server', async () => {
+    apiMock.mockClear()
+    await reportViolation('a1', { eventId: 'evt-1234567', sessionId: 'sess-1234567', answers: { q1: 'b' }, awayMs: 900, questionIndex: 2 })
+    expect(apiMock).toHaveBeenCalledWith('/api/quiz_attempts/a1/violation', {
+      method: 'POST',
+      body: { event_id: 'evt-1234567', session_id: 'sess-1234567', answers: { q1: 'b' }, away_ms: 900, question_index: 2 },
+    })
+  })
+
+  it('saveDraftAnswers is save_only and carries no event id', async () => {
+    apiMock.mockClear()
+    await saveDraftAnswers('a1', { sessionId: 'sess-1234567', answers: { q2: true } })
+    const { body } = apiMock.mock.calls[0][1]
+    expect(body).toEqual({ save_only: true, session_id: 'sess-1234567', answers: { q2: true } })
+  })
+})
+
+describe('mergeDraftAnswers', () => {
+  const drafts = {
+    'sess-old': { answers: { q1: 'old', q2: 'old' }, saved_at_ms: 1 },
+    'sess-new': { answers: { q1: 'new' }, saved_at_ms: 2 },
+    'sess-me': { answers: { q3: 'mine-server' }, saved_at_ms: 0 },
+  }
+
+  it("this tab's local draft always wins", () => {
+    expect(mergeDraftAnswers({ q1: 'local' }, drafts, 'sess-me').q1).toBe('local')
+  })
+
+  it('fills gaps from other sessions, newest snapshot winning', () => {
+    const merged = mergeDraftAnswers({}, drafts, 'sess-me')
+    expect(merged).toEqual({ q1: 'new', q2: 'old', q3: 'mine-server' })
+  })
+
+  it('copes with no drafts at all', () => {
+    expect(mergeDraftAnswers({ q1: 'a' }, undefined, 'sess-me')).toEqual({ q1: 'a' })
+    expect(mergeDraftAnswers(null, null)).toEqual({})
   })
 })

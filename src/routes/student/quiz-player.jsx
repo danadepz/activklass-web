@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { questionsForAttempt, questionsForStudent } from '@/lib/quizPool'
@@ -18,8 +18,11 @@ import {
 } from '@/lib/quizAttempts'
 import {
   finishAttempt,
+  mergeDraftAnswers,
   recordFocusEvent,
   recordReopen,
+  reportViolation,
+  saveDraftAnswers,
   startAttempt,
 } from '@/hooks/useAttemptSession'
 import { matchingChoices, matchingLefts } from '@/lib/quizGrading'
@@ -294,7 +297,7 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
             <span>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: ink }}>Fullscreen and tab switches</span>
               <span style={{ display: 'block', fontSize: 13, color: muted, marginTop: 2, lineHeight: 1.5 }}>
-                The quiz will open in fullscreen. Switching tabs or leaving the page triggers warnings and is recorded for your teacher.
+                The quiz will open in fullscreen. Switching tabs or leaving the page is recorded for your teacher. You get two warnings; the third time locks your attempt until your teacher reopens it. Your answers are kept.
               </span>
             </span>
           </li>
@@ -352,6 +355,9 @@ export async function explainSubmitFailure(attemptId, err) {
     if (status === 'discarded') {
       return 'Your teacher ended this attempt. Nothing was saved — go back to your class and start again.'
     }
+    if (status === 'locked' || err?.code === 'attempt_locked') {
+      return 'This attempt is locked. Your answers are kept — ask your teacher to reopen it.'
+    }
     if (status && status !== 'in_progress') {
       return 'This attempt has already been submitted. Check your results from your class page.'
     }
@@ -359,6 +365,44 @@ export async function explainSubmitFailure(attemptId, err) {
     /* If the check itself fails, the original error is still the best answer. */
   }
   return err.message
+}
+
+/** Strikes since the last unlock, as the server counts them (T-236). */
+function strikesOf(attempt) {
+  const count = Number(attempt?.violation_count) || 0
+  const base = Number(attempt?.violation_allowance_from) || 0
+  return Math.max(0, count - base)
+}
+
+function newToken(prefix) {
+  const raw = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
+  return `${prefix}-${raw}`.slice(0, 64)
+}
+
+/** One id per browser tab per attempt, kept across reloads of that tab. */
+function tabSessionId(attemptId) {
+  const key = `activklass:quiz-session:${attemptId}`
+  try {
+    const existing = sessionStorage.getItem(key)
+    if (existing) return existing
+    const made = newToken('sess')
+    sessionStorage.setItem(key, made)
+    return made
+  } catch {
+    return newToken('sess')
+  }
+}
+
+export const LOCKED_MESSAGE =
+  'This attempt is locked because you left the quiz page 3 times. Your answers are saved and the timer is paused. Ask your teacher to reopen it.'
+
+export function LockedPanel({ quiz, classId }) {
+  return (
+    <Gate icon={<AlertCircle className="h-6 w-6" />} title="Quiz Attempt Locked" classId={classId}>
+      {quiz?.title ? `${quiz.title}: ` : ''}{LOCKED_MESSAGE}
+    </Gate>
+  )
 }
 
 export function Runner({ quiz, attempt, isResume }) {
@@ -401,13 +445,38 @@ export function Runner({ quiz, attempt, isResume }) {
      should not outlive the tab. Answers are keyed by question id, so the
      shuffled order above does not have to be restored with them. */
   const draftKey = `activklass:quiz-draft:${quiz.id}:${profile.id}:${attemptNumber}`
+  /* T-236: names this tab to the server. Answers saved with a violation report
+     are kept under it, so a tab that fell behind never overwrites another's. */
+  const [sessionId] = useState(() => tabSessionId(attempt.id))
+  /* The attempt as the server has it now. A lock (from this tab or another)
+     and a teacher's unlock both arrive here, so an open tab follows them
+     without a reload. */
+  const [live, setLive] = useState(attempt)
+  useEffect(() => {
+    // Subscribing delivers the current document at once, then every change.
+    return onSnapshot(
+      doc(db, 'quiz_attempts', attempt.id),
+      (snap) => { if (snap.exists()) setLive({ id: snap.id, ...snap.data() }) },
+      () => { /* keep the last state; the next report or submit will tell */ },
+    )
+  }, [attempt])
+  const locked = live.status === 'locked'
+  const lockedRef = useRef(locked)
+  useEffect(() => { lockedRef.current = locked }, [locked])
   const [answers, setAnswers] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem(draftKey) ?? '{}') ?? {}
-    } catch {
-      return {} // private mode, or a draft written by an older shape
-    }
+    const local = (() => {
+      try {
+        return JSON.parse(sessionStorage.getItem(draftKey) ?? '{}') ?? {}
+      } catch {
+        return {} // private mode, or a draft written by an older shape
+      }
+    })()
+    // A tab opened after an unlock (or on another device) starts from the
+    // answers the server kept at the lock; this tab's own draft still wins.
+    return mergeDraftAnswers(local, attempt.draft_answers, sessionId)
   })
+  const answersRef = useRef(answers)
+  useEffect(() => { answersRef.current = answers }, [answers])
   const [idx, setIdx] = useState(0)
   /* Mirrors for the visibility and reopen listeners below. Those are
      registered once for the whole attempt; reading idx/questions directly
@@ -433,7 +502,7 @@ export function Runner({ quiz, attempt, isResume }) {
      document was written when Start was pressed, which is what anchors the
      deadline to the server clock instead of to whenever this tab opened. */
   async function submit({ expired = false } = {}) {
-    if (submittedRef.current) return
+    if (submittedRef.current || lockedRef.current) return
     submittedRef.current = true
     setSubmitting(true)
     setError(null)
@@ -487,12 +556,14 @@ export function Runner({ quiz, attempt, isResume }) {
      tick re-derives the remainder, so a reload, a sleeping laptop or a
      backgrounded tab all resume at the right number instead of at the number
      this tab last saw. Reaching zero submits what the student has. */
-  const hasTimer = secondsRemaining(attempt) !== null
-  const [remaining, setRemaining] = useState(() => secondsRemaining(attempt))
+  const hasTimer = secondsRemaining(live) !== null
+  const [remaining, setRemaining] = useState(() => secondsRemaining(live))
   useEffect(() => {
-    if (!hasTimer) return
+    // T-236 / D2: the clock is paused on the server while locked; the unlock
+    // restores the deadline, and this effect re-derives from the new one.
+    if (!hasTimer || locked) return
     const tick = () => {
-      const left = secondsRemaining(attempt)
+      const left = secondsRemaining(live)
       setRemaining(left)
       if (left <= 0) {
         clearInterval(id)
@@ -504,15 +575,31 @@ export function Runner({ quiz, attempt, isResume }) {
     }
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [hasTimer, attempt])
+  }, [hasTimer, live, locked])
 
   /* An attempt whose deadline passed while nobody was looking -- the tab was
      closed at 4 minutes left and reopened an hour later. Submitting on sight
      is the honest reading: the time was spent, and the answers in the draft
      are what the student had when it ran out. */
   useEffect(() => {
-    if (hasExpired(attempt)) queueMicrotask(() => submitRef.current({ expired: true }))
-  }, [attempt])
+    if (!locked && hasExpired(live)) queueMicrotask(() => submitRef.current({ expired: true }))
+  }, [live, locked])
+
+  /* T-236: entering the lock -- however it was learned -- hands this tab's
+     answers to the server once, so a lock tripped in ANOTHER tab cannot cost
+     the answers typed here. Leaving it (a teacher's unlock) folds in what the
+     other sessions saved, this tab's own answers winning. */
+  const wasLocked = useRef(locked)
+  useEffect(() => {
+    if (locked && !wasLocked.current) {
+      setTabWarning(null)
+      saveDraftAnswers(attempt.id, { sessionId, answers: answersRef.current }).catch(() => {})
+    }
+    if (!locked && wasLocked.current) {
+      setAnswers((prev) => mergeDraftAnswers(prev, live.draft_answers, sessionId))
+    }
+    wasLocked.current = locked
+  }, [locked, live, attempt.id, sessionId])
 
   /* Coming back to an attempt that was already open is a reopen. Recorded, not
      prevented: a dropped connection and a deliberate walk-away look identical
@@ -538,6 +625,8 @@ export function Runner({ quiz, attempt, isResume }) {
      claim: a second device, a phone on the desk, or notes on paper. It is
      evidence that attention left the page, and nothing more. */
   const awayRef = useRef(null)
+  const liveRef = useRef(live)
+  useEffect(() => { liveRef.current = live }, [live])
   const focusCountRef = useRef(
     Array.isArray(attempt.focus_events) ? attempt.focus_events.length : 0,
   )
@@ -549,23 +638,55 @@ export function Runner({ quiz, attempt, isResume }) {
       }
       const left = awayRef.current
       awayRef.current = null
-      if (!left || submittedRef.current) return
-      const count = focusCountRef.current + 1
-      focusCountRef.current = count
+      if (!left || submittedRef.current || lockedRef.current) return
+      const stored = focusCountRef.current + 1
+      focusCountRef.current = stored
+      const awayMs = Date.now() - left.at
       const event = focusEvent({
         at: new Date(left.at).toISOString(),
         questionIndex: left.index,
         questionId: questionsRef.current[left.index]?.id ?? null,
-        awayMs: Date.now() - left.at,
+        awayMs,
       })
-      recordFocusEvent(attempt.id, event, count - 1).catch(() => {})
+      recordFocusEvent(attempt.id, event, stored - 1).catch(() => {})
+      /* T-236: the warning shows at once from what this tab knows; the
+         server's count -- the one that decides the lock -- replaces it when
+         it answers. One event id per away period, reused on every retry, so
+         a retried or doubled report is counted once. */
+      const count = strikesOf(liveRef.current) + 1
       setTabWarning(count)
+      const report = {
+        eventId: newToken('evt'),
+        sessionId,
+        answers: answersRef.current,
+        awayMs,
+        questionIndex: left.index,
+      }
+      ;(async () => {
+        for (let tryNo = 0; tryNo < 3; tryNo += 1) {
+          try {
+            const res = await reportViolation(attempt.id, report)
+            if (res?.locked) {
+              setTabWarning(null)
+              setLive((l) => ({ ...l, status: 'locked' }))
+            } else if (Number.isFinite(res?.strikes)) {
+              setTabWarning((cur) => (cur === null ? null : res.strikes || null))
+            }
+            return
+          } catch {
+            // Offline or the API is down: the warning stands, nothing locks.
+            await new Promise((r) => setTimeout(r, 1000 * (tryNo + 1)))
+          }
+        }
+      })()
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [attempt.id])
+  }, [attempt.id, sessionId])
 
   const lowTime = remaining != null && remaining <= 30
+
+  if (locked) return <LockedPanel quiz={quiz} classId={live.class_id} />
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -779,6 +900,9 @@ export default function QuizPlayer() {
     const resultLink = last && (
       <> <Link to={`/student/quizzes/${last.id}/result`} style={{ color: navy, fontWeight: 700 }}>View your result</Link>.</>
     )
+    if (gate.reason === 'locked') {
+      return <LockedPanel quiz={quiz} classId={classId} />
+    }
     if (gate.reason === 'not_published') {
       return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Quiz Unavailable" classId={classId}>This quiz isn&apos;t open right now.{resultLink}</Gate>
     }
