@@ -6,6 +6,8 @@ import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const mockState = {
   resultsData: null,
@@ -195,5 +197,49 @@ describe('T-237: Per-student quiz access control', () => {
 
     expect(html).toContain('Access:')
     expect(html).toContain('Open')
+  })
+})
+
+describe('T-236 revision 2: reopening a tab-switch lock', () => {
+  const quiz = { id: 'quiz-1', status: 'published', attempts_allowed: 1 }
+  const students = [{ student_id: 's4', first_name: 'David', last_name: 'Luna' }]
+  const renderWith = (attempt) => {
+    mockState.resultsData = { students, attempts: { s4: [attempt] } }
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <ResultsView classId="class-1" quizId="quiz-1" quiz={quiz} totalPoints={10} assignedTo={null} refetch={vi.fn()} />
+      </MemoryRouter>,
+    )
+  }
+
+  it('states why the attempt is locked in the activity column', () => {
+    const html = renderWith({ id: 'a', status: 'locked', attempt_number: 1, locked_violation_count: 3 })
+    expect(html).toContain('Locked after 3 tab switches')
+    expect(html).toContain('Reopen attempt')
+  })
+
+  it('offers a bounded 15 / 30 / 60 minute choice for an untimed attempt, 15 first', () => {
+    const html = renderWith({ id: 'a', status: 'locked', attempt_number: 1, locked_violation_count: 3 })
+    expect(html).toMatch(/<option value="15" selected="">15 min<\/option>/)
+    expect(html).toContain('30 min')
+    expect(html).toContain('60 min')
+    expect(html).not.toMatch(/<option[^>]*>\s*(Unlimited|No limit)/i)
+  })
+
+  it('offers no extension for a timed attempt -- its paused time is restored instead', () => {
+    const html = renderWith({ id: 'a', status: 'locked', attempt_number: 1, remaining_ms_at_lock: 420_000 })
+    expect(html).toContain('Reopen attempt')
+    expect(html).not.toContain('15 min')
+  })
+})
+
+describe('T-236 / D3: unlocking never opens the quiz indefinitely', () => {
+  it('the Reopen button calls the server unlock and never writes student_access', () => {
+    const src = readFileSync(fileURLToPath(new URL('./quizzes.$quizId.jsx', import.meta.url)), 'utf8')
+    const start = src.indexOf('function UnlockAttemptButton(')
+    const body = src.slice(start, src.indexOf('function describeLock(', start))
+    expect(start).toBeGreaterThan(-1)
+    expect(body).toContain('unlockAttempt(attempt.id, { extensionMinutes: extension })')
+    expect(body).not.toContain('setStudentQuizAccess')
   })
 })

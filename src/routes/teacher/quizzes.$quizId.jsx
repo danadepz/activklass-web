@@ -589,42 +589,83 @@ function DiscardAttemptButton({ attempt, studentName, refetch }) {
  * to retake. Additive and per-student, so it neither disturbs the rest of the
  * class nor gets wiped by a later change to the class-wide allowance.
  */
-function UnlockAttemptButton({ attempt, quizId, studentId, studentName, refetch, refetchResults }) {
-  const { profile } = useAuth()
+function UnlockAttemptButton({ attempt, studentName, refetch, refetchResults }) {
+  /* T-236 revision 2: the server decides who may reopen (the owner of a class
+     this quiz is assigned to, with the student on its roster, or an admin of
+     the student's school), restores a timed attempt's paused minutes on its
+     own clock, and bounds an untimed one's resume. It no longer opens the quiz
+     for the student: that override never expired. */
+  const timed = typeof attempt.remaining_ms_at_lock === 'number'
+  const [extension, setExtension] = useState(15)
   const [unlock, unlocking] = useAsyncAction(async () => {
+    const strikes = Number(attempt.locked_violation_count ?? attempt.violation_count) || 3
+    if (!(await confirmDialog({
+      title: `Reopen ${studentName}'s attempt?`,
+      message:
+        `It was locked after ${strikes} tab switches. Their answers are kept. ` +
+        (timed
+          ? `They get back the ${formatAway(attempt.remaining_ms_at_lock)} that was left on the timer. `
+          : `They will have ${extension} minutes to finish if the quiz has closed. `) +
+        'They get three fresh warnings; every earlier tab switch stays on record.',
+      confirmLabel: 'Reopen attempt',
+    }))) return
     try {
-      await unlockAttempt(attempt.id, { teacherId: profile?.id })
-      await setStudentQuizAccess(quizId, studentId, 'open')
-      toast.success(`Attempt unlocked for ${studentName}.`)
+      await unlockAttempt(attempt.id, { extensionMinutes: extension })
+      toast.success(`Attempt reopened for ${studentName}.`)
       refetch?.()
       refetchResults?.()
     } catch (err) {
-      toast.error(`Could not unlock the attempt: ${err.message}`)
+      toast.error(
+        err?.status === 403
+          ? "Only this student's teacher can reopen this attempt."
+          : `Could not reopen the attempt: ${err.message}`,
+      )
     }
   })
   return (
-    <button
-      type="button"
-      onClick={unlock}
-      disabled={unlocking}
-      title="Unlock this student's attempt so they can resume"
-      className="transition hover:brightness-105 disabled:opacity-40"
-      style={{
-        ...mono,
-        fontSize: 11,
-        fontWeight: 700,
-        color: goldDeep,
-        background: '#FFFFFF',
-        border: '1.5px solid rgba(217,119,6,0.3)',
-        borderRadius: 8,
-        padding: '5px 9px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {unlocking ? '…' : 'Reopen attempt'}
-    </button>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {!timed && (
+        <select
+          aria-label={`Time to finish for ${studentName} if the quiz has closed`}
+          value={extension}
+          onChange={(e) => setExtension(Number(e.target.value))}
+          disabled={unlocking}
+          style={{ ...mono, fontSize: 11, padding: '4px 4px', borderRadius: 8, border: '1.5px solid rgba(217,119,6,0.3)', background: '#FFFFFF', color: goldDeep }}
+        >
+          <option value={15}>15 min</option>
+          <option value={30}>30 min</option>
+          <option value={60}>60 min</option>
+        </select>
+      )}
+      <button
+        type="button"
+        onClick={unlock}
+        disabled={unlocking}
+        title="Reopen this locked attempt so the student can finish it"
+        className="transition hover:brightness-105 disabled:opacity-40"
+        style={{
+          ...mono,
+          fontSize: 11,
+          fontWeight: 700,
+          color: goldDeep,
+          background: '#FFFFFF',
+          border: '1.5px solid rgba(217,119,6,0.3)',
+          borderRadius: 8,
+          padding: '5px 9px',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {unlocking ? '…' : 'Reopen attempt'}
+      </button>
+    </span>
   )
+}
+
+/** "Locked after 3 tab switches" -- an observation, in the activity column's voice. */
+function describeLock(attempt) {
+  const n = Number(attempt?.locked_violation_count ?? attempt?.violation_count) || null
+  return n ? `Locked after ${n} tab switches` : 'Locked'
 }
 
 function ToggleStudentAccessButton({ quizId, studentId, studentName, access, hasOverride, refetch, refetchResults }) {
@@ -799,14 +840,18 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
             /* The attempt worth reporting on: the one still open if there is
                one, otherwise the most recent finished one. */
             const notable = live ?? finished[finished.length - 1] ?? null
-            const activity = [describeAttemptActivity(notable), describeFocus(notable)]
+            const lockedAttempt = studentAttempts.find((a) => a?.status === 'locked')
+            const activity = [
+              lockedAttempt ? describeLock(lockedAttempt) : null,
+              describeAttemptActivity(notable),
+              describeFocus(notable),
+            ]
               .filter(Boolean)
               .join(' · ')
             const allowed = attemptsAllowedFor(quiz, s.student_id)
             const granted = Number(quiz?.extra_attempts?.[s.student_id]) || 0
             const access = studentAccessStatus({ quiz, studentId: s.student_id, attempts: studentAttempts })
             const hasOverride = hasIndividualAccessOverride(quiz, s.student_id)
-            const lockedAttempt = studentAttempts.find((a) => a?.status === 'locked')
             return (
               <tr key={s.student_id} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
                 <td style={{ padding: '12px 18px', fontWeight: 700 }}>
@@ -938,8 +983,6 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                     {lockedAttempt && (
                       <UnlockAttemptButton
                         attempt={lockedAttempt}
-                        quizId={quizId}
-                        studentId={s.student_id}
                         studentName={`${s.first_name} ${s.last_name}`}
                         refetch={refetch}
                         refetchResults={refetchResults}
