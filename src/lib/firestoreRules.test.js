@@ -2323,3 +2323,139 @@ describe('quiz_keys · the answer key', () => {
     await assertFails(batch.commit())
   })
 })
+
+describe('T-236 — the tab-switch lock is server-only, and so is moving the deadline', () => {
+  const STARTED_MS = new Date('2026-04-10T09:00:00Z').getTime()
+  const UNRELATED_TEACHER = 'teacher-20'
+  const FOREIGN_ADMIN = 'admin-20'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', STUDENT), { role: 'student', first_name: 'A', last_name: 'B', teacher_ids: [TEACHER], school_id: 'school-1' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_ADMIN), { role: 'admin', first_name: 'F', last_name: 'A', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', UNRELATED_TEACHER), { role: 'teacher', first_name: 'U', last_name: 'T', school_id: 'school-1' })
+      await setDoc(doc(db, 'classes', 'class-20'), { teacher_id: UNRELATED_TEACHER, student_ids: [] })
+      await setDoc(doc(db, 'quizzes', 'quiz-1'), { teacher_id: TEACHER, class_ids: ['class-1'], time_limit_minutes: 30 })
+      await setDoc(doc(db, 'quizzes', 'quiz-str'), { teacher_id: TEACHER, class_ids: ['class-1'], time_limit_minutes: '30' })
+      // Attempts the moment after create: no deadline yet (startAttempt adds it next).
+      const fresh = {
+        class_id: 'class-1', student_id: STUDENT, attempt_number: 1, status: 'in_progress',
+        started_at: new Date(STARTED_MS), reopen_count: 0, focus_events: [],
+      }
+      await setDoc(doc(db, 'quiz_attempts', 'fresh'), { ...fresh, quiz_id: 'quiz-1' })
+      await setDoc(doc(db, 'quiz_attempts', 'fresh-str'), { ...fresh, quiz_id: 'quiz-str' })
+    })
+    await seedAttempt('open', { started_at: new Date(STARTED_MS) })
+    await seedAttempt('locked', {
+      status: 'locked', violation_count: 3, violation_allowance_from: 0, locked_reason: 'tab_switch_limit',
+      remaining_ms_at_lock: 420_000, lock_history: [{ type: 'locked', at_ms: 1, by: 'system', violation_count: 3 }],
+    })
+  })
+
+  describe('the student', () => {
+    it('cannot unlock their own locked attempt', async () => {
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+    })
+
+    it('cannot lock, or write answers or away-events onto, a locked attempt', async () => {
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'open'), { status: 'locked' }))
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'locked'), { answers: { q1: 'a' } }))
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'locked'), { focus_events: [{ at: 'x' }] }))
+    })
+
+    for (const [field, value] of [
+      ['violation_count', 0],
+      ['violation_allowance_from', 99],
+      ['violation_event_ids', []],
+      ['locked_at', 'x'],
+      ['locked_reason', null],
+      ['locked_violation_count', 0],
+      ['lock_history', []],
+      ['remaining_ms_at_lock', 9_999_999],
+      ['resume_until_ms', 9_999_999_999_999],
+      ['draft_answers', { forged: { answers: { q1: 'x' } } }],
+      ['submitted_late', false],
+      ['late_by_ms', 0],
+      ['unlocked_at', 'x'],
+      ['unlocked_by', TEACHER],
+      ['discarded_by', TEACHER],
+    ]) {
+      it(`cannot write ${field} on their own open attempt`, async () => {
+        await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'open'), { [field]: value }))
+      })
+    }
+
+    it('cannot move an existing deadline later', async () => {
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'open'), { expires_at_ms: 9_999_999_999_999 }))
+    })
+
+    it('may stamp the first deadline at exactly started_at + the time limit (number and string limits)', async () => {
+      await assertSucceeds(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'fresh'), { expires_at_ms: STARTED_MS + 30 * 60_000 }))
+      await assertSucceeds(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'fresh-str'), { expires_at_ms: STARTED_MS + 30 * 60_000 }))
+    })
+
+    it('cannot stamp a first deadline beyond the time limit', async () => {
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'fresh'), { expires_at_ms: STARTED_MS + 30 * 60_000 + 1 }))
+    })
+
+    it('cannot stamp the deadline a second time', async () => {
+      await assertSucceeds(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'fresh'), { expires_at_ms: STARTED_MS + 60_000 }))
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'fresh'), { expires_at_ms: STARTED_MS + 120_000 }))
+    })
+
+    it('still saves ordinary progress on an open attempt', async () => {
+      await assertSucceeds(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'open'), {
+        reopen_count: 2,
+        focus_events: [{ at: 'x', question_index: 0, question_id: 'q1', away_ms: 900 }],
+      }))
+    })
+
+    it('cannot discard or delete an attempt to get round a lock (D5)', async () => {
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'locked'), { status: 'discarded' }))
+      await assertFails(updateDoc(doc(ctx(STUDENT), 'quiz_attempts', 'open'), { status: 'discarded' }))
+      await assertFails(deleteDoc(doc(ctx(STUDENT), 'quiz_attempts', 'locked')))
+    })
+  })
+
+  describe('the class teacher', () => {
+    it('cannot unlock directly -- only through the server endpoint', async () => {
+      await assertFails(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+    })
+
+    it('cannot lock directly, or edit the counts, the history or the resume grant', async () => {
+      await assertFails(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'open'), { status: 'locked' }))
+      await assertFails(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'locked'), { violation_count: 0 }))
+      await assertFails(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'locked'), { lock_history: [] }))
+      await assertFails(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'open'), { resume_until_ms: 9_999_999_999_999 }))
+    })
+
+    it('can still discard a locked attempt, and still mark a graded one', async () => {
+      await assertSucceeds(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'locked'), { status: 'discarded', discarded_by: TEACHER }))
+      await seedAttempt('graded', { status: 'graded', total_score: 3 })
+      await assertSucceeds(updateDoc(doc(ctx(TEACHER), 'quiz_attempts', 'graded'), { total_score: 5 }))
+    })
+  })
+
+  describe('everyone else', () => {
+    it('an unrelated teacher can neither unlock nor touch the attempt', async () => {
+      await assertFails(updateDoc(doc(ctx(UNRELATED_TEACHER), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+      await assertFails(updateDoc(doc(ctx(UNRELATED_TEACHER), 'quiz_attempts', 'locked'), { status: 'discarded' }))
+    })
+
+    it('an admin of another school can neither unlock nor touch the attempt', async () => {
+      await assertFails(updateDoc(doc(ctx(FOREIGN_ADMIN), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+      await assertFails(updateDoc(doc(ctx(FOREIGN_ADMIN), 'quiz_attempts', 'locked'), { status: 'discarded' }))
+    })
+
+    it('another student can neither unlock nor touch the attempt', async () => {
+      await assertFails(updateDoc(doc(ctx(OTHER_STUDENT), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+    })
+
+    it('a same-school admin is held to the same no-direct-unlock rule', async () => {
+      await assertFails(updateDoc(doc(ctx(ADMIN), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
+      await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'quiz_attempts', 'locked'), { status: 'discarded' }))
+    })
+  })
+})
