@@ -9,7 +9,7 @@
  * student's ClassStandingForecast. The only thing joining the two is one line in
  * shapeRiskResult. Drop it and nothing breaks loudly: `training` comes back
  * undefined, both components' disclosure blocks quietly evaluate false, and the
- * UI goes back to presenting a synthetic-data probability as though it meant
+ * UI goes back to presenting a synthetic-data score as though it meant
  * something. That silence is what these tests exist to catch.
  *
  * The API is stubbed rather than reached. shapeRiskResult is private, so the
@@ -26,7 +26,7 @@ vi.mock('./api', () => ({
 const { api } = await import('./api')
 const { predictRisk, predictRiskBatch, riskReasons } = await import('./ai')
 
-/** What risk_model.TRAINING_BASIS actually ships today. */
+/** Training metadata shipped by the development artifact. */
 const TRAINING = {
   real_data: false,
   source: 'synthetic',
@@ -39,8 +39,9 @@ const TRAINING = {
 }
 
 const reply = (over = {}) => ({
+  status: 'scored',
   risk_flag: 'on_track',
-  risk_probability: 0.13,
+  risk_score: 0.13,
   model: 'random_forest',
   top_factors: [{ feature: 'prior_average_grade', importance: 0.26 }],
   signals: [],
@@ -95,20 +96,15 @@ describe('training basis reaches the caller', () => {
 })
 
 describe('the no-data trap stays visible', () => {
-  it('reports zero coverage for a student with nothing recorded', async () => {
-    vi.mocked(api).mockResolvedValue(reply())
+  it('reports insufficient evidence for a student with nothing recorded', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ status: 'insufficient_data', risk_flag: null, risk_score: null }))
     const result = await predictRisk({})
-
-    // This is the trap the coverage warning exists for: the backend fills every
-    // missing level with a healthy cohort default and every missing trend with
-    // zero ("steady"), so a student it knows NOTHING about comes back on_track
-    // at 0.13 -- reassuring, and about nobody.
-    expect(result.flag).toBe('on_track')
-    expect(result.probability).toBe(0.13)
+    expect(result.status).toBe('insufficient_data')
+    expect(result.flag).toBeNull()
+    expect(result.score).toBeNull()
+    expect(result.probability).toBeNull()
     expect(result.atRisk).toBe(false)
 
-    // Both components gate their warning on coverage < 0.7, so 0 here is what
-    // makes that reassurance visibly unfounded rather than silently wrong.
     expect(result.coverage).toBe(0)
     expect(result.supplied).toEqual([])
     expect(result.missing).toContain('attendance_rate')
@@ -121,6 +117,14 @@ describe('the no-data trap stays visible', () => {
     const result = await predictRisk({ attendanceRate: 92 })
     expect(result.coverage).toBe(0.08)
     expect(result.coverage).toBeLessThan(0.7)
+  })
+
+  it('never trusts a scored response when the request feature vector is incomplete', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ risk_flag: 'high_risk', risk_score: 0.91 }))
+    const result = await predictRisk({ attendanceRate: 92 })
+    expect(result.status).toBe('insufficient_data')
+    expect(result.atRisk).toBe(false)
+    expect(result.score).toBeNull()
   })
 
   it('treats a levels-only caller as under half covered', async () => {
@@ -179,6 +183,64 @@ describe('the no-data trap stays visible', () => {
     await predictRisk({ missingWorkRate: 0, attendanceTrend: 0 })
     const sent = vi.mocked(api).mock.calls[0][1].body.indicators
     expect(sent).toEqual({ attendance_trend: 0, missing_work_rate: 0 })
+  })
+})
+
+// T-251: the parser must accept both the committed v1 reply (risk_probability,
+// no status, missing inputs filled with defaults) and the v2 reply (status +
+// risk_score), and never let a defaulted v1 number through for missing evidence.
+describe('backend contract compatibility (T-251)', () => {
+  const FULL = {
+    priorAverageGrade: 70, attendanceRate: 90, quizAverage: 60,
+    attendanceTrend: -0.1, quizTrend: -5, missingWorkRate: 0.2,
+  }
+  const v1 = (over = {}) => ({ risk_flag: 'high_risk', risk_probability: 0.75, model: 'random_forest', training: TRAINING, ...over })
+
+  it('A: v1, all six indicators -- the legacy value is kept, as an uncalibrated score', async () => {
+    vi.mocked(api).mockResolvedValue(v1({ risk_probability: 0.73 }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('scored')
+    expect(result.score).toBe(0.73)
+    expect(result.atRisk).toBe(true)
+    expect(result.probability).toBeNull()
+  })
+
+  it('B: v1, missing indicators -- the defaulted 75% is discarded', async () => {
+    vi.mocked(api).mockResolvedValue(v1())
+    const result = await predictRisk({ attendanceRate: 92 })
+    expect(result.status).toBe('insufficient_data')
+    expect(result.score).toBeNull()
+    expect(result.flag).toBeNull()
+    expect(result.atRisk).toBe(false)
+  })
+
+  it('B: v1 batch, nothing recorded -- no score for that student', async () => {
+    vi.mocked(api).mockResolvedValue({ results: [{ student_id: 's1', ...v1() }] })
+    const [result] = await predictRiskBatch([{ studentId: 's1', indicators: {} }])
+    expect(result.status).toBe('insufficient_data')
+    expect(result.score).toBeNull()
+  })
+
+  it('C: v2 scored, all six indicators -- risk_score is read on the 0-1 scale', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ risk_flag: 'high_risk', risk_score: 0.62, risk_probability: 0.99 }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('scored')
+    expect(result.score).toBe(0.62)
+    expect(result.atRisk).toBe(true)
+  })
+
+  it('D: v2 insufficient_data is kept even when the request was complete', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ status: 'insufficient_data', risk_flag: null, risk_score: null }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('insufficient_data')
+    expect(result.score).toBeNull()
+  })
+
+  it('v2 model_unavailable never yields a score', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ status: 'model_unavailable', risk_flag: null, risk_score: null }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('model_unavailable')
+    expect(result.score).toBeNull()
   })
 })
 

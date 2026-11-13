@@ -90,7 +90,18 @@ export default function ClassStandingForecast({
   const supplied = data.supplied ?? []
   const lowCoverage = (data.coverage ?? 0) < 0.7
   const reasons = riskReasons(data.signals, 'student')
-  const label = data.atRisk ? 'Needs attention' : 'On track'
+  if (data.status !== 'scored') {
+    return (
+      <div style={shell}>
+        <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 4px' }}>Projected standing</h3>
+        <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>
+          There is not enough recorded grade, attendance, and quiz history to produce a projection yet.
+          Your recorded grades remain available above.
+        </p>
+      </div>
+    )
+  }
+  const label = data.atRisk ? 'Needs attention' : 'No warning from this model'
   const tone = data.atRisk ? goldDeep : green
   const tint = data.atRisk ? 'rgba(245,197,24,0.12)' : 'rgba(31,138,91,0.08)'
   const edge = data.atRisk ? 'rgba(245,197,24,0.35)' : 'rgba(31,138,91,0.25)'
@@ -156,9 +167,8 @@ export default function ClassStandingForecast({
 
       {data.training?.real_data === false && (
         <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0', lineHeight: 1.5 }}>
-          This projection comes from a model that has not learned from real
-          ActivKlass results yet, so it can be wrong about you. Your teacher sees
-          the same note.
+          This development model was trained on generated data and may not match real academic outcomes.
+          Its score is uncalibrated; this is not a grade or a validated prediction.
         </p>
       )}
     </div>

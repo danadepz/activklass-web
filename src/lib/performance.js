@@ -62,13 +62,13 @@ export async function saveClassPerformance({ classId, teacherId, entries }) {
           student_id: studentId,
           risk_flag: result.flag ?? null,
           at_risk: result.atRisk === true,
-          risk_probability: result.probability ?? null,
+          risk_probability: null,
+          risk_score: result.score ?? null,
+          prediction_status: result.status ?? 'insufficient_data',
           // How much of the model's basis was actually measured. A confident
-          // probability at low coverage is the backend's defaults talking, so
-          // storing the flag without this would preserve a claim we cannot make.
+          // Store observed feature availability so an unknown record stays unknown.
           coverage: result.coverage ?? null,
-          // Which of THIS student's indicators are out of band -- the
-          // explainable part, and the only part a teacher can act on.
+          // Rule-based observed indicator signals, separate from model-level XAI.
           signals: result.signals ?? [],
           missing_indicators: result.missing ?? [],
           indicators: defined(indicators),

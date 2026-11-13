@@ -153,10 +153,9 @@ export default function PerformancePage() {
         grading period selected above — nothing from other classes or other periods.
         <br /><br />
         Risk is a separate projection, from attendance (its level and its recent trend), quiz
-        performance (level and trend), missing or unsubmitted work, and the student's grade. A
-        student is flagged only once the model's estimated likelihood reaches 50% — there is no
-        separate medium or low tier, just flagged or not, with the likelihood shown for anyone
-        flagged.
+        performance (level and trend), missing or unsubmitted work, and the student's grade.
+        A student is flagged when the model score reaches 50%. The score is uncalibrated and is not
+        a probability; students without all six recorded indicators are marked insufficient data.
       </InfoTooltip>
     </h1>
   )
@@ -187,6 +186,10 @@ export default function PerformancePage() {
   const performancePercent = (grade) => pointScale
     ? (bands.find((b) => lowerIsBetter ? grade <= b.point : grade >= b.point)?.from ?? 0)
     : grade
+  // The model schema uses a 0–100 grade. CHED point grades are converted using
+  // the configured point-scale band; passing 1.25 as a percentage would be a
+  // unit error. Keep the displayed grade untouched.
+  const riskRows = graded.map((r) => ({ ...r, riskGrade: performancePercent(r.grade) }))
 
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
   // The gradebook's own pass mark and point-scale direction, not a fixed 75:
@@ -378,7 +381,7 @@ export default function PerformancePage() {
               record of marked work, the other a forecast. Merging them would
               let a teacher read a prediction as a result. */}
           <div className="mt-4">
-            <PredictedRisk classId={classId} rows={graded} />
+            <PredictedRisk classId={classId} rows={riskRows} />
           </div>
         </>
       )}

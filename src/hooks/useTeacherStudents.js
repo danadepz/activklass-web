@@ -8,11 +8,9 @@
  * single blended row, so this deliberately does not average across a
  * student's classes.
  *
- * Risk is the Random Forest's own probability, not a grade cutoff: unlike a
- * fixed "below 85" line, `risk_probability` is a real 0-1 scale that already
- * weighs attendance trend, quiz trend and missing work alongside the grade
- * (see useClassRisk.js), and is where new indicators land as the model grows
- * -- a static threshold here would drift out of step with it. It's read from
+ * Risk is the Random Forest's uncalibrated score, not a grade cutoff. It is
+ * only available when all six model features were observed and is read from
+ * the class snapshot written by useClassRisk.js. It is read from
  * the `student_performance` snapshot useClassRisk writes when a teacher opens
  * a class's Performance tab, not recomputed here: firing /api/predict for
  * every student in every class on every visit to a directory page is not what
@@ -39,7 +37,7 @@ const classLabel = (c) =>
  * nothing is lost by deriving it from the probability instead of carrying
  * both.
  *
- * `model_training` rides along because the model is still trained on generated
+ * `model_training` rides along because the development model is trained on generated
  * data (risk_model.py TRAINING_BASIS, real_data: false). This page used to
  * keep the probability alone, so a teacher read "High risk 81%" here with
  * nothing saying where the 81% came from -- while the Performance tab, which
@@ -57,7 +55,8 @@ async function loadRiskByStudent(classId, studentIds) {
       snap.forEach((d) => {
         const data = d.data()
         byStudent[data.student_id] = {
-          probability: data.risk_probability ?? null,
+          score: data.risk_score ?? null,
+          status: data.prediction_status ?? 'insufficient_data',
           training: data.model_training ?? null,
         }
       })
@@ -107,7 +106,8 @@ async function loadClassRows(c) {
       policy,
       configured,
       grade,
-      riskProbability: risk[u.id]?.probability ?? null,
+      riskScore: risk[u.id]?.score ?? null,
+      riskStatus: risk[u.id]?.status ?? 'insufficient_data',
       riskTraining: risk[u.id]?.training ?? null,
     }
   })

@@ -309,18 +309,16 @@ describe('Students page', () => {
     expect(src).toMatch(/\$\{r\.firstName\} \$\{r\.lastName\} \$\{r\.lrn \?\? ''\}/)
   })
 
-  /* T-148 (andecobs-213): the dagger note on an unscored-model class gets the
-     same plain-English pass, still shorter than the pre-T-136 paragraph it
-     replaced and with no jargon ("trajectories", "ActivKlass history") left
-     in the fallback text. */
-  it('the "not trained on real data" note reads in plain English', () => {
+  /* T-251: the synthetic-data caution sits by the risk labels and uses the
+     same short wording as the Performance risk panel. */
+  it('the risk caution is plain, consistent, and free of model-training jargon', () => {
     state.rows = [{
       studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal',
       configured: false, riskTraining: { real_data: false },
     }]
     const html = render(<StudentsPage />)
-    expect(html).toContain('Not trained on real class data.')
-    expect(html).toContain("Treat a score as a reason to check in, not a")
+    expect(html).toContain('Risk is an early guide only. It uses sample data, not real ActivKlass results yet.')
+    expect(html).toContain('Use it as a reminder to check on the student, not as a final result.')
     expect(html).not.toContain('trajectories')
     expect(html).not.toContain('ActivKlass history')
     state.rows = [{ studentId: 's1', classId: 'c-hs', firstName: 'Juan', lastName: 'Dela Cruz', classLabel: 'MATH10 · Rizal', configured: false }]

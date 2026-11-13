@@ -54,24 +54,28 @@ export default function PredictedRisk({ classId, rows }) {
     )
   }
 
-  const scored = rows
+  const results = rows
     .map((r) => ({ row: r, risk: data?.[r.student_id] }))
     .filter((x) => x.risk)
+  const scored = results.filter((x) => x.risk.status === 'scored')
+  const insufficient = results.filter((x) => x.risk.status === 'insufficient_data').length
   const flagged = scored
     .filter((x) => x.risk.atRisk)
-    .sort((a, b) => (b.risk.probability ?? 0) - (a.risk.probability ?? 0))
+    .sort((a, b) => (b.risk.score ?? 0) - (a.risk.score ?? 0))
 
   // Coverage varies per student now that half the indicators are trends: two
   // students in the same class differ if one has fewer graded attempts to
   // difference. The median is what the banner reports, and the weakest student
   // is named alongside it so a single badly-covered row cannot hide behind a
   // healthy class average.
-  const coverages = scored.map((x) => x.risk.coverage ?? 0).sort((a, b) => a - b)
+  // Over every returned row, not just scored ones: an all-insufficient class
+  // would otherwise report 0% known even when grades are recorded.
+  const coverages = results.map((x) => x.risk.coverage ?? 0).sort((a, b) => a - b)
   const coverage = coverages.length
     ? coverages[Math.floor(coverages.length / 2)]
     : 0
   const worstCoverage = coverages[0] ?? 0
-  const missing = scored[0]?.risk.missing ?? []
+  const missing = results[0]?.risk.missing ?? []
   const training = scored[0]?.risk.training ?? null
 
   return (
@@ -83,7 +87,7 @@ export default function PredictedRisk({ classId, rows }) {
         </span>
       </div>
       <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 10px', maxWidth: '70ch' }}>
-        {training?.summary ?? RISK_CAVEAT}
+        {RISK_CAVEAT}
       </p>
 
       {/* Only shown while the model is fitted on generated data. The backend
@@ -107,10 +111,7 @@ export default function PredictedRisk({ classId, rows }) {
         }}>
           Only {Math.round(coverage * 100)}% of what the model weighs is known for this class
           {worstCoverage < coverage ? `, and as little as ${Math.round(worstCoverage * 100)}% for one student` : ''}
-          {missing.length ? ` (no ${missing.join(', ')})` : ''}. Missing inputs are filled with steady,
-          class-average assumptions, so a student can look safe simply because little is recorded
-          about them. Trends need a few weeks of attendance and several graded attempts before they
-          say anything.
+          {missing.length ? ` (no ${missing.join(', ')})` : ''}. Incomplete rows do not receive a score.
         </p>
       )}
 
@@ -119,9 +120,9 @@ export default function PredictedRisk({ classId, rows }) {
           fontSize: 13, color: green, background: 'rgba(31,138,91,0.07)',
           border: '1px solid rgba(31,138,91,0.25)', borderRadius: 11, padding: '12px 14px', margin: 0,
         }}>
-          No student is flagged at this coverage level. Worth re-checking once more attendance and
-          quiz results are recorded — the trends that make this an early warning need a few weeks of
-          history before they carry any weight.
+          {insufficient > 0
+            ? `No scored students are flagged. ${insufficient} student${insufficient === 1 ? ' has' : 's have'} insufficient recorded evidence for this model.`
+            : 'No student is flagged by the current model score. This is a synthetic-data development model, not a validated prediction.'}
         </p>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -146,9 +147,9 @@ export default function PredictedRisk({ classId, rows }) {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ ...serif, fontSize: 22, lineHeight: 1, color: red }}>
-                  {risk.probability == null ? '—' : `${Math.round(risk.probability * 100)}%`}
+                  {risk.score == null ? '—' : Math.round(risk.score * 100)}
                 </div>
-                <div style={{ ...mono, fontSize: 10.5, color: faint }}>likelihood</div>
+                <div style={{ ...mono, fontSize: 10.5, color: faint }}>uncalibrated score</div>
               </div>
             </div>
           ))}
@@ -157,8 +158,7 @@ export default function PredictedRisk({ classId, rows }) {
 
       {scored.length > 0 && flagged.length > 0 && (
         <p style={{ fontSize: 12, color: faint, margin: '12px 0 0' }}>
-          {flagged.length} of {scored.length} students flagged. This list will not match the
-          grade-threshold list above, and is not meant to.
+          {flagged.length} of {scored.length} students with sufficient evidence flagged; {insufficient} insufficient-data.
         </p>
       )}
     </div>

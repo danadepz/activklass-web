@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
+import { RISK_CAVEAT } from '@/hooks/useClassRisk'
 import { isPassingGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -47,7 +48,7 @@ const COLUMNS = {
     fn: (a, b, dir) => a.classLabel.localeCompare(b.classLabel) * (dir === 'asc' ? 1 : -1),
   },
   grade: { label: 'Grade', fn: missingLast((r) => r.grade) },
-  risk: { label: 'Risk', fn: missingLast((r) => r.riskProbability) },
+  risk: { label: 'Risk', fn: missingLast((r) => r.riskScore) },
 }
 // First click on a column gives the order a teacher most likely wants.
 const FIRST_DIR = { name: 'asc', class: 'asc', grade: 'asc', risk: 'desc' }
@@ -61,10 +62,10 @@ const td = { padding: '14px 16px', fontSize: 14, color: ink, verticalAlign: 'mid
    probability into three bands for readability, anchored on that 0.5 line so
    "High" here always agrees with the backend's own flag; "Medium" is our own
    early-warning band for a student climbing toward it but not there yet. */
-function riskLevel(probability) {
-  if (probability == null) return null
-  if (probability >= 0.5) return 'high'
-  if (probability >= 0.35) return 'medium'
+function riskLevel(score, status = 'scored') {
+  if (score == null || status !== 'scored') return null
+  if (score >= 0.5) return 'high'
+  if (score >= 0.35) return 'medium'
   return 'low'
 }
 
@@ -74,10 +75,12 @@ const RISK_LEVEL_STYLE = {
   low: { label: 'Low risk', color: greenDeep, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
 }
 
-function RiskBadge({ probability, training }) {
-  const level = riskLevel(probability)
+export function RiskBadge({ score, status, training }) {
+  const level = riskLevel(score, status)
   if (level == null) {
-    return <span style={{ fontSize: 12.5, color: faint }}>—</span>
+    return <span style={{ fontSize: 12.5, color: faint }}>
+      {status === 'insufficient_data' ? 'Not enough data' : '—'}
+    </span>
   }
   const { label, color, bg, border } = RISK_LEVEL_STYLE[level]
   // The dagger marks a score the model produced from generated data, and the
@@ -87,7 +90,7 @@ function RiskBadge({ probability, training }) {
   return (
     <span className="inline-flex items-center gap-1.5" style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
       {label}
-      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>{Math.round(probability * 100)}%</span>
+      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {Math.round(score * 100)}</span>
       {synthetic && <span style={{ fontWeight: 700, opacity: 0.75 }}>†</span>}
     </span>
   )
@@ -125,7 +128,7 @@ export default function StudentsPage() {
 
   const riskCounts = useMemo(() => {
     const n = { all: scoped.length, high: 0, medium: 0, low: 0, none: 0 }
-    for (const r of scoped) n[riskLevel(r.riskProbability) ?? 'none'] += 1
+    for (const r of scoped) n[riskLevel(r.riskScore, r.riskStatus) ?? 'none'] += 1
     return n
   }, [scoped])
 
@@ -135,7 +138,7 @@ export default function StudentsPage() {
     const seen = new Map()
     for (const r of scoped) {
       const cur = seen.get(r.classId) ?? { label: r.classLabel, scored: false }
-      if (r.riskProbability != null) cur.scored = true
+      if (r.riskScore != null && r.riskStatus === 'scored') cur.scored = true
       seen.set(r.classId, cur)
     }
     return [...seen.values()].filter((c) => !c.scored).map((c) => c.label)
@@ -144,7 +147,7 @@ export default function StudentsPage() {
   const filtered = useMemo(() => {
     const { key, dir } = sort
     return scoped
-      .filter((r) => riskFilter === 'all' || riskLevel(r.riskProbability) === riskFilter)
+      .filter((r) => riskFilter === 'all' || riskLevel(r.riskScore, r.riskStatus) === riskFilter)
       .sort((a, b) => COLUMNS[key].fn(a, b, dir))
   }, [scoped, riskFilter, sort])
 
@@ -300,6 +303,12 @@ export default function StudentsPage() {
         )}
       </div>
 
+      {list.some((r) => r.riskTraining?.real_data === false) && (
+        <p style={{ fontSize: 12.5, color: muted, margin: '0 2px 14px', maxWidth: 720 }}>
+          {RISK_CAVEAT}
+        </p>
+      )}
+
       {/* Table */}
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '18px 22px', borderBottom: `1px solid ${line}` }}>
@@ -365,7 +374,7 @@ export default function StudentsPage() {
                       )}
                     </td>
                     <td style={td}>
-                      <RiskBadge probability={r.riskProbability} training={r.riskTraining} />
+                      <RiskBadge score={r.riskScore} status={r.riskStatus} training={r.riskTraining} />
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <Link
@@ -392,15 +401,6 @@ export default function StudentsPage() {
         A student in multiple classes appears once per class, each with its own grade and risk.
       </p>
 
-      {list.some((r) => r.riskTraining?.real_data === false) && (
-        <p style={{ fontSize: 12.5, color: faint, margin: '10px 2px 0', maxWidth: 720 }}>
-          <strong style={{ color: goldDeep }}>† Not trained on real class data.</strong>{' '}
-          {list.find((r) => r.riskTraining?.real_data === false)?.riskTraining?.summary
-            ?? "These scores come from a model trained on simulated data, not real students — "
-             + "no term has finished yet. Treat a score as a reason to check in, not a "
-             + "prediction of how they'll end up."}
-        </p>
-      )}
       </>
       )}
     </div>

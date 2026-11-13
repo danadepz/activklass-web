@@ -4,7 +4,7 @@
  * specific risk bands ("High 50%+, Medium 35-49%, Low under 35%"). Those
  * bands do not exist anywhere in this codebase -- `useClassRisk`/`predictRisk`
  * only ever return a binary `atRisk` flag (the backend's
- * `risk_flag = 'high_risk' if prob >= 0.5 else 'on_track'`), so the tooltip
+ * `risk_flag = 'high_risk' if score >= 0.5 else 'on_track'`), so the tooltip
  * must say that, not her three-tier wording. This pins the tooltip's actual
  * content and that it only reveals on click, not by default.
  *
@@ -89,10 +89,11 @@ describe('T-137 — Performance/Risk tooltip', () => {
     expect(html).toContain('missing or unsubmitted work')
     expect(html).toContain("student&#x27;s grade")
 
-    // Her 50/35/Medium/Low bands do not exist in the code -- only a single
-    // 50% cutoff and a binary flag. The tooltip must say that, not her bands.
+    // Only a single 50% score cutoff exists. The displayed score is explicitly
+    // uncalibrated and must not be described as a likelihood.
     expect(html).toContain('50%')
-    expect(html).toContain('no separate medium or low tier')
+    expect(html).toContain('uncalibrated')
+    expect(html).toContain('not a probability')
     expect(html).not.toMatch(/35/)
     expect(html).not.toMatch(/[Mm]edium \(/)
   })

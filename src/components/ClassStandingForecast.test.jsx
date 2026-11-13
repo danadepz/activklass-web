@@ -35,7 +35,7 @@ function render(data) {
   )
 }
 
-const loaded = { atRisk: false, coverage: 1, signals: [], supplied: [] }
+const loaded = { status: 'scored', atRisk: false, coverage: 1, signals: [], supplied: [], training: { real_data: false } }
 
 describe('ClassStandingForecast -- the sentence shares the banner\'s measure (T-190)', () => {
   it('does not cap the explanatory sentence narrower than the card', () => {
@@ -54,6 +54,6 @@ describe('ClassStandingForecast -- the sentence shares the banner\'s measure (T-
     const html = render(loaded)
     expect(html).toContain('Projected standing')
     expect(html).toContain('A projection, not a grade')
-    expect(html).toContain('On track')
+    expect(html).toContain('No warning from this model')
   })
 })

@@ -30,9 +30,8 @@
  * A trend needs history to exist at all. Early in a term there are not enough
  * recorded days or attempts to difference, and every trend helper returns
  * undefined rather than 0 in that case: 0 means "measured, and flat", which is
- * a reassuring claim we would not have earned. Read `coverage` before showing
- * anything -- the backend fills gaps with neutral defaults, so a student we
- * know little about comes back steady rather than unknown.
+ *  a reassuring claim we would not have earned. Partial histories stay unknown:
+ *  the backend requires all six features and does not impute neutral defaults.
  */
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
@@ -145,11 +144,12 @@ async function classAssessments(classId) {
  */
 export function useClassRisk(classId, students, options = {}) {
   const ids = (students ?? []).map((s) => s.student_id).sort().join(',')
+  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, s.riskGrade ?? s.grade ?? null]))
   const { profile } = useAuth()
 
   return useQuery({
     ...options,
-    queryKey: ['class-risk', classId, ids],
+    queryKey: ['class-risk', classId, ids, grades],
     enabled: !!classId && (students ?? []).length > 0 && (options.enabled ?? true),
     // The model is deterministic for a given input, so there is nothing to gain
     // from refetching on every focus.
@@ -171,7 +171,7 @@ export function useClassRisk(classId, students, options = {}) {
         indicators: {
           attendanceRate: attendance[s.student_id]?.rate,
           attendanceTrend: attendance[s.student_id]?.trend,
-          priorAverageGrade: s.grade ?? undefined,
+          priorAverageGrade: s.riskGrade ?? s.grade ?? undefined,
           quizAverage: quizzes.byStudent[s.student_id]?.best,
           quizTrend: quizzes.byStudent[s.student_id]?.trend,
           // Pooled: assessments the teacher marked missing, plus quizzes whose
@@ -215,5 +215,5 @@ export function useClassRisk(classId, students, options = {}) {
  * what renders if an older backend answers without the field.
  */
 export const RISK_CAVEAT =
-  'Projected from attendance, grades and quiz scores and the direction each ' +
-  'is moving. A guide for where to look now, not a judgement about a student.'
+  'Risk is an early guide only. It uses sample data, not real ActivKlass results yet. ' +
+  'Use it as a reminder to check on the student, not as a final result.'

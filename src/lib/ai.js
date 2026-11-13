@@ -713,6 +713,10 @@ export function riskReasons(signals, audience = 'teacher') {
 }
 
 const RISK_FEATURES = Object.keys(RISK_FEATURE_WEIGHTS)
+const RISK_FEATURE_BOUNDS = {
+  prior_average_grade: [0, 100], attendance_rate: [0, 1], quiz_average: [0, 100],
+  attendance_trend: [-1, 1], quiz_trend: [-100, 100], missing_work_rate: [0, 1],
+}
 
 /**
  * The app stores attendance as a percentage -- student/index.jsx renders
@@ -728,7 +732,7 @@ function toAttendanceRate(value) {
   // "zero attendance" is the worst possible reading of "we didn't measure it".
   if (value == null || value === '') return undefined
   const n = Number(value)
-  if (!Number.isFinite(n) || n < 0) return undefined
+  if (!Number.isFinite(n) || n < 0 || n > 100) throw new TypeError('attendanceRate must be between 0 and 100')
   return n > 1 ? n / 100 : n
 }
 
@@ -736,10 +740,8 @@ function toAttendanceRate(value) {
  * camelCase indicators -> the snake_case vector the endpoint expects, keeping
  * only what was actually measured.
  *
- * Omitting a field is not neutral: the backend fills gaps with healthy cohort
- * defaults (attendance 0.92, prior grade 82, quiz 80), so a student we know
- * only a failing grade for still comes back `on_track`. We report what we sent
- * so callers can qualify the result instead of presenting a guess as a finding.
+ * Omitting a field keeps the prediction `insufficient_data` until the complete
+ * six-feature vector is available.
  */
 function buildRiskIndicators({
   attendanceRate,
@@ -766,7 +768,10 @@ function buildRiskIndicators({
     const value = candidates[feature]
     if (value == null || value === '') continue
     const n = Number(value)
-    if (Number.isFinite(n)) indicators[feature] = n
+    if (!Number.isFinite(n)) throw new TypeError(`${feature} must be a finite number`)
+    const [min, max] = RISK_FEATURE_BOUNDS[feature]
+    if (n < min || n > max) throw new RangeError(`${feature} is outside its supported range`)
+    indicators[feature] = n
   }
   return indicators
 }
@@ -784,10 +789,19 @@ function buildRiskIndicators({
 function shapeRiskResult(raw, indicators) {
   const supplied = Object.keys(indicators)
   const coverage = supplied.reduce((sum, f) => sum + RISK_FEATURE_WEIGHTS[f], 0)
+  const complete = RISK_FEATURES.every((feature) => supplied.includes(feature))
+  const status = raw.status
+    ? (raw.status === 'scored' && complete && raw.risk_flag ? 'scored'
+      : raw.status === 'model_unavailable' ? 'model_unavailable' : 'insufficient_data')
+    : (complete && raw.risk_flag ? 'scored' : 'insufficient_data')
   return {
-    flag: raw.risk_flag,
-    atRisk: raw.risk_flag === 'high_risk',
-    probability: raw.risk_probability,
+    status,
+    flag: status === 'scored' ? raw.risk_flag : null,
+    atRisk: status === 'scored' && raw.risk_flag === 'high_risk',
+    score: status === 'scored' ? (raw.risk_score ?? raw.risk_probability ?? null) : null,
+    // Kept as an explicit null for legacy consumers: this model is not
+    // empirically calibrated, so its forest score is not a probability.
+    probability: null,
     supplied,
     missing: RISK_FEATURES.filter((f) => !supplied.includes(f)),
     coverage: Math.round(coverage * 100) / 100,
