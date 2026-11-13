@@ -76,6 +76,17 @@ student may update their own attempt only while it is still `in_progress`.
 Score field: **`total_score`**, not `score`. Mobile once wrote `score`, and every teacher
 view silently dropped those attempts from mastery calculations.
 
+**T-236: the third tab switch locks the attempt (`status: 'locked'`), server-side only.**
+The player reports each away period to `POST /api/quiz_attempts/{id}/violation`; the
+teacher reopens through `POST /api/quiz_attempts/{id}/unlock` (`unlockAttempt` in
+`hooks/useAttemptSession.js`). No client writes the lock fields or moves an attempt into
+or out of `locked` — not even the class teacher, because the unlock endpoint is where the
+responsible-teacher check, the paused-clock restore and the audit entry happen. A
+student writes `expires_at_ms` once, never later than `started_at` + the time limit.
+`canStart` lets an open attempt resume past the quiz's close only while its server-written
+`resume_until_ms` lasts — the unlock no longer sets `student_access: 'open'`. Field list:
+`../activklass-backend/docs/02-database-schema.md`, `quiz_attempts`.
+
 ### 3. Syllabi live in two places
 Saving from the syllabus page writes `syllabi/{id}` **and** the class resolves through
 `classes/{classId}.syllabus_id`; the seed script instead writes
