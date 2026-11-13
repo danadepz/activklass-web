@@ -75,7 +75,7 @@ const RISK_LEVEL_STYLE = {
   low: { label: 'Low risk', color: greenDeep, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
 }
 
-export function RiskBadge({ score, status, training }) {
+export function RiskBadge({ score, status }) {
   const level = riskLevel(score, status)
   if (level == null) {
     return <span style={{ fontSize: 12.5, color: faint }}>
@@ -83,15 +83,12 @@ export function RiskBadge({ score, status, training }) {
     </span>
   }
   const { label, color, bg, border } = RISK_LEVEL_STYLE[level]
-  // The dagger marks a score the model produced from generated data, and the
-  // footnote below the table says what that means. A title attribute would
-  // not do: a disclosure nobody can see is not a disclosure.
-  const synthetic = training?.real_data === false
+  // No per-badge mark: RISK_CAVEAT above the roster shows under the same
+  // condition (synthetic training) and says it in words (T-251).
   return (
     <span className="inline-flex items-center gap-1.5" style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
       {label}
       <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {Math.round(score * 100)}</span>
-      {synthetic && <span style={{ fontWeight: 700, opacity: 0.75 }}>†</span>}
     </span>
   )
 }
@@ -374,7 +371,7 @@ export default function StudentsPage() {
                       )}
                     </td>
                     <td style={td}>
-                      <RiskBadge score={r.riskScore} status={r.riskStatus} training={r.riskTraining} />
+                      <RiskBadge score={r.riskScore} status={r.riskStatus} />
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <Link
