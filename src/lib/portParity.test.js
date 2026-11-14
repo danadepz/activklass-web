@@ -28,6 +28,9 @@ import * as mobilePool from '../../../activklass-mobile/src/lib/quizPool.ts'
 import * as mobileFeedback from '../../../activklass-mobile/src/lib/quizFeedback.ts'
 import * as webAttempts from './quizAttempts.js'
 import * as mobileAttempts from '../../../activklass-mobile/src/lib/quizAttempts.ts'
+import * as webDeliverables from './deliverables.js'
+import * as mobileDeliverables from '../../../activklass-mobile/src/lib/deliverables.ts'
+import { STATE_TONE } from '../routes/student/deliverables/WindowChip.jsx'
 
 const pool = (n, points = 2) =>
   Array.from({ length: n }, (_, i) => ({
@@ -362,5 +365,40 @@ describe('quizAttempts parity', () => {
       expect(mobileAttempts.focusEvent(input)).toEqual(webAttempts.focusEvent(input))
     }
     expect(mobileAttempts.FOCUS_EVENT_CAP).toBe(webAttempts.FOCUS_EVENT_CAP)
+  })
+})
+
+/* T-252: the mobile Quizzes tab derives a quiz's state and chip sentence from
+   a port of deliverables.js, so the same quiz reads the same on both. */
+describe('deliverables (quiz) parity', () => {
+  const NOW = new Date('2026-11-14T10:00').getTime()
+  const done = { status: 'graded', attempt_number: 1 }
+  const live = { status: 'in_progress', attempt_number: 1 }
+  const cases = [
+    [{ status: 'published' }, []],
+    [{ status: 'published', opens_at: '2026-11-20T08:00', closes_at: '2026-11-21T17:00' }, []],
+    [{ status: 'published', closes_at: '2026-11-14T23:59' }, []],
+    [{ status: 'published', closes_at: '2026-11-17T23:59' }, [live]],
+    [{ status: 'published', closes_at: '2026-11-10T17:00' }, []],
+    [{ status: 'closed', closes_at: '2026-11-30T17:00' }, []],
+    [{ status: 'closed' }, []],
+    [{ status: 'published', closes_at: '2026-11-10T17:00' }, [done]],
+    [{ status: 'published', opens_at: 'not a date' }, []],
+  ]
+
+  it('derives the same state and chip sentence for every window', () => {
+    for (const [fields, attempts] of cases) {
+      const quiz = { id: 'q1', title: 'Quiz 1', ...fields }
+      const w = webDeliverables.fromQuiz(quiz, { classId: 'c1', attempts, now: NOW })
+      const m = mobileDeliverables.fromQuiz(quiz, { attempts, now: NOW })
+      expect(m.state).toBe(w.state)
+      expect(mobileDeliverables.describeWindow(m, NOW)).toBe(webDeliverables.describeWindow(w, NOW))
+    }
+  })
+
+  it('badges each state with the web card badge word', () => {
+    for (const state of webDeliverables.STATES) {
+      expect(mobileDeliverables.STATE_BADGE[state]).toBe(STATE_TONE[state].badge)
+    }
   })
 })
