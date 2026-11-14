@@ -332,11 +332,9 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       // the typed value covers the case where the admin chose one themselves,
       // which the server deliberately does not echo back.
       const pw = res.user.initial_password ?? form.password
-      // The password half of this line is what an admin questions: the field
-      // accepts it on length alone (tempPasswordError), which reads as no rule
-      // at all unless the screen says why. The weakness is bounded --
-      // is_temp_password holds them on /change-password until they pick their
-      // own -- so the banner has to carry that, not just the string itself.
+      // The password is temporary: is_temp_password and the server-side
+      // must_change_password claim hold them on /change-password until they
+      // pick their own, so the banner has to say that, not just the string.
       setDone(
         `Created. They sign in as ${login} with the password “${pw}” — give them both directly, nothing is emailed. `
         + 'They will be asked to choose a new password the first time they sign in.'
@@ -375,7 +373,8 @@ function CreateUserForm({ onCreated, settings, users, role }) {
             ? 'The employee number needs at least 6 digits — the last six become their login.'
             : '')
         : '') ||
-      // Blank falls back to the default; is_temp_password gates either way.
+      // Blank -> the server generates one for this account (T-267); a typed
+      // one must meet the full rule. is_temp_password gates either way.
       tempPasswordError(form.password, { required: false })
     if (problem) return setError(problem)
     if (!prefix) {

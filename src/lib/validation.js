@@ -57,19 +57,16 @@ export function passwordError(value) {
 }
 
 /**
- * Admin-ISSUED temporary passwords: length only. The person must replace it
- * anyway (is_temp_password gates them), and an admin typing one by hand should
- * not be held to the character-class rule above on a value its owner is about
- * to discard. (It also used to be what let the old shared default through;
- * audit F-03 removed that, and a GENERATED password passes the full rule
- * anyway -- see backend services/initial_password.py.) User-chosen passwords
- * keep going through passwordError.
+ * Staff-TYPED temporary passwords (create, bulk, reset). T-267: the same full
+ * rule as passwordError -- the backend enforces it on every password it
+ * writes, so a weaker value here would only fail later with a server error.
+ * The only difference is that a blank may be optional: the server then
+ * generates a compliant password for that account.
  */
 export function tempPasswordError(value, { required = true } = {}) {
   const text = String(value ?? '')
   if (!text) return required ? 'Password is required.' : ''
-  if (text.length < MIN_PASSWORD) return `Password must be at least ${MIN_PASSWORD} characters.`
-  return ''
+  return passwordError(text)
 }
 
 /* "Grade 7" (K-12, grades 1-12) or "1st Year" / "3rd" (college, years 1-5).

@@ -81,9 +81,15 @@ describe('passwordError', () => {
 })
 
 describe('tempPasswordError', () => {
-  it('accepts the standing default and anything 8+ characters', () => {
-    expect(tempPasswordError('pass1234')).toBe('')
-    expect(tempPasswordError('aaaaaaaa')).toBe('')
+  // T-267: the same vectors as backend tests/test_password_policy.py (N).
+  it('applies the full password rule to a typed temporary password', () => {
+    expect(tempPasswordError('Str0ng!Pass')).toBe('')
+    expect(tempPasswordError('pass1234')).not.toBe('')
+    expect(tempPasswordError('aaaaaaaa')).not.toBe('')
+    for (const weak of ['Ab1!xyz', 'abcdef1!', 'ABCDEF1!', 'Abcdefg!', 'Abcdefg1']) {
+      expect(tempPasswordError(weak)).toBe(passwordError(weak))
+      expect(tempPasswordError(weak)).not.toBe('')
+    }
   })
   it('rejects short values, and blanks only when required', () => {
     expect(tempPasswordError('short')).not.toBe('')

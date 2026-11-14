@@ -1,13 +1,13 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
-import { emailError } from '@/lib/validation'
+import { emailError, passwordError } from '@/lib/validation'
 import { bulkCreateUsers } from '@/lib/admin'
 import { issuedLoginId } from '@/lib/logins'
 import { stampedName } from '@/lib/csv'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { navy, ink, muted, faint, green, red, line, mono, goldDeep } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
-import { CREATABLE_ROLES, MIN_PASSWORD, btnPrimary, btnGhost, th } from './ui'
+import { CREATABLE_ROLES, btnPrimary, btnGhost, th } from './ui'
 import { accountsNamed, accountWithEmail, accountWithLogin, accountName, describeAccount } from './duplicates'
 import { summarizeFailures } from './bulkFailures'
 import Notice from './Notice'
@@ -16,7 +16,7 @@ const PREVIEW_CAP = 8
 
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
-  'role', 'email', 'middle_name', 'password', // blank password -> the default
+  'role', 'email', 'middle_name', 'password', // blank password -> one generated per account
   'personal_email',                           // a contact address on file, never the sign-in
   'student_number', 'lrn',                    // students: number always; LRN for Grade 12 & below
   'grade', 'section', 'birthdate',            // grade is stored as year_level
@@ -71,7 +71,7 @@ const ROW_SPEC = {
  *  a row without an LRN needs six digits in the student number instead. */
 export function rowProblem(row, prefix) {
   if (!row.first_name || !row.last_name) return 'missing name'
-  if (row.password && row.password.length < MIN_PASSWORD) return 'password too short'
+  if (row.password && passwordError(row.password)) return 'password does not meet the password rule'
   if (!CREATABLE_ROLES.includes(row.role)) {
     if (row.role === 'parent') return 'parents self-register'
     // Admin is excluded from CREATABLE_ROLES on purpose (2026-10-03, owner:
@@ -549,8 +549,8 @@ export default function BulkUpload({ role, onDone, settings, users }) {
                       </td>
                       <td style={{ padding: '8px 14px' }}>
                         {r.password
-                          ? (r.password.length >= MIN_PASSWORD ? '••••••••' : <em>too short</em>)
-                          : <span style={{ color: faint }}>default</span>}
+                          ? (!passwordError(r.password) ? '••••••••' : <em>too weak</em>)
+                          : <span style={{ color: faint }}>generated</span>}
                       </td>
                     </tr>
                   )

@@ -26,7 +26,7 @@ import { fetchUsersByIds, parseCsv } from '@/lib/roster'
 import { downloadXlsx, readXlsxRows } from '@/lib/xlsx'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { issuedLoginId } from '@/lib/logins'
-import { tempPasswordError, MIN_PASSWORD, nameError, lrnError, idNumberError, emailError, birthdateError, BIRTHDATE_HINT } from '@/lib/validation'
+import { tempPasswordError, PASSWORD_RULE, nameError, lrnError, idNumberError, emailError, birthdateError, BIRTHDATE_HINT } from '@/lib/validation'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -645,7 +645,7 @@ export const signInConfirm = {
  */
 export const resetCopy = {
   prompt: (login) =>
-    `This replaces the password for ${login} immediately. At least ${MIN_PASSWORD} characters — they will be asked to choose a new password the next time they sign in.`,
+    `This replaces the password for ${login} immediately. ${PASSWORD_RULE} They will be asked to choose a new password the next time they sign in.`,
   done: (login) =>
     `Password set for ${login}. Pass it on in person — nothing is emailed. They'll pick their own the next time they sign in.`,
 }
