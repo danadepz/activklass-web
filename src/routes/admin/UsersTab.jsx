@@ -22,6 +22,7 @@ import CardHead from './CardHead'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
+import { SUPPORT_EMAIL } from './SubscriptionTab'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 
 const ROLE_TINT = {
@@ -83,9 +84,16 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
 
   const shownName = name ?? school?.name ?? ''
   const shownAbbr = abbr ?? school?.login_prefix ?? ''
+  // T-255 (owner decision 2026-11-14): once the school has its prefix -- set
+  // at registration and carried through approval -- name and abbreviation
+  // are view-only; a correction goes through support, since every issued
+  // login is built from the prefix. A school with none yet (pre-T-169) still
+  // sets it here once.
+  const locked = !!school?.login_prefix
 
   function submit(e) {
     e.preventDefault()
+    if (locked) return
     setDone('')
     const problem = schoolNameError(shownName) || schoolAbbrError(shownAbbr)
     if (problem) return setError(problem)
@@ -102,6 +110,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
         sub={
           loadError ? 'Your school’s details could not be loaded, so this card cannot show them yet. Nothing has been changed.'
             : pending ? 'Checking which school this account manages…'
+            : locked ? 'Set when your school registered. Every issued login starts with this prefix, a dash, then the last six digits of the LRN (students) or employee ID (teachers).'
             : school ? 'Enter your school’s full name and the abbreviation used beside it — the abbreviation is the prefix of every issued login: prefix, a dash, then the last six digits of the LRN (students) or employee ID (teachers). Existing logins are never changed.'
             : 'This admin account is not linked to a school yet, so a login prefix cannot be set.'
         }
@@ -118,22 +127,28 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
             School Name
-            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200 }} value={shownName}
+            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200 }} value={shownName} readOnly={locked}
                    onChange={(e) => { setName(e.target.value); setDone('') }}
                    placeholder="e.g. University of Cebu-Banilad" />
           </label>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             Abbreviation
-            <input style={{ ...field, width: 130, padding: '10px 14px' }} value={shownAbbr}
+            <input style={{ ...field, width: 130, padding: '10px 14px' }} value={shownAbbr} readOnly={locked}
                    onChange={(e) => { setAbbr(e.target.value); setDone('') }}
                    placeholder="e.g. UCB" />
           </label>
           <span style={{ ...mono, fontSize: 12.5, color: faint }}>
             → {(shownAbbr.trim().toLowerCase() || 'prefix')}-789012
           </span>
-          <button type="submit" style={btnPrimary} disabled={mut.isPending}>
-            {mut.isPending ? 'Saving…' : 'Save'}
-          </button>
+          {locked ? (
+            <span style={{ fontSize: 12.5, color: muted }}>
+              Need to change either? <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: blueText }}>Contact ActivKlass support</a>.
+            </span>
+          ) : (
+            <button type="submit" style={btnPrimary} disabled={mut.isPending}>
+              {mut.isPending ? 'Saving…' : 'Save'}
+            </button>
+          )}
           <div style={{ flex: '1 1 100%', minWidth: 200 }}>
             <Notice>{error}</Notice>
             <Notice tone="ok">{done}</Notice>

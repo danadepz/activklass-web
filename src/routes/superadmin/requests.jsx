@@ -421,6 +421,11 @@ function ApproveDialog({ request, onClose, onDone }) {
     school_year_current: '',
     teacher_seats: String(request.teacher_seats ?? ''),
     student_seats: String(request.student_seats ?? ''),
+    // T-255: the abbreviation from registration becomes the login prefix.
+    // A prefix another school holds is refused by the server (409), and this
+    // is where the superadmin picks a free one instead of the admin finding
+    // the box empty after sign-in.
+    login_prefix: String(request.school_abbr ?? '').toLowerCase(),
   })
   const [error, setError] = useState(null)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
@@ -440,6 +445,7 @@ function ApproveDialog({ request, onClose, onDone }) {
         school_year_current: form.school_year_current.trim() || null,
         teacher_seats: Number(form.teacher_seats),
         student_seats: Number(form.student_seats),
+        ...(form.login_prefix.trim() && { login_prefix: form.login_prefix.trim().toLowerCase() }),
       }),
     onSuccess: onDone,
     onError: (err) => setError(err.message),
@@ -478,6 +484,9 @@ function ApproveDialog({ request, onClose, onDone }) {
 
         <Field label="School name">
           <input value={form.name} onChange={set('name')} className={inputCls} />
+        </Field>
+        <Field label="Login prefix" hint="From the abbreviation they registered. Every login this school issues starts with it, and no two schools may share one.">
+          <input value={form.login_prefix} onChange={set('login_prefix')} className={inputCls} placeholder="e.g. ucb" />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Campus" hint="Optional.">

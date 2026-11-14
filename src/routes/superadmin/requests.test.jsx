@@ -50,3 +50,16 @@ describe('T-82 — the console can tell a paid request from an estimate-only one
     expect(queuesSource).toMatch(/school_payment_status: schoolSnap\.exists\(\) \? \(schoolSnap\.data\(\)\.payment_status \?\? null\) : null/)
   })
 })
+
+/* T-255 (maykel_64440-339): approval now refuses a login prefix another school
+   holds; the Approve dialog is where the superadmin sees the registered one and
+   picks a free one, so the new admin never finds the box empty. */
+describe('T-255 — Approve dialog carries the login prefix', () => {
+  it('prefills the prefix from the registered abbreviation', () => {
+    expect(requestsSource).toContain("login_prefix: String(request.school_abbr ?? '').toLowerCase()")
+    expect(requestsSource).toContain('<Field label="Login prefix"')
+  })
+  it('sends it with the approval', () => {
+    expect(requestsSource).toMatch(/login_prefix: form\.login_prefix\.trim\(\)\.toLowerCase\(\)/)
+  })
+})
