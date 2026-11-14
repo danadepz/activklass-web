@@ -84,12 +84,10 @@ export function resendApprovalNotice(requestId) {
 }
 
 /**
- * Decline a request whose school already paid for its year at sign-up
- * (T-82, Option B): refunds through PayMongo before writing anything, so a
- * plain client-side Firestore update -- fine for a request nothing was ever
- * charged on -- cannot be used here (the client cannot call the gateway).
- * requests.jsx only reaches for this when the request's school shows
- * payment_status: 'paid'; an unpaid request still declines Firestore-direct.
+ * Decline a school request (T-256): disables the requester's login so a
+ * declined registration leaves no working account, and -- when the school
+ * already paid at sign-up (T-82) -- refunds through PayMongo before writing
+ * anything. Never deletes the account; purge stays its own explicit act.
  */
 export function declineRequest(requestId, note) {
   return api(`/api/superadmin/requests/${requestId}/decline`, { method: 'POST', body: { note } })

@@ -269,3 +269,11 @@ describe('T-201 — the temp-password field is gone from the set-password screen
     expect(source).toMatch(/const \[password, setPassword\] = useState\(''\)/)
   })
 })
+
+describe('T-256 — a declined registrant who tries to sign in is told what to do', () => {
+  const source = readFileSync(fileURLToPath(new URL('./login.jsx', import.meta.url)), 'utf8')
+
+  it('the disabled-account message says they can register again', () => {
+    expect(source).toMatch(/'auth\/user-disabled': '[^']*If your school registration was declined, you can register again with a different email\./)
+  })
+})

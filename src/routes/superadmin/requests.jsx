@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
 import { approveRequest, declineRequest, purgeRequest, resendApprovalNotice } from '@/lib/superadmin'
@@ -20,18 +20,16 @@ import { Dialog, Field, inputCls } from './index'
  * school here. Until this page existed the only way to see a request was the
  * Firebase console.
  *
- * Firestore-direct for the list and for an ordinary Decline, like the
- * verifications queue next door: firestore.rules lets the super admin claim
- * -- and nobody else -- read or update this collection, and declining is one
- * status field plus a note. Approving is the opposite case and goes through
- * Flask: it creates the school and the subscription and promotes the
- * requester's account, three writes the client is deliberately not allowed
- * to make.
+ * Firestore-direct for the list, like the verifications queue next door:
+ * firestore.rules lets the super admin claim -- and nobody else -- read this
+ * collection. Approving and Declining both go through Flask: approving
+ * creates the school and the subscription and promotes the requester's
+ * account, and declining (T-256) disables the requester's login -- writes
+ * the client is deliberately not allowed to make.
  *
  * T-82 (Option B, 2026-09-26): a request may already point at a pending
- * school that paid for its year at sign-up. Declining one of those also goes
- * through Flask -- refunding through PayMongo is not a write the client can
- * make either -- and Approving one confirms the paid school instead of
+ * school that paid for its year at sign-up. Declining one of those refunds
+ * it through PayMongo first, and Approving one confirms the paid school instead of
  * creating a fresh one on a 30-day trial (`fetchPendingRequests` attaches
  * each row's `school_payment_status` so this page knows which is which).
  */
@@ -124,27 +122,15 @@ export default function SuperAdminRequestsPage() {
   })
 
   const decline = useMutation({
-    mutationFn: async ({ id, note, paid }) => {
-      // T-82: a request whose school already paid at sign-up must be
-      // refunded through PayMongo before it can be declined -- the client
-      // cannot call the gateway, so that case goes through Flask instead of
-      // the plain Firestore write below, which stays exactly as it was for
-      // a request nothing was ever charged on.
-      if (paid) {
-        return declineRequest(id, note.trim())
-      }
-      await updateDoc(doc(db, 'subscription_requests', id), {
-        status: 'declined',
-        decision_note: note.trim(),
-        decided_at: serverTimestamp(),
-      })
-      return null
-    },
+    // T-256: every decline goes through Flask, which disables the
+    // requester's login -- a bare Firestore write left it working. A paid
+    // school is refunded there first (T-82).
+    mutationFn: ({ id, note }) => declineRequest(id, note.trim()),
     onSuccess: (res, { school, paid }) => {
       toast.success(
         paid
-          ? `${school} declined and refunded${res?.refund ? ` (₱${Number(res.refund.amount).toLocaleString('en-PH')})` : ''}. Their teacher account is untouched.`
-          : `${school} declined. Their teacher account is untouched.`,
+          ? `${school} declined and refunded${res?.refund ? ` (₱${Number(res.refund.amount).toLocaleString('en-PH')})` : ''}. Their account can no longer sign in.`
+          : `${school} declined. Their account can no longer sign in.`,
       )
       setDeclining(null)
       setNote('')
@@ -154,7 +140,7 @@ export default function SuperAdminRequestsPage() {
       toast.error(
         paid
           ? (err.message || 'The refund could not be started, so nothing was declined. Try again in a moment.')
-          : 'That did not save. Check the rules deploy and try again.',
+          : (err.message || 'That did not go through. Try again.'),
       ),
   })
 

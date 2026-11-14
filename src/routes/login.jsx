@@ -35,7 +35,8 @@ const FRIENDLY_ERRORS = {
   'auth/invalid-email': 'That email or login ID is not valid.',
   // Deactivate (admin Users tab, solo teacher's Student accounts) disables the
   // Firebase user; unmapped, the student only saw the generic line below.
-  'auth/user-disabled': 'This account has been deactivated. Ask your teacher or school to reactivate it.',
+  // T-256: a declined school registration lands here too.
+  'auth/user-disabled': 'This account has been deactivated. If your school registration was declined, you can register again with a different email. Otherwise, ask your teacher or school to reactivate it.',
 }
 
 /* "Incorrect login or password." is true and useless: it never says WHICH

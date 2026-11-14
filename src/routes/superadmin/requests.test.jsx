@@ -19,13 +19,13 @@ import { describe, expect, it } from 'vitest'
 const requestsSource = readFileSync(fileURLToPath(new URL('./requests.jsx', import.meta.url)), 'utf8')
 const queuesSource = readFileSync(fileURLToPath(new URL('./queues.js', import.meta.url)), 'utf8')
 
-describe('T-82 — declining a paid request refunds through Flask, not a bare Firestore write', () => {
-  it('branches on paid before deciding how to decline', () => {
-    expect(requestsSource).toMatch(/if \(paid\) \{\s*return declineRequest\(id, note\.trim\(\)\)/)
+describe('T-256 — every decline goes through Flask, which closes the requester login', () => {
+  it('declining always calls the server, paid or not', () => {
+    expect(requestsSource).toMatch(/mutationFn: \(\{ id, note \}\) => declineRequest\(id, note\.trim\(\)\)/)
   })
 
-  it('the unpaid path is untouched — still the same client-side Firestore update', () => {
-    expect(requestsSource).toMatch(/await updateDoc\(doc\(db, 'subscription_requests', id\), \{\s*status: 'declined'/)
+  it('no bare Firestore decline is left -- it would leave a working login behind', () => {
+    expect(requestsSource).not.toMatch(/status: 'declined'/)
   })
 
   it('the click site passes paid through, computed from the row PayMongo actually flipped', () => {
