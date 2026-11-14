@@ -32,8 +32,18 @@ import { PaidPlanHint } from '@/components/SubscriptionBadge'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
-  published: { label: 'Published', color: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
+  scheduled: { label: 'Published · not open yet', color: blueText, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.25)' },
+  ongoing: { label: 'Ongoing', color: green, bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.4)' },
   closed: { label: 'Closed', color: goldDeep, bg: 'rgba(245,197,24,0.18)', border: 'rgba(245,197,24,0.5)' },
+  completed: { label: 'Completed', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
+}
+/* T-260: the pill says where the quiz is in its life, not just its stored
+   status -- closed by the teacher reads Closed, past its closing time reads
+   Completed. Same lifecycleOf the tabs use. */
+export function statusPillKey(quiz, now = Date.now()) {
+  const phase = lifecycleOf(quiz, now)
+  if (phase === 'past') return quiz.status === 'closed' ? 'closed' : 'completed'
+  return phase
 }
 /* Lifecycle, not status. `status` alone put a quiz that opens next Monday and
    one that is open right now in the same bucket, which is the distinction a
@@ -620,7 +630,7 @@ function QuizCard({ quiz, classes, onDelete }) {
   // exists (a quiz that came through the backend).
   const count = quiz.question_count ?? (quiz.questions?.length ?? 0)
   const points = quiz.total_points ?? totalPoints(quiz.questions)
-  const s = STATUS_PILL[quiz.status] ?? STATUS_PILL.draft
+  const s = STATUS_PILL[statusPillKey(quiz)] ?? STATUS_PILL.draft
   const isAi = quiz.generated_by === 'ai_generated'
   // The same sentence the student's dashboard and class page print for this
   // window (lib/deliverables.js), so "Due Fri 19 Sep, 11:59 PM" here is

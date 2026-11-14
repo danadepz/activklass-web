@@ -75,8 +75,9 @@ describe('Quizzes list card window chip', () => {
     state.quizzes = [q({ opens_at: '2026-09-10T08:00', closes_at: '2026-09-19T23:59' })]
     const html = render()
     expect(html).toContain('Due 09-19-26, 11:59 PM')
-    // Beside the teacher's status pill, not in place of it.
-    expect(html).toContain('>Published<')
+    // Beside the teacher's status pill, not in place of it. The pill reads the
+    // lifecycle since T-260, so an open published quiz says Ongoing.
+    expect(html).toContain('>Ongoing<')
   })
 
   it('an undated quiz reads No deadline rather than nothing', () => {

@@ -48,6 +48,8 @@ import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { quizPublishError } from '@/lib/validation'
+import { QuestionView } from '@/routes/student/quiz-player'
 
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: ink, marginBottom: 6 }
 const fieldStyle = {
@@ -1611,9 +1613,12 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   const dirty = builderSnapshot(settings, assignedClassIds, questions) !== savedSnapshot
+  // T-260: what stops this quiz being published, shown beside Publish.
+  const publishBlocker = quizPublishError({ title: settings.title, questions, classIds: assignedClassIds })
 
   /* The Syllabus topic options come from the assigned classes' syllabi, read
      the same way every other teacher-side screen reads them (DATA-MODEL.md
@@ -1833,12 +1838,8 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   async function publish() {
     // Reachable by keyboard even though the button is disabled, and silence
     // here reads exactly like the bug above.
-    if (questions.length === 0) {
-      refusePublish('Add at least one question before publishing.')
-      return
-    }
-    if (assignedClassIds.length === 0) {
-      refusePublish('Assign this quiz to at least one class before publishing — use "Assign to Classes" above.')
+    if (publishBlocker) {
+      refusePublish(publishBlocker)
       return
     }
     /* Both are recoverable-by-editing problems, so they block publishing
@@ -2184,21 +2185,32 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           {dirty && !saving && (
             <span style={{ ...mono, fontSize: 11.5, color: goldDeep }}>Unsaved changes</span>
           )}
-          {/* Says why Publish will refuse before it is pressed. The refusal
-              itself now toasts, but a reason shown up front is a better loop
-              than a reason shown after a click. */}
-          {!dirty && assignedClassIds.length === 0 && questions.length > 0 && (
-            <span style={{ ...mono, fontSize: 11.5, color: faint }}>Assign a class to publish</span>
+          {/* Says why Publish is off, so a disabled button is never silent
+              (T-260: title, questions, points above 0, a class). */}
+          {publishBlocker && (
+            <span role="status" style={{ ...mono, fontSize: 11.5, color: goldDeep }}>{publishBlocker}</span>
           )}
+          <button type="button" onClick={() => setPreviewOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
+            Preview
+          </button>
           <button onClick={save} disabled={saving} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
             {saving ? 'Saving…' : 'Save draft'}
           </button>
-          <button onClick={publish} disabled={saving || publishing || questions.length === 0} className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" style={btnPrimary}>
+          <button onClick={publish} disabled={saving || publishing || !!publishBlocker} className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" style={btnPrimary}>
             {publishing ? 'Publishing…' : 'Publish'}
             <GoldArrow />
           </button>
         </div>
       </div>
+
+      {previewOpen && (
+        <PreviewModal
+          title={settings.title}
+          instructions={settings.instructions}
+          questions={questions}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
 
       <PublishModal
         isOpen={isPublishModalOpen}
@@ -2222,6 +2234,44 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           setQuestions(prev => [...prev, ...formatted])
         }}
       />
+    </div>
+  )
+}
+
+/**
+ * The quiz as a student will see it (T-260), drawn by the student player's own
+ * QuestionView so the two cannot drift. Answers picked here go nowhere. Mounted
+ * only while open, so each opening starts blank.
+ */
+export function PreviewModal({ title, instructions, questions, onClose }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Preview quiz' })
+  // toPayload mints option ids, so it runs once rather than on every render.
+  const [paper] = useState(() => questions.map(toPayload))
+  const [answers, setAnswers] = useState({})
+  return (
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 680, background: '#F7F8FB', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '20px 28px', background: '#FFFFFF', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
+          <p style={{ ...mono, fontSize: 11, color: goldDeep, margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Student preview · answers are not saved</p>
+          <h2 style={{ ...serif, fontSize: 22, margin: '4px 0 0', color: ink }}>{title?.trim() || 'Untitled quiz'}</h2>
+          {instructions?.trim() && <p style={{ fontSize: 13.5, color: muted, margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{instructions}</p>}
+        </div>
+        <div style={{ padding: '20px 28px', overflowY: 'auto' }} className="flex flex-col gap-5">
+          {paper.length === 0 && <p style={{ color: faint, fontSize: 14 }}>This quiz has no questions yet.</p>}
+          {paper.map((q, i) => (
+            <section key={q.id} aria-label={`Question ${i + 1}`}>
+              <p style={{ ...mono, fontSize: 11.5, color: faint, margin: '0 0 6px' }}>
+                Question {i + 1} of {paper.length} · {q.points} {Number(q.points) === 1 ? 'point' : 'points'}
+              </p>
+              <p style={{ fontSize: 15.5, color: ink, fontWeight: 600, margin: '0 0 12px', whiteSpace: 'pre-wrap' }}>{q.text || <em style={{ color: faint }}>No question text</em>}</p>
+              <QuestionView q={q} answer={answers[q.id]} setAnswer={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))} />
+            </section>
+          ))}
+        </div>
+        <div style={{ padding: '16px 28px', background: '#FFFFFF', borderTop: '1px solid rgba(14,42,92,0.07)', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnModalGhost}>Close preview</button>
+        </div>
+      </div>
     </div>
   )
 }

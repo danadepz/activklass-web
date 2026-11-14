@@ -136,7 +136,7 @@ function OptionRow({ selected, onClick, children }) {
   )
 }
 
-function QuestionView({ q, answer, setAnswer }) {
+export function QuestionView({ q, answer, setAnswer }) {
   if (q.qtype === 'mcq') {
     return (
       <div className="flex flex-col gap-2.5">

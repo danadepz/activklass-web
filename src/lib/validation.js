@@ -473,6 +473,21 @@ export function taskTitleError(value) {
   return ''
 }
 
+/**
+ * Why a quiz cannot be published yet, or '' (T-260). A draft may be half
+ * built; a published quiz with no questions or a zero-point question is found
+ * by students in the middle of the exam.
+ * @param {{ title: string, questions: { points: unknown }[], classIds: string[] }} quiz
+ */
+export function quizPublishError({ title, questions = [], classIds = [] }) {
+  if (!String(title ?? '').trim()) return 'Give this quiz a title before publishing.'
+  if (questions.length === 0) return 'Add at least one question before publishing.'
+  const bad = questions.findIndex((q) => !(Number(q.points) > 0))
+  if (bad !== -1) return `Question ${bad + 1} needs a point value above 0 before publishing.`
+  if (classIds.length === 0) return 'Assign this quiz to at least one class before publishing — use "Assign to Classes" above.'
+  return ''
+}
+
 /** A task's kind: one of activity, assignment, exam, other. */
 export function taskKindError(value) {
   return TASK_KIND_VALUES.includes(value) ? '' : 'Pick what kind of task this is.'
