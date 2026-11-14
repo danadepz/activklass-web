@@ -41,7 +41,7 @@ function isAnswered(q, a) {
   }
 }
 
-async function loadPlayerData(classId, quizId, studentId) {
+export async function loadPlayerData(classId, quizId, studentId) {
   const [quizSnap, classSnap] = await Promise.all([
     getDoc(doc(db, 'quizzes', quizId)),
     getDoc(doc(db, 'classes', classId)),
@@ -55,6 +55,12 @@ async function loadPlayerData(classId, quizId, studentId) {
   // not START a quiz. Finished-attempt feedback lives on a different route
   // (student/quiz-feedback.jsx) and is untouched by this.
   if (isDroppedFromClass(clazz, studentId)) throw new Error('dropped')
+  // T-261: the quiz must be assigned to THIS class, not just readable. Being
+  // enrolled here proved nothing about a quiz another class was given, and the
+  // attempt would have been filed under this class. Same rule as mobile
+  // startAttempt: class_ids when present, the legacy scalar otherwise.
+  const assignedClasses = Array.isArray(quiz.class_ids) ? quiz.class_ids : quiz.class_id ? [quiz.class_id] : []
+  if (!assignedClasses.includes(classId)) throw new Error('wrong_class')
   // Respect targeted assignment ('all'/legacy = everyone; otherwise an id list).
   const assignedTo = quiz.assigned_to
   if (assignedTo && assignedTo !== 'all' && !(Array.isArray(assignedTo) && assignedTo.includes(studentId))) {
@@ -886,6 +892,7 @@ export default function QuizPlayer() {
   if (isError) {
     if (error?.message === 'not_enrolled') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Enrolled" classId={classId}>You can only take quizzes for classes you're enrolled in.</Gate>
     if (error?.message === 'dropped') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Active in This Class" classId={classId}>You're no longer active in this class, so you can't take quizzes right now. Ask your teacher if this isn't right.</Gate>
+    if (error?.message === 'wrong_class') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Part of This Class" classId={classId}>This quiz isn't assigned to this class. Open it from the class your teacher gave it to.</Gate>
     if (error?.message === 'not_assigned') return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Not Assigned to You" classId={classId}>Your teacher assigned this quiz to specific students, and you're not on the list.</Gate>
     return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Quiz Not Found" classId={classId}>This quiz may have been removed.</Gate>
   }

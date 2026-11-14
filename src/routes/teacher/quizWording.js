@@ -74,3 +74,54 @@ export function backToDraftRefusal(startedCount) {
   if (!startedCount) return null
   return `${startedCount} student${startedCount === 1 ? ' has' : 's have'} already started this quiz, so it can't go back to a draft. Close it instead, or fix the wording below.`
 }
+
+/**
+ * Applies a scoring edit to a published quiz's questions (T-261). `edits` is
+ * one row per question, in order: `{ points, correct, tf, answersText }` --
+ * `correct` is the mcq option id marked right, `tf` the true/false answer,
+ * `answersText` the accepted short answers one per line. Text, ids, types and
+ * option order never change here; that is what lets the server regrade an
+ * attempt against the same paper it sat.
+ */
+export function applyScoringEdits(questions = [], edits = []) {
+  return questions.map((q, i) => {
+    const e = edits[i] ?? {}
+    const next = { ...q, points: Number(e.points ?? q.points) }
+    if (q.qtype === 'mcq' && e.correct != null) {
+      next.options = (q.options ?? []).map((o) => ({ ...o, is_correct: o.id === e.correct }))
+    } else if (q.qtype === 'true_false' && typeof e.tf === 'boolean') {
+      next.answer_key = { value: e.tf }
+    } else if (q.qtype === 'short_answer' && typeof e.answersText === 'string') {
+      next.answer_key = { answers: e.answersText.split('\n').map((s) => s.trim()).filter(Boolean) }
+    }
+    return next
+  })
+}
+
+/**
+ * The warning a teacher reads before a regrade (T-261), from the server's
+ * preview. Names how many students finished, how many marks move, and each
+ * one that moves -- never "some scores may change".
+ */
+export function describeRegrade(preview, nameOf = (id) => id) {
+  const { students = 0, finished_attempts: finished = 0, in_progress: open = 0, attempts = [] } = preview ?? {}
+  const moved = attempts.filter((a) => a.changed)
+  const lines = []
+  if (!finished) {
+    lines.push('No student has finished this quiz yet, so no mark changes.')
+  } else {
+    lines.push(
+      `${students} student${students === 1 ? ' has' : 's have'} finished this quiz (${finished} attempt${finished === 1 ? '' : 's'}). ` +
+        (moved.length
+          ? `Saving will change ${moved.length} of those marks:`
+          : 'None of their marks change.'),
+    )
+    for (const a of moved) {
+      lines.push(`${nameOf(a.student_id)}, attempt ${a.attempt_number ?? '?'}: ${a.before ?? 0}/${a.before_possible ?? 0} → ${a.after}/${a.after_possible}`)
+    }
+  }
+  if (open) {
+    lines.push(`${open} student${open === 1 ? ' is' : 's are'} taking it now and will be marked with the new answers when they submit.`)
+  }
+  return lines
+}

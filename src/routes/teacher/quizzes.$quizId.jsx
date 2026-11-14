@@ -43,7 +43,8 @@ import {
 } from '@/lib/quizAttempts'
 import { discardAttempt, grantExtraAttempt, setStudentQuizAccess, unlockAttempt } from '@/hooks/useAttemptSession'
 import { removeQuizFromAllRecords, syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
-import { applyWordingEdits, backToDraftRefusal, wordingEditError } from './quizWording'
+import { applyScoringEdits, applyWordingEdits, backToDraftRefusal, describeRegrade, wordingEditError } from './quizWording'
+import { api } from '@/lib/api'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
@@ -2520,6 +2521,133 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
  * only way `wordingEditError` ever fires is a bug, not a teacher's typing --
  * it stands as the check that would catch one.
  */
+/**
+ * Change points or answers on a published quiz (T-261, owner scope "allow +
+ * regrade"). The teacher must see who is affected before saving: Save stays
+ * off until the impact has been checked for exactly these edits, and saving
+ * writes the quiz and key, regrades every finished attempt on the server
+ * (which keeps the mark it replaced), then re-posts the class record.
+ */
+export function ChangeScoringModal({ quiz, onClose, refetch }) {
+  const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Change scoring', closeOnBackdrop: false })
+  const questions = quiz.questions ?? []
+  const [edits, setEdits] = useState(() =>
+    questions.map((q) => ({
+      points: String(q.points ?? 1),
+      correct: (q.options ?? []).find((o) => o.is_correct)?.id ?? null,
+      tf: q.answer_key?.value ?? true,
+      answersText: (q.answer_key?.answers ?? []).join('\n'),
+    })),
+  )
+  const [preview, setPreview] = useState(null)
+  const [names, setNames] = useState({})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const next = applyScoringEdits(questions, edits)
+  const problem = quizPublishError({ title: quiz.title, questions: next, classIds: quiz.class_ids ?? [] })
+  const edit = (i, patch) => {
+    setPreview(null) // any change makes the last impact check stale
+    setEdits((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  }
+
+  async function checkImpact() {
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await api(`/api/quizzes/${quiz.id}/regrade`, { method: 'POST', body: { dry_run: true, questions: next } })
+      const ids = [...new Set((result.attempts ?? []).map((a) => a.student_id))]
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      setNames(Object.fromEntries(users.map((u) => [u.id, `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || 'A student'])))
+      setPreview(result)
+    } catch {
+      setError('Could not check which marks would change. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveAndRegrade() {
+    setBusy(true)
+    setError(null)
+    try {
+      await writeQuizWithKey(quiz.id, { class_ids: quiz.class_ids ?? [] }, next, {
+        merge: true,
+        teacherId: quiz.teacher_id,
+        schoolId: quiz.school_id ?? null,
+        keyLoaded: quiz._keyLoaded === true,
+        quiz,
+      })
+      const result = await api(`/api/quizzes/${quiz.id}/regrade`, { method: 'POST', body: {} })
+      // The record reads the attempts, so it is re-posted after the regrade,
+      // through the same sync that keeps hand-typed and recovered marks.
+      const synced = await syncQuizToAllRecords({ quiz: { ...quiz, questions: next }, classMappings: quiz.class_mappings })
+      refetch()
+      const moved = result.changed_attempts ?? 0
+      toast.success(`Scoring saved. ${moved} mark${moved === 1 ? '' : 's'} regraded${synced.skipped?.length ? `; ${synced.skipped.join(' ')}` : ' and the class record updated.'}`)
+      onClose()
+    } catch {
+      setError('Could not save and regrade. Nothing was regraded if the save failed; check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
+      <div {...panelProps} style={{ width: '100%', maxWidth: 640, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ padding: '22px 28px 16px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Change scoring</h2>
+          <p style={{ fontSize: 13, color: muted, margin: '6px 0 0' }}>Points and answers only. Students who already finished are regraded, and you see whose marks change before anything is saved.</p>
+        </div>
+        <div style={{ padding: '18px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
+          {questions.map((q, i) => (
+            <div key={q.id} style={{ borderBottom: '1px solid rgba(14,42,92,0.06)', paddingBottom: 12 }}>
+              <div className="flex items-start justify-between gap-3">
+                <p style={{ fontSize: 14, color: ink, fontWeight: 600, margin: 0 }}>Q{i + 1}. {q.text}</p>
+                <label style={{ ...mono, fontSize: 12, color: muted, whiteSpace: 'nowrap' }}>
+                  <input aria-label={`Points for question ${i + 1}`} type="number" min="0.5" step="0.5" value={edits[i].points} onChange={(e) => edit(i, { points: e.target.value })} className="ak-input" style={{ ...fieldStyle, width: 70, padding: '6px 8px', textAlign: 'right' }} /> pts
+                </label>
+              </div>
+              {q.qtype === 'mcq' && (q.options ?? []).map((o) => (
+                <label key={o.id} className="flex items-center gap-2" style={{ fontSize: 13, color: ink, marginTop: 6 }}>
+                  <input type="radio" name={`correct-${q.id}`} checked={edits[i].correct === o.id} onChange={() => edit(i, { correct: o.id })} style={{ accentColor: navy }} />
+                  {o.text}
+                </label>
+              ))}
+              {q.qtype === 'true_false' && (
+                <select aria-label={`Answer for question ${i + 1}`} value={String(edits[i].tf)} onChange={(e) => edit(i, { tf: e.target.value === 'true' })} className="ak-input" style={{ ...fieldStyle, marginTop: 6, width: 140 }}>
+                  <option value="true">True</option>
+                  <option value="false">False</option>
+                </select>
+              )}
+              {q.qtype === 'short_answer' && (
+                <textarea aria-label={`Accepted answers for question ${i + 1}`} rows={2} value={edits[i].answersText} onChange={(e) => edit(i, { answersText: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 6, resize: 'vertical' }} />
+              )}
+            </div>
+          ))}
+          {problem && <p role="status" style={{ fontSize: 13, color: goldDeep, margin: 0 }}>{problem}</p>}
+          {preview && (
+            <div role="alert" style={{ background: 'rgba(245,197,24,0.12)', border: '1px solid rgba(245,197,24,0.5)', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: ink }}>
+              {describeRegrade(preview, (id) => names[id] ?? 'A student').map((line) => <p key={line} style={{ margin: '2px 0' }}>{line}</p>)}
+            </div>
+          )}
+          {error && <p style={{ fontSize: 13, color: red, margin: 0 }}>{error}</p>}
+        </div>
+        <div style={{ padding: '16px 28px', borderTop: '1px solid rgba(14,42,92,0.07)', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
+          <button type="button" onClick={onClose} disabled={busy} style={btnModalGhost}>Cancel</button>
+          <button type="button" onClick={checkImpact} disabled={busy || !!problem} className="disabled:opacity-50" style={btnModalGhost}>
+            {busy && !preview ? 'Checking…' : 'Check impact'}
+          </button>
+          <button type="button" onClick={saveAndRegrade} disabled={busy || !preview || !!problem} className="disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+            {busy && preview ? 'Saving…' : 'Save and regrade'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Edit wording', closeOnBackdrop: false })
   const [edits, setEdits] = useState([])
@@ -2708,6 +2836,7 @@ export default function QuizBuilderPage() {
   }
 
   const [isEditWordingOpen, setIsEditWordingOpen] = useState(false)
+  const [isScoringOpen, setIsScoringOpen] = useState(false)
   const [selectedQuestionIndices, setSelectedQuestionIndices] = useState(() => new Set())
   const [bankingQuestions, setBankingQuestions] = useState(false)
 
@@ -2987,6 +3116,11 @@ export default function QuizBuilderPage() {
                     Edit wording
                   </button>
                 )}
+                {quiz.status === 'published' && (
+                  <button type="button" onClick={() => setIsScoringOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
+                    Change scoring
+                  </button>
+                )}
               </div>
             </div>
             {(quiz.questions ?? []).map((q, i) => (
@@ -3073,6 +3207,9 @@ export default function QuizBuilderPage() {
           quiz={quiz}
           refetch={refetch}
         />
+      )}
+      {isScoringOpen && (
+        <ChangeScoringModal quiz={quiz} onClose={() => setIsScoringOpen(false)} refetch={refetch} />
       )}
     </div>
   )
