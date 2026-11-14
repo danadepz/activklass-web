@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
@@ -61,6 +62,45 @@ async function loadFeedback(attemptId) {
   }
 
   return { attempt, quiz, attemptCount, correctAnswers }
+}
+
+/* T-263: generated on tap, never on load -- owner's cost decision. A null
+   explanation (the model disagreed with the teacher's key, the daily limit is
+   spent, AI is off) leaves the plain line above it standing, and nothing else. */
+function ExplainAnswer({ attemptId, questionId, studentText }) {
+  const [status, setStatus] = useState('idle')
+  const [ex, setEx] = useState(null)
+  async function explain() {
+    setStatus('loading')
+    try {
+      const res = await api(`/api/quiz_attempts/${attemptId}/explain`, { method: 'POST', body: { question_id: questionId } })
+      setEx(res?.explanation ?? null)
+      setStatus(res?.explanation ? 'done' : 'none')
+    } catch {
+      setStatus('none')
+    }
+  }
+  if (status === 'none') return null
+  if (status !== 'done') {
+    return (
+      <button type="button" onClick={explain} disabled={status === 'loading'}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '7px 12px', fontSize: 12.5, fontWeight: 700, color: navy, background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 9, cursor: status === 'loading' ? 'wait' : 'pointer' }}>
+        <Sparkles className="h-3.5 w-3.5" />{status === 'loading' ? 'Explaining…' : 'Explain my answer'}
+      </button>
+    )
+  }
+  return <ExplanationView ex={ex} studentText={studentText} />
+}
+
+export function ExplanationView({ ex, studentText }) {
+  return (
+    <div style={{ display: 'grid', gap: 8, marginTop: 10, fontSize: 13, color: muted, lineHeight: 1.55 }}>
+      <p style={{ margin: 0 }}><strong style={{ color: ink }}>Why “{studentText}” is wrong:</strong> {ex.why_yours_is_wrong}</p>
+      <p style={{ margin: 0 }}><strong style={{ color: ink }}>Why the answer is right:</strong> {ex.why_correct_is_right}</p>
+      <p style={{ margin: 0 }}><strong style={{ color: ink }}>The idea:</strong> {ex.concept}</p>
+      <p style={{ margin: 0 }}><strong style={{ color: ink }}>Remember:</strong> {ex.takeaway}</p>
+    </div>
+  )
 }
 
 function ResultIcon({ state }) {
@@ -206,6 +246,7 @@ export default function QuizFeedback() {
                   {showExplanation && (
                     <div style={{ display: 'flex', gap: 9, background: 'rgba(63,169,245,0.07)', border: '1px solid rgba(63,169,245,0.28)', borderRadius: 11, padding: '11px 13px', marginTop: 12 }}>
                       <span style={{ color: blueText, flexShrink: 0, marginTop: 1 }}><Sparkles className="h-4 w-4" /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 13, color: muted, lineHeight: 1.55, margin: 0 }}>
                         {q.qtype === 'essay'
                           ? (q.rubric ? <><strong style={{ color: ink }}>What we look for:</strong> {q.rubric}</> : 'Your teacher will review and score this response.')
@@ -213,6 +254,10 @@ export default function QuizFeedback() {
                             ? <><strong style={{ color: ink }}>Explanation:</strong> {q.explanation}</>
                             : <><strong style={{ color: ink }}>Review:</strong> The correct answer is “{correctText}”. Revisit this topic in your class materials.</>}
                       </p>
+                      {state === 'incorrect' && q.qtype !== 'essay' && !q.explanation && (
+                        <ExplainAnswer attemptId={attemptId} questionId={q.id} studentText={studentText} />
+                      )}
+                      </div>
                     </div>
                   )}
                 </div>
