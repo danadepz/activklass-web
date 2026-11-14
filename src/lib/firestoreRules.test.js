@@ -689,6 +689,73 @@ describe('first-login and reset session gates', () => {
 })
 
 /**
+ * T-267 Bite E: the student test above cannot catch a field dropped from
+ * serverOwnedFields(), because a student's own update is already limited to
+ * photo_url / personal_email. These callers' update branches would otherwise
+ * ALLOW the write, so each denial here is owed to serverOwnedFields() alone.
+ * Every case pairs the refusal with an ordinary edit by the same caller that
+ * must succeed, and pins the refusal to permission-denied, so a denial for an
+ * unrelated reason (stale session, missing seed) cannot pass as protection.
+ */
+describe('users · server-owned session fields, for callers who may otherwise edit', () => {
+  const SESSION_FIELDS = {
+    session_version: 7,
+    password_reset_pending: true,
+    password_reset_was_disabled: true,
+  }
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', STUDENT), {
+        role: 'student', first_name: 'S', last_name: 'T', school_id: 'school-1', teacher_ids: [TEACHER],
+      })
+    })
+  })
+
+  async function deniedByRules(write) {
+    const err = await assertFails(write)
+    expect(err.code).toBe('permission-denied')
+  }
+
+  it('a teacher may edit their own profile but not its session fields', async () => {
+    const db = ctx(TEACHER)
+    await assertSucceeds(updateDoc(doc(db, 'users', TEACHER), { first_name: 'Teo' }))
+    for (const [field, value] of Object.entries(SESSION_FIELDS)) {
+      await deniedByRules(updateDoc(doc(db, 'users', TEACHER), { [field]: value }))
+    }
+  })
+
+  it('a same-school admin may edit a teacher but not their session fields', async () => {
+    const db = ctx(ADMIN)
+    await assertSucceeds(updateDoc(doc(db, 'users', TEACHER), { first_name: 'Teo' }))
+    for (const [field, value] of Object.entries(SESSION_FIELDS)) {
+      await deniedByRules(updateDoc(doc(db, 'users', TEACHER), { [field]: value }))
+    }
+  })
+
+  it('a teacher may edit their own student but not the student’s session fields', async () => {
+    const db = ctx(TEACHER)
+    await assertSucceeds(updateDoc(doc(db, 'users', STUDENT), { first_name: 'Sam' }))
+    for (const [field, value] of Object.entries(SESSION_FIELDS)) {
+      await deniedByRules(updateDoc(doc(db, 'users', STUDENT), { [field]: value }))
+    }
+  })
+
+  it('a teacher may create a student profile but not seed its session fields', async () => {
+    const db = ctx(TEACHER)
+    await assertSucceeds(setDoc(doc(db, 'users', 'new-student-ok'), { role: 'student', first_name: 'N', last_name: 'S' }))
+    for (const [field, value] of Object.entries(SESSION_FIELDS)) {
+      await deniedByRules(setDoc(doc(db, 'users', `new-student-${field}`), {
+        role: 'student', first_name: 'N', last_name: 'S', [field]: value,
+      }))
+    }
+  })
+})
+
+/**
  * A school admin cannot create another admin (2026-10-03). Before this, the
  * `isAdmin()` branch of the update rule let an admin write ANY field on ANY
  * profile, role included — the re-role dropdown on the admin console's Users
