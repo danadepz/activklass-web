@@ -44,13 +44,13 @@ vi.mock('@/components/SignOutButton', () => ({ default: () => <button type="butt
 
 import PayToActivate from './pay-to-activate.jsx'
 
-function render({ profile, school, isSuperAdmin = false, subscription = null, isLoading = false, isError = false }) {
+function render({ profile, school, isSuperAdmin = false, subscription = null, isLoading = false, isError = false, url = '/pay-to-activate' }) {
   authState.current = { profile, school, isSuperAdmin, refreshProfile: vi.fn(() => Promise.resolve()) }
   queryState.subscription = subscription
   queryState.isLoading = isLoading
   queryState.isError = isError
   navigateSpy.mockClear()
-  return renderToStaticMarkup(<MemoryRouter><PayToActivate /></MemoryRouter>)
+  return renderToStaticMarkup(<MemoryRouter initialEntries={[url]}><PayToActivate /></MemoryRouter>)
 }
 
 const ADMIN = { role: 'admin', email: 'admin@school.edu.ph' }
@@ -110,4 +110,24 @@ describe('/pay-to-activate — the gate no longer applies', () => {
   // house pattern cannot drive it, the same limitation register.test.jsx's
   // T-82 poll effect and account.jsx's useCheckoutReturn already live with.
   // Covered in the browser walk instead.
+})
+
+/* T-257 (maykel_64440-341): cancelling on the payment page used to land back here with
+   nothing said — the admin could not tell whether they had been charged. */
+describe('/pay-to-activate — coming back from a cancelled payment', () => {
+  const unpaid = { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 600 } }
+
+  it('says plainly that nothing was charged, and still offers the retry', () => {
+    const html = render({ profile: ADMIN, school: APPROVED_UNPAID_SCHOOL, subscription: unpaid,
+      url: '/pay-to-activate?checkout_cancelled=1' })
+    expect(html).toContain('Payment cancelled — nothing was charged.')
+    expect(html).toContain('Pay for this school year')
+    expect(html).toContain('Sign out')
+    expect(html.toLowerCase()).not.toContain('paymongo')
+  })
+
+  it('says nothing about a cancellation on an ordinary visit', () => {
+    const html = render({ profile: ADMIN, school: APPROVED_UNPAID_SCHOOL, subscription: unpaid })
+    expect(html).not.toContain('Payment cancelled')
+  })
 })

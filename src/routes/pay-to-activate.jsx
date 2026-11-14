@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { schoolApprovedUnpaid } from '@/lib/schoolStatus'
@@ -33,6 +33,8 @@ export default function PayToActivate() {
   const { profile, school, isSuperAdmin, refreshProfile } = useAuth()
   const navigate = useNavigate()
   const [err, setErr] = useState('')
+  // T-257: PayMongo's cancel link returns here (subscriptions.py cancel_url).
+  const cancelled = useSearchParams()[0].get('checkout_cancelled') === '1'
 
   // Nothing to wait for here: not in a school, or the school has since been
   // activated (or suspended, which owns its own screen).
@@ -77,6 +79,15 @@ export default function PayToActivate() {
       subtitle={`${school?.name ?? 'Your school'} is approved. Paying for the year opens the dashboard for everyone.`}
     >
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+        {cancelled && (
+          <div style={{ marginBottom: 12 }}>
+            <AuthNotice>
+              <strong>Payment cancelled — nothing was charged.</strong> Your school’s approval and
+              seats are kept. Press <strong>Pay for this school year</strong> below to try again
+              whenever you’re ready.
+            </AuthNotice>
+          </div>
+        )}
         <AuthNotice>
           <strong>You’re approved.</strong> The ActivKlass team has reviewed your request. Paying
           for the school year is the last step — once it clears, you and every teacher and student
