@@ -44,8 +44,8 @@ const OTHER_ADMIN = 'admin-2'
 let testEnv
 
 /** A signed-in context whose users/{uid} document carries the given role. */
-function ctx(uid) {
-  return testEnv.authenticatedContext(uid).firestore()
+function ctx(uid, claims = {}) {
+  return testEnv.authenticatedContext(uid, claims).firestore()
 }
 
 /**
@@ -643,6 +643,48 @@ describe('users · what a student may write about their own password', () => {
     await assertFails(
       updateDoc(doc(ctx(STUDENT), 'users', OTHER_STUDENT), { is_temp_password: false }),
     )
+  })
+})
+
+describe('first-login and reset session gates', () => {
+  it('lets a restricted account read only its own onboarding profile', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', STUDENT), {
+        role: 'student', is_temp_password: true, session_version: 1,
+      })
+      await seedAttempt('restricted-attempt')
+    })
+    const restricted = ctx(STUDENT, { must_change_password: true, session_version: 1 })
+    await assertSucceeds(getDoc(doc(restricted, 'users', STUDENT)))
+    await assertFails(getDoc(doc(restricted, 'quiz_attempts', 'restricted-attempt')))
+  })
+
+  it('denies restricted writes to protected academic documents', async () => {
+    const restricted = ctx(STUDENT, { must_change_password: true })
+    await assertFails(setDoc(doc(restricted, 'quiz_attempts', 'blocked-attempt'), {
+      student_id: STUDENT, status: 'in_progress', quiz_id: 'quiz-1',
+    }))
+  })
+
+  it('restores intended access only with the refreshed claim and current session version', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', STUDENT), {
+        role: 'student', session_version: 3,
+      })
+      await seedAttempt('own-attempt')
+      await seedAttempt('classmate-attempt', { student_id: OTHER_STUDENT })
+    })
+    const refreshed = ctx(STUDENT, { session_version: 3 })
+    await assertSucceeds(getDoc(doc(refreshed, 'quiz_attempts', 'own-attempt')))
+    await assertFails(getDoc(doc(refreshed, 'quiz_attempts', 'classmate-attempt')))
+    await assertFails(getDoc(doc(ctx(STUDENT, { session_version: 2 }), 'quiz_attempts', 'own-attempt')))
+  })
+
+  it('does not allow a client to advance its own session version', async () => {
+    const db = ctx(STUDENT)
+    await assertFails(updateDoc(doc(db, 'users', STUDENT), { session_version: 1 }))
+    await assertFails(updateDoc(doc(db, 'users', STUDENT), { password_reset_pending: false }))
+    await assertFails(updateDoc(doc(db, 'users', STUDENT), { password_reset_was_disabled: false }))
   })
 })
 
