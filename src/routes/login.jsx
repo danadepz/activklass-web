@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import { toAuthEmail, wrongCredentialMessage } from '@/lib/logins'
 import { passwordError } from '@/lib/validation'
 import { useAuth } from '@/context/useAuth'
@@ -136,24 +137,14 @@ export default function Login() {
         : '')
     if (problem) throw Object.assign(new Error(problem), { friendly: true })
 
-    // No reauthentication needed: they signed in seconds ago, which satisfies
-    // Firebase's recent-login requirement for updatePassword.
-    await updatePassword(auth.currentUser, newPassword)
-    /* Best effort, and deliberately after the fact — same reasoning as
-       components/ChangePassword: the password HAS changed by now, so a failed
-       flag write must not read as a failed change. firestore.rules allows this
-       self-write for every role (students are limited to exactly these
-       credential fields plus photo_url). */
-    try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        is_temp_password: false,
-        password_changed_at: serverTimestamp(),
-      })
-    } catch (flagErr) {
-      console.warn('[Login] password state not recorded:', flagErr)
-    }
-    // Lift the client-side gate for this session whether or not the write
-    // landed, then straight to the role dashboard — no confirmation screen.
+    // Change initial password through the server endpoint so that
+    // the must_change_password custom claim is lifted by the Admin SDK.
+    await api('/api/auth/initial-password', {
+      method: 'POST',
+      body: { new_password: newPassword, confirm_password: confirmPassword },
+    })
+    // Force refresh token so the lifted claim takes effect immediately in memory.
+    await auth.currentUser?.getIdToken?.(true)
     markPasswordChanged()
     navigate('/portal', { replace: true })
   }

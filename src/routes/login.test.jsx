@@ -38,6 +38,7 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 vi.mock('@/lib/firebase', () => ({ auth: {}, db: {} }))
+vi.mock('@/lib/api', () => ({ api: vi.fn() }))
 vi.mock('firebase/auth', () => ({
   signInWithEmailAndPassword: vi.fn(),
   setPersistence: vi.fn(),
