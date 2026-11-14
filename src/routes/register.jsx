@@ -757,7 +757,7 @@ export default function Register() {
             <>
               <SeatNumberInput
                 id="reg-solo-students"
-                label="Students you handle"
+                label="Students You Handle"
                 value={form.soloStudents}
                 onChange={setSeat('soloStudents')}
                 onBlur={clampSeat('soloStudents', SEATS.perTeacher.min, SEATS.perTeacher.max)}
@@ -803,16 +803,16 @@ export default function Register() {
                 then you can sign in, but not build a class.
               </AuthNotice>
               <div className="grid gap-3.5 md:grid-cols-2">
-                <Field id="reg-id-type" label="ID type">
+                <Field id="reg-id-type" label="ID Type">
                   <select id="reg-id-type" className="ak-input" required value={form.idType} onChange={set('idType')} style={selectStyle(true)}>
                     {ID_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </Field>
-                <Field id="reg-id-number" label="ID number">
-                  <input id="reg-id-number" className="ak-input" required maxLength={40} placeholder="As printed on the ID" value={form.idNumber} onChange={set('idNumber')} style={authInputStyle} />
+                <Field id="reg-id-number" label="ID Number">
+                  <input id="reg-id-number" className="ak-input" required maxLength={40} placeholder="As Printed on the ID" value={form.idNumber} onChange={set('idNumber')} style={authInputStyle} />
                 </Field>
               </div>
-              <Field id="reg-id-link" label="Link to a photo of the ID">
+              <Field id="reg-id-link" label="Link to a Photo of the ID">
                 <input id="reg-id-link" className="ak-input" type="url" required placeholder="https://drive.google.com/…" value={form.idLink} onChange={set('idLink')} style={authInputStyle} />
                 <p style={{ fontSize: 12, color: '#9AA6BD', margin: '8px 0 0', lineHeight: 1.5 }}>
                   Upload the photo to Google Drive or OneDrive, share it with “anyone with the
@@ -892,7 +892,7 @@ export default function Register() {
                     ? 'Request access'
                     : completing
                       ? 'Complete profile'
-                      : 'Start free trial'}
+                      : 'Start Free Trial'}
             </SubmitButton>
           </div>
 

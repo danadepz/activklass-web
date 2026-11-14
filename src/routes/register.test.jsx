@@ -62,6 +62,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
 
 import { PHONE_IN_USE_ERROR, phoneError } from '@/lib/validation'
 import Register, { Progress, positionsFor, signedInAsSomeoneElse } from './register.jsx'
+import { ID_TYPES } from './pending-verification'
 
 const step1 = () => renderToStaticMarkup(<Register />)
 
@@ -895,5 +896,28 @@ describe('T-232 — Title Case on institution signup school fields', () => {
   it('renders "Name of Your School" placeholder in Title Case', () => {
     expect(registerSource).toContain('placeholder="Name of Your School"')
     expect(registerSource).not.toContain('placeholder="Name of your School"')
+  })
+})
+
+/* T-262 (maykel_64440-344): the Individual path's steps 5-6 follow T-232's Title Case,
+   placeholders included ("Name of Your School" set that precedent). */
+describe('T-262 — Title Case on Individual registration', () => {
+  it.each([
+    'label="Students You Handle"',
+    'label="ID Type"',
+    'label="ID Number"',
+    'placeholder="As Printed on the ID"',
+    'label="Link to a Photo of the ID"',
+    "'Start Free Trial'",
+  ])('register.jsx carries %s', (s) => {
+    expect(registerSource).toContain(s)
+  })
+
+  it('the ID type dropdown options are Title Case', () => {
+    expect(ID_TYPES.map((t) => t.label)).toEqual(['School / Employee ID', 'PRC License'])
+  })
+
+  it('leaves T-240\'s step-6 sentence alone', () => {
+    expect(registerSource).toContain('You can change this number later as your load changes')
   })
 })

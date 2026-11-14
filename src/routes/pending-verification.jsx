@@ -11,8 +11,8 @@ import { SUPPORT_EMAIL } from '@/routes/admin/SubscriptionTab'
 import { ink, muted, navy, line } from '@/theme'
 
 export const ID_TYPES = [
-  { value: 'school_id', label: 'School / employee ID' },
-  { value: 'prc', label: 'PRC license' },
+  { value: 'school_id', label: 'School / Employee ID' },
+  { value: 'prc', label: 'PRC License' },
 ]
 
 /**

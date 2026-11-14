@@ -27,7 +27,7 @@ describe('ProfileCard', () => {
       verification_id_type: 'prc', verification_id_number: '0123456',
     }
     const html = render()
-    expect(html).toContain('PRC license no.')
+    expect(html).toContain('PRC License no.')
     expect(html).toContain('the one we checked when your account was approved')
     const greyed = disabledInputs(html)
     expect(greyed).toHaveLength(2)
@@ -41,7 +41,7 @@ describe('ProfileCard', () => {
       verification_id_type: 'school_id', verification_id_number: 'UCB-2021-0042',
     }
     const html = render()
-    expect(html).toContain('School / employee ID no.')
+    expect(html).toContain('School / Employee ID no.')
     expect(html).toContain('value="UCB-2021-0042"')
   })
 
