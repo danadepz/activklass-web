@@ -223,6 +223,16 @@ function SectionHead({ dot, title, note }) {
   )
 }
 
+/* T-248: an AI practice quiz is saved as a draft and only the quiz editor can
+   publish it, so a plan whose quiz is still a draft would hand students a quiz
+   they cannot open -- and invite publishing it unread. The plan waits for it. */
+function practiceQuizBlocker(plan, quizzes) {
+  if (!plan.recommended_quiz_id) return null
+  const quiz = (quizzes ?? []).find((q) => q.id === plan.recommended_quiz_id)
+  if (quiz?.status === 'published') return null
+  return 'Review the practice quiz first: open it in the quiz editor, check every question, and publish it there. Then publish this plan.'
+}
+
 /**
  * Remediation plans for the class, with their own edit and publish actions.
  *
@@ -250,6 +260,7 @@ function RemediationPanel({ plans, legacy, nameById, attemptsByQuiz, quizzes, bu
           // students actually hold; saying so is the difference between "done"
           // and "you still have to re-publish".
           const stale = published && reach !== targets.length
+          const quizBlock = practiceQuizBlocker(plan, quizzes)
           const completion = published ? completionOf(plan, attemptsByQuiz ?? {}, quizzes ?? []) : null
           const open = openId === plan.id
           return (
@@ -327,8 +338,8 @@ function RemediationPanel({ plans, legacy, nameById, attemptsByQuiz, quizzes, bu
                 ) : null}
                 <button
                   onClick={() => onPublish(plan)}
-                  disabled={busy === `publish:${plan.id}` || targets.length === 0}
-                  title={targets.length === 0 ? 'Pick at least one student first' : undefined}
+                  disabled={busy === `publish:${plan.id}` || targets.length === 0 || !!quizBlock}
+                  title={targets.length === 0 ? 'Pick at least one student first' : quizBlock ?? undefined}
                   className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }}
                 >
@@ -563,7 +574,7 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
 }
 
 /** Edit a plan: its text, its linked practice quiz, and who receives it. */
-function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz }) {
+function RemediationEditor({ plan, quizzes, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a remediation plan', closeOnBackdrop: false })
   const [title, setTitle] = useState(plan.title ?? '')
   const [guidance, setGuidance] = useState(plan.guidance ?? '')
@@ -571,6 +582,7 @@ function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, o
 
   const working = busy === `save:${plan.id}` || busy === `publish:${plan.id}`
   const generating = busy === `quiz:${plan.id}`
+  const quizBlock = practiceQuizBlocker(plan, quizzes)
   const patch = () => ({
     title: title.trim() || plan.title,
     guidance: guidance.trim(),
@@ -642,9 +654,15 @@ function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, o
             </button>
           </div>
           <p style={{ fontSize: 11.5, color: muted, margin: '8px 0 0', lineHeight: 1.45 }}>
-            Generating a quiz no longer navigates away — it attaches here so you keep the plan you
-            are editing. Publishing the plan does not publish the quiz; open it to do that.
+            Steps: 1. Generate with AI. 2. Open it in the quiz editor, review and edit every
+            question, then publish the quiz there. 3. Come back here and publish this plan.
+            Saving a draft is always allowed.
           </p>
+          {quizBlock && (
+            <p role="status" data-testid="quiz-review-block" style={{ fontSize: 12, color: goldDeep, fontWeight: 600, margin: '8px 0 0', lineHeight: 1.45 }}>
+              {quizBlock}
+            </p>
+          )}
         </div>
 
         <div className="mt-4">
@@ -676,7 +694,8 @@ function RemediationEditor({ plan, nameById, rosterIds, busy, onClose, onSave, o
         <div className="mt-5 flex flex-wrap gap-3">
           <button
             onClick={() => onSaveAndPublish(patch())}
-            disabled={working || targets.length === 0}
+            disabled={working || targets.length === 0 || !!quizBlock}
+            title={quizBlock ?? undefined}
             className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ flex: 1, minWidth: 170, padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
           >
@@ -1135,6 +1154,7 @@ export default function ScaffoldTopicsPage() {
       {editingPlan && (
         <RemediationEditor
           plan={editingPlan}
+          quizzes={data.quizzes ?? []}
           nameById={data.nameById ?? {}}
           rosterIds={data.rosterIds ?? []}
           busy={busy}
