@@ -194,6 +194,56 @@ describe('quiz_attempts · creating an attempt (G7-14 trust boundary)', () => {
   })
 })
 
+describe('quiz passwords (T-259)', () => {
+  /** quiz-1 with a password on, at version 2, and its secret, written past the rules. */
+  async function seedPasswordQuiz({ required = true, pass } = {}) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'quizzes', 'quiz-1'), {
+        teacher_id: TEACHER, status: 'published', class_ids: ['class-1'],
+        password_required: required, password_version: 2,
+      })
+      await setDoc(doc(db, 'quiz_secrets', 'quiz-1'), { teacher_id: TEACHER, password: 'fixture-pass', version: 2 })
+      if (pass !== undefined) {
+        await setDoc(doc(db, 'quiz_passes', `quiz-1_${STUDENT}`), { quiz_id: 'quiz-1', student_id: STUDENT, version: pass })
+      }
+    })
+  }
+  const start = () =>
+    setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-pw'), { quiz_id: 'quiz-1', student_id: STUDENT, status: 'in_progress' })
+
+  it('refuses to start a password quiz without a pass', async () => {
+    await seedPasswordQuiz()
+    await assertFails(start())
+  })
+  it('starts it with a pass at the current version', async () => {
+    await seedPasswordQuiz({ pass: 2 })
+    await assertSucceeds(start())
+  })
+  it('refuses a pass earned under an older password', async () => {
+    await seedPasswordQuiz({ pass: 1 })
+    await assertFails(start())
+  })
+  it('starts freely once the teacher turns protection off', async () => {
+    await seedPasswordQuiz({ required: false })
+    await assertSucceeds(start())
+  })
+  it('no client can read the password, not even the quiz’s teacher', async () => {
+    await seedPasswordQuiz()
+    await assertFails(getDoc(doc(ctx(STUDENT), 'quiz_secrets', 'quiz-1')))
+    await assertFails(getDoc(doc(ctx(TEACHER), 'quiz_secrets', 'quiz-1')))
+  })
+  it('the quiz document a student reads carries no password', async () => {
+    await seedPasswordQuiz()
+    const snap = await assertSucceeds(getDoc(doc(ctx(STUDENT), 'quizzes', 'quiz-1')))
+    expect(JSON.stringify(snap.data())).not.toContain('fixture-pass')
+  })
+  it('a student cannot write their own pass', async () => {
+    await seedPasswordQuiz()
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_passes', `quiz-1_${STUDENT}`), { quiz_id: 'quiz-1', student_id: STUDENT, version: 2 }))
+  })
+})
+
 describe('quiz_attempts · finishing your own attempt', () => {
   beforeEach(() => seedAttempt('a1'))
 

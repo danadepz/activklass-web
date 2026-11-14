@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { api } from '@/lib/api'
 import { useAuth } from '@/context/useAuth'
 import { questionsForAttempt, questionsForStudent } from '@/lib/quizPool'
 import { isDroppedFromClass } from '@/lib/roster'
@@ -242,10 +243,25 @@ export function tabSwitchWarningMessage(count) {
   return `You have left the quiz page ${count} times. Your teacher sees every time you switch tabs or leave this page.`
 }
 
+/**
+ * T-259: a password quiz is unlocked on the server first, and the attempt is
+ * created only if that succeeded -- a wrong password throws before `start`.
+ */
+export async function unlockThenStart({ quiz, classId, password, start }) {
+  if (quiz.password_required === true) {
+    await api(`/api/quizzes/${quiz.id}/unlock`, { method: 'POST', body: { password, class_id: classId } })
+  }
+  return start()
+}
+
 export function StartCard({ quiz, attempts, classId, onStarted }) {
   const { profile } = useAuth()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState(null)
+  const [password, setPassword] = useState('')
+  // T-259: the password is checked by Flask, never here -- the quiz document
+  // carries only the flag. A right entry earns the pass the attempt rule reads.
+  const needsPassword = quiz.password_required === true
 
   const attemptNumber = nextAttemptNumber(attempts)
   const questions = useMemo(
@@ -266,7 +282,7 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
       if (typeof document !== 'undefined' && document.documentElement?.requestFullscreen) {
         document.documentElement?.requestFullscreen().catch(() => {})
       }
-      await startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber })
+      await unlockThenStart({ quiz, classId, password, start: () => startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber }) })
       onStarted()
     } catch (err) {
       setError(err.message)
@@ -315,9 +331,23 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
               {error}
             </p>
           )}
+          {needsPassword && (
+            <label style={{ display: 'block', marginBottom: 14 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink, marginBottom: 6 }}>Quiz password</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your teacher gives you this"
+                className="ak-input"
+                style={{ width: '100%', padding: '11px 12px', fontSize: 15, border: `1px solid ${line}`, borderRadius: 10 }}
+              />
+            </label>
+          )}
           <button
             onClick={begin}
-            disabled={starting}
+            disabled={starting || (needsPassword && !password.trim())}
             className="transition hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
               width: '100%',

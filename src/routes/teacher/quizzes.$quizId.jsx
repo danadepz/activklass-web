@@ -6,7 +6,7 @@ import { deleteQuizWithKey, loadQuizWithKey, writeQuizWithKey } from '@/lib/quiz
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
-import { ArrowRight, Sparkles, BookOpen, Lock } from '@/components/icons'
+import { ArrowRight, Sparkles, BookOpen, Lock, Eye, EyeOff } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
@@ -2522,6 +2522,125 @@ function ImportFromBankModal({ isOpen, onClose, syllabi, onImport }) {
  * it stands as the check that would catch one.
  */
 /**
+ * T-259: an optional password a student enters before starting. The secret
+ * lives in a document no client can open; this card reads and writes it only
+ * through Flask (app/api/quiz_password.py). The quiz document it is passed
+ * carries just `password_required`, which is all a student can ever see.
+ */
+export function QuizPasswordCard({ quiz, refetch }) {
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState(null)
+  const [draft, setDraft] = useState('')
+  const [show, setShow] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [names, setNames] = useState({})
+  const on = state ? state.required : quiz.password_required === true
+  const saved = state?.password ?? ''
+
+  async function load() {
+    setBusy(true)
+    setError(null)
+    try {
+      const data = await api(`/api/quizzes/${quiz.id}/password`)
+      setState(data)
+      setDraft(data.password ?? '')
+      const ids = [...new Set((data.log ?? []).map((r) => r.student_id))]
+      const users = ids.length ? await fetchUsersByIds(ids) : []
+      setNames(Object.fromEntries(users.map((u) => [u.id, `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || 'A student'])))
+    } catch {
+      setError('Could not load the quiz password. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function save(body, done) {
+    setBusy(true)
+    setError(null)
+    try {
+      const data = await api(`/api/quizzes/${quiz.id}/password`, { method: 'PUT', body })
+      setState((s) => ({ ...s, ...data }))
+      setDraft(data.password ?? '')
+      refetch()
+      toast.success(done)
+    } catch (err) {
+      setError(err?.status === 400 ? err.message : 'Could not save the quiz password. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function toggleOpen() {
+    if (!open && !state) load()
+    setOpen((o) => !o)
+  }
+
+  return (
+    <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '12px 16px' }}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2" style={{ fontSize: 14, fontWeight: 700, color: ink }}>
+          <Lock className="h-4 w-4" /> Quiz password
+          <span style={{ ...mono, fontSize: 11, fontWeight: 600, color: on ? green : muted }}>{on ? 'ON' : 'OFF'}</span>
+        </span>
+        <button type="button" onClick={toggleOpen} className="transition hover:opacity-70" style={linkBtn}>
+          {open ? 'Hide' : 'Manage'}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-label="Quiz password"
+              type={show ? 'text' : 'password'}
+              autoComplete="off"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="4 to 64 characters"
+              className="ak-input"
+              style={{ ...fieldStyle, flex: '1 1 200px', width: 'auto' }}
+            />
+            <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide password' : 'Show password'} title={show ? 'Hide password' : 'Show password'} className="transition hover:opacity-70" style={linkBtn}>
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+            <button type="button" disabled={busy} onClick={() => save({ generate: true }, 'New password generated. Students who entered the old one need this one to start.')} className="disabled:opacity-50" style={btnGhost}>
+              Generate
+            </button>
+            <button type="button" disabled={busy || draft.trim().length < 4 || draft.trim() === saved} onClick={() => save({ password: draft }, 'Password saved. Students who entered the old one need this one to start.')} className="disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
+              Save password
+            </button>
+          </div>
+          <label className="flex items-center gap-2" style={{ fontSize: 13, color: ink }}>
+            <input type="checkbox" checked={on} disabled={busy || !saved} onChange={(e) => save({ required: e.target.checked }, e.target.checked ? 'Students now need the password to start.' : 'Password turned off. It is kept for when you turn it back on.')} style={{ accentColor: navy }} />
+            Students need this password to start the quiz
+          </label>
+          <p style={{ fontSize: 12, color: muted, margin: 0 }}>
+            Turning it off keeps the password. Changing it never touches attempts or scores; an attempt already started carries on.
+          </p>
+          {error && <p role="alert" style={{ fontSize: 13, color: red, margin: 0 }}>{error}</p>}
+          {state && (
+            <div>
+              <p style={{ ...labelStyle, marginBottom: 4 }}>Password entries</p>
+              {(state.log ?? []).length === 0 ? (
+                <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>No one has entered it yet.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 180, overflowY: 'auto' }}>
+                  {state.log.slice(0, 50).map((r, i) => (
+                    <li key={i} style={{ fontSize: 12.5, color: ink, padding: '3px 0' }}>
+                      {names[r.student_id] ?? 'A student'} · <span style={{ color: r.ok ? green : red, fontWeight: 600 }}>{r.ok ? 'right' : 'wrong'}</span> · {r.at ? new Date(r.at).toLocaleString() : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Change points or answers on a published quiz (T-261, owner scope "allow +
  * regrade"). The teacher must see who is affected before saving: Save stays
  * off until the impact has been checked for exactly these edits, and saving
@@ -3033,6 +3152,8 @@ export default function QuizBuilderPage() {
           </div>
         )}
       </div>
+
+      <QuizPasswordCard quiz={quiz} refetch={refetch} />
 
       {editable ? (
         <>
