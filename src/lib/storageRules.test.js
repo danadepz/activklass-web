@@ -511,3 +511,53 @@ describe('learning_materials · write — only the syllabus owner or an admin', 
     )
   })
 })
+
+/*
+ * Security remediation (2026-11-14): the three student-written paths pinned
+ * the writer to their own uid segment but never asked whether that student
+ * belongs to the class in the path, so any signed-in student -- at any
+ * school -- could upload (up to 10-25 MB a file, unbounded in number) into
+ * any class's hand-in, excuse-letter or contest folder. Proven here before
+ * the fix: the three "refuses" tests below passed the write. Now the student
+ * must be on the class's roster, read across to Firestore exactly as the
+ * hand-out read rule above already does.
+ */
+describe('student uploads · only into a class the student is enrolled in', () => {
+  const PDF = { contentType: 'application/pdf' }
+
+  it('refuses a hand-in from a student not enrolled in the class', async () => {
+    await assertFails(uploadBytes(
+      ref(storageCtx(OTHER_STUDENT), 'task_files/class-1/task-1/submissions/student-2/essay.pdf'), BYTES, PDF,
+    ))
+  })
+
+  it('allows a hand-in from an enrolled student under their own uid', async () => {
+    await assertSucceeds(uploadBytes(
+      ref(storageCtx(STUDENT), 'task_files/class-1/task-1/submissions/student-1/essay.pdf'), BYTES, PDF,
+    ))
+  })
+
+  it('refuses an excuse letter from a student not enrolled in the class', async () => {
+    await assertFails(uploadBytes(
+      ref(storageCtx(OTHER_STUDENT), 'excuse_letters/class-1/student-2/note.pdf'), BYTES, PDF,
+    ))
+  })
+
+  it('allows an excuse letter from an enrolled student', async () => {
+    await assertSucceeds(uploadBytes(
+      ref(storageCtx(STUDENT), 'excuse_letters/class-1/student-1/note.pdf'), BYTES, PDF,
+    ))
+  })
+
+  it('refuses a contest file from a student not enrolled in the class', async () => {
+    await assertFails(uploadBytes(
+      ref(storageCtx(OTHER_STUDENT), 'contest_files/class-1/student-2/proof.pdf'), BYTES, PDF,
+    ))
+  })
+
+  it('allows a contest file from an enrolled student', async () => {
+    await assertSucceeds(uploadBytes(
+      ref(storageCtx(STUDENT), 'contest_files/class-1/student-1/proof.pdf'), BYTES, PDF,
+    ))
+  })
+})
