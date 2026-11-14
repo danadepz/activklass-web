@@ -601,7 +601,38 @@ export async function generateSyllabus({
       },
     }),
   )
-  return validateSyllabusDraft(draft, gradeLevel)
+  const checked = validateSyllabusDraft(draft, gradeLevel)
+  return {
+    ...checked,
+    modules: checked.modules.map((m) => ({ ...m, topics: m.topics.map(withTopicMaterial) })),
+  }
+}
+
+export const TOPIC_MATERIAL_TITLE = 'Summary and key terms'
+
+/**
+ * T-249: the summary and key terms the model writes for each topic become one
+ * note resource on that topic, so the teacher reads and edits it in the draft
+ * like any note they typed, and students see it only after Save. Plain text,
+ * not markdown: a syllabus note is shown to students as pre-wrapped text.
+ */
+export function withTopicMaterial(topic) {
+  const { summary, key_terms: keyTerms, ...rest } = topic
+  const terms = (Array.isArray(keyTerms) ? keyTerms : [])
+    .map((k) => [String(k?.term ?? '').trim(), String(k?.definition ?? '').trim()])
+    .filter(([term]) => term)
+  const text = [
+    String(summary ?? '').trim(),
+    terms.length ? ['Key terms:', ...terms.map(([t, d]) => (d ? `• ${t} — ${d}` : `• ${t}`))].join('\n') : '',
+  ].filter(Boolean).join('\n\n')
+  if (!text) return rest
+  return {
+    ...rest,
+    resources: [
+      { title: TOPIC_MATERIAL_TITLE, resource_type: 'rich_text', url: '', content_markdown: text },
+      ...(rest.resources ?? []),
+    ],
+  }
 }
 
 /**

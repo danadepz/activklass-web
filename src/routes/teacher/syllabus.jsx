@@ -139,7 +139,7 @@ function MelcCode({ code, status }) {
   )
 }
 
-function TopicResourceEditor({ syllabusId, topic, onChange }) {
+export function TopicResourceEditor({ syllabusId, topic, onChange }) {
   const [addingType, setAddingType] = useState(null) // null, 'file', 'link', 'rich_text'
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
@@ -365,24 +365,39 @@ function TopicResourceEditor({ syllabusId, topic, onChange }) {
             if (res.resource_type === 'rich_text') icon = '✍️'
 
             return (
-              <div key={res._key} className="flex items-center justify-between bg-white border border-slate-150 rounded px-2.5 py-1.5 text-xs shadow-sm">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm">{icon}</span>
-                  <span className="font-semibold text-slate-700 truncate">{res.title}</span>
-                  {res.resource_type === 'link' && (
-                    <span className="text-[10px] text-slate-400 truncate max-w-[120px]">({res.url})</span>
-                  )}
-                  {res.resource_type === 'rich_text' && (
-                    <span className="text-[10px] text-slate-400 font-mono">({res.content_markdown?.slice(0, 15)}...)</span>
-                  )}
+              <div key={res._key} className="bg-white border border-slate-150 rounded px-2.5 py-1.5 text-xs shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm">{icon}</span>
+                    <span className="font-semibold text-slate-700 truncate">{res.title}</span>
+                    {res.resource_type === 'link' && (
+                      <span className="text-[10px] text-slate-400 truncate max-w-[120px]">({res.url})</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemove(res._key)}
+                    className="text-slate-400 hover:text-red-500 font-bold ml-2 text-sm"
+                    title="Remove resource"
+                  >
+                    ×
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleRemove(res._key)}
-                  className="text-slate-400 hover:text-red-500 font-bold ml-2 text-sm"
-                  title="Remove resource"
-                >
-                  ×
-                </button>
+                {/* T-249: a note -- typed or AI-generated -- is read and edited here
+                    before Save; nothing reaches students until the syllabus is saved. */}
+                {res.resource_type === 'rich_text' && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-[11px] text-slate-500">Read and edit</summary>
+                    <textarea
+                      aria-label={`Edit ${res.title}`}
+                      rows={6}
+                      value={res.content_markdown ?? ''}
+                      onChange={(e) => onChange(resources.map((r) => (
+                        r._key === res._key ? { ...r, content_markdown: e.target.value } : r
+                      )))}
+                      className="mt-1 w-full border border-slate-200 rounded px-2 py-1 text-xs text-slate-700"
+                    />
+                  </details>
+                )}
               </div>
             )
           })}
