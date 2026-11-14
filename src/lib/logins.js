@@ -14,10 +14,10 @@ export const INTERNAL_LOGIN_SUFFIX = '@activklass.internal'
 
 // Audit F-03: `DEFAULT_PASSWORD = 'pass1234'` was exported from here and
 // printed by three screens, so it reached the web production bundle -- which
-// is served to anyone, signed in or not. It is gone: the server now generates
-// one password per account (backend services/initial_password.py) and returns
-// it once, as `initial_password`, to whoever created the account. No client
-// can know a starting password ahead of time any more, which is the point.
+// is served to anyone, signed in or not. It stays out of the bundle: the server
+// owns the temporary password (backend services/initial_password.py; T-267
+// revision: one shared value again, owner's decision) and names it as
+// `initial_password` to whoever created the account.
 
 /**
  * 'snhs-789012' from the prefix + the last 6 digits of an id number.

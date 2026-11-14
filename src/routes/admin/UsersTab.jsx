@@ -325,12 +325,10 @@ function CreateUserForm({ onCreated, settings, users, role }) {
     mutationFn: createUser,
     onSuccess: (res) => {
       const login = res.user.login_id ?? res.user.email
-      // Audit F-03: this used to be `form.password || DEFAULT_PASSWORD` -- the
-      // client GUESSING the server's fallback. Now that a blank field mints a
-      // password unique to this account, only the server knows it, and it says
-      // so in `initial_password` (returned once, never stored). Falling back to
-      // the typed value covers the case where the admin chose one themselves,
-      // which the server deliberately does not echo back.
+      // The server names the temporary password it used in `initial_password`
+      // (T-267 revision: the school's standard one), so no client ever carries
+      // the value itself. Falling back to the typed value covers an admin who
+      // chose one, which the server deliberately does not echo back.
       const pw = res.user.initial_password ?? form.password
       // The password is temporary: is_temp_password and the server-side
       // must_change_password claim hold them on /change-password until they
@@ -555,13 +553,12 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           Temporary Password <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
                  onChange={set('password')} />
-          {/* This used to name the shared fallback value. Audit F-03 replaced
-              that with one generated password per account, so there is no
-              value to print ahead of time -- the success message shows the
-              one the server actually minted. */}
+          {/* The value itself stays server-side (audit F-03: it must not be in
+              the public bundle); the success message shows it. */}
           <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-            Leave blank and we generate a password for this account — it is shown
-            to you once, here, when the account is created.
+            Leave blank to use the school’s standard temporary password — it is shown
+            here when the account is created. They must choose their own password
+            the first time they sign in.
           </span>
         </label>
       </div>

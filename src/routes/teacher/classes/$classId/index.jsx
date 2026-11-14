@@ -326,11 +326,11 @@ function firstReason(rows) {
 /**
  * Announce the accounts that were just minted.
  *
- * Each account's starting password is generated for it alone (audit F-03,
- * backend services/initial_password.py), is emailed to nobody and is never
- * stored, so this response is the only place it will ever exist -- the toast
- * stays until it is dismissed, and a roster-sized import gets the list as a
- * CSV rather than a wall of text in a toast.
+ * Every new account starts on the school's standard temporary password
+ * (T-267 revision, backend services/initial_password.py). The server names it
+ * per row, so the value never sits in this bundle (audit F-03); nothing is
+ * emailed, the toast stays until dismissed, and a roster-sized import gets
+ * the list as a CSV rather than a wall of text in a toast.
  */
 function announceLogins(created) {
   const logins = created.filter((c) => c.login_created && c.initial_password)
@@ -345,18 +345,16 @@ function announceLogins(created) {
     )
     return
   }
-  // No single password to name any more: each row carries its own, so the
-  // download is the only way to hand them out.
   toast.success(
-    `${logins.length} sign-in accounts created, each with its own starting password. ` +
-      'Nothing is emailed — download the list so you know who still has to change theirs.',
+    `${logins.length} sign-in accounts created on the standard temporary password. ` +
+      'Nothing is emailed — download the list and hand each student their login. They must choose their own password the first time they sign in.',
     {
       duration: 0,
       action: {
         label: 'Download logins',
         onClick: () =>
           downloadCsv(stampedName('new-student-logins'), [
-            ['email', 'first_name', 'last_name', 'student_number', 'initial_password'],
+            ['email', 'first_name', 'last_name', 'student_number', 'temporary_password'],
             ...logins.map((l) => [l.email, l.first_name, l.last_name, l.student_number, l.initial_password]),
           ]),
       },
@@ -985,8 +983,8 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                       the hand-it-over instruction this used to carry now
                       lives in announceLogins()'s post-create success
                       message instead -- either both change, or neither. */}
-                  Creates the student's account and adds them to this class. A temporary
-                  password is generated for them and shown to you once, right after.
+                  Creates the student's account and adds them to this class. They start on
+                  the school's standard temporary password, shown to you right after.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>

@@ -16,7 +16,7 @@ const PREVIEW_CAP = 8
 
 const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
-  'role', 'email', 'middle_name', 'password', // blank password -> one generated per account
+  'role', 'email', 'middle_name', 'password', // blank password -> the standard temporary one
   'personal_email',                           // a contact address on file, never the sign-in
   'student_number', 'lrn',                    // students: number always; LRN for Grade 12 & below
   'grade', 'section', 'birthdate',            // grade is stored as year_level
@@ -54,14 +54,14 @@ const ROW_SPEC = {
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
     ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. Students can also add or update it later from their profile. Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
-    ['password', 'Optional. Blank generates a different password for each account, listed per row in the result — so you can hand each one over.'],
+    ['password', 'Optional. Blank gives the account the school’s standard temporary password, shown per row in the result. Everyone must choose their own password the first time they sign in.'],
   ],
   teacher: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['employee_number', 'Required, and needs at least 6 digits — the last six become the login.'],
     ['department', 'Optional.'],
     ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
-    ['password', 'Optional. Blank generates a different password for each account, listed per row in the result — so you can hand each one over.'],
+    ['password', 'Optional. Blank gives the account the school’s standard temporary password, shown per row in the result. Everyone must choose their own password the first time they sign in.'],
   ],
 }
 
@@ -550,7 +550,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
                       <td style={{ padding: '8px 14px' }}>
                         {r.password
                           ? (!passwordError(r.password) ? '••••••••' : <em>too weak</em>)
-                          : <span style={{ color: faint }}>generated</span>}
+                          : <span style={{ color: faint }}>temporary</span>}
                       </td>
                     </tr>
                   )

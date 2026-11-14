@@ -104,18 +104,16 @@ async function provisionInto(classId, rows) {
   const minted = (res.created ?? []).filter((c) => c.login_created)
   if (minted.length) {
     toast.success(
-      // Audit F-03: this used to read "all on the starting password X" from
-      // the first row. Each account now has its own, so there is no single
-      // value to name -- the per-row download is the only way to hand them
-      // out, which is what the CSV below has always carried.
-      `${minted.length} sign-in account${minted.length === 1 ? '' : 's'} created, each with its own starting password. ` +
-        'Nothing is emailed — download the list and hand each student their login.',
+      // T-267 revision: every new account starts on the school's standard
+      // temporary password; the server names it per row, so no client carries it.
+      `${minted.length} sign-in account${minted.length === 1 ? '' : 's'} created on the standard temporary password. ` +
+        'Nothing is emailed — download the list and hand each student their login. They must choose their own password the first time they sign in.',
       {
         duration: 0,
         action: {
           label: 'Download logins',
           onClick: () => downloadCsv(stampedName('new-student-logins'), [
-            ['last_name', 'first_name', 'login', 'password'],
+            ['last_name', 'first_name', 'login', 'temporary_password'],
             ...minted.map((c) => [c.last_name, c.first_name, c.login_id ?? c.email, c.initial_password]),
           ]),
         },
@@ -458,7 +456,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
         Columns: <span style={mono}>first_name, last_name, student_number, birthdate</span> (as YYYY-MM-DD — needed for guardian access) — optional{' '}
         <span style={mono}>lrn, email, grade_level, section</span>.{' '}
         {prefix
-          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); each student gets their own generated starting password, listed in the download, and is asked to change it.</>
+          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); every new account starts on the school’s standard temporary password, shown in the download, and must be changed at first sign-in.</>
           : <>No school abbreviation is on your account, so each row needs an <span style={mono}>email</span>, which becomes the login.</>}
       </p>
       {parseError && <p style={{ fontSize: 13, color: red, margin: '10px 0 0' }}>{parseError}</p>}
