@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchProposedPolicyQuote, fetchSubscriptionQuote } from '@/lib/subscription'
+import { fetchSubscriptionQuote } from '@/lib/subscription'
+import OptionBDemoQuote from '@/components/OptionBDemoQuote'
 
 const php = (value) => Number.isFinite(value) ? `₱${value.toLocaleString('en-PH')}` : 'Unavailable'
 
@@ -41,11 +42,9 @@ const secondaryBtnStyle = {
  *
  * All amounts come strictly from the server quote; the frontend performs no price math.
  */
-export default function SubscriptionQuoteReview({ ownerId, disabled = false, onContinue, showOptionBComparison = false, isSuperAdmin = false }) {
+export default function SubscriptionQuoteReview({ ownerId, disabled = false, onContinue }) {
   const [quoteReviewed, setQuoteReviewed] = useState(false)
   const [termsAcknowledged, setTermsAcknowledged] = useState(false)
-  const [previewCapacity, setPreviewCapacity] = useState(null)
-  const previewEnabled = Boolean(showOptionBComparison && isSuperAdmin)
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['subscription-quote', ownerId],
@@ -55,20 +54,6 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   })
 
   const quote = data?.quote
-  const previewTeachers = previewCapacity?.teachers ?? (quote?.subscription_type === 'institution' ? quote.teacher_seats : 10)
-  const previewStudents = previewCapacity?.students ?? (quote?.subscription_type === 'institution' ? quote.student_capacity : 400)
-  const proposedQuery = useQuery({
-    queryKey: ['proposed-subscription-quote', ownerId, quote?.subscription_type, previewTeachers, previewStudents],
-    queryFn: () => fetchProposedPolicyQuote(ownerId, {
-      subscriptionType: quote.subscription_type,
-      teacherSeats: quote.subscription_type === 'institution' ? previewTeachers : 1,
-      studentCapacity: previewStudents,
-    }),
-    enabled: Boolean(previewEnabled && ownerId && quote),
-    retry: false,
-  })
-  const proposed = proposedQuery.data?.proposal
-  const showStagingPreview = previewEnabled
   const isInstitution = quote?.subscription_type === 'institution'
   const termsConfig = quote?.terms || { required: false, available: false, version: null, url: null, status: 'not_required' }
   const isTermsRequired = Boolean(termsConfig.required)
@@ -83,8 +68,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
     !disabled &&
     !isLoading &&
     !isError &&
-    Boolean(quote) &&
-    !showStagingPreview
+    Boolean(quote)
 
   return (
     <section
@@ -128,6 +112,14 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
 
       {quote && (
         <>
+          <OptionBDemoQuote
+            subscriptionType={quote.subscription_type}
+            teacherSeats={quote.teacher_seats}
+            studentCapacity={quote.student_capacity}
+          />
+          <div role="note" style={{ fontSize: 11.5, color: '#64748B', margin: '10px 0' }}>
+            The demo package above is read-only. The payment breakdown and button below use only the active backend checkout quote.
+          </div>
           {/* 1. Subscription Details */}
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, marginBottom: 14 }}>
             <h4 style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, color: '#0E2A5C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -151,46 +143,6 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
               </p>
             </div>
           </div>
-
-          {/* Staging Option B Package Comparison (Test Only) */}
-          {showStagingPreview && (
-            <div style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', borderRadius: 8, padding: 14, marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0E2A5C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Staging Preview: Proposed Option B Package
-                </h4>
-                <span style={{ fontSize: 11, background: '#FEF3C7', color: '#92400E', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
-                  checkout_eligible: false · Staging Comparison Only
-                </span>
-              </div>
-              <p style={{ fontSize: 12, color: '#475569', margin: '0 0 8px', lineHeight: 1.45 }}>
-                Backend-calculated, Super Administrator-only test preview. This proposal cannot be purchased; live checkout continues to use the legacy schedule.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'end', margin: '8px 0' }}>
-                {quote.subscription_type === 'institution' && (
-                  <label style={{ fontSize: 12 }}>Teacher seats
-                    <input aria-label="Option B preview teacher seats" type="number" value={previewTeachers ?? ''} onChange={(event) => setPreviewCapacity((value) => ({ ...value, teachers: Number(event.target.value) }))} style={{ display: 'block', width: 110, padding: 6 }} />
-                  </label>
-                )}
-                <label style={{ fontSize: 12 }}>Unique student capacity
-                  <input aria-label="Option B preview student capacity" type="number" value={previewStudents ?? ''} onChange={(event) => setPreviewCapacity((value) => ({ ...value, students: Number(event.target.value) }))} style={{ display: 'block', width: 150, padding: 6 }} />
-                </label>
-              </div>
-              {proposedQuery.isLoading && <p role="status">Loading proposed policy quote…</p>}
-              {proposedQuery.isError && <p role="alert">Proposed quote unavailable. Verify the backend test-only policy flag and Super Administrator authorization.</p>}
-              {!proposedQuery.isLoading && !proposedQuery.isError && proposed && proposed.checkout_eligible === false && (
-                <div style={{ fontSize: 12.5, color: '#1E293B', lineHeight: 1.6 }}>
-                  <div><strong>Option B policy:</strong> {proposed.policy_version || 'Unavailable'}</div>
-                  <div><strong>Proposed Pricing:</strong> {Array.isArray(proposed.line_items) ? proposed.line_items.map((item) => `${item.quantity} × ${php(item.unit_price_php)} (${item.key})`).join(' + ') : 'Unavailable'} = {php(proposed.total_contract_php)}</div>
-                  <div><strong>AI Credit Entitlement:</strong> {Number.isFinite(proposed.ai_credits?.granted) ? proposed.ai_credits.granted.toLocaleString() : 'Unavailable'} total credits ({Number.isFinite(proposed.ai_credits?.student_reserved) ? proposed.ai_credits.student_reserved.toLocaleString() : 'Unavailable'} student-protected + {Number.isFinite(proposed.ai_credits?.teacher_reserved) ? proposed.ai_credits.teacher_reserved.toLocaleString() : 'Unavailable'} teacher pool)</div>
-                  <div><strong>Daily Allowance:</strong> {proposed.daily_limits?.teacher_generations_per_seat ?? 'Unavailable'} teacher generations/seat/day, {proposed.daily_limits?.student_explanations_per_student ?? 'Unavailable'} student explanations/student/day ({proposed.daily_limits?.timezone ?? 'Unavailable'} reset)</div>
-                  <div><strong>File Storage:</strong> {proposed.storage?.gb ?? 'Unavailable'} GB decimal (capacity blocks are calculated by the backend)</div>
-                </div>
-              )}
-              {!proposedQuery.isLoading && !proposedQuery.isError && !proposed && <p role="status">Proposed quote unavailable.</p>}
-              {proposed && proposed.checkout_eligible !== false && <p role="alert">Invalid preview response: backend did not mark this proposal as non-purchasable.</p>}
-            </div>
-          )}
 
           {/* 2. Resource Allowances */}
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, marginBottom: 14 }}>
@@ -227,7 +179,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
           {/* 3. Financial Breakdown */}
           <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, padding: 12, marginBottom: 14 }}>
             <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: '#0E2A5C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Financial Breakdown
+              Active checkout · current legacy policy
             </h4>
             <div role="note" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 7, padding: 9, marginBottom: 10, fontSize: 12, color: '#1E3A8A' }}>
               Payment notice: this breakdown is the backend quote ({quote.pricing_version}). If the backend amount or policy changes before checkout, checkout is rejected until you review a fresh quote. Option B demo previews cannot start PayMongo checkout.
@@ -338,7 +290,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
 
       {/* Button and Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-        {!showStagingPreview && <button
+        <button
           type="button"
           disabled={!isReadyToPay}
           onClick={() => isReadyToPay && onContinue(quote)}
@@ -349,8 +301,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
           }}
         >
           Pay for this school year
-        </button>}
-        {showStagingPreview && <span role="note">Option B preview only. PayMongo checkout is disabled in this view.</span>}
+        </button>
 
         <button
           type="button"

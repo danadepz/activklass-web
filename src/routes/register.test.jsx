@@ -985,4 +985,10 @@ describe('Registration policy ownership and quote safety', () => {
     expect(registerSource).toContain('registrationQuoteQuery.isError || !response')
     expect(registerSource).toContain('registrationQuoteReady')
   })
+
+  it('shows the separate backend-quoted Option B demo for both registration types', () => {
+    expect(registerSource).toContain('<OptionBDemoQuote subscriptionType="teacher" teacherSeats={1} studentCapacity={Number(form.soloStudents)} />')
+    expect(registerSource).toContain('<OptionBDemoQuote subscriptionType="institution" teacherSeats={Number(form.teacherSeats)} studentsPerTeacher={Number(form.studentsPerTeacher)} />')
+    expect(registerSource).not.toMatch(/OptionBDemoQuote[\s\S]{0,300}(?:checkout|startCheckout)/)
+  })
 })

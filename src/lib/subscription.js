@@ -83,6 +83,15 @@ export function fetchRegistrationQuote(input) {
   })
 }
 
+/** Public package-only quote for the clearly non-payable Option B demo. */
+export function fetchOptionBDemoQuote(input) {
+  return api('/api/subscription/demo-option-b-quote', {
+    method: 'POST',
+    requireAuth: false,
+    body: input,
+  })
+}
+
 /** Limits are applied server-side from the catalogue, not sent from here. */
 export function changePlan(ownerId, plan) {
   return api(`/api/subscription/${ownerId}/plan`, { method: 'POST', body: { plan } })
@@ -123,9 +132,8 @@ export function recordTermsAcceptance(ownerId, { termsVersion, userAgent } = {})
 }
 
 /**
- * Proposed Option B policy quote for test/staging evaluation.
- * Backend requires superadmin authorization and SUBSCRIPTION_POLICY_MODE=test_only.
- * Returns non-payable proposal comparison; checkout_eligible is always false.
+ * Legacy authenticated Option B comparison retained for internal diagnostics.
+ * Customer-facing demo screens use fetchOptionBDemoQuote instead.
  */
 export function fetchProposedPolicyQuote(ownerId, { subscriptionType, teacherSeats, studentCapacity } = {}) {
   return api(`/api/subscription/${ownerId}/proposed-policy-quote`, {
