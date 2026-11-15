@@ -27,7 +27,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { deleteObject, getBytes, ref, uploadBytes } from 'firebase/storage'
 
-const RULES_PATH = fileURLToPath(
+// ACTIVKLASS_STORAGE_RULES_PATH points this suite at another copy of the
+// rules (a worktree, or a pre-fix copy to prove a test bites), as
+// ACTIVKLASS_RULES_PATH does for firestoreRules.test.js.
+const RULES_PATH = process.env.ACTIVKLASS_STORAGE_RULES_PATH || fileURLToPath(
   new URL('../../../activklass-backend/storage.rules', import.meta.url),
 )
 
@@ -559,5 +562,65 @@ describe('student uploads · only into a class the student is enrolled in', () =
     await assertSucceeds(uploadBytes(
       ref(storageCtx(STUDENT), 'contest_files/class-1/student-1/proof.pdf'), BYTES, PDF,
     ))
+  })
+})
+
+// T-256: a school purge advances users/{uid}.session_version before deleting
+// anything, then deletes the profile. Neither a token minted before the bump
+// nor one whose profile is gone may write into the school's folders.
+describe('every write needs a live session (T-256 purge)', () => {
+  const IMG = { contentType: 'image/png' }
+  async function endSessions(...uids) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      for (const uid of uids) {
+        await setDoc(doc(ctx.firestore(), 'users', uid), { session_version: 1 }, { merge: true })
+      }
+    })
+  }
+  async function deleteProfile(uid) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const { deleteDoc } = await import('firebase/firestore')
+      await deleteDoc(doc(ctx.firestore(), 'users', uid))
+    })
+  }
+  const studentWrites = [
+    ['a submission', 'task_files/class-1/task-1/submissions/student-1/essay.pdf', PDF],
+    ['an excuse letter', 'excuse_letters/class-1/student-1/letter.pdf', PDF],
+    ['a contest file', 'contest_files/class-1/student-1/proof.pdf', PDF],
+    ['an avatar', 'avatars/student-1/me.png', IMG],
+  ]
+  const teacherWrites = [
+    ['a class syllabus file', 'syllabi/class-1/plan.pdf', PDF],
+    ['a learning material', 'learning_materials/syl-1/week1.pdf', PDF],
+    ['a new-syllabus learning material', 'learning_materials/unsaved-id/week1.pdf', PDF],
+    ['a task hand-out', 'task_files/class-1/task-1/handout.pdf', PDF],
+  ]
+
+  for (const [what, path, meta] of studentWrites) {
+    it(`a student's pre-purge token cannot upload ${what}`, async () => {
+      await endSessions(STUDENT)
+      await assertFails(uploadBytes(ref(storageCtx(STUDENT), path), BYTES, meta))
+    })
+    it(`a student whose profile was purged cannot upload ${what}`, async () => {
+      await deleteProfile(STUDENT)
+      await assertFails(uploadBytes(ref(storageCtx(STUDENT), path), BYTES, meta))
+    })
+  }
+  for (const [what, path, meta] of teacherWrites) {
+    it(`a teacher's pre-purge token cannot upload ${what}`, async () => {
+      await endSessions(TEACHER)
+      await assertFails(uploadBytes(ref(storageCtx(TEACHER), path), BYTES, meta))
+    })
+  }
+  it("an admin's pre-purge token cannot upload a class syllabus file", async () => {
+    await endSessions(ADMIN)
+    await assertFails(uploadBytes(ref(storageCtx(ADMIN), 'syllabi/class-1/plan.pdf'), BYTES, PDF))
+  })
+  it('a token carrying the current session_version still uploads', async () => {
+    await endSessions(STUDENT, TEACHER)
+    const student = testEnv.authenticatedContext(STUDENT, { session_version: 1 }).storage()
+    const teacher = testEnv.authenticatedContext(TEACHER, { session_version: 1 }).storage()
+    await assertSucceeds(uploadBytes(ref(student, 'excuse_letters/class-1/student-1/letter.pdf'), BYTES, PDF))
+    await assertSucceeds(uploadBytes(ref(teacher, 'task_files/class-1/task-1/handout.pdf'), BYTES, PDF))
   })
 })

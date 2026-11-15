@@ -2758,3 +2758,55 @@ describe('purge_operations · server-only purge records (T-256)', () => {
     await assertFails(getDoc(doc(testEnv.authenticatedContext('someone-256').firestore(), 'purge_operations', 'subscriber_s1')))
   })
 })
+
+// T-256: a school purge advances users/{uid}.session_version before it deletes
+// anything (purge_operations._end_sessions), then deletes the profile. Every
+// academic write is judged through isTeacher()/isStudent()/isAdmin(), which
+// require signedIn() -> sessionVersionIsCurrent(): neither a pre-purge token
+// nor one whose profile is gone may add a school-owned record.
+describe('a purged school adds no records (T-256)', () => {
+  async function endSessions(...uids) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      for (const uid of uids) {
+        await setDoc(doc(admin.firestore(), 'users', uid), { session_version: 1 }, { merge: true })
+      }
+    })
+  }
+  async function purgeProfile(uid) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await deleteDoc(doc(admin.firestore(), 'users', uid))
+    })
+  }
+  const newClass = { teacher_id: TEACHER, student_ids: [], subject: 'X' }
+  const attendance = { records: { [STUDENT]: 'P' } }
+  const announcement = { teacher_id: TEACHER, title: 'Hi', class_id: 'class-1' }
+
+  it('a live teacher still creates a class and records attendance (control)', async () => {
+    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+  })
+  it("a teacher's pre-purge token cannot create a class, record attendance or announce", async () => {
+    await endSessions(TEACHER)
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'announcements', 'an-new'), announcement))
+  })
+  it('a teacher whose profile was purged cannot create a class or record attendance', async () => {
+    await purgeProfile(TEACHER)
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+  })
+  it("a student's pre-purge token cannot open a quiz attempt", async () => {
+    await endSessions(STUDENT)
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-new'), {
+      student_id: STUDENT, quiz_id: 'q1', class_id: 'class-1', status: 'in_progress', started_at: serverTimestamp(),
+    }))
+  })
+  it('a token carrying the new session_version is a live session again', async () => {
+    await endSessions(TEACHER)
+    await assertSucceeds(setDoc(doc(ctx(TEACHER, { session_version: 1 }), 'classes', 'c-new'), newClass))
+  })
+  it('no client may set school_id on a profile (affiliation is server-only)', async () => {
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { school_id: 'purged-school' }))
+  })
+})
