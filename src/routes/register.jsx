@@ -22,6 +22,7 @@ import {
   abbrConflictError,
   addSchoolToDirectory,
   fetchSchoolDirectory,
+  findActiveSchoolById,
 } from '@/lib/schoolDirectory'
 import { useAuth } from '@/context/useAuth'
 import { CALENDARS, estimateAnnual, estimateSolo, pesos, trialEndsFrom, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS } from '@/lib/pricing'
@@ -220,10 +221,13 @@ export default function Register() {
   // Readable signed-out, so it loads while the form is being filled in. On a
   // fetch error the dropdown degrades to just the "add my school" path.
   const queryClient = useQueryClient()
+  // staleTime 0 (T-272): every mount and every return to the tab refetches,
+  // so a school purged while the page sat open drops out of the list. The
+  // submit re-check in createAccount and firestore.rules are the real guards.
   const schoolsQuery = useQuery({
     queryKey: ['school-directory'],
     queryFn: fetchSchoolDirectory,
-    staleTime: 60_000,
+    staleTime: 0,
   })
   const schools = schoolsQuery.data ?? []
   const addingSchool = form.schoolId === NEW_SCHOOL
@@ -341,6 +345,16 @@ export default function Register() {
       const clash = await abbrConflictError(form.newSchoolAbbr, form.newSchoolName)
       if (clash) { setError(clash); return }
     }
+    // T-272: the picked school comes from a list that may be stale — re-read
+    // it now, before any account exists, and refuse one purged since.
+    const picked = addingSchool ? null : await findActiveSchoolById(form.schoolId)
+    if (!addingSchool && !picked) {
+      queryClient.invalidateQueries({ queryKey: ['school-directory'] })
+      setForm((f) => ({ ...f, schoolId: '' }))
+      setStep(3)
+      setError('That school is no longer available on ActivKlass. Pick your school again, or add it.')
+      return
+    }
     // 0. Someone else's session is not ours to finish. Stop here, before any
     // account or directory write, and leave the form as it is: Sign out (the
     // notice above the form, or the button beside this message) and the same
@@ -429,7 +443,7 @@ export default function Register() {
     // the session that step 1 just created.
     const school = addingSchool
       ? await addSchoolToDirectory({ name: form.newSchoolName, abbreviation: form.newSchoolAbbr })
-      : (schools.find((s) => s.id === form.schoolId) ?? null)
+      : picked
     if (addingSchool && school) {
       queryClient.invalidateQueries({ queryKey: ['school-directory'] })
     }

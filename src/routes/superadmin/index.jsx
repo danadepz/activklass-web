@@ -14,7 +14,9 @@ import { SEGMENTS, STATUSES, analyticsFor, filterRows, segmentOf } from '@/lib/s
 import AnalyticsBand from './AnalyticsBand'
 import AbsorbDialog from './AbsorbDialog'
 import MessageDialog from './MessageDialog'
-import PurgeConfirmDialog from './PurgeConfirmDialog'
+import PurgeConfirmDialog, { SCHOOL_PURGE_GUARD } from './PurgeConfirmDialog'
+import { PENDING_REQUESTS_KEY } from './queues'
+import { isIncompletePurge, purgeErrorMessage, purgeResultMessage } from '@/lib/purgeFeedback'
 import { toast } from '@/components/ui/toast'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -229,12 +231,24 @@ export default function SuperAdminSubscribersPage() {
 
   const purgeSub = useMutation({
     mutationFn: (ownerId) => purgeSubscriber(ownerId),
-    onSuccess: () => {
-      toast.success('Subscriber and associated records purged.')
+    // T-256: success only when the server confirms every account and record
+    // is gone; a purge also removes requests, so those lists refresh too.
+    onSuccess: (result) => {
+      const { ok, message } = purgeResultMessage(result, 'Subscriber and its accounts')
+      if (ok) toast.success(message)
+      else toast.error(message)
       setPurgingSubscriber(null)
       refresh()
+      queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
     },
-    onError: (err) => toast.error(err.message || 'Could not purge subscriber.'),
+    onError: (err) => {
+      toast.error(purgeErrorMessage(err, 'Could not purge subscriber.'))
+      if (isIncompletePurge(err)) {
+        setPurgingSubscriber(null)
+        refresh()
+      }
+    },
   })
 
   if (isLoading) return <SkeletonTable rows={7} cols={6} tone="dark" label="Loading subscribers" />
@@ -531,6 +545,9 @@ export default function SuperAdminSubscribersPage() {
 
                   <td className="px-4 py-4">
                     <StatusPill status={sub.status} />
+                    {sub.purge_state === 'incomplete' && (
+                      <div className="mt-1 text-[11px] font-semibold text-red-300">Purge incomplete</div>
+                    )}
                   </td>
 
                   <td className="px-4 py-4 text-right">
@@ -571,7 +588,7 @@ export default function SuperAdminSubscribersPage() {
                         disabled={purgeSub.isPending}
                         className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
                       >
-                        Purge…
+                        {sub.purge_state === 'incomplete' ? 'Retry purge…' : 'Purge…'}
                       </button>
                     </div>
                   </td>
@@ -646,9 +663,12 @@ export default function SuperAdminSubscribersPage() {
         <PurgeConfirmDialog
           title={`Purge ${purgingSubscriber.type === 'institution' ? 'Institution' : 'Solo Teacher'} Subscription`}
           name={purgingSubscriber.name}
-          detail={`This will permanently delete the subscription document, associated ${
-            purgingSubscriber.type === 'institution' ? 'school doc and all unassigned accounts' : 'teacher profile and auth credentials'
-          } (if 0 classes exist).`}
+          detail={
+            purgingSubscriber.type === 'institution'
+              ? 'This will permanently delete the subscription, the school, and everything it owns.'
+              : 'This will permanently delete the subscription, teacher profile and auth credentials (if 0 classes exist).'
+          }
+          guard={purgingSubscriber.type === 'institution' ? SCHOOL_PURGE_GUARD : undefined}
           isPending={purgeSub.isPending}
           onClose={() => setPurgingSubscriber(null)}
           onConfirm={() => purgeSub.mutate(purgingSubscriber.id)}

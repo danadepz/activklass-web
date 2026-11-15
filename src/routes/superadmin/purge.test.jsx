@@ -50,3 +50,59 @@ describe('Guarded Purge Feature — index.jsx (Subscribers tab)', () => {
     expect(indexSource).toMatch(/purgeSub\.mutate\(purgingSubscriber\.id\)/)
   })
 })
+
+/* T-256: both purge screens show success only on a server-confirmed completed
+   purge, show an incomplete one as an error with a retry, and refresh every
+   list a purge can touch. Source-read, like the rest of this file. */
+describe('T-256 — purge feedback is never unconditional success', () => {
+  for (const [name, source] of [['requests.jsx', requestsSource], ['index.jsx', indexSource]]) {
+    it(`${name} decides success from the server result`, () => {
+      expect(source).toMatch(/onSuccess: \(result\) => \{\s*(\/\/[^\n]*\n\s*)*const \{ ok, message \} = purgeResultMessage\(result,/)
+      expect(source).toMatch(/if \(ok\) toast\.success\(message\)\s*else toast\.error\(message\)/)
+      expect(source).not.toMatch(/toast\.success\('[^']*purged/)
+    })
+
+    it(`${name} reports an incomplete purge as an error and refreshes its list`, () => {
+      expect(source).toMatch(/toast\.error\(purgeErrorMessage\(err,/)
+      expect(source).toMatch(/if \(isIncompletePurge\(err\)\)/)
+    })
+
+    it(`${name} marks an incomplete purge and offers the retry`, () => {
+      expect(source).toMatch(/purge_state === 'incomplete'/)
+      expect(source).toMatch(/'Retry purge…' : 'Purge…'/)
+    })
+  }
+
+  it('a request purge refreshes the subscriber list too, and a subscriber purge the request lists', () => {
+    expect(requestsSource).toMatch(/invalidateQueries\(\{ queryKey: \['sa-subscribers'\] \}\)/)
+    expect(indexSource).toMatch(/invalidateQueries\(\{ queryKey: PENDING_REQUESTS_KEY \}\)/)
+    expect(indexSource).toMatch(/invalidateQueries\(\{ queryKey: \['sa-requests-approved'\] \}\)/)
+  })
+
+  it('the confirmation dialogs are still in front of both purges', () => {
+    expect(requestsSource).toMatch(/onConfirm=\{\(\) => purge\.mutate\(purging\.id\)\}/)
+    expect(indexSource).toMatch(/onConfirm=\{\(\) => purgeSub\.mutate\(purgingSubscriber\.id\)\}/)
+  })
+})
+
+describe('T-256 Option B — the school purge dialog says what the server does', () => {
+  const SCHOOL_PURGE_GUARD = (purgeDialogSource.match(/export const SCHOOL_PURGE_GUARD =\s*"([^"]+)"/) || [])[1] || ''
+
+  it('school purges warn that everything the school owns goes, and name what still blocks it', () => {
+    expect(SCHOOL_PURGE_GUARD).toMatch(/classes, gradebooks, attendance, quizzes, tasks, submissions/)
+    expect(SCHOOL_PURGE_GUARD).toMatch(/uploaded files/)
+    expect(SCHOOL_PURGE_GUARD).toMatch(/Payment records are kept/)
+    expect(SCHOOL_PURGE_GUARD).toMatch(/has paid/)
+    expect(SCHOOL_PURGE_GUARD).toMatch(/shared with someone outside the school/)
+    expect(SCHOOL_PURGE_GUARD).not.toMatch(/active classes/)
+  })
+
+  it('both school purge dialogs use it; the solo-teacher ones keep the classes guard', () => {
+    expect(requestsSource).toMatch(/guard=\{SCHOOL_PURGE_GUARD\}/)
+    expect(indexSource).toMatch(/guard=\{purgingSubscriber\.type === 'institution' \? SCHOOL_PURGE_GUARD : undefined\}/)
+    expect(verificationsSource).not.toMatch(/SCHOOL_PURGE_GUARD/)
+    expect(purgeDialogSource).toMatch(/guard = ACCOUNT_GUARD/)
+    expect(purgeDialogSource).toMatch(/<strong>Guarded:<\/strong> \{guard\}/)
+    expect(requestsSource).not.toMatch(/if 0 classes/)
+  })
+})

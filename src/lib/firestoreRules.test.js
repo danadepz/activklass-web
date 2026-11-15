@@ -1221,6 +1221,11 @@ describe('subscription_requests · the Institution path on /register', () => {
   // school_directory. Optional — a request filed before this field existed
   // must still be writable without it.
   it('lets the school abbreviation through (T-169)', async () => {
+    // T-272: the abbreviation must name a directory row that exists — the
+    // one register.jsx picked or created a moment earlier.
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'school_directory', 'ucb'), { name: 'University of Cebu-Banilad', abbreviation: 'UCB' })
+    })
     await assertSucceeds(
       setDoc(
         doc(collection(ctx(TEACHER), 'subscription_requests')),
@@ -1251,6 +1256,113 @@ describe('subscription_requests · the Institution path on /register', () => {
     const ref = doc(collection(ctx(TEACHER), 'subscription_requests'))
     await setDoc(ref, request())
     await assertFails(getDoc(ref))
+  })
+})
+
+/*
+ * T-272: a Super Admin purge retires the purged school's directory row
+ * (`status: 'retired'`, Admin SDK) instead of deleting it. The registration
+ * page's list may be stale, and anyone can hand-make a request, so the rule —
+ * not the dropdown — refuses a NEW affiliation to a retired or missing row,
+ * while every profile already carrying it keeps working.
+ */
+describe('school_directory lifecycle · purged schools cannot be newly chosen (T-272)', () => {
+  const NEWCOMER = 'newcomer-272'
+  const ctxEmail = (uid, email) => testEnv.authenticatedContext(uid, { email }).firestore()
+  const profile = (overrides = {}) => ({
+    role: 'teacher', first_name: 'N', last_name: 'C', email: 'new@school.edu', ...overrides,
+  })
+  const request = (overrides = {}) => ({
+    uid: NEWCOMER, first_name: 'M', last_name: 'D', phone: '09171234567',
+    school_name: 'Purged Academy', school_type: 'private', academic_calendar: 'school_year',
+    position: 'admin', email: 'new@school.edu', teacher_seats: 20, students_per_teacher: 120,
+    student_seats: 2400, status: 'pending', created_at: serverTimestamp(), ...overrides,
+  })
+  async function seedDirectory() {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'school_directory', 'pa'), { name: 'Purged Academy', abbreviation: 'PA', status: 'retired', retired_school_id: 's-gone' })
+      await setDoc(doc(db, 'school_directory', 'live'), { name: 'Live High', abbreviation: 'LIVE', status: 'active' })
+      await setDoc(doc(db, 'school_directory', 'old'), { name: 'Old College', abbreviation: 'OLD' }) // legacy: no status
+      // T-256: a purge has fenced this school and is still removing it.
+      await setDoc(doc(db, 'school_directory', 'rg'), { name: 'Going Academy', abbreviation: 'RG', status: 'retiring', retiring_operation_id: 'subscriber_s-rg' })
+      await setDoc(doc(db, 'users', 'rg-veteran'), { role: 'teacher', first_name: 'R', last_name: 'V', teaching_school_id: 'rg', teaching_school_name: 'Going Academy' })
+      // A teacher who joined Purged Academy before it was purged.
+      await setDoc(doc(db, 'users', 'veteran'), { role: 'teacher', first_name: 'V', last_name: 'T', teaching_school_id: 'pa', teaching_school_name: 'Purged Academy' })
+    })
+  }
+  beforeEach(seedDirectory)
+
+  it('C/D: refuses a new profile pointing at a retired entry — the stale dropdown case', async () => {
+    await assertFails(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'pa', teaching_school_name: 'Purged Academy' })))
+  })
+
+  it('D: refuses a new profile pointing at an entry that does not exist', async () => {
+    await assertFails(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'nowhere', teaching_school_name: 'Nowhere' })))
+  })
+
+  it('E/F: accepts an active entry and a legacy entry with no status', async () => {
+    await assertSucceeds(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'live', teaching_school_name: 'Live High' })))
+    await assertSucceeds(setDoc(doc(ctxEmail('newcomer-2', 'n2@school.edu'), 'users', 'newcomer-2'),
+      profile({ email: 'n2@school.edu', teaching_school_id: 'old', teaching_school_name: 'Old College' })))
+  })
+
+  it('still accepts a profile with no school at all', async () => {
+    await assertSucceeds(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER), profile()))
+  })
+
+  it('G: a teacher already affiliated with the purged school keeps editing their profile', async () => {
+    await assertSucceeds(updateDoc(doc(ctx('veteran'), 'users', 'veteran'), { first_name: 'Vee' }))
+  })
+
+  it('D: refuses switching a profile onto a retired entry, allows switching to an active one', async () => {
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { teaching_school_id: 'pa', teaching_school_name: 'Purged Academy' }))
+    await assertSucceeds(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { teaching_school_id: 'live', teaching_school_name: 'Live High' }))
+  })
+
+  it('C/D: refuses an Institution request naming a retired or missing abbreviation; accepts an active one', async () => {
+    const reqs = (uid) => doc(collection(ctxEmail(uid, 'new@school.edu'), 'subscription_requests'))
+    await assertFails(setDoc(reqs(NEWCOMER), request({ school_abbr: 'PA' })))
+    await assertFails(setDoc(reqs(NEWCOMER), request({ school_abbr: 'NOPE' })))
+    await assertSucceeds(setDoc(reqs(NEWCOMER), request({ school_name: 'Live High', school_abbr: 'LIVE' })))
+  })
+
+  it('T-256: refuses every NEW affiliation to a school whose purge is unfinished (retiring)', async () => {
+    await assertFails(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'rg', teaching_school_name: 'Going Academy' })))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { teaching_school_id: 'rg', teaching_school_name: 'Going Academy' }))
+    await assertFails(setDoc(doc(collection(ctxEmail(NEWCOMER, 'new@school.edu'), 'subscription_requests')),
+      request({ school_name: 'Going Academy', school_abbr: 'RG' })))
+  })
+
+  it('T-256: an existing affiliation to a retiring school is left alone; the client cannot clear retiring', async () => {
+    await assertSucceeds(updateDoc(doc(ctx('rg-veteran'), 'users', 'rg-veteran'), { first_name: 'Arr' }))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'rg'), { status: 'active' }))
+  })
+
+  it('a client cannot retire, restore, or re-create a retired entry', async () => {
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'pa'), { status: 'active' }))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'live'), { status: 'retired' }))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'school_directory', 'pa'), {
+      name: 'Purged Academy', abbreviation: 'PA', created_by: TEACHER, created_at: serverTimestamp(),
+    }))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'school_directory', 'fresh'), {
+      name: 'Fresh School', abbreviation: 'FRESH', created_by: TEACHER, created_at: serverTimestamp(), status: 'retired',
+    }))
+  })
+
+  it('L: a registration that lands before retirement keeps its affiliation; the next one after is refused', async () => {
+    await assertSucceeds(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'live', teaching_school_name: 'Live High' })))
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await updateDoc(doc(admin.firestore(), 'school_directory', 'live'), { status: 'retired' })
+    })
+    await assertFails(setDoc(doc(ctxEmail('late-1', 'late@school.edu'), 'users', 'late-1'),
+      profile({ email: 'late@school.edu', teaching_school_id: 'live', teaching_school_name: 'Live High' })))
+    await assertSucceeds(updateDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER), { phone: '09170000000' }))
   })
 })
 
@@ -2616,5 +2728,85 @@ describe('T-236 — the tab-switch lock is server-only, and so is moving the dea
       await assertFails(updateDoc(doc(ctx(ADMIN), 'quiz_attempts', 'locked'), { status: 'in_progress' }))
       await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'quiz_attempts', 'locked'), { status: 'discarded' }))
     })
+  })
+})
+
+/* T-256: purge_operations holds a purge's frozen target list and retry state.
+   Only the Flask Admin SDK writes it; no rule names it, so the default deny
+   must keep every client out -- the Super Admin's own browser included, since
+   a client-side edit could point a resumed purge at other accounts. */
+describe('purge_operations · server-only purge records (T-256)', () => {
+  const superCtx = () => testEnv.authenticatedContext('dev-256', { superadmin: true }).firestore()
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'purge_operations', 'subscriber_s1'), {
+        state: 'incomplete', step: 'auth', plan: { uids: ['a'], docs: [] },
+      })
+    })
+  })
+
+  it('the Super Admin client cannot read, list, edit, create or delete one', async () => {
+    const db = superCtx()
+    await assertFails(getDoc(doc(db, 'purge_operations', 'subscriber_s1')))
+    await assertFails(getDocs(collection(db, 'purge_operations')))
+    await assertFails(updateDoc(doc(db, 'purge_operations', 'subscriber_s1'), { 'plan.uids': ['victim'] }))
+    await assertFails(setDoc(doc(db, 'purge_operations', 'request_x'), { state: 'completed' }))
+    await assertFails(deleteDoc(doc(db, 'purge_operations', 'subscriber_s1')))
+  })
+
+  it('an ordinary signed-in user cannot read one either', async () => {
+    await assertFails(getDoc(doc(testEnv.authenticatedContext('someone-256').firestore(), 'purge_operations', 'subscriber_s1')))
+  })
+})
+
+// T-256: a school purge advances users/{uid}.session_version before it deletes
+// anything (purge_operations._end_sessions), then deletes the profile. Every
+// academic write is judged through isTeacher()/isStudent()/isAdmin(), which
+// require signedIn() -> sessionVersionIsCurrent(): neither a pre-purge token
+// nor one whose profile is gone may add a school-owned record.
+describe('a purged school adds no records (T-256)', () => {
+  async function endSessions(...uids) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      for (const uid of uids) {
+        await setDoc(doc(admin.firestore(), 'users', uid), { session_version: 1 }, { merge: true })
+      }
+    })
+  }
+  async function purgeProfile(uid) {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await deleteDoc(doc(admin.firestore(), 'users', uid))
+    })
+  }
+  const newClass = { teacher_id: TEACHER, student_ids: [], subject: 'X' }
+  const attendance = { records: { [STUDENT]: 'P' } }
+  const announcement = { teacher_id: TEACHER, title: 'Hi', class_id: 'class-1' }
+
+  it('a live teacher still creates a class and records attendance (control)', async () => {
+    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+  })
+  it("a teacher's pre-purge token cannot create a class, record attendance or announce", async () => {
+    await endSessions(TEACHER)
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'announcements', 'an-new'), announcement))
+  })
+  it('a teacher whose profile was purged cannot create a class or record attendance', async () => {
+    await purgeProfile(TEACHER)
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+  })
+  it("a student's pre-purge token cannot open a quiz attempt", async () => {
+    await endSessions(STUDENT)
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'a-new'), {
+      student_id: STUDENT, quiz_id: 'q1', class_id: 'class-1', status: 'in_progress', started_at: serverTimestamp(),
+    }))
+  })
+  it('a token carrying the new session_version is a live session again', async () => {
+    await endSessions(TEACHER)
+    await assertSucceeds(setDoc(doc(ctx(TEACHER, { session_version: 1 }), 'classes', 'c-new'), newClass))
+  })
+  it('no client may set school_id on a profile (affiliation is server-only)', async () => {
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { school_id: 'purged-school' }))
   })
 })
