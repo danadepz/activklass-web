@@ -187,7 +187,7 @@ export default function ParentalAccessPanel({
     <section style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 24, marginTop: 20 }}>
       {/* The page runs to 1040px but this panel is a column of short rows, so at
           full width it reads as mostly empty. Capped and centred instead. */}
-      <div style={{ maxWidth: 620, margin: '0 auto' }}>
+      <div>
         <div className="flex items-center gap-3">
           <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(14,42,92,0.07)', color: ink, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
             <ShieldCheck className="h-5 w-5" />
@@ -235,10 +235,16 @@ export default function ParentalAccessPanel({
                 still gates approving/revoking/toggling scopes below -- a minor
                 still cannot do those -- it just no longer gates seeing the
                 code itself. */}
+            {/* Two columns on a wide panel: the code on the left, what a guardian
+                can see on the right (its four toggles sit 2x2). Once a guardian
+                is connected the right-hand block is not shown, so the code
+                takes the full row. */}
+            <div className="grid gap-x-8 md:grid-cols-2">
+            <div className={`flex flex-col ${guardians.length === 0 ? '' : 'md:col-span-2'}`}>
             <h3 style={heading}>Guardian Link Code</h3>
 
             {!showCode ? (
-              <div style={{ ...box, padding: '20px 18px' }}>
+              <div style={{ ...box, padding: '20px 18px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 {/* The button stays, but not as a configuration gate — it is
                     there so a live credential is not sitting on screen for a
                     shoulder or a screenshot to pick up. */}
@@ -257,7 +263,7 @@ export default function ParentalAccessPanel({
                 </button>
               </div>
             ) : (
-              <div style={{ ...box, padding: 18 }}>
+              <div style={{ ...box, padding: 18, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <div
                     style={{
@@ -286,6 +292,7 @@ export default function ParentalAccessPanel({
                 </p>
               </div>
             )}
+            </div>
 
             {/* --- 2. Then what approving will grant -----------------------
                 These are a convenience, not the safety mechanism. A redeemed
@@ -302,7 +309,7 @@ export default function ParentalAccessPanel({
                 real. The stored defaults still apply when a later guardian
                 is approved; they just stop being on screen. */}
             {guardians.length === 0 && (
-              <>
+              <div>
                 <h3 style={heading}>What Guardians Can See</h3>
                 <p style={note}>
                   {canManage
@@ -310,7 +317,7 @@ export default function ParentalAccessPanel({
                     : 'These are managed for you and cannot be changed here.'}
                 </p>
 
-                <div className="flex flex-col gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {PERMISSIONS.map((perm) => (
                     <Toggle
                       key={perm.key}
@@ -323,8 +330,9 @@ export default function ParentalAccessPanel({
                     />
                   ))}
                 </div>
-              </>
+              </div>
             )}
+            </div>
 
             {/* --- 3. Who it let in --------------------------------------- */}
             <h3 style={{ ...heading, margin: '26px 0 12px' }}>
