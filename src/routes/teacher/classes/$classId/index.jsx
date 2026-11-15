@@ -38,11 +38,6 @@ const STATUS_STYLE = {
   mastered: 'bg-indigo-50 text-indigo-700',
 }
 
-const ENROLLMENT_STYLE = {
-  AC: 'bg-green-50 text-green-700',
-  IN: 'bg-slate-100 text-slate-500',
-}
-
 /* Account-state labels, kept here rather than added to STATUS_LABELS in
    lib/roster.js — that file is the logic lane's, and its map is the academic
    one. See the note above STATUS_STYLE about the overloaded field. */
@@ -252,8 +247,9 @@ function rosterPatch(fields) {
    a session left open across midnight is not worth a re-render for. */
 const TODAY_ISO = new Date().toISOString().slice(0, 10)
 
-/* Shared roster field inputs (ID Number, Middle Name, Course, Year, Remarks,
-   enrollment status, LRN, birthdate). Last/first name come from the account. */
+/* Roster field inputs for the Edit Student modal (ID Number, Middle Name,
+   Course, Year, LRN, birthdate, Remarks). Last/first name come from the
+   account. Enrollment status is kept in `fields` but no longer shown. */
 /**
  * Show a failure in the banner.
  *
@@ -379,25 +375,6 @@ function StudentFields({ fields, setFields, clazz, programs, disabled = false })
       <ProgramYearFields fields={fields} set={set} clazz={clazz} programs={programs} disabled={disabled} />
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label style={labelStyle}>Remarks <span style={optHint}>(Optional)</span></label>
-          <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
-            <option value="">—</option>
-            {REMARKS_OPTIONS.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Enrollment Status</label>
-          <select className="ak-input" value={fields.enrollment_status} onChange={set('enrollment_status')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
-            {Object.entries(ENROLLMENT_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label} ({value})</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
           <label style={labelStyle}>LRN <span style={optHint}>(Basic Ed, Optional)</span></label>
           <input className="ak-input" placeholder="12-digit LRN" value={fields.lrn} onChange={set('lrn')} style={fieldStyle} disabled={disabled} />
         </div>
@@ -406,6 +383,21 @@ function StudentFields({ fields, setFields, clazz, programs, disabled = false })
           <input className="ak-input" type="date" max={TODAY_ISO} value={fields.birthdate} onChange={set('birthdate')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled} />
           <BirthdateHint missing={!fields.birthdate} />
         </div>
+      </div>
+      {/* Enrollment Status was removed from this form (owner request,
+          2026-11-15). Remarks lost its row partner, so it takes the full
+          width as the form's last field instead of sitting beside a gap.
+          `fields.enrollment_status` is still loaded from the student and
+          written back unchanged by rosterPatch, so the roster's Enrollment
+          column and its AC count keep their data. */}
+      <div>
+        <label style={labelStyle}>Remarks <span style={optHint}>(Optional)</span></label>
+        <select className="ak-input" value={fields.remarks} onChange={set('remarks')} style={{ ...fieldStyle, cursor: 'pointer' }} disabled={disabled}>
+          <option value="">—</option>
+          {REMARKS_OPTIONS.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
       </div>
     </div>
   )
@@ -1130,7 +1122,13 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
     lrn: student.lrn ?? '',
     birthdate: student.birthdate ?? '',
   })
-  const [status, setStatus] = useState(student.status ?? 'active')
+  /* No `status` state any more (2026-11-15): the "Academic Progress" select
+     that edited it was removed. It wrote users.status, which is the ACCOUNT
+     state the backend gates sign-in on (see the note above STATUS_STYLE), so
+     picking "Needs Remediation" there locked the student out -- and a Save
+     after Disable/Enable Sign-In in this same modal wrote the stale value
+     back. Save now leaves status alone; Disable/Enable Sign-In is the one
+     control that changes it. */
   const [error, setError] = useState(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
@@ -1152,7 +1150,6 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
       await updateDoc(doc(db, 'users', student.id), {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        status,
         ...rosterPatch(fields),
       })
       onDone()
@@ -1196,19 +1193,6 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
           </label>
         </div>
         <StudentFields fields={fields} setFields={setFields} clazz={clazz} programs={programs} disabled={readOnly} />
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">Academic Progress</span>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            disabled={readOnly}
-            className={`${inputCls} w-full mt-1 bg-white`}
-          >
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
         <GuardiansSection student={student} />
         {/* T-70: the account-wide switch, moved off the row and in here.
             This is the student's SIGN-IN everywhere, not this class -- the
@@ -2064,8 +2048,7 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-semibold">Name</th>
                 <th className="px-5 py-2.5 font-semibold">Program / Year</th>
                 <th className="px-5 py-2.5 font-semibold">Remarks</th>
-                <th className="px-5 py-2.5 font-semibold text-center">Enrollment</th>
-                <th className="px-5 py-2.5 font-semibold">Progress</th>
+                <th className="px-5 py-2.5 font-semibold">Status</th>
                 {/* T-62: View · Edit · Disable per row — Remove dropped (owner's word, dawny808-89) */}
                 <th className="px-5 py-2.5 font-semibold text-right">Actions</th>
               </tr>
@@ -2073,7 +2056,6 @@ export default function ClassDetailPage() {
             <tbody>
               {filteredStudents.map((s) => {
                 const status = s.status ?? 'active'
-                const enrollment = s.enrollment_status ?? 'AC'
                 const dropped = isDroppedFromClass(clazz, s.id)
                 const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
                 return (
@@ -2107,11 +2089,6 @@ export default function ClassDetailPage() {
                     </td>
                     <td className="px-5 py-3 text-slate-600">{courseYear || '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ENROLLMENT_STYLE[enrollment]}`}>
-                        {enrollment}
-                      </span>
-                    </td>
                     <td className="px-5 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${dropped ? STATUS_STYLE.inactive : STATUS_STYLE[status]}`}>
                         {/* T-70: Disabled here means dropped from THIS class,
