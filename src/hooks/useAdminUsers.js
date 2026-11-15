@@ -20,9 +20,13 @@ export const adminUsersKey = ['fs-admin-users']
 
 export async function fetchAllUsers(schoolId) {
   if (!schoolId) return []
-  const snap = await getDocs(query(collection(db, 'users'), where('school_id', '==', schoolId)))
+  const [snap, activitySnap] = await Promise.all([
+    getDocs(query(collection(db, 'users'), where('school_id', '==', schoolId))),
+    getDocs(query(collection(db, 'student_activity'), where('school_id', '==', schoolId))),
+  ])
+  const activityByUid = new Map(activitySnap.docs.map((d) => [d.id, d.data().last_active_at ?? null]))
   return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
+    .map((d) => ({ id: d.id, ...d.data(), last_active_at: activityByUid.get(d.id) ?? null }))
     .sort((a, b) => {
       const byLast = (a.last_name ?? '').localeCompare(b.last_name ?? '')
       return byLast !== 0 ? byLast : (a.first_name ?? '').localeCompare(b.first_name ?? '')

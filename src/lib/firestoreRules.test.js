@@ -688,6 +688,63 @@ describe('first-login and reset session gates', () => {
   })
 })
 
+describe('student_activity · private, server-stamped session activity', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', STUDENT), {
+        role: 'student', school_id: 'school-1', session_version: 4,
+      })
+      await setDoc(doc(db, 'users', 'other-student'), { role: 'student', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', 'parent-1'), { role: 'parent' })
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher' })
+      await setDoc(doc(db, 'student_activity', STUDENT), {
+        school_id: 'school-1', last_active_at: new Date('2026-11-16T11:00:00Z'),
+      })
+      await setDoc(doc(db, 'student_activity', 'other-student'), {
+        school_id: 'school-1', last_active_at: new Date('2026-11-16T11:00:00Z'),
+      })
+    })
+  })
+
+  it('allows only the student’s own server-time stamp, including first-password sessions', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', 'new-student'), {
+        role: 'student', school_id: 'school-1', session_version: 2,
+      })
+    })
+    await assertSucceeds(setDoc(doc(ctx('new-student', { session_version: 2 }), 'student_activity', 'new-student'), {
+      school_id: 'school-1', last_active_at: serverTimestamp(),
+    }, { merge: true }))
+    await assertSucceeds(updateDoc(doc(ctx(STUDENT, { session_version: 4 }), 'student_activity', STUDENT), {
+      last_active_at: serverTimestamp(),
+    }))
+    await assertSucceeds(updateDoc(doc(ctx(STUDENT, { must_change_password: true, session_version: 4 }), 'student_activity', STUDENT), {
+      last_active_at: serverTimestamp(),
+    }))
+    await assertFails(updateDoc(doc(ctx(STUDENT, { session_version: 4 }), 'student_activity', STUDENT), {
+      last_active_at: new Date(),
+    }))
+    await assertFails(updateDoc(doc(ctx(STUDENT, { session_version: 4 }), 'student_activity', STUDENT), {
+      last_active_at: serverTimestamp(), extra: true,
+    }))
+    await assertFails(updateDoc(doc(ctx(STUDENT, { session_version: 4 }), 'student_activity', 'other-student'), { last_active_at: serverTimestamp() }))
+    await assertFails(updateDoc(doc(ctx(STUDENT, { session_version: 3 }), 'student_activity', STUDENT), {
+      last_active_at: serverTimestamp(),
+    }))
+  })
+
+  it('limits activity reads to the student and same-school admins', async () => {
+    await assertSucceeds(getDoc(doc(ctx(STUDENT), 'student_activity', STUDENT)))
+    await assertSucceeds(getDocs(query(collection(ctx(ADMIN), 'student_activity'), where('school_id', '==', 'school-1'))))
+    await assertFails(getDoc(doc(ctx(OTHER_ADMIN), 'student_activity', STUDENT)))
+    await assertFails(getDoc(doc(ctx(TEACHER), 'student_activity', STUDENT)))
+    await assertFails(getDoc(doc(ctx('parent-1'), 'student_activity', STUDENT)))
+  })
+})
+
 /**
  * T-267 Bite E: the student test above cannot catch a field dropped from
  * serverOwnedFields(), because a student's own update is already limited to

@@ -434,8 +434,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
         ...(role === 'student' ? (() => {
           const [a, b] = splitPair(isG12 ? form.gradeSection : form.courseYear)
           return {
-            // One LRN/ID Number field: for Grade 12 & below it is the LRN and
-            // also fills student_number, which the server requires.
+            student_level: isG12 ? 'k12' : 'college',
             student_number: form.studentNumber.trim(),
             ...(isG12 ? { lrn: form.studentNumber.trim() } : {}),
             birthdate: form.birthdate,
@@ -487,13 +486,6 @@ function CreateUserForm({ onCreated, settings, users, role }) {
                 <option value="college">College</option>
               </select>
             </label>
-            {/* One field for the learner's identifier (owner request,
-                2026-11-15), replacing the separate Student Number and LRN
-                fields. Grade 12 & below: a 12-digit DepEd LRN, sent as both
-                `lrn` and `student_number` (the server requires a student
-                number on every student). College: the student ID, sent as
-                `student_number`. The hint says which applies, under the
-                Level picked above it (T-24). */}
             <label style={labelStyle}>
               LRN/ID Number
               <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}

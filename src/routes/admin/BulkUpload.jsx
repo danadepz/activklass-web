@@ -18,7 +18,7 @@ const REQUIRED = ['first_name', 'last_name']
 const OPTIONAL = [
   'role', 'email', 'middle_name', 'password', // blank password -> the standard temporary one
   'personal_email',                           // a contact address on file, never the sign-in
-  'student_number', 'lrn',                    // students: number always; LRN for Grade 12 & below
+  'student_level', 'student_number', 'lrn',    // student_level: k12 or college; legacy files may omit it
   'grade', 'section', 'birthdate',            // grade is stored as year_level
   'employee_number', 'department',            // teachers: number required per row
   'course', 'year_level',
@@ -32,7 +32,7 @@ const OPTIONAL = [
    per-column rules live in the ROW_SPEC table on the card instead. */
 const TEMPLATES = {
   student: {
-    columns: ['first_name', 'middle_name', 'last_name', 'student_number', 'lrn',
+    columns: ['first_name', 'middle_name', 'last_name', 'student_level', 'student_number', 'lrn',
               'grade', 'section', 'course', 'birthdate', 'personal_email', 'password'],
   },
   teacher: {
@@ -50,7 +50,8 @@ const ROW_SPEC = {
   student: [
     ['first_name · last_name', 'Required. middle_name is optional.'],
     ['student_number', 'Required on every student row.'],
-    ['lrn', '12 digits for Grade 12 & below. College rows leave it blank — then the student number carries the 6+ digits instead.'],
+    ['student_level', 'Use k12 or college. Older CSV files may omit this column; grade/LRN fields are used to infer the level.'],
+    ['lrn', 'Required 12-digit LRN for k12. College rows may leave it blank; the student number carries the 6+ login digits.'],
     ['birthdate', 'Required, as YYYY-MM-DD. Parental access checks against it.'],
     ['grade · section · course', 'Optional. grade is stored as the year level, for school and college rows alike.'],
     ['personal_email', 'Recommended — their own inbox, like sample.juan@gmail.com, as a contact on file. Students can also add or update it later from their profile. Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
@@ -63,6 +64,15 @@ const ROW_SPEC = {
     ['personal_email', 'Recommended — their own inbox, like sample.maria@gmail.com, as a contact on file. This upload is the only place it gets on file (they can only confirm it later, not add it). Never the sign-in: they sign in with the issued login, and a staff reset from this console is how they get back in.'],
     ['password', 'Optional. Blank gives the account the school’s standard temporary password, shown per row in the result. Everyone must choose their own password the first time they sign in.'],
   ],
+}
+
+export function studentLevelForRow(row) {
+  const raw = String(row.student_level || '').trim().toLowerCase()
+  const aliases = { 'k-12': 'k12', 'k–12': 'k12', 'k 12': 'k12' }
+  if (raw) return aliases[raw] || raw
+  const level = String(row.grade || row.year_level || '').trim().split(/\s*[-–]\s*/, 1)[0]
+  const gradeIsK12 = /^(?:k|kinder(?:garten)?|(?:grade\s*)?(?:[1-9]|1[0-2]))$/i.test(level)
+  return gradeIsK12 || Boolean(row.lrn) ? 'k12' : 'college'
 }
 
 /** What stops a row from being accepted; mirrors _prepare_user in api/admin.py.
@@ -84,6 +94,12 @@ export function rowProblem(row, prefix) {
   if (row.role === 'student') {
     if (!row.student_number) return 'missing student_number'
     if (row.lrn && !/^\d{12}$/.test(row.lrn)) return 'LRN must be 12 digits'
+    const rawStudentLevel = String(row.student_level || '').trim().toLowerCase()
+    const studentLevel = studentLevelForRow(row)
+    if (rawStudentLevel && !['k12', 'college', 'k-12', 'k–12', 'k 12'].includes(rawStudentLevel)) {
+      return "student_level must be 'k12' or 'college'"
+    }
+    if (studentLevel === 'k12' && !row.lrn) return 'K–12 students need a 12-digit LRN'
     if (!row.lrn && (row.student_number ?? '').replace(/\D/g, '').length < 6) {
       return 'needs a 12-digit LRN or a student number with 6+ digits'
     }
@@ -110,7 +126,7 @@ export function rowProblem(row, prefix) {
 export function rowLogin(row, prefix) {
   if (!CREATABLE_ROLES.includes(row.role)) return undefined
   return issuedLoginId(prefix, row.role === 'student'
-    ? (row.lrn || row.student_number)
+    ? (studentLevelForRow(row) === 'college' ? row.student_number : (row.lrn || row.student_number))
     : row.employee_number)
 }
 
@@ -344,6 +360,9 @@ export default function BulkUpload({ role, onDone, settings, users }) {
       // profile as year_level, the key the rest of the app already reads.
       const res = await bulkCreateUsers(rows.map(({ grade, ...r }) => ({
         ...r,
+        ...(r.role === 'student' || role === 'student'
+          ? { student_level: studentLevelForRow({ ...r, grade }) }
+          : {}),
         ...(grade ? { year_level: grade } : {}),
         role: r.role || role,
       })))

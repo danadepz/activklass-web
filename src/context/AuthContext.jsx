@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { AuthContext } from './auth-context'
 
@@ -62,6 +62,16 @@ export function AuthProvider({ children }) {
       setProfile({ id: uid, ...data })
       setStatus('signed_in')
       setErrorDetail(null)
+      // Keep activity outside the profile document, which approved guardians
+      // can read. Rules allow the student to stamp only their own activity doc
+      // with server time; failed writes must not block profile loading.
+      if (data.role === 'student' && data.status !== 'inactive') {
+        setDoc(doc(db, 'student_activity', uid), {
+          school_id: data.school_id ?? null,
+          last_active_at: serverTimestamp(),
+        }, { merge: true })
+          .catch((activityError) => console.warn('[AuthContext] activity stamp failed:', activityError.code ?? ''))
+      }
     } catch (err) {
       setProfile(null)
       setIsSuperAdmin(false)
