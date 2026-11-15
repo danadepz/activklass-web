@@ -67,7 +67,8 @@ describe('T-178 — Lane 1: Admin Screens', () => {
     expect(adminUsersSrc).toContain('School & Login Prefix')
     expect(adminUsersSrc).toContain('School Name')
     expect(adminUsersSrc).toContain('Save Term Dates')
-    expect(adminUsersSrc).toContain('Student Number')
+    // Student Number and LRN became one "LRN/ID Number" field (2026-11-15).
+    expect(adminUsersSrc).toContain('LRN/ID Number')
     expect(adminUsersSrc).toContain('Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>')
     expect(adminUsersSrc).toContain('Course &amp; Year <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>')
     expect(adminUsersSrc).toContain('Department <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>')
