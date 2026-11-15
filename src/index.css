@@ -276,6 +276,12 @@
   box-shadow: 0 0 0 3px rgba(14, 42, 92, 0.1) !important;
 }
 
+/* Hide native browser password reveal/clear buttons (Edge/IE) so they don't duplicate custom EyeToggle */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Primary auth button — lifts on hover, presses on click (the !important
    overrides the inline base shadow the button carries). */
 .ak-primary { transition: transform 0.12s ease, box-shadow 0.12s ease; }
