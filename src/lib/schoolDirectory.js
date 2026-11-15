@@ -43,15 +43,41 @@ export function schoolNameKey(name) {
     .trim()
 }
 
-/** Every directory entry, A→Z by name: [{id, name, abbreviation}]. */
+/**
+ * T-272: a Super Admin purge marks the purged school's entry `status:
+ * 'retired'` (backend app/services/school_directory.py) instead of deleting
+ * it, so profiles that already name it keep a readable school. A retired entry
+ * is never offered for a NEW affiliation; an entry with no status (every one
+ * written before T-272) is active. firestore.rules enforces the same thing on
+ * the write — this filter is the courtesy, not the guard.
+ */
+export function isRetiredSchool(entry) {
+  return entry?.status === 'retired'
+}
+
+/** Every selectable directory entry, A→Z by name: [{id, name, abbreviation}]. */
 export async function fetchSchoolDirectory() {
   const snap = await getDocs(collection(db, 'school_directory'))
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((s) => !isRetiredSchool(s))
     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
 }
 
-/** The entry holding this abbreviation, or null. Works signed out. */
+/**
+ * Re-read one entry at submit time: the dropdown's list may be minutes old
+ * (an open tab, a cached query), and the school may have been purged since.
+ * Returns the entry, or null when it is gone or retired.
+ */
+export async function findActiveSchoolById(id) {
+  if (!id) return null
+  const snap = await getDoc(doc(db, 'school_directory', id))
+  if (!snap.exists()) return null
+  const entry = { id: snap.id, ...snap.data() }
+  return isRetiredSchool(entry) ? null : entry
+}
+
+/** The entry holding this abbreviation (retired ones included), or null. Works signed out. */
 export async function findSchoolByAbbr(abbreviation) {
   const key = schoolAbbrKey(abbreviation)
   if (!key) return null
@@ -77,6 +103,14 @@ export async function findSchoolByName(name) {
 export async function abbrConflictError(abbreviation, name) {
   const existing = await findSchoolByAbbr(abbreviation)
   if (!existing) return ''
+  // A retired abbreviation is never handed out again on its own (T-272) —
+  // not even to the same name, since that would silently revive a purged school.
+  if (isRetiredSchool(existing)) {
+    return (
+      `“${String(abbreviation).trim().toUpperCase()}” belonged to a school that is no longer on ActivKlass. ` +
+      'Choose a different abbreviation.'
+    )
+  }
   if (schoolNameKey(existing.name) === schoolNameKey(name)) return ''
   return (
     `“${String(abbreviation).trim().toUpperCase()}” is already used by ${existing.name}. ` +
@@ -96,7 +130,7 @@ export async function addSchoolToDirectory({ name, abbreviation }) {
   // The same school typed differently — "Cebu - Banilad" for an existing
   // "Cebu-Banilad" — reuses the existing entry (its abbreviation included)
   // instead of listing the school twice under two abbreviations.
-  const sameSchool = await findSchoolByName(cleanName)
+  const sameSchool = await findSchoolByName(cleanName) // active entries only
   if (sameSchool) return sameSchool
   const existing = await findSchoolByAbbr(abbr)
   if (existing) throw new Error(await abbrConflictError(abbr, cleanName))

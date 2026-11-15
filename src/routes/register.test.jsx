@@ -58,6 +58,7 @@ vi.mock('@/lib/schoolDirectory', () => ({
   abbrConflictError: () => null,
   addSchoolToDirectory: vi.fn(),
   fetchSchoolDirectory: vi.fn(),
+  findActiveSchoolById: vi.fn(),
 }))
 
 import { PHONE_IN_USE_ERROR, phoneError } from '@/lib/validation'
