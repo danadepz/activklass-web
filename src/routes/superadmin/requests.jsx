@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { CALENDARS, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS, estimateAnnual, pesos } from '@/lib/pricing'
+import { CALENDARS, TRIAL_DAYS } from '@/lib/pricing'
 import { approveRequest, declineRequest, purgeRequest, resendApprovalNotice } from '@/lib/superadmin'
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
@@ -206,18 +206,12 @@ export default function SuperAdminRequestsPage() {
                         {n(teacherSeats)} teachers × {n(r.students_per_teacher)} students each ={' '}
                         <span className="font-mono">{n(studentSeats)}</span> student seats
                       </dd>
-                      <dt className="text-zinc-500">{paid ? 'Paid' : 'Estimate'}</dt>
+                      <dt className="text-zinc-500">Pricing</dt>
                       <dd className="text-zinc-300">
-                        {/* The same figure, the same way, as the seats step on
-                            /register showed it to them -- so what they saw and
-                            what we approve on is one number, not two. */}
-                        <span className="font-mono">{pesos(estimateAnnual(teacherSeats, studentSeats))}</span> per school year
-                        <span className="text-zinc-500">
-                          {' '}· {pesos(estimateAnnual(teacherSeats, studentSeats) / MONTHS_PER_SCHOOL_YEAR)} / month ·{' '}
-                          {paid
-                            ? 'already charged at sign-up (T-82) -- approving confirms it, not a fresh 30-day trial'
-                            : `first ${TRIAL_DAYS} days free · shown to them as an estimate; prices not yet confirmed`}
-                        </span>
+                        {paid
+                          ? 'Payment amount is recorded by the backend; approval confirms the paid request without a second charge.'
+                          : `The backend will provide the active policy quote after approval. No local price estimate is used here; the account checkout shows the amount before PayMongo.`}
+                        {!paid && ` The previous ${TRIAL_DAYS}-day trial wording is not an institution payment quote.`}
                       </dd>
                       <dt className="text-zinc-500">Requested</dt>
                       <dd className="text-zinc-300">{when(r.created_at)}</dd>
@@ -259,8 +253,7 @@ export default function SuperAdminRequestsPage() {
                     </label>
                     {paid && (
                       <p className="text-xs text-amber-400">
-                        This school paid {pesos(estimateAnnual(teacherSeats, studentSeats))} at sign-up. Declining refunds it
-                        through PayMongo before anything else is written.
+                        This school has a recorded payment. The backend refunds that payment through PayMongo before anything else is written.
                       </p>
                     )}
                     <textarea
@@ -463,8 +456,6 @@ function ApproveDialog({ request, onClose, onDone }) {
     approve.mutate()
   }
 
-  const annual = estimateAnnual(Number(form.teacher_seats) || 0, Number(form.student_seats) || 0)
-
   return (
     <Dialog
       title={`Approve ${request.school_name || 'this school'}`}
@@ -510,9 +501,9 @@ function ApproveDialog({ request, onClose, onDone }) {
           <p className="mt-2 text-[11px] text-zinc-500">
             They asked for {Number(request.teacher_seats ?? 0).toLocaleString('en-PH')} teachers × {Number(request.students_per_teacher ?? 0).toLocaleString('en-PH')} students each.
             {paid ? (
-              <> Paid at sign-up: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year.</>
+              <> The backend payment record is authoritative; approval does not create another charge.</>
             ) : (
-              <> Estimate at these seats: <span className="font-mono text-zinc-300">{pesos(annual)}</span> per school year — an estimate until the prices are confirmed.</>
+              <> The backend validates these seats. The current server quote is shown to the school before its PayMongo checkout after approval.</>
             )}
           </p>
         </div>

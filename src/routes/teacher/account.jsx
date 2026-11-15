@@ -265,7 +265,7 @@ function PayButton({ ownerId }) {
   })
   return (
     <div style={{ marginTop: 12 }}>
-      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison={import.meta.env?.VITE_SUBSCRIPTION_POLICY_MODE === 'test_only'} onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
+      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
       <Notice>{err}</Notice>
     </div>
   )
@@ -284,7 +284,7 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
   const [value, setValue] = useState(String(floor))
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: ({ studentSeats, amount }) => startSeatIncreaseCheckout(ownerId, { studentSeats, quoteTotalPhp: amount }),
+    mutationFn: ({ studentSeats, amount, pricingVersion }) => startSeatIncreaseCheckout(ownerId, { studentSeats, quoteTotalPhp: amount, pricingVersion }),
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setErr(e.message),
   })
@@ -293,9 +293,9 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
     setErr('')
     const nextValue = Number.parseInt(value, 10)
     const next = await confirmSeatIncrease({
+      ownerId,
       current: { studentSeats: floor },
       next: { studentSeats: nextValue },
-      paidThroughMs,
       onError: setErr,
     })
     if (next) mut.mutate(next)

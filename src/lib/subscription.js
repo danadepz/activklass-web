@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { estimateProrated, pesos } from './pricing'
 import { confirmDialog } from '../components/ui/dialogs'
 import { blue, gold, green, red } from '../theme'
 
@@ -68,6 +67,20 @@ export function fetchSubscription(ownerId) {
 /** Backend-calculated current-price summary; informational, never charge authority. */
 export function fetchSubscriptionQuote(ownerId) {
   return api(`/api/subscription/${ownerId}/quote`)
+}
+
+/** Active legacy registration policy and its server-owned seat bounds. */
+export function fetchRegistrationPolicy() {
+  return api('/api/subscription/registration-policy', { requireAuth: false })
+}
+
+/** Backend-authoritative registration quote; no local estimate fallback. */
+export function fetchRegistrationQuote(input) {
+  return api('/api/subscription/registration-quote', {
+    method: 'POST',
+    requireAuth: false,
+    body: input,
+  })
 }
 
 /** Limits are applied server-side from the catalogue, not sent from here. */
@@ -165,12 +178,21 @@ export function confirmCheckout(ownerId, reference) {
  * charge from the delta and never writes `limits` until PayMongo confirms --
  * this only starts the checkout, same shape as `startCheckout`.
  */
-export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats, quoteTotalPhp } = {}) {
+export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats, quoteTotalPhp, pricingVersion } = {}) {
   const body = { quote_reviewed: true }
   if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
   if (studentSeats !== undefined) body.student_seats = studentSeats
   if (quoteTotalPhp !== undefined) body.quote_total_php = quoteTotalPhp
+  if (pricingVersion) body.pricing_version = pricingVersion
   return api(`/api/subscription/${ownerId}/seats/checkout`, { method: 'POST', body })
+}
+
+/** Server quote for a seat upgrade; never estimate the PayMongo amount locally. */
+export function fetchSeatIncreaseQuote(ownerId, { teacherSeats, studentSeats } = {}) {
+  const body = {}
+  if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
+  if (studentSeats !== undefined) body.student_seats = studentSeats
+  return api(`/api/subscription/${ownerId}/seats/quote`, { method: 'POST', body })
 }
 
 /**
@@ -191,7 +213,7 @@ export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats,
  * default) for a solo teacher.
  */
 export async function confirmSeatIncrease({
-  current, next, paidThroughMs, ownerPhrase = 'what you already have', onError,
+  ownerId, current, next, ownerPhrase = 'what you already have', onError,
 }) {
   const curTeacher = current.teacherSeats ?? 0
   const curStudent = current.studentSeats ?? 0
@@ -208,22 +230,35 @@ export async function confirmSeatIncrease({
     return null
   }
 
+  let response
+  try {
+    response = await fetchSeatIncreaseQuote(ownerId, { teacherSeats: nextTeacher, studentSeats: nextStudent })
+  } catch (err) {
+    onError(err.message || 'The server could not provide a seat-increase quote.')
+    return null
+  }
+  const quote = response?.quote
+  if (!quote || quote.requested_limits?.teacher_seats !== nextTeacher || quote.requested_limits?.student_seats !== nextStudent || !Number.isFinite(quote.payment_due_php)) {
+    onError('The server returned an incomplete seat-increase quote. Refresh and try again.')
+    return null
+  }
   const addedTeacher = nextTeacher - curTeacher
   const addedStudent = nextStudent - curStudent
-  const amount = estimateProrated(addedTeacher, addedStudent, paidThroughMs)
+  const amount = quote.payment_due_php
+  const money = (value) => `₱${value.toLocaleString('en-PH')}`
   const parts = []
   if (addedTeacher > 0) parts.push(`${addedTeacher} teacher seat${addedTeacher === 1 ? '' : 's'}`)
   if (addedStudent > 0) parts.push(`${addedStudent} student seat${addedStudent === 1 ? '' : 's'}`)
   const ok = await confirmDialog({
     title: `Add ${parts.join(' and ')}?`,
     message:
-      `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
+      `This charges ${money(amount)} now — prorated to the months left until your plan renews — `
       + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
       + 'not this screen.',
-    confirmLabel: `Pay ${pesos(amount)}`,
+    confirmLabel: `Pay ${money(amount)}`,
   })
   if (!ok) return null
-  return { teacherSeats: nextTeacher, studentSeats: nextStudent, amount }
+  return { teacherSeats: nextTeacher, studentSeats: nextStudent, amount, pricingVersion: quote.pricing_version }
 }
 
 /**

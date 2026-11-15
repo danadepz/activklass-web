@@ -1,11 +1,39 @@
 import { describe, expect, it, vi } from 'vitest'
 import { api } from './api'
-import { accountKind, describeSubscription, formatDecimalBytes, recordTermsAcceptance, toMillis } from './subscription'
+import { accountKind, describeSubscription, fetchRegistrationPolicy, fetchRegistrationQuote, fetchSeatIncreaseQuote, formatDecimalBytes, recordTermsAcceptance, toMillis } from './subscription'
 
 vi.mock('./api', () => ({ api: vi.fn() }))
 
 const NOW = Date.parse('2026-08-29T08:00:00Z')
 const days = (n) => new Date(NOW + n * 24 * 60 * 60 * 1000)
+
+describe('backend registration pricing contract', () => {
+  it('loads the active registration policy without client-side pricing configuration', async () => {
+    api.mockResolvedValueOnce({ policy_version: 'legacy-seat-rates-300d-v1' })
+    await fetchRegistrationPolicy()
+    expect(api).toHaveBeenCalledWith('/api/subscription/registration-policy', { requireAuth: false })
+  })
+
+  it('sends registration capacity to the backend quote endpoint unchanged', async () => {
+    const input = { subscription_type: 'institution', teacher_seats: 20, students_per_teacher: 30 }
+    api.mockResolvedValueOnce({ policy_version: 'legacy-seat-rates-300d-v1', quote: { total_contract_php: 60000 } })
+    const result = await fetchRegistrationQuote(input)
+    expect(api).toHaveBeenCalledWith('/api/subscription/registration-quote', {
+      method: 'POST', requireAuth: false, body: input,
+    })
+    expect(result.quote.total_contract_php).toBe(60000)
+  })
+
+  it('requests a prorated seat-upgrade amount from the backend', async () => {
+    const input = { teacherSeats: 11, studentSeats: 1000 }
+    api.mockResolvedValueOnce({ quote: { pricing_version: 'legacy-seat-rates-300d-v1', payment_due_php: 600 } })
+    const result = await fetchSeatIncreaseQuote('school-1', input)
+    expect(api).toHaveBeenCalledWith('/api/subscription/school-1/seats/quote', {
+      method: 'POST', body: { teacher_seats: 11, student_seats: 1000 },
+    })
+    expect(result.quote.payment_due_php).toBe(600)
+  })
+})
 
 describe('toMillis', () => {
   it('reads every timestamp shape the app produces', () => {

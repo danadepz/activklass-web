@@ -439,7 +439,8 @@ describe('T-82 — Option C: the pending-school checkout is gone, sign-up is req
   })
 
   it('the seat-picker is back to "nothing to pay today" and a quote that comes later, not a charge', () => {
-    expect(registerSource).toMatch(/Your final quote follows from these numbers/)
+    expect(registerSource).toContain('Backend quote')
+    expect(registerSource).toContain('fetchRegistrationQuote')
     expect(registerSource).not.toMatch(/Due today/)
     expect(registerSource).not.toMatch(/Refunded in full if we decline your request/)
   })
@@ -779,15 +780,16 @@ describe('T-129 (andecobs-170) — the seat sliders become number inputs, same f
     expect(body).toMatch(/step=\{step\}/)
   })
 
-  it('types freely (onChange is a plain pass-through) and clamps to the floor/cap only on blur', () => {
+  it('takes seat bounds from the backend policy and clamps to its returned floor/cap only on blur', () => {
     // Clamping on every keystroke would stop "3" from ever becoming "300" --
     // it would snap back to the floor the instant it dipped below it. The
     // slider enforced its floor/cap physically; the number input enforces
     // the same floor/cap on blur instead, after the person is done typing.
     expect(registerSource).toMatch(/const setSeat = \(key\) => \(e\) => setForm\(\(f\) => \(\{ \.\.\.f, \[key\]: e\.target\.value \}\)\)/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('teacherSeats', SEATS\.teachers\.min, SEATS\.teachers\.max\)\}/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('studentsPerTeacher', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('soloStudents', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
+    expect(registerSource).toContain("const registrationPolicyQuery = useQuery")
+    expect(registerSource).toContain('registrationLimits?.institution?.teacher_seats')
+    expect(registerSource).toContain('registrationLimits?.institution?.students_per_teacher')
+    expect(registerSource).toContain('registrationLimits?.teacher?.student_capacity')
   })
 
   it('the clamp math itself holds the same floor and cap the sliders enforced, in both directions and for a non-numeric value', () => {
@@ -931,17 +933,19 @@ describe('T-262 — Title Case on Individual registration', () => {
   })
 })
 
-describe('Registration seat limits: Option B staging alignment and legacy preservation', () => {
-  it('preserves legacy commercial rules: 20 teachers floor, 30 students per teacher floor', async () => {
-    const { LEGACY_SEATS } = await import('./register')
-    expect(LEGACY_SEATS.teachers.min).toBe(20)
-    expect(LEGACY_SEATS.perTeacher.min).toBe(30)
+describe('Registration policy ownership and quote safety', () => {
+  it('does not define local seat limits or subscription amount formulas', () => {
+    expect(registerSource).not.toContain('OPTION_B_STAGING_SEATS')
+    expect(registerSource).not.toContain('LEGACY_SEATS')
+    expect(registerSource).not.toContain('estimateAnnual(')
+    expect(registerSource).not.toContain('estimateSolo(')
+    expect(registerSource).toContain('queryFn: fetchRegistrationPolicy')
+    expect(registerSource).toContain('queryFn: () => fetchRegistrationQuote(')
   })
 
-  it('provides Option B staging minimums: 2 teachers floor, 40 total student minimum capacity (2 × 20)', async () => {
-    const { OPTION_B_STAGING_SEATS } = await import('./register')
-    expect(OPTION_B_STAGING_SEATS.teachers.min).toBe(2)
-    expect(OPTION_B_STAGING_SEATS.perTeacher.min).toBe(20)
-    expect(OPTION_B_STAGING_SEATS.teachers.min * OPTION_B_STAGING_SEATS.perTeacher.min).toBe(40)
+  it('fails closed when registration quote is missing or its policy version is stale', () => {
+    expect(registerSource).toContain('response.policy_version !== registrationPolicy.policy_version')
+    expect(registerSource).toContain('registrationQuoteQuery.isError || !response')
+    expect(registerSource).toContain('registrationQuoteReady')
   })
 })

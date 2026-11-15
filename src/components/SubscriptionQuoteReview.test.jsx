@@ -84,8 +84,7 @@ describe('SubscriptionQuoteReview', () => {
     expect(html).toContain('Early renewal preserves remaining term days')
   })
 
-  it('renders the backend Option B staging quote only for a Super Administrator with both staging flags', () => {
-    vi.stubEnv('VITE_SUBSCRIPTION_POLICY_MODE', 'test_only')
+  it('renders the backend Option B staging quote only for a Super Administrator; backend controls availability', () => {
     const html = renderToStaticMarkup(<SubscriptionQuoteReview ownerId="teacher-1" onContinue={() => {}} showOptionBComparison={true} isSuperAdmin />)
     expect(html).toContain('Staging Preview: Proposed Option B Package')
     expect(html).toContain('checkout_eligible: false · Staging Comparison Only')
@@ -95,18 +94,14 @@ describe('SubscriptionQuoteReview', () => {
     expect(html).toContain('10 student explanations/student/day')
     expect(html).toContain('Option B preview only. PayMongo checkout is disabled in this view.')
     expect(html).not.toContain('Pay for this school year')
-    vi.unstubAllEnvs()
   })
 
   it('does not show the Option B preview to a non-Super Administrator', () => {
-    vi.stubEnv('VITE_SUBSCRIPTION_POLICY_MODE', 'test_only')
     const html = renderToStaticMarkup(<SubscriptionQuoteReview ownerId="teacher-1" onContinue={() => {}} showOptionBComparison={true} />)
     expect(html).not.toContain('Staging Preview: Proposed Option B Package')
-    vi.unstubAllEnvs()
   })
 
   it('does not locally derive Option B when the backend response is unavailable', () => {
-    vi.stubEnv('VITE_SUBSCRIPTION_POLICY_MODE', 'test_only')
     const old = queryMock.proposed
     queryMock.proposed = { data: undefined, isLoading: false, isError: true }
     const html = renderToStaticMarkup(<SubscriptionQuoteReview ownerId="teacher-1" onContinue={() => {}} showOptionBComparison isSuperAdmin />)
@@ -115,7 +110,6 @@ describe('SubscriptionQuoteReview', () => {
     expect(html).not.toContain('₱1,200 (student_capacity_blocks)')
     expect(html).not.toContain('Pay for this school year')
     queryMock.proposed = old
-    vi.unstubAllEnvs()
   })
 
   it('renders credit consumption explanation and non-AI feature protection notice', () => {

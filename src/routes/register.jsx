@@ -6,6 +6,7 @@ import { createUserWithEmailAndPassword, deleteUser, signInWithEmailAndPassword 
 import { Timestamp, addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { api, ApiError } from '@/lib/api'
+import { fetchRegistrationPolicy, fetchRegistrationQuote } from '@/lib/subscription'
 import {
   emailError,
   linkError,
@@ -23,7 +24,7 @@ import {
   fetchSchoolDirectory,
 } from '@/lib/schoolDirectory'
 import { useAuth } from '@/context/useAuth'
-import { CALENDARS, estimateAnnual, estimateSolo, pesos, trialEndsFrom, MONTHS_PER_SCHOOL_YEAR, TRIAL_DAYS } from '@/lib/pricing'
+import { CALENDARS, trialEndsFrom, TRIAL_DAYS } from '@/lib/pricing'
 import AuthLayout, {
   SubmitButton,
   EyeToggle,
@@ -84,34 +85,10 @@ export function positionsFor(kind) {
   return kind === 'institution' ? POSITIONS : POSITIONS.filter((p) => p.value !== 'admin')
 }
 
-// A school picks how many seats it needs on two sliders, and the
-// subscription follows from those numbers — there are no named plans. The
-// floors are the smallest school we sell to; the student floor is also the
-// solo-teacher cap, so a school never pays for less than one teacher gets.
-// Students are sized PER TEACHER on both paths — a school's total is
-// teachers × students-per-teacher (20 teachers at 120 each = 2,400), so the
-// two sliders stay relative to each other instead of drifting apart. 120 is
-// the solo trial cap, and a typical full load.
-// Minimum and maximum seat limits.
-// Legacy commercial mode: 20 teachers floor, 30 students per teacher floor (600 students min).
-// Option B staging mode: 2 teachers floor, 40 students total minimum (2 teachers × 20 per teacher).
-export const LEGACY_SEATS = {
-  teachers: { min: 20, max: 500, step: 5 },
-  perTeacher: { min: 30, max: 300, step: 5 },
-}
-
-export const OPTION_B_STAGING_SEATS = {
-  teachers: { min: 2, max: 500, step: 1 },
-  perTeacher: { min: 20, max: 300, step: 5 },
-}
-
-export const SEATS_CONFIG = {
-  legacy: LEGACY_SEATS,
-  option_b: OPTION_B_STAGING_SEATS,
-}
-
-const isOptionBPolicy = typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUBSCRIPTION_POLICY_MODE === 'test_only'
-export const SEATS = isOptionBPolicy ? OPTION_B_STAGING_SEATS : LEGACY_SEATS
+// Seat bounds are loaded from the active backend registration policy. Keep
+// the controls unavailable until that policy arrives; no browser-side pricing
+// mode or minimum is authoritative.
+const emptySeatBounds = { min: 1, max: 1, step: 1 }
 
 // The registration walk, per account type. Step 1 is the chooser; the last
 // step is where the account (or the request) is actually created. A
@@ -191,9 +168,9 @@ export default function Register() {
     email: '',
     password: '',
     confirm: '',
-    teacherSeats: SEATS.teachers.min,
-    studentsPerTeacher: 120,
-    soloStudents: 40,
+    teacherSeats: '',
+    studentsPerTeacher: '',
+    soloStudents: '',
     idType: ID_TYPES[0].value,
     idNumber: '',
     idLink: '',
@@ -232,12 +209,53 @@ export default function Register() {
   const schools = schoolsQuery.data ?? []
   const addingSchool = form.schoolId === NEW_SCHOOL
 
+  const registrationPolicyQuery = useQuery({
+    queryKey: ['subscription-registration-policy'],
+    queryFn: fetchRegistrationPolicy,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const registrationPolicy = registrationPolicyQuery.data
+  const registrationLimits = registrationPolicy?.registration_limits
+  const teacherBounds = registrationLimits?.institution?.teacher_seats
+  const perTeacherBounds = registrationLimits?.institution?.students_per_teacher
+  const soloStudentBounds = registrationLimits?.teacher?.student_capacity
+
+  useEffect(() => {
+    if (!registrationLimits) return
+    setForm((current) => ({
+      ...current,
+      teacherSeats: current.teacherSeats || String(teacherBounds?.min ?? ''),
+      studentsPerTeacher: current.studentsPerTeacher || String(perTeacherBounds?.min ?? ''),
+      soloStudents: current.soloStudents || String(soloStudentBounds?.min ?? ''),
+    }))
+  }, [registrationPolicy?.policy_version])
+
   const steps = STEPS[kind] ?? STEPS.individual
   const lastStep = completing ? 3 : steps.length
   const choosing = step === 1
   const sent = step === 'sent'
 
   const totalStudents = Number(form.teacherSeats) * Number(form.studentsPerTeacher)
+
+  const registrationQuoteQuery = useQuery({
+    queryKey: [
+      'registration-quote', registrationPolicy?.policy_version, kind,
+      kind === 'individual' ? Number(form.soloStudents) : Number(form.teacherSeats),
+      kind === 'individual' ? null : Number(form.studentsPerTeacher),
+    ],
+    queryFn: () => fetchRegistrationQuote(kind === 'individual'
+      ? { subscription_type: 'teacher', teacher_seats: 1, student_capacity: Number(form.soloStudents) }
+      : { subscription_type: 'institution', teacher_seats: Number(form.teacherSeats), students_per_teacher: Number(form.studentsPerTeacher) }),
+    enabled: Boolean(!completing && registrationPolicy?.policy_version && step === lastStep),
+    retry: false,
+  })
+  const registrationQuoteReady = Boolean(
+    registrationPolicy &&
+    registrationQuoteQuery.data?.eligible &&
+    registrationQuoteQuery.data?.policy_version === registrationPolicy.policy_version &&
+    registrationQuoteQuery.data?.quote?.pricing_version === registrationPolicy.policy_version
+  )
 
   const pwScore = scorePassword(form.password)
   const pwStrength = pwColor(pwScore)
@@ -274,6 +292,16 @@ export default function Register() {
     }
     if (n === 5 && kind === 'individual') {
       return verificationIdError(form.idNumber, form.idType) || linkError(form.idLink, { label: 'The link to your ID' })
+    }
+    if (!completing && n === lastStep) {
+      if (registrationPolicyQuery.isError || !registrationPolicy) return 'The server pricing policy is unavailable. Try again before submitting.'
+      if (registrationQuoteQuery.isLoading || registrationQuoteQuery.isFetching) return 'Loading the current server quote. Try again in a moment.'
+      const response = registrationQuoteQuery.data
+      if (registrationQuoteQuery.isError || !response) return 'The server quote is unavailable. Try again before submitting.'
+      if (response.policy_version !== registrationPolicy.policy_version || response.quote?.pricing_version !== registrationPolicy.policy_version) {
+        return 'The pricing policy changed. Reload the registration quote before submitting.'
+      }
+      if (!response.eligible) return response.ineligibility_reasons?.[0] || 'These seat counts are outside the active registration policy.'
     }
     // seats: the number inputs' own min/max attributes block a form
     // submit (Next or the final step) on an out-of-range value natively,
@@ -776,8 +804,11 @@ export default function Register() {
                 label="Students You Handle"
                 value={form.soloStudents}
                 onChange={setSeat('soloStudents')}
-                onBlur={clampSeat('soloStudents', SEATS.perTeacher.min, SEATS.perTeacher.max)}
-                {...SEATS.perTeacher}
+                onBlur={soloStudentBounds ? clampSeat('soloStudents', soloStudentBounds.min, soloStudentBounds.max) : undefined}
+                min={soloStudentBounds?.min ?? emptySeatBounds.min}
+                max={soloStudentBounds?.max ?? emptySeatBounds.max}
+                step={soloStudentBounds?.step ?? emptySeatBounds.step}
+                disabled={!soloStudentBounds}
               />
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
                 <div className="flex items-start justify-between gap-4">
@@ -791,8 +822,12 @@ export default function Register() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Estimate</div>
-                    <Estimate annual={estimateSolo(form.soloStudents)} />
+                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Backend quote</div>
+                    <RegistrationQuote
+                      quoteState={registrationQuoteQuery}
+                      policyState={registrationPolicyQuery}
+                      expectedVersion={registrationPolicy?.policy_version}
+                    />
                   </div>
                 </div>
                 <TrialLine />
@@ -845,16 +880,22 @@ export default function Register() {
                 label="Teachers"
                 value={form.teacherSeats}
                 onChange={setSeat('teacherSeats')}
-                onBlur={clampSeat('teacherSeats', SEATS.teachers.min, SEATS.teachers.max)}
-                {...SEATS.teachers}
+                onBlur={teacherBounds ? clampSeat('teacherSeats', teacherBounds.min, teacherBounds.max) : undefined}
+                min={teacherBounds?.min ?? emptySeatBounds.min}
+                max={teacherBounds?.max ?? emptySeatBounds.max}
+                step={teacherBounds?.step ?? emptySeatBounds.step}
+                disabled={!teacherBounds}
               />
               <SeatNumberInput
                 id="reg-students-per-teacher"
                 label="Students Per Teacher"
                 value={form.studentsPerTeacher}
                 onChange={setSeat('studentsPerTeacher')}
-                onBlur={clampSeat('studentsPerTeacher', SEATS.perTeacher.min, SEATS.perTeacher.max)}
-                {...SEATS.perTeacher}
+                onBlur={perTeacherBounds ? clampSeat('studentsPerTeacher', perTeacherBounds.min, perTeacherBounds.max) : undefined}
+                min={perTeacherBounds?.min ?? emptySeatBounds.min}
+                max={perTeacherBounds?.max ?? emptySeatBounds.max}
+                step={perTeacherBounds?.step ?? emptySeatBounds.step}
+                disabled={!perTeacherBounds}
               />
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
                 <div className="flex items-start justify-between gap-4">
@@ -868,8 +909,12 @@ export default function Register() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Estimate</div>
-                    <Estimate annual={estimateAnnual(form.teacherSeats, totalStudents)} />
+                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Backend quote</div>
+                    <RegistrationQuote
+                      quoteState={registrationQuoteQuery}
+                      policyState={registrationPolicyQuery}
+                      expectedVersion={registrationPolicy?.policy_version}
+                    />
                   </div>
                 </div>
                 <TrialLine institution />
@@ -899,7 +944,12 @@ export default function Register() {
                 Back
               </button>
             )}
-            <SubmitButton type="submit" disabled={submitting} aria-busy={submitting} style={{ marginTop: 0 }}>
+            <SubmitButton
+              type="submit"
+              disabled={submitting || (!completing && step === lastStep && !registrationQuoteReady)}
+              aria-busy={submitting || (!completing && step === lastStep && registrationQuoteQuery.isFetching)}
+              style={{ marginTop: 0 }}
+            >
               {step < lastStep
                 ? 'Next'
                 : submitting
@@ -975,18 +1025,58 @@ function Field({ id, label, hint, children }) {
   )
 }
 
-// One payment per school year on every calendar (owner's call, 2026-08-29);
-// the calendar a school runs on is recorded, not billed by.
-function Estimate({ annual }) {
+function RegistrationQuote({ quoteState, policyState, expectedVersion }) {
+  if (policyState.isLoading) {
+    return <div role="status" style={{ fontSize: 13, color: muted }}>Loading server pricing policy…</div>
+  }
+  if (policyState.isError) {
+    return (
+      <div role="alert" style={{ fontSize: 13, color: '#B91C1C' }}>
+        Server pricing policy unavailable. Your entries are saved in this form.
+        <button type="button" onClick={() => policyState.refetch()} disabled={policyState.isFetching} style={{ display: 'block', marginTop: 5 }}>
+          {policyState.isFetching ? 'Retrying…' : 'Retry policy'}
+        </button>
+      </div>
+    )
+  }
+  if (quoteState.isLoading || quoteState.isFetching) {
+    return <div role="status" style={{ fontSize: 13, color: muted }}>Loading server quote…</div>
+  }
+  if (quoteState.isError || !quoteState.data) {
+    return (
+      <div role="alert" style={{ fontSize: 13, color: '#B91C1C' }}>
+        Quote unavailable. Your entries are saved in this form.
+        <button type="button" onClick={() => quoteState.refetch()} disabled={quoteState.isFetching} style={{ display: 'block', marginTop: 5 }}>
+          {quoteState.isFetching ? 'Retrying…' : 'Retry quote'}
+        </button>
+      </div>
+    )
+  }
+  const result = quoteState.data
+  if (result.policy_version !== expectedVersion || result.quote?.pricing_version !== expectedVersion) {
+    return <div role="alert" style={{ fontSize: 13, color: '#B91C1C' }}>Quote unavailable because the policy version changed. Reload the quote.</div>
+  }
+  if (!result.eligible) {
+    return <div role="alert" style={{ fontSize: 13, color: '#B91C1C' }}>{result.ineligibility_reasons?.[0] || 'Seat counts are outside the active policy.'}</div>
+  }
+  const amount = result.quote?.total_contract_php
+  if (!Number.isFinite(amount)) {
+    return <div role="status" style={{ fontSize: 13, color: muted }}>Price unavailable in this quote.</div>
+  }
   return (
-    <>
+    <div>
       <div style={{ fontSize: 22, fontWeight: 700, color: navy, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-        {pesos(annual)}
+        ₱{amount.toLocaleString('en-PH')}
       </div>
       <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>
-        per school year · {pesos(annual / MONTHS_PER_SCHOOL_YEAR)} / month
+        {result.quote.term_days} days · policy {result.policy_version}
       </div>
-    </>
+      {result.quote.line_items?.map((item) => (
+        <div key={item.key} style={{ fontSize: 11.5, color: muted, marginTop: 2 }}>
+          {item.quantity.toLocaleString('en-PH')} × ₱{item.unit_price_php.toLocaleString('en-PH')} · ₱{item.subtotal_php.toLocaleString('en-PH')}
+        </div>
+      ))}
+    </div>
   )
 }
 

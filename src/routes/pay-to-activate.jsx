@@ -116,7 +116,7 @@ export default function PayToActivate() {
           </p>
         ) : isAdmin ? (
           <>
-            <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison={import.meta.env?.VITE_SUBSCRIPTION_POLICY_MODE === 'test_only'} onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
+            <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
             {err && <div style={{ marginTop: 12 }}><AuthError>{err}</AuthError></div>}
           </>
         ) : (

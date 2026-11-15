@@ -332,8 +332,8 @@ function SeatIncreaseCard({ ownerId, sub }) {
   const [error, setError] = useState('')
 
   const mut = useMutation({
-    mutationFn: ({ teacherSeats: t, studentSeats: s, amount }) => startSeatIncreaseCheckout(ownerId, {
-      teacherSeats: t, studentSeats: s, quoteTotalPhp: amount,
+    mutationFn: ({ teacherSeats: t, studentSeats: s, amount, pricingVersion }) => startSeatIncreaseCheckout(ownerId, {
+      teacherSeats: t, studentSeats: s, quoteTotalPhp: amount, pricingVersion,
     }),
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setError(e.message),
@@ -344,9 +344,9 @@ function SeatIncreaseCard({ ownerId, sub }) {
     const t = Number.parseInt(teacherSeats, 10)
     const s = Number.parseInt(studentSeats, 10)
     const next = await confirmSeatIncrease({
+      ownerId,
       current: { teacherSeats: curTeacher, studentSeats: curStudent },
       next: { teacherSeats: t, studentSeats: s },
-      paidThroughMs: toMillis(sub.paid_through),
       ownerPhrase: 'what your school already has',
       onError: setError,
     })
