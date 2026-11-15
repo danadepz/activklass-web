@@ -110,9 +110,14 @@ describe('the Post Scores button no longer contradicts the sentence beside it (T
     expect(pIdx).toBeLessThan(buttonIdx)
   })
 
-  it('labels the button "Post Scores Now", not the old "Post scores now"', () => {
-    expect(liveSrc).toContain("'Post Scores Now'")
+  // Renamed "Post Scores Now" -> "Release Scores" (owner request, 2026-11-15).
+  // Label only: the button still calls the same `post` handler.
+  it('labels the button "Release Scores", not the old "Post Scores Now"', () => {
+    expect(liveSrc).toContain("'Release Scores'")
+    expect(liveSrc).not.toContain("'Post Scores Now'")
     expect(liveSrc).not.toContain("'Post scores now'")
+    // Same <button>: its onClick is still `post`, and no other tag sits between.
+    expect(liveSrc).toMatch(/onClick=\{post\}[^<]*'Release Scores'/)
   })
 
   it('never promises "to Class Record" on the button -- a pending essay can make it skip a student (T-199)', () => {
