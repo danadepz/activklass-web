@@ -40,6 +40,7 @@ beforeEach(() => {
     pa: { name: 'Purged Academy', abbreviation: 'PA', status: 'retired' },
     live: { name: 'Live High', abbreviation: 'LIVE', status: 'active' },
     old: { name: 'Old College', abbreviation: 'OLD' }, // written before T-272: no status
+    rg: { name: 'Going Academy', abbreviation: 'RG', status: 'retiring' }, // T-256: purge unfinished
   }
 })
 
@@ -54,8 +55,13 @@ describe('the registration dropdown (A, B, E, F)', () => {
     expect((await fetchSchoolDirectory()).some((s) => s.id === 'pa')).toBe(false)
   })
 
-  it('reads only `retired` as retired — a missing status is active', () => {
+  it('leaves out a school whose purge is still running (T-256 retiring)', async () => {
+    expect((await fetchSchoolDirectory()).some((s) => s.id === 'rg')).toBe(false)
+  })
+
+  it('reads `retired` and `retiring` as unavailable — a missing status is active', () => {
     expect(isRetiredSchool({ status: 'retired' })).toBe(true)
+    expect(isRetiredSchool({ status: 'retiring' })).toBe(true)
     expect(isRetiredSchool({})).toBe(false)
     expect(isRetiredSchool({ status: 'active' })).toBe(false)
     expect(isRetiredSchool(null)).toBe(false)
@@ -66,6 +72,7 @@ describe('the submit-time re-check (C)', () => {
   it('refuses a picked school that has since been retired or removed', async () => {
     expect(await findActiveSchoolById('pa')).toBeNull()
     expect(await findActiveSchoolById('gone')).toBeNull()
+    expect(await findActiveSchoolById('rg')).toBeNull() // T-256: purge started after the list loaded
     expect(await findActiveSchoolById('')).toBeNull()
   })
 

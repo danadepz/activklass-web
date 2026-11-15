@@ -52,7 +52,9 @@ export function schoolNameKey(name) {
  * the write — this filter is the courtesy, not the guard.
  */
 export function isRetiredSchool(entry) {
-  return entry?.status === 'retired'
+  // T-256: 'retiring' is a school a purge has started removing. It is closed to
+  // new registrations exactly like a retired one until the purge finishes.
+  return entry?.status === 'retired' || entry?.status === 'retiring'
 }
 
 /** Every selectable directory entry, A→Z by name: [{id, name, abbreviation}]. */

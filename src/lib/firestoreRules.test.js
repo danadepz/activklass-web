@@ -1284,6 +1284,9 @@ describe('school_directory lifecycle · purged schools cannot be newly chosen (T
       await setDoc(doc(db, 'school_directory', 'pa'), { name: 'Purged Academy', abbreviation: 'PA', status: 'retired', retired_school_id: 's-gone' })
       await setDoc(doc(db, 'school_directory', 'live'), { name: 'Live High', abbreviation: 'LIVE', status: 'active' })
       await setDoc(doc(db, 'school_directory', 'old'), { name: 'Old College', abbreviation: 'OLD' }) // legacy: no status
+      // T-256: a purge has fenced this school and is still removing it.
+      await setDoc(doc(db, 'school_directory', 'rg'), { name: 'Going Academy', abbreviation: 'RG', status: 'retiring', retiring_operation_id: 'subscriber_s-rg' })
+      await setDoc(doc(db, 'users', 'rg-veteran'), { role: 'teacher', first_name: 'R', last_name: 'V', teaching_school_id: 'rg', teaching_school_name: 'Going Academy' })
       // A teacher who joined Purged Academy before it was purged.
       await setDoc(doc(db, 'users', 'veteran'), { role: 'teacher', first_name: 'V', last_name: 'T', teaching_school_id: 'pa', teaching_school_name: 'Purged Academy' })
     })
@@ -1325,6 +1328,19 @@ describe('school_directory lifecycle · purged schools cannot be newly chosen (T
     await assertFails(setDoc(reqs(NEWCOMER), request({ school_abbr: 'PA' })))
     await assertFails(setDoc(reqs(NEWCOMER), request({ school_abbr: 'NOPE' })))
     await assertSucceeds(setDoc(reqs(NEWCOMER), request({ school_name: 'Live High', school_abbr: 'LIVE' })))
+  })
+
+  it('T-256: refuses every NEW affiliation to a school whose purge is unfinished (retiring)', async () => {
+    await assertFails(setDoc(doc(ctxEmail(NEWCOMER, 'new@school.edu'), 'users', NEWCOMER),
+      profile({ teaching_school_id: 'rg', teaching_school_name: 'Going Academy' })))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { teaching_school_id: 'rg', teaching_school_name: 'Going Academy' }))
+    await assertFails(setDoc(doc(collection(ctxEmail(NEWCOMER, 'new@school.edu'), 'subscription_requests')),
+      request({ school_name: 'Going Academy', school_abbr: 'RG' })))
+  })
+
+  it('T-256: an existing affiliation to a retiring school is left alone; the client cannot clear retiring', async () => {
+    await assertSucceeds(updateDoc(doc(ctx('rg-veteran'), 'users', 'rg-veteran'), { first_name: 'Arr' }))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'school_directory', 'rg'), { status: 'active' }))
   })
 
   it('a client cannot retire, restore, or re-create a retired entry', async () => {
