@@ -21,32 +21,62 @@ import { describe, expect, it } from 'vitest'
 
 const src = readFileSync(fileURLToPath(new URL('./quizzes.$quizId.jsx', import.meta.url)), 'utf8')
 
+/* 2026-11-15, owner request: the column widened from max-w-3xl to max-w-5xl.
+   T-35 had kept it at 3xl on purpose (long question text reads better
+   narrow), but at that width the results table squeezed until a score like
+   "6 / 14" wrapped onto two lines. 5xl matches the Quizzes list page. What
+   T-35 actually guarded still holds: one centred wrapper sets the width. */
 describe('quiz editor centring (T-35)', () => {
-  it('centres the whole editor from a single wrapper', () => {
-    expect(src).toMatch(/className="mx-auto max-w-3xl"/)
+  it('centres the whole editor from a single wrapper, at the Quizzes page width', () => {
+    expect(src).toMatch(/className="mx-auto max-w-5xl"/)
   })
 
   it('leaves no second width block to float out of line with it', () => {
-    // Four containers each carried max-w-3xl before; centring a subset is the
+    // Four containers each carried a max-w before; centring a subset is the
     // failure the card called out. One is the wrapper; there must be no other.
-    const widthBlocks = src.match(/max-w-3xl/g) ?? []
+    const widthBlocks = src.match(/max-w-(3xl|4xl|5xl|6xl|7xl)/g) ?? []
     expect(widthBlocks).toHaveLength(1)
   })
 
   it('the one that remains is the centred one', () => {
-    const only = src.match(/[^\n]*max-w-3xl[^\n]*/)[0]
+    const only = src.match(/[^\n]*max-w-5xl[^\n]*/)[0]
     expect(only).toContain('mx-auto')
   })
 
-  it('does not centre by widening the column instead', () => {
-    // The alternative the card said to offer rather than assume. Long question
-    // text reads worse at max-w-5xl, and it is not what he asked for.
-    expect(src).not.toMatch(/max-w-5xl|max-w-4xl/)
+  it('no longer uses the narrow max-w-3xl column', () => {
+    expect(src).not.toMatch(/max-w-3xl/)
   })
 
   it('leaves the modals alone — they already centre themselves as overlays', () => {
     expect(src).toMatch(/maxWidth:\s*500/)
     expect(src).toMatch(/maxWidth:\s*760/)
+  })
+})
+
+/**
+ * A score reads as one figure (2026-11-15, owner request). In the results
+ * table the Best Score column was squeezed until "6 / 14" broke at its spaces
+ * into "6 /" over "14". The cells that print a score now never wrap; the
+ * values themselves are unchanged.
+ */
+describe('scores stay on one line', () => {
+  it('Best Score cell does not wrap, and still shows best / totalPoints', () => {
+    const cell = src.match(/<td style=\{\{[^}]*\}\}>\s*\{best !== null \? `\$\{best\} \/ \$\{totalPoints\}` : '—'\}/)
+    expect(cell, 'Best Score cell').not.toBeNull()
+    expect(cell[0]).toContain("whiteSpace: 'nowrap'")
+  })
+
+  it('Attempts cell ("1 / 1") does not wrap', () => {
+    const cell = src.match(/<td style=\{\{[^}]*\}\}>\s*\{finished\.length \|\| '—'\}/)
+    expect(cell, 'Attempts cell').not.toBeNull()
+    expect(cell[0]).toContain("whiteSpace: 'nowrap'")
+  })
+
+  it('each attempt score in the student pop-up does not wrap, value unchanged', () => {
+    const at = src.indexOf('{a.total_score != null ? `${a.total_score} / ${a.total_possible ?? totalPoints}` : a.status}')
+    expect(at).toBeGreaterThan(-1)
+    const span = src.slice(src.lastIndexOf('<span', at), at)
+    expect(span).toContain("whiteSpace: 'nowrap'")
   })
 })
 

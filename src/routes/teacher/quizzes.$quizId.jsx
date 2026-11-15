@@ -867,7 +867,7 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                     {s.last_name}, {s.first_name}
                   </button>
                 </td>
-                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B' }}>
+                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', color: '#3A4A6B', whiteSpace: 'nowrap' }}>
                   {finished.length || '—'}
                   <span
                     style={{ color: faint }}
@@ -879,7 +879,9 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                     <span title={`You granted ${granted} extra attempt(s)`} style={{ color: green, fontSize: 11 }}> +{granted}</span>
                   )}
                 </td>
-                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', fontWeight: 700, color: best !== null ? ink : faint }}>
+                {/* nowrap: a score is one figure. In a squeezed column the
+                    browser broke "6 / 14" at its spaces into two lines. */}
+                <td style={{ ...mono, padding: '12px 18px', textAlign: 'center', fontWeight: 700, color: best !== null ? ink : faint, whiteSpace: 'nowrap' }}>
                   {best !== null ? `${best} / ${totalPoints}` : '—'}
                 </td>
                 <td style={{ padding: '12px 18px', color: muted }}>
@@ -1278,7 +1280,7 @@ export function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, on
                       <div style={{ ...mono, fontSize: 12, color: '#3A4A6B', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <span>{a.submitted_at ? new Date(a.submitted_at.seconds ? a.submitted_at.seconds * 1000 : a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : `Attempt ${i + 1}`}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ color: pending ? goldDeep : undefined }}>
+                          <span style={{ color: pending ? goldDeep : undefined, whiteSpace: 'nowrap' }}>
                             {a.total_score != null ? `${a.total_score} / ${a.total_possible ?? totalPoints}` : a.status}
                             {pending ? ' · pending' : ''}
                           </span>
@@ -3108,7 +3110,10 @@ export default function QuizBuilderPage() {
     // One centred column for the whole editor -- header, notice and body. There
     // is no right-hand element on this route, so the page balances instead of
     // leaving half of a wide screen empty. Undoing it is this one wrapper.
-    <div className="mx-auto max-w-3xl">
+    // Widened 2026-11-15 (owner request) from the old 768px column, where the
+    // results table squeezed until "6 / 14" wrapped onto two lines. 1024px
+    // matches the Quizzes list page this one is opened from.
+    <div className="mx-auto max-w-5xl">
       <Link to="/teacher/quizzes" className="inline-flex items-center gap-1.5 transition hover:opacity-70" style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}>
         ← Back to quizzes
       </Link>
