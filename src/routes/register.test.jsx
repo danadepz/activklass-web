@@ -992,3 +992,18 @@ describe('Registration policy ownership and quote safety', () => {
     expect(registerSource).not.toMatch(/OptionBDemoQuote[\s\S]{0,300}(?:checkout|startCheckout)/)
   })
 })
+
+describe('Registration phone number input constraints', () => {
+  it('carries maxLength={11}, inputMode="numeric", and type="tel" on #reg-phone', () => {
+    expect(registerSource).toMatch(/<input[\s\S]*?id="reg-phone"[\s\S]*?maxLength=\{11\}/)
+    expect(registerSource).toMatch(/<input[\s\S]*?id="reg-phone"[\s\S]*?inputMode="numeric"/)
+    expect(registerSource).toMatch(/<input[\s\S]*?id="reg-phone"[\s\S]*?type="tel"/)
+  })
+
+  it('limits phone input to 11 digits and starts with 09', () => {
+    expect(phoneError('09171234567')).toBe('')
+    expect(phoneError('0912345678')).not.toBe('')
+    expect(phoneError('091234567890')).not.toBe('')
+    expect(phoneError('08123456789')).not.toBe('')
+  })
+})

@@ -386,8 +386,8 @@ export function phoneError(value, { required = true } = {}) {
   const text = String(value ?? '').trim()
   if (!text) return required ? 'Phone number is required.' : ''
   const digits = text.replace(/\D/g, '')
-  if (!PHONE_CHARS_RE.test(text) || digits.length < 7 || digits.length > 13) {
-    return 'Enter a valid phone number, like 0917 123 4567.'
+  if (!PHONE_CHARS_RE.test(text) || digits.length !== 11 || !digits.startsWith('09')) {
+    return 'Enter a valid 11-digit phone number starting with 09, like 0917 123 4567.'
   }
   return ''
 }

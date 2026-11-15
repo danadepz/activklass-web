@@ -286,16 +286,23 @@ describe('verificationIdError', () => {
 })
 
 describe('phoneError', () => {
-  it('accepts Philippine numbers however they are typed', () => {
+  it('accepts 11-digit Philippine mobile numbers starting with 09', () => {
     expect(phoneError('09171234567')).toBe('')
-    expect(phoneError('+63 917 123 4567')).toBe('')
-    expect(phoneError('(032) 255-1234')).toBe('')
+    expect(phoneError('0917 123 4567')).toBe('')
+    expect(phoneError('0917-123-4567')).toBe('')
+    expect(phoneError('09338887766')).toBe('')
+    expect(phoneError('09434969549')).toBe('')
   })
-  it('rejects blanks, letters and wrong lengths', () => {
+  it('rejects numbers not starting with 09, wrong lengths, blanks, and letters', () => {
     expect(phoneError('')).not.toBe('')
     expect(phoneError('', { required: false })).toBe('')
     expect(phoneError('0917 ABC 4567')).not.toBe('')
     expect(phoneError('1234')).not.toBe('')
+    expect(phoneError('0912345678')).not.toBe('') // 10 digits
+    expect(phoneError('091234567890')).not.toBe('') // 12 digits
+    expect(phoneError('08123456789')).not.toBe('') // does not start with 09
+    expect(phoneError('(032) 255-1234')).not.toBe('') // landline
+    expect(phoneError('+63 917 123 4567')).not.toBe('') // not 11 digits, starts with +63
     expect(phoneError('12345678901234')).not.toBe('')
   })
 })

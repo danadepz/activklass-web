@@ -194,6 +194,14 @@ export default function Register() {
   const consented = agreed.privacy && agreed.terms
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const handlePhone = (e) => {
+    let digits = e.target.value.replace(/\D/g, '')
+    if (digits.startsWith('63') && digits.length > 10) {
+      digits = '0' + digits.slice(2)
+    }
+    digits = digits.slice(0, 11)
+    setForm((f) => ({ ...f, phone: digits }))
+  }
   // T-129 (andecobs-170): a seat count typed into a number input, not dragged
   // on a slider. Typing stays free-form (so "3" can still become "300"
   // without the field snapping back to the floor after every keystroke);
@@ -710,7 +718,19 @@ export default function Register() {
                   <input id="reg-last" className="ak-input" required autoComplete="family-name" placeholder="Dela Cruz" value={form.lastName} onChange={set('lastName')} style={authInputStyle} />
                 </Field>
                 <Field id="reg-phone" label="Phone Number">
-                  <input id="reg-phone" className="ak-input" type="tel" required autoComplete="tel" placeholder="0917 123 4567" value={form.phone} onChange={set('phone')} style={authInputStyle} />
+                  <input
+                    id="reg-phone"
+                    className="ak-input"
+                    type="tel"
+                    inputMode="numeric"
+                    required
+                    autoComplete="tel"
+                    maxLength={11}
+                    placeholder="09171234567"
+                    value={form.phone}
+                    onChange={handlePhone}
+                    style={authInputStyle}
+                  />
                 </Field>
               </div>
             </>
