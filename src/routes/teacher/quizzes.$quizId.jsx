@@ -527,7 +527,7 @@ function PostScoresButton({ quiz, classId, auto }) {
         className="transition hover:brightness-105 disabled:opacity-50"
         style={{ ...btnGhost, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: navy, whiteSpace: 'nowrap', flexShrink: 0 }}
       >
-        {posting ? 'Posting…' : 'Post Scores Now'}
+        {posting ? 'Posting…' : 'Release Scores'}
       </button>
     </div>
   )
