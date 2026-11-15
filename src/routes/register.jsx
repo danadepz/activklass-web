@@ -8,6 +8,7 @@ import { auth, db } from '@/lib/firebase'
 import { api, ApiError } from '@/lib/api'
 import {
   emailError,
+  formatSchoolYear,
   linkError,
   nameError,
   passwordError,
@@ -27,12 +28,13 @@ import { CALENDARS, estimateAnnual, estimateSolo, pesos, trialEndsFrom, MONTHS_P
 import AuthLayout, {
   SubmitButton,
   EyeToggle,
-  AuthError,
   AuthNotice,
 } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { navy, gold, goldDeep, muted, blue, blueText, violet, violetDeep } from '@/theme'
 import { BookOpen, Users, ShieldCheck, Check } from '@/components/icons'
+import LegalConsentChecks from '@/components/LegalConsentGate'
+import { toast } from '@/components/ui/toast'
 import { ID_TYPES } from '@/routes/pending-verification'
 
 // T-114 (triplecookiemonster-142): where the sign-up chooser's Parent card
@@ -181,10 +183,20 @@ export default function Register() {
     idType: ID_TYPES[0].value,
     idNumber: '',
     idLink: '',
+    schoolYear: '',
   })
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState(null)
+  // Problems appear as a popup that fades on its own, not a banner that stays
+  // in the form, so there is no error state to clear: raising one shows the
+  // popup, and `setError(null)` (a new attempt starting) has nothing to do.
+  const setError = (message) => {
+    if (message) toast.error(message, { duration: 6000 })
+  }
   const [submitting, setSubmitting] = useState(false)
+  // Privacy Notice + Terms and Conditions, agreed on the last step. Front-end
+  // only: held for this sitting, not recorded anywhere.
+  const [agreed, setAgreed] = useState({ privacy: false, terms: false })
+  const consented = agreed.privacy && agreed.terms
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   // T-129 (andecobs-170): a seat count typed into a number input, not dragged
@@ -276,6 +288,7 @@ export default function Register() {
     const problem = stepProblem(step)
     if (problem) { setError(problem); return }
     if (step < lastStep) { setStep(step + 1); return }
+    if (!consented) { setError('Please read and agree to the Privacy Notice and the Terms and Conditions to continue.'); return }
     setSubmitting(true)
     try {
       await createAccount()
@@ -534,8 +547,10 @@ export default function Register() {
   return (
     <AuthLayout
       variant="card"
+      // The step forms hold their heading and bottom controls still; the
+      // "Request sent" confirmation has neither, so it stays centred.
+      anchorTop={!sent}
       title={title}
-      titleSize={choosing ? 'clamp(34px, 7vw, 48px)' : undefined}
       subtitle={subtitle}
     >
       {sent ? (
@@ -556,7 +571,7 @@ export default function Register() {
           </Link>
         </div>
       ) : choosing ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-1 flex-col gap-4">
           <div className="flex flex-col gap-3" role="group" aria-label="Subscription type">
             <ChoiceCard
               selected={kind === 'individual'}
@@ -590,22 +605,25 @@ export default function Register() {
               body="Get the ActivKlass mobile app — your account is made there, with the link code from your child’s Profile"
             />
           </div>
-          <SubmitButton type="button" disabled={!kind || kind === 'parent'} onClick={() => setStep(2)}>
-            Continue
-          </SubmitButton>
+          {/* pinned to the bottom, same place on every step */}
+          <div className="mt-auto flex flex-col gap-4">
+            <SubmitButton type="button" disabled={!kind || kind === 'parent'} onClick={() => setStep(2)}>
+              Continue
+            </SubmitButton>
 
-          <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: muted }}>
-            Already have an account?{' '}
-            <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
-              Sign in
-            </Link>
+            <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: muted }}>
+              Already have an account?{' '}
+              <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
+                Sign in
+              </Link>
+            </div>
+            <Progress steps={steps} current={1} />
           </div>
-          <Progress steps={steps} current={1} />
         </div>
       ) : gettingApp ? (
         <ParentAppQr onBack={() => setStep(1)} />
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-4">
           {completing && (
             <AuthNotice>
               Signed in as <strong>{firebaseUser.email}</strong> — just complete your profile below.
@@ -617,8 +635,7 @@ export default function Register() {
               different account — what you fill in below stays. <SignOutButton onClick={signOutHere} />
             </AuthNotice>
           )}
-          {error && <AuthError>{error}</AuthError>}
-
+          {!(completing && step === 2) && <BackLink onClick={back} />}
           {step === 2 && (
             <>
               <div className="grid gap-3.5 md:grid-cols-2">
@@ -745,7 +762,7 @@ export default function Register() {
                         <Check className="h-3.5 w-3.5" /> Passwords match
                       </div>
                     ) : (
-                      <div style={{ fontSize: 12, color: '#E0794B', marginTop: 8 }}>Does not match yet.</div>
+                      <div style={{ fontSize: 12, color: '#E0794B', marginTop: 8 }}>Does not match</div>
                     )
                   )}
                 </Field>
@@ -824,22 +841,42 @@ export default function Register() {
 
           {step === 5 && kind === 'institution' && (
             <>
-              <SeatNumberInput
-                id="reg-teacher-seats"
-                label="Teachers"
-                value={form.teacherSeats}
-                onChange={setSeat('teacherSeats')}
-                onBlur={clampSeat('teacherSeats', SEATS.teachers.min, SEATS.teachers.max)}
-                {...SEATS.teachers}
-              />
-              <SeatNumberInput
-                id="reg-students-per-teacher"
-                label="Students Per Teacher"
-                value={form.studentsPerTeacher}
-                onChange={setSeat('studentsPerTeacher')}
-                onBlur={clampSeat('studentsPerTeacher', SEATS.perTeacher.min, SEATS.perTeacher.max)}
-                {...SEATS.perTeacher}
-              />
+              {/* School Year shares the seats row so the step keeps its height.
+                  Digits only, shown as 2026 - 2027; front-end input only, it is
+                  not part of the request that is saved. */}
+              <div className="grid gap-3.5 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="reg-school-year" style={{ ...authLabelStyle, marginBottom: 8 }}>School Year</label>
+                  <input
+                    id="reg-school-year"
+                    className="ak-input"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={11}
+                    placeholder="2026 - 2027"
+                    value={form.schoolYear}
+                    onChange={(e) => setForm((f) => ({ ...f, schoolYear: formatSchoolYear(e.target.value) }))}
+                    style={{ ...authInputStyle, fontSize: 20, fontWeight: 700, color: navy, fontVariantNumeric: "tabular-nums" }}
+                  />
+                  <div style={{ fontSize: 12, color: "#9AA6BD", marginTop: 6 }}>Digits only</div>
+                </div>
+                <SeatNumberInput
+                  id="reg-teacher-seats"
+                  label="Teachers"
+                  value={form.teacherSeats}
+                  onChange={setSeat('teacherSeats')}
+                  onBlur={clampSeat('teacherSeats', SEATS.teachers.min, SEATS.teachers.max)}
+                  {...SEATS.teachers}
+                />
+                <SeatNumberInput
+                  id="reg-students-per-teacher"
+                  label="Students Per Teacher"
+                  value={form.studentsPerTeacher}
+                  onChange={setSeat('studentsPerTeacher')}
+                  onBlur={clampSeat('studentsPerTeacher', SEATS.perTeacher.min, SEATS.perTeacher.max)}
+                  {...SEATS.perTeacher}
+                />
+              </div>
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -872,29 +909,33 @@ export default function Register() {
             </>
           )}
 
-          <div className="flex items-center gap-4" style={{ marginTop: 4 }}>
-            {!(completing && step === 2) && (
-              <button
-                type="button"
-                onClick={back}
-                className="transition hover:opacity-70"
-                style={{ flexShrink: 0, fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Back
-              </button>
-            )}
-            <SubmitButton type="submit" disabled={submitting} aria-busy={submitting} style={{ marginTop: 0 }}>
-              {step < lastStep
-                ? 'Next'
-                : submitting
-                  ? (kind === 'institution' ? 'Sending…' : completing ? 'Finishing…' : 'Creating account…')
-                  : kind === 'institution'
-                    ? 'Request access'
-                    : completing
-                      ? 'Complete profile'
-                      : 'Start Free Trial'}
-            </SubmitButton>
-          </div>
+          {step === lastStep && (
+            <LegalConsentChecks
+              agreed={agreed}
+              onChange={(key, value) => setAgreed((a) => ({ ...a, [key]: value }))}
+            />
+          )}
+
+          {/* Button, sign-in line and progress bar are pinned to the bottom of
+              the column (mt-auto), so they sit in the same place on every
+              step however tall that step's fields are. */}
+          <div className="mt-auto flex flex-col gap-4">
+          <SubmitButton
+            type="submit"
+            disabled={submitting || (step === lastStep && !consented)}
+            aria-busy={submitting}
+            style={{ marginTop: 0 }}
+          >
+            {step < lastStep
+              ? 'Next'
+              : submitting
+                ? (kind === 'institution' ? 'Sending…' : completing ? 'Finishing…' : 'Creating account…')
+                : kind === 'institution'
+                  ? 'Request access'
+                  : completing
+                    ? 'Complete profile'
+                    : 'Start Free Trial'}
+          </SubmitButton>
 
           {completing ? (
             <div style={{ textAlign: 'center', marginTop: 4, fontSize: 14, color: muted }}>
@@ -911,6 +952,7 @@ export default function Register() {
             </div>
           )}
           <Progress steps={completing ? steps.slice(0, 3) : steps} current={step} />
+          </div>
         </form>
       )}
     </AuthLayout>
@@ -990,6 +1032,26 @@ function TrialLine() {
 // T-129 (andecobs-170): a number input, not a slider -- same floor and cap
 // (`min`/`max`), enforced on blur by the caller's `onBlur` (see `clampSeat`)
 // rather than here, so this stays a plain controlled input.
+// The step-back control: a plain "‹ Back" at the top left of the form, away
+// from the main button so the two are never read as a pair.
+function BackLink({ onClick }) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1 transition hover:opacity-70"
+        style={{ fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Back
+      </button>
+    </div>
+  )
+}
+
 function SeatNumberInput({ id, label, value, onChange, onBlur, min, max, step }) {
   return (
     <div>
@@ -1097,6 +1159,7 @@ function ParentAppQr({ onBack }) {
 
   return (
     <div className="flex flex-col items-center gap-5" style={{ textAlign: 'center' }}>
+      <div style={{ alignSelf: 'flex-start' }}><BackLink onClick={onBack} /></div>
       <AuthNotice>
         Your account is made in the app, not here. Scan the code below, install
         ActivKlass, and sign up there with the link code from your child’s Profile.
@@ -1122,14 +1185,6 @@ function ParentAppQr({ onBack }) {
           {MOBILE_APP_RELEASE_URL}
         </a>
       </p>
-      <button
-        type="button"
-        onClick={onBack}
-        className="transition hover:opacity-70"
-        style={{ fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}
-      >
-        Back
-      </button>
       <div style={{ textAlign: 'center', fontSize: 14, color: muted }}>
         Already have an account?{' '}
         <Link to="/login" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy }}>
