@@ -121,7 +121,8 @@ describe('T-178 — Lane 3: Class Detail & Record', () => {
     expect(classDetailSrc).toContain('Year <span style={optHint}>(Optional)</span>')
     expect(classDetailSrc).toContain('LRN <span style={optHint}>(Basic Ed, Optional)</span>')
     expect(classDetailSrc).toContain('Remarks <span style={optHint}>(Optional)</span>')
-    expect(classDetailSrc).toContain('Academic Progress')
+    // 'Academic Progress' was removed from the Edit Student modal (2026-11-15);
+    // its absence is pinned in classes/$classId/editStudentFieldsRemoved.test.js.
     expect(classDetailSrc).toContain('Disable Sign-In')
     expect(classDetailSrc).toContain('Enable Sign-In')
   })
