@@ -92,10 +92,26 @@ export function positionsFor(kind) {
 // teachers × students-per-teacher (20 teachers at 120 each = 2,400), so the
 // two sliders stay relative to each other instead of drifting apart. 120 is
 // the solo trial cap, and a typical full load.
-const SEATS = {
+// Minimum and maximum seat limits.
+// Legacy commercial mode: 20 teachers floor, 30 students per teacher floor (600 students min).
+// Option B staging mode: 2 teachers floor, 40 students total minimum (2 teachers × 20 per teacher).
+export const LEGACY_SEATS = {
   teachers: { min: 20, max: 500, step: 5 },
   perTeacher: { min: 30, max: 300, step: 5 },
 }
+
+export const OPTION_B_STAGING_SEATS = {
+  teachers: { min: 2, max: 500, step: 1 },
+  perTeacher: { min: 20, max: 300, step: 5 },
+}
+
+export const SEATS_CONFIG = {
+  legacy: LEGACY_SEATS,
+  option_b: OPTION_B_STAGING_SEATS,
+}
+
+const isOptionBPolicy = typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUBSCRIPTION_POLICY_MODE === 'test_only'
+export const SEATS = isOptionBPolicy ? OPTION_B_STAGING_SEATS : LEGACY_SEATS
 
 // The registration walk, per account type. Step 1 is the chooser; the last
 // step is where the account (or the request) is actually created. A
@@ -856,7 +872,7 @@ export default function Register() {
                     <Estimate annual={estimateAnnual(form.teacherSeats, totalStudents)} />
                   </div>
                 </div>
-                <TrialLine />
+                <TrialLine institution />
                 <div style={{ fontSize: 12, color: '#9AA6BD', marginTop: 10, lineHeight: 1.45 }}>
                   Teacher seats carry the AI generation and records; student seats are records only.
                   These numbers are an estimate and capacity can change later.
@@ -975,14 +991,16 @@ function Estimate({ annual }) {
 }
 
 // "First 30 days free — then ₱X" sits under both estimates.
-function TrialLine() {
+function TrialLine({ institution = false }) {
   return (
     <div
       className="flex items-center gap-2"
       style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(14,42,92,0.08)', fontSize: 13, fontWeight: 700, color: '#1F8A5B' }}
     >
       <Check className="h-4 w-4" />
-      First {TRIAL_DAYS} days free — nothing to pay today.
+      {institution
+        ? 'Institution requests are reviewed first. No institution trial starts at registration.'
+        : <>First {TRIAL_DAYS} days free — nothing to pay today.</>}
     </div>
   )
 }

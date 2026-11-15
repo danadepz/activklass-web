@@ -91,6 +91,15 @@ describe('/register step 1 — choosing a path', () => {
   })
 })
 
+describe('institution trial disclosure', () => {
+  it('does not advertise the individual free trial as an institution benefit', () => {
+    const source = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
+    expect(source).toContain('Institution requests are reviewed first. No institution trial starts at registration.')
+    expect(source).toMatch(/<TrialLine institution \/>/)
+    expect(source).toMatch(/institution\s*\?\s*'Institution requests are reviewed first/)
+  })
+})
+
 /* T-56 (maykel_64440-73, -75, -76): registering on a browser still signed in
    as Marites handed the tester HER dashboard — the submit saw a session, took
    it for a registration to resume, found a finished profile and went to the
@@ -919,5 +928,20 @@ describe('T-262 — Title Case on Individual registration', () => {
 
   it('leaves T-240\'s step-6 sentence alone', () => {
     expect(registerSource).toContain('You can change this number later as your load changes')
+  })
+})
+
+describe('Registration seat limits: Option B staging alignment and legacy preservation', () => {
+  it('preserves legacy commercial rules: 20 teachers floor, 30 students per teacher floor', async () => {
+    const { LEGACY_SEATS } = await import('./register')
+    expect(LEGACY_SEATS.teachers.min).toBe(20)
+    expect(LEGACY_SEATS.perTeacher.min).toBe(30)
+  })
+
+  it('provides Option B staging minimums: 2 teachers floor, 40 total student minimum capacity (2 × 20)', async () => {
+    const { OPTION_B_STAGING_SEATS } = await import('./register')
+    expect(OPTION_B_STAGING_SEATS.teachers.min).toBe(2)
+    expect(OPTION_B_STAGING_SEATS.perTeacher.min).toBe(20)
+    expect(OPTION_B_STAGING_SEATS.teachers.min * OPTION_B_STAGING_SEATS.perTeacher.min).toBe(40)
   })
 })

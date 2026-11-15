@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { accountKind, describeSubscription, toMillis } from './subscription'
+import { describe, expect, it, vi } from 'vitest'
+import { api } from './api'
+import { accountKind, describeSubscription, formatDecimalBytes, recordTermsAcceptance, toMillis } from './subscription'
+
+vi.mock('./api', () => ({ api: vi.fn() }))
 
 const NOW = Date.parse('2026-08-29T08:00:00Z')
 const days = (n) => new Date(NOW + n * 24 * 60 * 60 * 1000)
@@ -91,6 +94,23 @@ describe('describeSubscription', () => {
     expect(ended.kind).toBe('expired')
     expect(ended.label).toBe('Subscription ended')
     expect(ended.locks).toEqual({ quizBank: true, teacherGroups: true })
+  })
+})
+
+describe('recordTermsAcceptance', () => {
+  it('sends the explicit acceptance flag required by the backend contract', async () => {
+    await recordTermsAcceptance('school-1', { termsVersion: 'terms-v1', userAgent: 'test-agent' })
+    expect(api).toHaveBeenCalledWith('/api/subscription/school-1/terms/accept', {
+      method: 'POST',
+      body: { accepted: true, terms_version: 'terms-v1', user_agent: 'test-agent' },
+    })
+  })
+})
+
+describe('formatDecimalBytes', () => {
+  it('uses decimal gigabytes for subscription storage allowances', () => {
+    expect(formatDecimalBytes(5_000_000_000)).toBe('5.0 GB')
+    expect(formatDecimalBytes(25_000_000_000)).toBe('25 GB')
   })
 })
 

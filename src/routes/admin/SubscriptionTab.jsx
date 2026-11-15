@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changePlan, confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
-  formatBytes, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
+  formatDecimalBytes, formatBytes, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
 import {
   fetchSchoolInvites, inviteTeacher, releaseMember, revokeInvite,
@@ -16,7 +16,7 @@ import Button from '@/components/ui/Button'
 import { confirmDialog } from '@/components/ui/dialogs'
 import ChangePassword from '@/components/ChangePassword'
 
-const GB = 1024 ** 3
+const GB = 1_000_000_000
 
 /**
  * The address already named on the "Verifying your account" hold screen
@@ -44,32 +44,67 @@ export function PlanChangeNotice({ error }) {
   )
 }
 
-function Meter({ label, used, total, unit, over }) {
-  const pct = total ? Math.min(100, Math.round((used / total) * 100)) : null
-  const bar = over ? red : pct != null && pct >= 80 ? gold : green
+function Meter({ label, used, total, unit, over, resourceType = 'seats', formatValue = (value) => value }) {
+  const numericUsed = typeof used === 'number' ? used : null
+  const numericTotal = typeof total === 'number' ? total : null
+  const pct = numericTotal && numericUsed != null ? Math.min(100, Math.round((numericUsed / numericTotal) * 100)) : null
+  const available = numericTotal != null && numericUsed != null ? Math.max(0, numericTotal - numericUsed) : null
+
+  const isExhausted = over || (pct != null && pct >= 100)
+  const isCritical = !isExhausted && pct != null && pct >= 90
+  const isWarning = !isExhausted && !isCritical && pct != null && pct >= 80
+
+  const barColor = isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#D97706' : green
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>{label}</span>
-        <span style={{ ...mono, fontSize: 12.5, color: over ? red : muted }}>
-          {used}{unit ? ` ${unit}` : ''} / {total == null ? 'unlimited' : `${total}${unit ? ` ${unit}` : ''}`}
+        <span style={{ ...mono, fontSize: 12.5, color: isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#B45309' : muted }}>
+          {formatValue(used)}{unit ? ` ${unit}` : ''} / {total == null ? 'unlimited' : `${formatValue(total)}${unit ? ` ${unit}` : ''}`}
+          {available != null && (
+            <span style={{ fontSize: 11, marginLeft: 6, color: isExhausted ? red : muted }}>
+              ({formatValue(available)} available)
+            </span>
+          )}
         </span>
       </div>
       <div style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}>
         {pct != null && (
-          <div style={{ width: `${pct}%`, height: '100%', background: bar, transition: 'width .25s' }} />
+          <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width .25s' }} />
         )}
       </div>
-      {over && (
-        <div style={{ fontSize: 12, color: red, marginTop: 5 }}>
-          Over the plan limit. Nothing is blocked — upgrade when convenient.
+
+      {isWarning && (
+        <div style={{ fontSize: 11.5, color: '#B45309', marginTop: 5, lineHeight: 1.4 }}>
+          <strong>80% capacity reached:</strong> Approaching plan limit. All active learners and classes remain fully operational.
+        </div>
+      )}
+
+      {isCritical && (
+        <div style={{ fontSize: 11.5, color: '#EA580C', marginTop: 5, lineHeight: 1.4, fontWeight: 600 }}>
+          <strong>90% capacity reached:</strong> High utilization. Consider expanding capacity soon.
+        </div>
+      )}
+
+      {isExhausted && (
+        <div style={{ fontSize: 11.5, color: red, marginTop: 5, lineHeight: 1.4 }}>
+          <strong>Resource limit reached (100%):</strong>{' '}
+          {resourceType === 'seats'
+            ? 'Existing students and teachers retain full access to active classes and records. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).'
+            : resourceType === 'ai'
+              ? 'Non-AI academic features (grading, attendance, lesson plans, rosters) remain fully usable.'
+              : 'Storage capacity is informational in this release. New uploads are not blocked, and existing files remain accessible.'}
+          <div style={{ fontSize: 11, color: red, marginTop: 2 }}>
+            No automatic charges or data deletions will ever occur.
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
+function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
   const [error, setError] = useState('')
   const catalogue = plans?.[sub.type] ?? {}
   const names = Object.keys(catalogue)
@@ -105,6 +140,10 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
   const trialEndsLabel = trialEndsMs
     ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null
+  const paidThroughMs = toMillis(sub.paid_through)
+  const paidThroughLabel = paidThroughMs
+    ? new Date(paidThroughMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
 
   return (
     <section style={{ ...card, padding: 22 }}>
@@ -127,6 +166,11 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
             {sub.status === 'trial' && trialEndsLabel && (
               <div style={{ fontSize: 13, color: muted }}>
                 Trial ends {trialEndsLabel}
+              </div>
+            )}
+            {sub.status === 'active' && paidThroughLabel && (
+              <div style={{ fontSize: 13, color: muted }}>
+                Paid through {paidThroughLabel} · Early renewal preserves remaining days
               </div>
             )}
           </div>
@@ -159,10 +203,68 @@ function PlanCard({ ownerId, sub, usage, plans, onChanged }) {
       <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
                     marginTop: 22 }}>
         <Meter label="Teacher Seats" used={usage.teachers.used} total={usage.teachers.seats}
-               over={usage.teachers.over} />
+               over={usage.teachers.over} resourceType="seats" />
         <Meter label="Student Seats" used={usage.students.used} total={usage.students.seats}
-               over={usage.students.over} />
-        <StorageMeter limitBytes={storageBytes} />
+               over={usage.students.over} resourceType="seats" />
+        <StorageMeter limitBytes={storageBytes} resourceUsage={resourceUsage} />
+      </div>
+
+      {/* Administrator-level resource summary and allowances */}
+      <div style={{
+        marginTop: 20,
+        padding: 16,
+        background: 'rgba(14,42,92,0.03)',
+        border: `1px solid ${line}`,
+        borderRadius: 10,
+      }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: navy, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+          Institutional Resource Allowances &amp; Allocation Summary
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, fontSize: 12.5, color: ink }}>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>Teacher Seats</div>
+            <span><strong>{usage.teachers.used} occupied</strong> ({Math.max(0, (usage.teachers.seats || 0) - usage.teachers.used)} available of {usage.teachers.seats || 'unlimited'} total)</span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>Shared Student Capacity</div>
+            <span><strong>{usage.students.used} occupied</strong> ({Math.max(0, (usage.students.seats || 0) - usage.students.used)} available of {usage.students.seats || 'unlimited'} total)</span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>School-wide AI Credits</div>
+            <span>
+              {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.remaining ?? 0) <= 0
+                ? '0 credits remaining (Exhausted)'
+                : resourceUsage?.ai_credits?.granted
+                  ? `${Number(resourceUsage.ai_credits.remaining ?? resourceUsage.ai_credits.granted).toLocaleString()} credits available`
+                  : 'Unavailable (subscription credit wallet unprovisioned; standard daily quotas apply)'}
+            </span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>Student-Protected Credit Pool</div>
+            <span>
+              {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.student_remaining ?? 0) <= 0
+                ? '0 credits remaining (Exhausted)'
+                : resourceUsage?.ai_credits?.student_protected
+                  ? `${Number(resourceUsage.ai_credits.student_remaining ?? resourceUsage.ai_credits.student_protected).toLocaleString()} protected`
+                  : 'Unavailable (not configured in this release)'}
+            </span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>Teacher / Student Consumption</div>
+            <span>
+              {resourceUsage?.ai_credits?.teacher_used != null
+                ? `Teachers: ${resourceUsage.ai_credits.teacher_used}, Students: ${resourceUsage.ai_credits.student_used}`
+                : 'Unavailable (unmetered at institutional level; individual user quotas apply)'}
+            </span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5 }}>Shared Storage Allowance</div>
+            <span>{formatDecimalBytes(storageBytes)} (per-file security limits enforced)</span>
+          </div>
+        </div>
+        <p role="status" style={{ fontSize: 11.5, color: muted, lineHeight: 1.5, margin: '10px 0 0' }}>
+          <strong>Policy Note:</strong> AI credits and daily balances: {resourceUsage?.ai_credits?.status === 'available_estimated' ? ((resourceUsage.ai_credits.remaining ?? 0) <= 0 ? 'Exhausted.' : 'Active.') : 'Unavailable for this subscription (unprovisioned).'} Existing AI access remains unchanged. At capacity, existing students and teachers retain full access to active classes. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled. Non-AI academic tools remain usable at AI quota limits. No automatic charges or data deletions will ever occur.
+        </p>
       </div>
 
       {error && <div style={{ marginTop: 14 }}><PlanChangeNotice error={error} /></div>}
@@ -178,9 +280,11 @@ export const SEAT_CHECKOUT_BANNER = {
   paid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
-    text: 'We could not confirm the payment yet. If you completed it, refresh in a moment — otherwise nothing was charged.',
+    text: 'Payment is still unconfirmed by the server. If you completed it, refresh in a moment; do not assume it succeeded.',
   },
-  cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
+  attempt_failed: { bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00', text: 'The provider reported a failed attempt. The checkout may still be retryable; payment has not been confirmed.' },
+  expired: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'The payment provider reports that this checkout session expired. Start a new checkout if you still want to continue.' },
+  unverified_return: { bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00', text: 'This page was returned from checkout, but no payment reference was provided. Payment status is unverified.' },
 }
 
 function SeatCheckoutBanner({ state, receipt, dismiss }) {
@@ -228,7 +332,9 @@ function SeatIncreaseCard({ ownerId, sub }) {
   const [error, setError] = useState('')
 
   const mut = useMutation({
-    mutationFn: ({ teacherSeats: t, studentSeats: s }) => startSeatIncreaseCheckout(ownerId, { teacherSeats: t, studentSeats: s }),
+    mutationFn: ({ teacherSeats: t, studentSeats: s, amount }) => startSeatIncreaseCheckout(ownerId, {
+      teacherSeats: t, studentSeats: s, quoteTotalPhp: amount,
+    }),
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setError(e.message),
   })
@@ -288,33 +394,34 @@ function SeatIncreaseCard({ ownerId, sub }) {
   )
 }
 
-function StorageMeter({ limitBytes }) {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin-storage'],
-    queryFn: fetchStorageUsage,
-    retry: false,
-  })
-
-  if (isLoading) return <div style={{ fontSize: 12.5, color: faint }}>Measuring storage…</div>
-  if (isError) return <div style={{ fontSize: 12.5, color: faint }}>Storage usage unavailable.</div>
-
-  if (data?.available === false) {
+function StorageMeter({ limitBytes, resourceUsage }) {
+  const storage = resourceUsage?.storage
+  const schoolStorageUsed = storage?.bytes ?? storage?.used_bytes
+  if (typeof schoolStorageUsed === 'number' && ['available', 'attributed', 'available_estimated'].includes(storage?.status)) {
     return (
-      <div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 6 }}>Storage</div>
-        <div style={{ fontSize: 12.5, color: muted, lineHeight: 1.5 }}>
-          Not enabled for this project. The plan allows {formatBytes(limitBytes)}; usage can be measured
-          once Firebase Storage is turned on.
-        </div>
-      </div>
+      <Meter
+        label="Storage"
+        used={schoolStorageUsed}
+        total={limitBytes}
+        resourceType="storage"
+        formatValue={formatDecimalBytes}
+      />
     )
   }
 
   return (
     <div>
-      <Meter label="Storage" used={formatBytes(data.total_bytes)} total={formatBytes(limitBytes)} />
-      <div style={{ fontSize: 12, color: faint, marginTop: 5 }}>
-        {data.file_count} file{data.file_count === 1 ? '' : 's'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>Storage</span>
+        <span style={{ ...mono, fontSize: 12.5, color: muted }}>
+          {formatDecimalBytes(limitBytes)} capacity
+        </span>
+      </div>
+      <div style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}>
+        <div style={{ width: '0%', height: '100%', background: green }} />
+      </div>
+      <div style={{ fontSize: 11.5, color: muted, lineHeight: 1.45, marginTop: 5 }}>
+        Per-file upload caps (5–25 MB) enforced. School-attributed storage metering is unprovisioned; project-wide storage is not allocated per institution.
       </div>
     </div>
   )
@@ -518,7 +625,7 @@ export default function SubscriptionTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <SeatCheckoutBanner {...checkout} />
 
-      <PlanCard ownerId={ownerId} sub={subscription} usage={usage} plans={plans}
+      <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} plans={plans}
                 onChanged={refresh} />
 
       {subscription.type === 'institution' && subscription.status === 'active' && (
