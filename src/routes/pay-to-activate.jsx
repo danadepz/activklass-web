@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { schoolApprovedUnpaid } from '@/lib/schoolStatus'
-import { estimateAnnual, pesos } from '@/lib/pricing'
-import { fetchSubscription, startCheckout } from '@/lib/subscription'
-import AuthLayout, { SubmitButton, AuthNotice, AuthError } from '@/components/AuthLayout'
+import { fetchSubscription, recordTermsAcceptance, startCheckout, useCheckoutReturn } from '@/lib/subscription'
+import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
+import AuthLayout, { AuthNotice, AuthError } from '@/components/AuthLayout'
 import SignOutButton from '@/components/SignOutButton'
 import { ink, muted, line } from '@/theme'
 
@@ -34,7 +34,7 @@ export default function PayToActivate() {
   const navigate = useNavigate()
   const [err, setErr] = useState('')
   // T-257: PayMongo's cancel link returns here (subscriptions.py cancel_url).
-  const cancelled = useSearchParams()[0].get('checkout_cancelled') === '1'
+  const paymentReturn = useCheckoutReturn(school?.id)
 
   // Nothing to wait for here: not in a school, or the school has since been
   // activated (or suspended, which owns its own screen).
@@ -49,7 +49,20 @@ export default function PayToActivate() {
   })
 
   const mut = useMutation({
-    mutationFn: () => startCheckout(school.id),
+    mutationFn: async ({ pricingVersion, totalPhp, termsVersion }) => {
+      let termsAcceptanceId
+      if (termsVersion) {
+        const record = await recordTermsAcceptance(school.id, { termsVersion })
+        termsAcceptanceId = record.acceptance_id
+      }
+      return startCheckout(school.id, {
+        quoteReviewed: true,
+        pricingVersion,
+        quoteTotalPhp: totalPhp,
+        termsVersion,
+        termsAcceptanceId,
+      })
+    },
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setErr(e.message),
   })
@@ -67,26 +80,27 @@ export default function PayToActivate() {
 
   if (!gated) return <Navigate to="/portal" replace />
 
-  const sub = data?.subscription
-  const limits = sub?.limits ?? {}
-  const estimate = limits.teacher_seats
-    ? estimateAnnual(limits.teacher_seats, limits.student_seats ?? 0)
-    : null
-
   return (
     <AuthLayout
       title="One step left — pay for the school year"
       subtitle={`${school?.name ?? 'Your school'} is approved. Paying for the year opens the dashboard for everyone.`}
     >
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-        {cancelled && (
+        {paymentReturn.state === 'checking' && (
           <div style={{ marginBottom: 12 }}>
-            <AuthNotice>
-              <strong>Payment cancelled — nothing was charged.</strong> Your school’s approval and
-              seats are kept. Press <strong>Pay for this school year</strong> below to try again
-              whenever you’re ready.
-            </AuthNotice>
+            <AuthNotice><strong>Checking payment status with ActivKlass…</strong></AuthNotice>
           </div>
+        )}
+        {paymentReturn.state && paymentReturn.state !== 'checking' && paymentReturn.state !== 'paid' && (
+          <div style={{ marginBottom: 12 }}><AuthNotice>{
+            paymentReturn.state === 'expired'
+              ? 'The payment provider reports that this checkout expired. You may start a new checkout.'
+              : paymentReturn.state === 'attempt_failed'
+                ? 'The provider reported a failed payment attempt. Payment is not confirmed; the checkout may still be retryable.'
+                : paymentReturn.state === 'unverified_return'
+                  ? 'The browser returned from checkout without a payment reference. The payment outcome is unverified.'
+                  : 'Payment remains unconfirmed by the server. Refresh this page before assuming it succeeded.'
+          }</AuthNotice></div>
         )}
         <AuthNotice>
           <strong>You’re approved.</strong> The ActivKlass team has reviewed your request. Paying
@@ -102,22 +116,7 @@ export default function PayToActivate() {
           </p>
         ) : isAdmin ? (
           <>
-            {estimate != null && (
-              <p style={{ fontSize: 14, color: ink, margin: '16px 0 0' }}>
-                {Number(limits.teacher_seats).toLocaleString()} teacher{limits.teacher_seats === 1 ? '' : 's'} ×{' '}
-                {Number(limits.student_seats ?? 0).toLocaleString()} students — {pesos(estimate)} for one school year.
-              </p>
-            )}
-            <div style={{ marginTop: 14 }}>
-              <SubmitButton
-                type="button"
-                disabled={mut.isPending}
-                onClick={() => { setErr(''); mut.mutate() }}
-                style={{ marginTop: 0, width: 'auto', padding: '13px 22px' }}
-              >
-                {mut.isPending ? 'Starting payment…' : 'Pay for this school year'}
-              </SubmitButton>
-            </div>
+            <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
             {err && <div style={{ marginTop: 12 }}><AuthError>{err}</AuthError></div>}
           </>
         ) : (

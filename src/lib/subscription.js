@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import { estimateProrated, pesos } from './pricing'
 import { confirmDialog } from '../components/ui/dialogs'
 import { blue, gold, green, red } from '../theme'
 
@@ -65,6 +64,25 @@ export function fetchSubscription(ownerId) {
   return api(`/api/subscription/${ownerId}`)
 }
 
+/** Backend-calculated current-price summary; informational, never charge authority. */
+export function fetchSubscriptionQuote(ownerId) {
+  return api(`/api/subscription/${ownerId}/quote`)
+}
+
+/** Active legacy registration policy and its server-owned seat bounds. */
+export function fetchRegistrationPolicy() {
+  return api('/api/subscription/registration-policy', { requireAuth: false })
+}
+
+/** Backend-authoritative registration quote; no local estimate fallback. */
+export function fetchRegistrationQuote(input) {
+  return api('/api/subscription/registration-quote', {
+    method: 'POST',
+    requireAuth: false,
+    body: input,
+  })
+}
+
 /** Limits are applied server-side from the catalogue, not sent from here. */
 export function changePlan(ownerId, plan) {
   return api(`/api/subscription/${ownerId}/plan`, { method: 'POST', body: { plan } })
@@ -81,8 +99,51 @@ export function changePlan(ownerId, plan) {
  * an Account page to return to. Only takes effect server-side when
  * `ownerId` is actually a pending school; harmless to pass otherwise.
  */
-export function startCheckout(ownerId, { flow } = {}) {
-  return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST', body: flow ? { flow } : undefined })
+export function startCheckout(ownerId, { flow, quoteReviewed = false, pricingVersion, quoteTotalPhp, termsVersion, termsAcceptanceId } = {}) {
+  const body = {}
+  if (flow) body.flow = flow
+  if (quoteReviewed) body.quote_reviewed = true
+  if (pricingVersion) body.pricing_version = pricingVersion
+  if (quoteTotalPhp !== undefined) body.quote_total_php = quoteTotalPhp
+  if (termsVersion) body.terms_version = termsVersion
+  if (termsAcceptanceId) body.terms_acceptance_id = termsAcceptanceId
+  return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST', body })
+}
+
+/**
+ * Record explicit acceptance of an approved subscription Terms version.
+ * Hits backend POST /api/subscription/<owner_id>/terms/accept.
+ */
+export function recordTermsAcceptance(ownerId, { termsVersion, userAgent } = {}) {
+  const ua = userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : 'web-client')
+  return api(`/api/subscription/${ownerId}/terms/accept`, {
+    method: 'POST',
+    body: { accepted: true, terms_version: termsVersion, user_agent: ua },
+  })
+}
+
+/**
+ * Proposed Option B policy quote for test/staging evaluation.
+ * Backend requires superadmin authorization and SUBSCRIPTION_POLICY_MODE=test_only.
+ * Returns non-payable proposal comparison; checkout_eligible is always false.
+ */
+export function fetchProposedPolicyQuote(ownerId, { subscriptionType, teacherSeats, studentCapacity } = {}) {
+  return api(`/api/subscription/${ownerId}/proposed-policy-quote`, {
+    method: 'POST',
+    body: {
+      subscription_type: subscriptionType,
+      teacher_seats: teacherSeats,
+      student_capacity: studentCapacity,
+    },
+  })
+}
+
+/**
+ * Read persisted payment record directly from database without external provider round-trips.
+ * Returns { owner_id, payment: { reference, status, kind, amount_php, pricing_version, paid_at, provider_confirmed } }
+ */
+export function fetchPaymentStatus(ownerId, reference) {
+  return api(`/api/subscription/${ownerId}/payments/${reference}`)
 }
 
 /**
@@ -117,11 +178,21 @@ export function confirmCheckout(ownerId, reference) {
  * charge from the delta and never writes `limits` until PayMongo confirms --
  * this only starts the checkout, same shape as `startCheckout`.
  */
-export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats } = {}) {
+export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats, quoteTotalPhp, pricingVersion } = {}) {
+  const body = { quote_reviewed: true }
+  if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
+  if (studentSeats !== undefined) body.student_seats = studentSeats
+  if (quoteTotalPhp !== undefined) body.quote_total_php = quoteTotalPhp
+  if (pricingVersion) body.pricing_version = pricingVersion
+  return api(`/api/subscription/${ownerId}/seats/checkout`, { method: 'POST', body })
+}
+
+/** Server quote for a seat upgrade; never estimate the PayMongo amount locally. */
+export function fetchSeatIncreaseQuote(ownerId, { teacherSeats, studentSeats } = {}) {
   const body = {}
   if (teacherSeats !== undefined) body.teacher_seats = teacherSeats
   if (studentSeats !== undefined) body.student_seats = studentSeats
-  return api(`/api/subscription/${ownerId}/seats/checkout`, { method: 'POST', body })
+  return api(`/api/subscription/${ownerId}/seats/quote`, { method: 'POST', body })
 }
 
 /**
@@ -142,7 +213,7 @@ export function startSeatIncreaseCheckout(ownerId, { teacherSeats, studentSeats 
  * default) for a solo teacher.
  */
 export async function confirmSeatIncrease({
-  current, next, paidThroughMs, ownerPhrase = 'what you already have', onError,
+  ownerId, current, next, ownerPhrase = 'what you already have', onError,
 }) {
   const curTeacher = current.teacherSeats ?? 0
   const curStudent = current.studentSeats ?? 0
@@ -159,22 +230,35 @@ export async function confirmSeatIncrease({
     return null
   }
 
+  let response
+  try {
+    response = await fetchSeatIncreaseQuote(ownerId, { teacherSeats: nextTeacher, studentSeats: nextStudent })
+  } catch (err) {
+    onError(err.message || 'The server could not provide a seat-increase quote.')
+    return null
+  }
+  const quote = response?.quote
+  if (!quote || quote.requested_limits?.teacher_seats !== nextTeacher || quote.requested_limits?.student_seats !== nextStudent || !Number.isFinite(quote.payment_due_php)) {
+    onError('The server returned an incomplete seat-increase quote. Refresh and try again.')
+    return null
+  }
   const addedTeacher = nextTeacher - curTeacher
   const addedStudent = nextStudent - curStudent
-  const amount = estimateProrated(addedTeacher, addedStudent, paidThroughMs)
+  const amount = quote.payment_due_php
+  const money = (value) => `₱${value.toLocaleString('en-PH')}`
   const parts = []
   if (addedTeacher > 0) parts.push(`${addedTeacher} teacher seat${addedTeacher === 1 ? '' : 's'}`)
   if (addedStudent > 0) parts.push(`${addedStudent} student seat${addedStudent === 1 ? '' : 's'}`)
   const ok = await confirmDialog({
     title: `Add ${parts.join(' and ')}?`,
     message:
-      `This charges ${pesos(amount)} now — prorated to the months left until your plan renews — `
+      `This charges ${money(amount)} now — prorated to the months left until your plan renews — `
       + "and the new seats renew on that same date. Seat reductions go through ActivKlass support, "
       + 'not this screen.',
-    confirmLabel: `Pay ${pesos(amount)}`,
+    confirmLabel: `Pay ${money(amount)}`,
   })
   if (!ok) return null
-  return { teacherSeats: nextTeacher, studentSeats: nextStudent }
+  return { teacherSeats: nextTeacher, studentSeats: nextStudent, amount, pricingVersion: quote.pricing_version }
 }
 
 /**
@@ -195,37 +279,56 @@ export function useCheckoutReturn(ownerId) {
   const qc = useQueryClient()
   const reference = params.get('checkout_ref')
   const cancelled = params.get('checkout_cancelled')
-  const [state, setState] = useState(reference ? 'checking' : cancelled ? 'cancelled' : null)
+  const [state, setState] = useState(reference ? 'checking' : cancelled ? 'unverified_return' : null)
   const [receipt, setReceipt] = useState(null)
 
   useEffect(() => {
     if (!reference || !ownerId) return undefined
     let stopped = false
     let attempt = 0
+    const markPaid = (payment) => {
+      setState('paid')
+      setReceipt({
+        receiptSentTo: payment?.receipt_sent_to ?? null,
+        receiptFailed: Boolean(payment?.receipt_failed),
+        kind: payment?.kind ?? 'subscription',
+        newLimits: payment?.new_limits ?? null,
+      })
+      qc.invalidateQueries({ queryKey: ['subscription'] })
+    }
     async function poll() {
       attempt += 1
       try {
+        // Redirect query parameters are navigation hints only. Read the
+        // owner-scoped backend record before displaying any payment outcome.
+        const stored = await fetchPaymentStatus(ownerId, reference)
+        const payment = stored?.payment
+        if (stopped) return
+        if (payment?.status === 'paid' && payment.provider_confirmed === true) {
+          markPaid(payment)
+          return
+        }
+        if (payment?.status === 'expired') {
+          setState('expired')
+          return
+        }
         const res = await confirmCheckout(ownerId, reference)
         if (stopped) return
         if (res.status === 'paid') {
-          setState('paid')
-          // T-69: sent to <email>, or explicitly not sent -- never guessed
-          // from silence. `kind`/`newLimits` tell a seat top-up apart from
-          // the annual payment so the caller's banner can say which.
-          setReceipt({
-            receiptSentTo: res.receipt_sent_to ?? null,
-            receiptFailed: !!res.receipt_failed,
-            kind: res.kind ?? 'subscription',
-            newLimits: res.new_limits ?? null,
-          })
-          qc.invalidateQueries({ queryKey: ['subscription'] })
+          const refreshed = await fetchPaymentStatus(ownerId, reference).catch(() => null)
+          markPaid(refreshed?.payment || res)
           return
         }
+        if (res.status === 'expired') {
+          setState('expired')
+          return
+        }
+        if (res.provider_attempt_status === 'failed') setState('attempt_failed')
       } catch {
         if (stopped) return
       }
       if (attempt < 5) setTimeout(poll, 2000)
-      else if (!stopped) setState('unconfirmed')
+      else if (!stopped) setState((current) => current === 'attempt_failed' ? current : 'unconfirmed')
     }
     poll()
     return () => { stopped = true }
@@ -241,7 +344,20 @@ export function useCheckoutReturn(ownerId) {
     setParams(params, { replace: true })
   }
 
-  return { state, receipt, dismiss }
+  return { state, receipt, reference, dismiss }
+}
+
+/**
+ * Hook to inspect the persisted payment document directly from Firestore
+ * without making external payment provider calls.
+ */
+export function usePaymentStatus(ownerId, reference) {
+  return useQuery({
+    queryKey: ['subscription-payment-status', ownerId, reference],
+    queryFn: () => fetchPaymentStatus(ownerId, reference),
+    enabled: Boolean(ownerId && reference),
+    retry: false,
+  })
 }
 
 /**
@@ -261,6 +377,16 @@ export function formatBytes(bytes) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   const value = bytes / 1024 ** i
+  return `${value >= 10 || i === 0 ? Math.round(value) : value.toFixed(1)} ${units[i]}`
+}
+
+/** Format decimal-byte subscription allowances (1 GB = 1,000,000,000 bytes). */
+export function formatDecimalBytes(bytes) {
+  if (bytes == null) return '—'
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1000)), units.length - 1)
+  const value = bytes / 1000 ** i
   return `${value >= 10 || i === 0 ? Math.round(value) : value.toFixed(1)} ${units[i]}`
 }
 

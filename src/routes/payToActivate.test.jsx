@@ -27,7 +27,7 @@ vi.mock('react-router-dom', async (importOriginal) => ({
   useNavigate: () => navigateSpy,
 }))
 
-const queryState = vi.hoisted(() => ({ subscription: null, isLoading: false, isError: false }))
+const queryState = vi.hoisted(() => ({ subscription: null, isLoading: false, isError: false, paymentState: null }))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({
     data: queryState.subscription ? { subscription: queryState.subscription } : undefined,
@@ -39,16 +39,18 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/lib/subscription', () => ({
   fetchSubscription: vi.fn(),
   startCheckout: vi.fn(),
+  useCheckoutReturn: () => ({ state: queryState.paymentState }),
 }))
 vi.mock('@/components/SignOutButton', () => ({ default: () => <button type="button">Sign out</button> }))
 
 import PayToActivate from './pay-to-activate.jsx'
 
-function render({ profile, school, isSuperAdmin = false, subscription = null, isLoading = false, isError = false, url = '/pay-to-activate' }) {
+function render({ profile, school, isSuperAdmin = false, subscription = null, isLoading = false, isError = false, paymentState = null, url = '/pay-to-activate' }) {
   authState.current = { profile, school, isSuperAdmin, refreshProfile: vi.fn(() => Promise.resolve()) }
   queryState.subscription = subscription
   queryState.isLoading = isLoading
   queryState.isError = isError
+  queryState.paymentState = paymentState
   navigateSpy.mockClear()
   return renderToStaticMarkup(<MemoryRouter initialEntries={[url]}><PayToActivate /></MemoryRouter>)
 }
@@ -57,16 +59,15 @@ const ADMIN = { role: 'admin', email: 'admin@school.edu.ph' }
 const APPROVED_UNPAID_SCHOOL = { id: 'S1', name: 'UCB', subscription_status: 'approved_unpaid' }
 
 describe('/pay-to-activate — the admin who owes the payment', () => {
-  it('offers the Pay button and the seat estimate', () => {
+  it('offers the server-quote review before the Pay button', () => {
     const html = render({
       profile: ADMIN,
       school: APPROVED_UNPAID_SCHOOL,
       subscription: { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 2400 } },
     })
     expect(html).toContain('Pay for this school year')
-    expect(html).toContain('20 teachers')
-    expect(html).toContain('2,400 students')
-    expect(html).toContain('₱')
+    expect(html).toContain('Review subscription details')
+    expect(html).toContain('Subscription price breakdown')
   })
 
   it('shows the gateway-error message when starting checkout fails, without naming the vendor', () => {
@@ -117,10 +118,11 @@ describe('/pay-to-activate — the gate no longer applies', () => {
 describe('/pay-to-activate — coming back from a cancelled payment', () => {
   const unpaid = { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 600 } }
 
-  it('says plainly that nothing was charged, and still offers the retry', () => {
+  it('does not infer cancellation from a redirect and displays provider-status checking', () => {
     const html = render({ profile: ADMIN, school: APPROVED_UNPAID_SCHOOL, subscription: unpaid,
-      url: '/pay-to-activate?checkout_cancelled=1' })
-    expect(html).toContain('Payment cancelled — nothing was charged.')
+      paymentState: 'checking', url: '/pay-to-activate?checkout_cancelled=1&checkout_ref=ref-1' })
+    expect(html).toContain('Checking payment status with ActivKlass')
+    expect(html).not.toContain('Payment cancelled — nothing was charged.')
     expect(html).toContain('Pay for this school year')
     expect(html).toContain('Sign out')
     expect(html.toLowerCase()).not.toContain('paymongo')
@@ -128,6 +130,6 @@ describe('/pay-to-activate — coming back from a cancelled payment', () => {
 
   it('says nothing about a cancellation on an ordinary visit', () => {
     const html = render({ profile: ADMIN, school: APPROVED_UNPAID_SCHOOL, subscription: unpaid })
-    expect(html).not.toContain('Payment cancelled')
+    expect(html).not.toContain('Payment was cancelled')
   })
 })

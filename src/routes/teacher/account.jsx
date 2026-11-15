@@ -7,9 +7,10 @@ import ChangePassword from '@/components/ChangePassword'
 import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
 import {
-  changePlan, confirmSeatIncrease, describeSubscription, fetchPlans, fetchSubscription, formatBytes,
-  startCheckout, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
+  changePlan, confirmSeatIncrease, describeSubscription, fetchPlans, fetchSubscription,
+  formatDecimalBytes, recordTermsAcceptance, startCheckout, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
+import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -17,7 +18,7 @@ import { confirmDialog } from '@/components/ui/dialogs'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
 import { ID_TYPES } from '@/routes/pending-verification'
 
-const GB = 1024 ** 3
+const GB = 1_000_000_000
 // The same list the registration form and the superadmin queue read, so the
 // label the teacher sees here is the one they picked there.
 const ID_LABEL = Object.fromEntries(ID_TYPES.map((t) => [t.value, t.label]))
@@ -43,23 +44,55 @@ function Notice({ tone = 'error', children }) {
   )
 }
 
-function Meter({ label, used, total, over }) {
-  const pct = total ? Math.min(100, Math.round((used / total) * 100)) : null
-  const bar = over ? red : pct != null && pct >= 80 ? gold : green
+function Meter({ label, used, total, over, resourceType = 'seats' }) {
+  const numericUsed = typeof used === 'number' ? used : null
+  const numericTotal = typeof total === 'number' ? total : null
+  const pct = numericTotal && numericUsed != null ? Math.min(100, Math.round((numericUsed / numericTotal) * 100)) : null
+  const available = numericTotal != null && numericUsed != null ? Math.max(0, numericTotal - numericUsed) : null
+
+  const isExhausted = over || (pct != null && pct >= 100)
+  const isCritical = !isExhausted && pct != null && pct >= 90
+  const isWarning = !isExhausted && !isCritical && pct != null && pct >= 80
+
+  const barColor = isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#D97706' : green
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>{label}</span>
-        <span style={{ ...mono, fontSize: 12.5, color: over ? red : muted }}>
+        <span style={{ ...mono, fontSize: 12.5, color: isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#B45309' : muted }}>
           {used} / {total == null ? 'unlimited' : total}
+          {available != null && (
+            <span style={{ fontSize: 11, marginLeft: 6, color: isExhausted ? red : muted }}>
+              ({available} available)
+            </span>
+          )}
         </span>
       </div>
       <div style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}>
-        {pct != null && <div style={{ width: `${pct}%`, height: '100%', background: bar }} />}
+        {pct != null && (
+          <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width .25s' }} />
+        )}
       </div>
-      {over && (
-        <div style={{ fontSize: 12, color: red, marginTop: 5 }}>
-          Over your plan. Nothing is blocked — upgrade when you need to.
+
+      {isWarning && (
+        <div style={{ fontSize: 11.5, color: '#B45309', marginTop: 5, lineHeight: 1.4 }}>
+          <strong>80% capacity reached:</strong> Approaching student limit. Existing learners and classes remain fully active.
+        </div>
+      )}
+
+      {isCritical && (
+        <div style={{ fontSize: 11.5, color: '#EA580C', marginTop: 5, lineHeight: 1.4, fontWeight: 600 }}>
+          <strong>90% capacity reached:</strong> High student seat utilization. Consider adding student seats soon.
+        </div>
+      )}
+
+      {isExhausted && (
+        <div style={{ fontSize: 11.5, color: red, marginTop: 5, lineHeight: 1.4 }}>
+          <strong>Seat limit reached (100%):</strong> Existing students and classes retain full access. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).
+          <div style={{ fontSize: 11, color: red, marginTop: 2 }}>
+            No automatic charges or data deletions will ever occur.
+          </div>
         </div>
       )}
     </div>
@@ -213,17 +246,26 @@ function PlanType({ label, detail }) {
  * their admin pays for, and never one already active.
  */
 function PayButton({ ownerId }) {
+  const { isSuperAdmin } = useAuth()
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: () => startCheckout(ownerId),
+    mutationFn: async ({ pricingVersion, totalPhp, termsVersion }) => {
+      let termsAcceptanceId
+      if (termsVersion) {
+        const acceptance = await recordTermsAcceptance(ownerId, { termsVersion })
+        termsAcceptanceId = acceptance.acceptance_id
+      }
+      return startCheckout(ownerId, {
+        quoteReviewed: true, pricingVersion, quoteTotalPhp: totalPhp,
+        termsVersion, termsAcceptanceId,
+      })
+    },
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setErr(e.message),
   })
   return (
     <div style={{ marginTop: 12 }}>
-      <Button disabled={mut.isPending} onClick={() => { setErr(''); mut.mutate() }}>
-        {mut.isPending ? 'Starting payment…' : 'Pay for this school year'}
-      </Button>
+      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
       <Notice>{err}</Notice>
     </div>
   )
@@ -242,7 +284,7 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
   const [value, setValue] = useState(String(floor))
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: (studentSeats) => startSeatIncreaseCheckout(ownerId, { studentSeats }),
+    mutationFn: ({ studentSeats, amount, pricingVersion }) => startSeatIncreaseCheckout(ownerId, { studentSeats, quoteTotalPhp: amount, pricingVersion }),
     onSuccess: (res) => { window.location.href = res.checkout_url },
     onError: (e) => setErr(e.message),
   })
@@ -251,12 +293,12 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
     setErr('')
     const nextValue = Number.parseInt(value, 10)
     const next = await confirmSeatIncrease({
+      ownerId,
       current: { studentSeats: floor },
       next: { studentSeats: nextValue },
-      paidThroughMs,
       onError: setErr,
     })
-    if (next) mut.mutate(next.studentSeats)
+    if (next) mut.mutate(next)
   }
 
   return (
@@ -295,9 +337,11 @@ export const CHECKOUT_BANNER = {
   seatsAdded: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
-    text: 'We could not confirm the payment yet. If you completed it, refresh in a moment — otherwise nothing was charged.',
+    text: 'Payment is still unconfirmed by the server. If you completed it, refresh in a moment; do not assume it succeeded.',
   },
-  cancelled: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'Payment was cancelled — nothing was charged.' },
+  attempt_failed: { bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00', text: 'The provider reported a failed attempt. The checkout may still be retryable; payment has not been confirmed.' },
+  expired: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'The payment provider reports that this checkout session expired. Start a new checkout if you still want to subscribe.' },
+  unverified_return: { bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00', text: 'This page was returned from checkout, but no payment reference was provided. Payment status is unverified.' },
 }
 
 function CheckoutBanner({ state, receipt, dismiss }) {
@@ -405,11 +449,15 @@ function SubscriptionCard() {
     )
   }
 
-  const { subscription: sub, usage } = data
+  const { subscription: sub, usage, resource_usage: resourceUsage } = data
   const catalogue = plansRes?.plans?.[sub.type] ?? {}
   const trialEndsMs = toMillis(sub.trial_ends_at)
   const trialEndsLabel = trialEndsMs
     ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
+  const paidThroughMs = toMillis(sub.paid_through)
+  const paidThroughLabel = paidThroughMs
+    ? new Date(paidThroughMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null
 
   // Absorbed: the school took over the bill, so there is no plan of their own
@@ -460,6 +508,9 @@ function SubscriptionCard() {
             <p style={{ fontSize: 13, color: muted, margin: 0 }}>
               Trial ends {trialEndsLabel}
             </p>
+          )}
+          {sub.status === 'active' && paidThroughLabel && (
+            <p style={{ fontSize: 13, color: muted, margin: '4px 0 0' }}>Paid through {paidThroughLabel} (early renewal preserves remaining days)</p>
           )}
           {/* A subscriptions doc exists but is still trial/expired -- an
               admin-provisioned trial, or a first Pay attempt that was never
@@ -524,14 +575,55 @@ function SubscriptionCard() {
       <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))',
                     marginTop: 20 }}>
         <Meter label="Student seats" used={usage.students.used} total={usage.students.seats}
-               over={usage.students.over} />
+               over={usage.students.over} resourceType="seats" />
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 6 }}>Storage</div>
-          <div style={{ fontSize: 12.5, color: muted, lineHeight: 1.5 }}>
-            Your plan includes {formatBytes((sub.limits?.storage_gb ?? 0) * GB)}. Usage is reported by
-            your administrator once file storage is enabled.
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 6 }}>Storage Allowance</div>
+          <div style={{ ...mono, fontSize: 12.5, color: muted, marginBottom: 4 }}>
+            {formatDecimalBytes((sub.limits?.storage_gb ?? 0) * GB)} capacity
+          </div>
+          <div style={{ fontSize: 11.5, color: muted, lineHeight: 1.45 }}>
+            Uploads are capped per file (5–25 MB) by Storage security rules. Individual storage metering is unprovisioned.
           </div>
         </div>
+      </div>
+
+      <div style={{
+        marginTop: 18,
+        padding: 14,
+        background: 'rgba(14,42,92,0.03)',
+        border: `1px solid ${line}`,
+        borderRadius: 10,
+      }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: navy, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+          Resource Allowances &amp; Usage Policy
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, fontSize: 12, color: ink }}>
+          <div>
+            <div style={{ color: muted, fontSize: 11 }}>Student Capacity</div>
+            <span><strong>{usage.students.used} occupied</strong> ({Math.max(0, (usage.students.seats || 0) - usage.students.used)} available of {usage.students.seats || 'unlimited'} total)</span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11 }}>AI Credits</div>
+            <span>
+              {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.remaining ?? 0) <= 0
+                ? '0 credits remaining (Exhausted)'
+                : resourceUsage?.ai_credits?.granted
+                  ? `${Number(resourceUsage.ai_credits.remaining ?? resourceUsage.ai_credits.granted).toLocaleString()} credits available`
+                  : 'Unavailable (unprovisioned; standard daily user quotas apply)'}
+            </span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11 }}>Teacher Daily Generations</div>
+            <span>Standard policy (200 ops/day max; unmetered at plan level)</span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11 }}>Student Daily Explanations</div>
+            <span>Standard policy enabled (unmetered at plan level)</span>
+          </div>
+        </div>
+        <p role="status" style={{ fontSize: 11.5, color: muted, lineHeight: 1.5, margin: '8px 0 0' }}>
+          <strong>Protective Invariants:</strong> At seat limit, existing students retain full class access and capacity is informational while subscription-wide enforcement is disabled. At AI limits, non-AI academic features (gradebooks, rosters, attendance) remain fully operational. No automatic charges or data deletions will ever occur.
+        </p>
       </div>
 
       <Notice>{err}</Notice>

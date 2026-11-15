@@ -92,6 +92,15 @@ describe('/register step 1 — choosing a path', () => {
   })
 })
 
+describe('institution trial disclosure', () => {
+  it('does not advertise the individual free trial as an institution benefit', () => {
+    const source = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
+    expect(source).toContain('Institution requests are reviewed first. No institution trial starts at registration.')
+    expect(source).toMatch(/<TrialLine institution \/>/)
+    expect(source).toMatch(/institution\s*\?\s*'Institution requests are reviewed first/)
+  })
+})
+
 /* T-56 (maykel_64440-73, -75, -76): registering on a browser still signed in
    as Marites handed the tester HER dashboard — the submit saw a session, took
    it for a registration to resume, found a finished profile and went to the
@@ -431,7 +440,8 @@ describe('T-82 — Option C: the pending-school checkout is gone, sign-up is req
   })
 
   it('the seat-picker is back to "nothing to pay today" and a quote that comes later, not a charge', () => {
-    expect(registerSource).toMatch(/Your final quote follows from these numbers/)
+    expect(registerSource).toContain('Backend quote')
+    expect(registerSource).toContain('fetchRegistrationQuote')
     expect(registerSource).not.toMatch(/Due today/)
     expect(registerSource).not.toMatch(/Refunded in full if we decline your request/)
   })
@@ -771,15 +781,16 @@ describe('T-129 (andecobs-170) — the seat sliders become number inputs, same f
     expect(body).toMatch(/step=\{step\}/)
   })
 
-  it('types freely (onChange is a plain pass-through) and clamps to the floor/cap only on blur', () => {
+  it('takes seat bounds from the backend policy and clamps to its returned floor/cap only on blur', () => {
     // Clamping on every keystroke would stop "3" from ever becoming "300" --
     // it would snap back to the floor the instant it dipped below it. The
     // slider enforced its floor/cap physically; the number input enforces
     // the same floor/cap on blur instead, after the person is done typing.
     expect(registerSource).toMatch(/const setSeat = \(key\) => \(e\) => setForm\(\(f\) => \(\{ \.\.\.f, \[key\]: e\.target\.value \}\)\)/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('teacherSeats', SEATS\.teachers\.min, SEATS\.teachers\.max\)\}/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('studentsPerTeacher', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
-    expect(registerSource).toMatch(/onBlur=\{clampSeat\('soloStudents', SEATS\.perTeacher\.min, SEATS\.perTeacher\.max\)\}/)
+    expect(registerSource).toContain("const registrationPolicyQuery = useQuery")
+    expect(registerSource).toContain('registrationLimits?.institution?.teacher_seats')
+    expect(registerSource).toContain('registrationLimits?.institution?.students_per_teacher')
+    expect(registerSource).toContain('registrationLimits?.teacher?.student_capacity')
   })
 
   it('the clamp math itself holds the same floor and cap the sliders enforced, in both directions and for a non-numeric value', () => {
@@ -903,7 +914,7 @@ describe('Privacy Notice and Terms are agreed on the last step', () => {
   })
 
   it('keeps the final submit disabled until both are ticked, and refuses in the handler too', () => {
-    expect(registerSource).toMatch(/disabled=\{submitting \|\| \(step === lastStep && !consented\)\}/)
+    expect(registerSource).toMatch(/disabled=\{submitting \|\| \(step === lastStep && !consented\) \|\| \(!completing && step === lastStep && !registrationQuoteReady\)\}/)
     expect(registerSource).toMatch(/if \(!consented\)/)
   })
 })
@@ -956,5 +967,22 @@ describe('T-262 — Title Case on Individual registration', () => {
 
   it('leaves T-240\'s step-6 sentence alone', () => {
     expect(registerSource).toContain('You can change this number later as your load changes')
+  })
+})
+
+describe('Registration policy ownership and quote safety', () => {
+  it('does not define local seat limits or subscription amount formulas', () => {
+    expect(registerSource).not.toContain('OPTION_B_STAGING_SEATS')
+    expect(registerSource).not.toContain('LEGACY_SEATS')
+    expect(registerSource).not.toContain('estimateAnnual(')
+    expect(registerSource).not.toContain('estimateSolo(')
+    expect(registerSource).toContain('queryFn: fetchRegistrationPolicy')
+    expect(registerSource).toContain('queryFn: () => fetchRegistrationQuote(')
+  })
+
+  it('fails closed when registration quote is missing or its policy version is stale', () => {
+    expect(registerSource).toContain('response.policy_version !== registrationPolicy.policy_version')
+    expect(registerSource).toContain('registrationQuoteQuery.isError || !response')
+    expect(registerSource).toContain('registrationQuoteReady')
   })
 })
