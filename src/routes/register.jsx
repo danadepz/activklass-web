@@ -639,6 +639,7 @@ export default function Register() {
         </div>
       ) : choosing ? (
         <div className="flex flex-1 flex-col gap-4">
+          <Progress steps={steps} current={1} />
           <div className="flex flex-col gap-3" role="group" aria-label="Subscription type">
             <ChoiceCard
               selected={kind === 'individual'}
@@ -684,13 +685,13 @@ export default function Register() {
                 Sign in
               </Link>
             </div>
-            <Progress steps={steps} current={1} />
           </div>
         </div>
       ) : gettingApp ? (
         <ParentAppQr onBack={() => setStep(1)} />
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-4">
+          <Progress steps={completing ? steps.slice(0, 3) : steps} current={step} />
           {completing && (
             <AuthNotice>
               Signed in as <strong>{firebaseUser.email}</strong> — just complete your profile below.
@@ -1049,7 +1050,6 @@ export default function Register() {
               </div>
             </div>
           )}
-          <Progress steps={completing ? steps.slice(0, 3) : steps} current={step} />
           </div>
         </form>
       )}
@@ -1227,7 +1227,7 @@ export function Progress({ steps, current }) {
   // never past its own total, on either walk.
   const shown = Math.min(current, steps.length)
   return (
-    <div aria-label={`Step ${shown} of ${steps.length}`} style={{ marginTop: 20 }}>
+    <div aria-label={`Step ${shown} of ${steps.length}`} style={{ marginBottom: 8 }}>
       <div className="flex items-center justify-between" style={{ fontSize: 12, color: muted, marginBottom: 8 }}>
         <span style={{ fontWeight: 700, color: navy }}>{steps[shown - 1]}</span>
         <span>Step {shown} of {steps.length}</span>

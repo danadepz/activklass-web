@@ -1007,3 +1007,21 @@ describe('Registration phone number input constraints', () => {
     expect(phoneError('08123456789')).not.toBe('')
   })
 })
+
+describe('Registration progress bar position', () => {
+  it('renders the steps bar at the top instead of at the bottom', () => {
+    // Step 1: Progress appears before ChoiceCard
+    const step1ProgressAt = registerSource.indexOf('<Progress steps={steps} current={1} />')
+    const choiceCardAt = registerSource.indexOf('<ChoiceCard')
+    expect(step1ProgressAt).toBeGreaterThan(-1)
+    expect(choiceCardAt).toBeGreaterThan(-1)
+    expect(step1ProgressAt).toBeLessThan(choiceCardAt)
+
+    // Step 2..N: Progress appears at the top of the form, before submit button
+    const formAt = registerSource.indexOf('<form onSubmit={handleSubmit}')
+    const formProgressAt = registerSource.indexOf('<Progress steps={completing ? steps.slice(0, 3) : steps} current={step} />')
+    const submitBtnAt = registerSource.indexOf('<SubmitButton', formProgressAt)
+    expect(formProgressAt).toBeGreaterThan(formAt)
+    expect(submitBtnAt).toBeGreaterThan(formProgressAt)
+  })
+})
