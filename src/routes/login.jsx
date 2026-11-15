@@ -144,7 +144,15 @@ export default function Login() {
       body: { new_password: newPassword, confirm_password: confirmPassword },
     })
     // Force refresh token so the lifted claim takes effect immediately in memory.
-    await auth.currentUser?.getIdToken?.(true)
+    try {
+      await auth.currentUser?.getIdToken?.(true)
+    } catch {
+      // Firebase Admin SDK revokes existing refresh tokens when updating a password.
+      // Re-authenticate silently with the new password so the session is refreshed cleanly.
+      try {
+        await signInWithEmailAndPassword(auth, toAuthEmail(email), newPassword)
+      } catch { /* proceed if user doc already updated */ }
+    }
     markPasswordChanged()
     navigate('/portal', { replace: true })
   }
