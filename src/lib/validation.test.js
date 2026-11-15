@@ -3,7 +3,7 @@ import {
   emailError, nameError, passwordError, tempPasswordError, yearLevelError,
   GRADE_LEVELS, YEAR_LEVELS,
   semesterError, semesterLabel,
-  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, normalizePhone, linkError,
+  idNumberError, lrnError, loginPrefixError, schoolNameError, schoolAbbrError, phoneError, normalizePhone, formatSchoolYear, linkError,
   prcLicenseError, verificationIdError,
   passingPercentError,
   birthdateError, BIRTHDATE_HINT,
@@ -309,6 +309,27 @@ describe('phoneError', () => {
    web and backend side (register.jsx sends the raw value; the backend's
    `_normalize_phone` in app/api/auth.py mirrors this function and
    normalises what it reads from Firestore before comparing). */
+describe('formatSchoolYear', () => {
+  it('keeps digits only and shows them as 2026 - 2027', () => {
+    expect(formatSchoolYear('20262027')).toBe('2026 - 2027')
+    expect(formatSchoolYear('2026 - 2027')).toBe('2026 - 2027')
+    expect(formatSchoolYear('SY 2026-2027')).toBe('2026 - 2027')
+  })
+
+  it('builds up as the user types and backs out cleanly', () => {
+    expect(formatSchoolYear('2')).toBe('2')
+    expect(formatSchoolYear('2026')).toBe('2026')
+    expect(formatSchoolYear('20262')).toBe('2026 - 2')
+    expect(formatSchoolYear('2026 - ')).toBe('2026')
+    expect(formatSchoolYear('')).toBe('')
+    expect(formatSchoolYear(undefined)).toBe('')
+  })
+
+  it('never takes more than eight digits', () => {
+    expect(formatSchoolYear('202620279999')).toBe('2026 - 2027')
+  })
+})
+
 describe('normalizePhone', () => {
   it('collapses the exact same number typed four different ways', () => {
     const canonical = normalizePhone('09434969549')
