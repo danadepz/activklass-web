@@ -50,3 +50,37 @@ describe('Guarded Purge Feature — index.jsx (Subscribers tab)', () => {
     expect(indexSource).toMatch(/purgeSub\.mutate\(purgingSubscriber\.id\)/)
   })
 })
+
+/* T-256: both purge screens show success only on a server-confirmed completed
+   purge, show an incomplete one as an error with a retry, and refresh every
+   list a purge can touch. Source-read, like the rest of this file. */
+describe('T-256 — purge feedback is never unconditional success', () => {
+  for (const [name, source] of [['requests.jsx', requestsSource], ['index.jsx', indexSource]]) {
+    it(`${name} decides success from the server result`, () => {
+      expect(source).toMatch(/onSuccess: \(result\) => \{\s*(\/\/[^\n]*\n\s*)*const \{ ok, message \} = purgeResultMessage\(result,/)
+      expect(source).toMatch(/if \(ok\) toast\.success\(message\)\s*else toast\.error\(message\)/)
+      expect(source).not.toMatch(/toast\.success\('[^']*purged/)
+    })
+
+    it(`${name} reports an incomplete purge as an error and refreshes its list`, () => {
+      expect(source).toMatch(/toast\.error\(purgeErrorMessage\(err,/)
+      expect(source).toMatch(/if \(isIncompletePurge\(err\)\)/)
+    })
+
+    it(`${name} marks an incomplete purge and offers the retry`, () => {
+      expect(source).toMatch(/purge_state === 'incomplete'/)
+      expect(source).toMatch(/'Retry purge…' : 'Purge…'/)
+    })
+  }
+
+  it('a request purge refreshes the subscriber list too, and a subscriber purge the request lists', () => {
+    expect(requestsSource).toMatch(/invalidateQueries\(\{ queryKey: \['sa-subscribers'\] \}\)/)
+    expect(indexSource).toMatch(/invalidateQueries\(\{ queryKey: PENDING_REQUESTS_KEY \}\)/)
+    expect(indexSource).toMatch(/invalidateQueries\(\{ queryKey: \['sa-requests-approved'\] \}\)/)
+  })
+
+  it('the confirmation dialogs are still in front of both purges', () => {
+    expect(requestsSource).toMatch(/onConfirm=\{\(\) => purge\.mutate\(purging\.id\)\}/)
+    expect(indexSource).toMatch(/onConfirm=\{\(\) => purgeSub\.mutate\(purgingSubscriber\.id\)\}/)
+  })
+})

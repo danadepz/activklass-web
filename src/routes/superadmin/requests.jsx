@@ -8,6 +8,7 @@ import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import MessageDialog from './MessageDialog'
 import PurgeConfirmDialog from './PurgeConfirmDialog'
+import { isIncompletePurge, purgeErrorMessage, purgeResultMessage } from '@/lib/purgeFeedback'
 import { PENDING_REQUESTS_KEY, fetchPendingRequests } from './queues'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Dialog, Field, inputCls } from './index'
@@ -33,6 +34,15 @@ import { Dialog, Field, inputCls } from './index'
  * creating a fresh one on a 30-day trial (`fetchPendingRequests` attaches
  * each row's `school_payment_status` so this page knows which is which).
  */
+
+/* T-256: the purge stopped partway. Its accounts are disabled; Retry purge finishes it. */
+function PurgeIncompleteBadge() {
+  return (
+    <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold text-red-300">
+      Purge incomplete
+    </span>
+  )
+}
 
 const CALENDAR_LABEL = Object.fromEntries(CALENDARS.map((c) => [c.value, c.label]))
 
@@ -72,16 +82,30 @@ export default function SuperAdminRequestsPage() {
   const [message, setMessage] = useState(null) // { school, subject, body } to copy
   const { data: approved } = useQuery({ queryKey: ['sa-requests-approved'], queryFn: fetchApproved })
 
+  // T-256: a purge can also remove an approved school's subscription, so
+  // every list it can touch is refreshed, not just this page's.
+  const refreshAfterPurge = () => {
+    queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
+    queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
+    queryClient.invalidateQueries({ queryKey: ['sa-subscribers'] })
+  }
   const purge = useMutation({
     mutationFn: (requestId) => purgeRequest(requestId),
-    onSuccess: () => {
-      toast.success('Request and associated test accounts purged.')
+    onSuccess: (result) => {
+      // Success only when the server confirms every account and record is gone.
+      const { ok, message } = purgeResultMessage(result, 'Request and its accounts')
+      if (ok) toast.success(message)
+      else toast.error(message)
       setPurging(null)
-      queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
-      queryClient.invalidateQueries({ queryKey: ['sa-requests-approved'] })
+      refreshAfterPurge()
     },
     onError: (err) => {
-      toast.error(err.message || 'Could not purge request.')
+      toast.error(purgeErrorMessage(err, 'Could not purge request.'))
+      // An incomplete purge changed things: show the row's new state.
+      if (isIncompletePurge(err)) {
+        setPurging(null)
+        refreshAfterPurge()
+      }
     },
   })
 
@@ -241,13 +265,14 @@ export default function SuperAdminRequestsPage() {
                     >
                       Decline…
                     </button>
+                    {r.purge_state === 'incomplete' && <PurgeIncompleteBadge />}
                     <button
                       type="button"
                       disabled={busy || purge.isPending}
                       onClick={() => setPurging({ id: r.id, name: r.school_name, email: r.email })}
                       className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
                     >
-                      Purge…
+                      {r.purge_state === 'incomplete' ? 'Retry purge…' : 'Purge…'}
                     </button>
                   </div>
                 </div>
@@ -376,13 +401,14 @@ export default function SuperAdminRequestsPage() {
                   >
                     Approval message
                   </button>
+                  {r.purge_state === 'incomplete' && <PurgeIncompleteBadge />}
                   <button
                     type="button"
                     disabled={purge.isPending}
                     onClick={() => setPurging({ id: r.id, name: r.school_name, email: r.email })}
                     className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 transition-colors"
                   >
-                    Purge…
+                    {r.purge_state === 'incomplete' ? 'Retry purge…' : 'Purge…'}
                   </button>
                 </div>
               </li>

@@ -2714,3 +2714,31 @@ describe('T-236 — the tab-switch lock is server-only, and so is moving the dea
     })
   })
 })
+
+/* T-256: purge_operations holds a purge's frozen target list and retry state.
+   Only the Flask Admin SDK writes it; no rule names it, so the default deny
+   must keep every client out -- the Super Admin's own browser included, since
+   a client-side edit could point a resumed purge at other accounts. */
+describe('purge_operations · server-only purge records (T-256)', () => {
+  const superCtx = () => testEnv.authenticatedContext('dev-256', { superadmin: true }).firestore()
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'purge_operations', 'subscriber_s1'), {
+        state: 'incomplete', step: 'auth', plan: { uids: ['a'], docs: [] },
+      })
+    })
+  })
+
+  it('the Super Admin client cannot read, list, edit, create or delete one', async () => {
+    const db = superCtx()
+    await assertFails(getDoc(doc(db, 'purge_operations', 'subscriber_s1')))
+    await assertFails(getDocs(collection(db, 'purge_operations')))
+    await assertFails(updateDoc(doc(db, 'purge_operations', 'subscriber_s1'), { 'plan.uids': ['victim'] }))
+    await assertFails(setDoc(doc(db, 'purge_operations', 'request_x'), { state: 'completed' }))
+    await assertFails(deleteDoc(doc(db, 'purge_operations', 'subscriber_s1')))
+  })
+
+  it('an ordinary signed-in user cannot read one either', async () => {
+    await assertFails(getDoc(doc(testEnv.authenticatedContext('someone-256').firestore(), 'purge_operations', 'subscriber_s1')))
+  })
+})
