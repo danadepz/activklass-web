@@ -25,7 +25,7 @@ export const PRIVACY_NOTICE = {
     { h: 'Who We Are', blocks: [
       'ActivKlass is a class management system developed as a capstone project of the University of Cebu – Banilad Campus. It is currently in a pilot phase. It is not owned, endorsed, or operated by DepEd or CHED.',
       'For this notice, ActivKlass is the entity that decides how your personal data is used. The school or teacher who creates your account also has responsibilities for the data they enter (see Consent and Minors).',
-      'Data Protection Officer / Contact: [to be provided]',
+      'Data Protection Officer / Contact: activklassteam.2026@gmail.com',
     ] },
     { h: 'What We Collect', blocks: [
       [
@@ -43,7 +43,7 @@ export const PRIVACY_NOTICE = {
     ] },
     { h: 'AI Features and Automated Processing', blocks: [
       [
-        'Content generation: quiz and syllabus requests are sent to [Google Gemini], an outside AI service. We send only what is needed for the request.',
+        'Content generation: quiz and syllabus requests are sent to Google Gemini, an outside AI service. We send only what is needed for the request.',
         'Risk prediction: a model uses academic and engagement data to flag students who may need support. It lists the factors behind each flag. The result is a recommendation for the teacher, not a decision about the student. Teachers make the final judgment.',
       ],
       'Your data may be processed on servers outside the Philippines by these providers.',
@@ -141,12 +141,12 @@ export const TERMS = {
       [
         'You keep ownership of the content you create, such as syllabi, quizzes and class records.',
         'You give ActivKlass permission to store and process it so the system can work.',
-        'The ActivKlass software, design and name belong to its developers and the University of Cebu – Banilad Campus [confirm ownership arrangement].',
+        'The ActivKlass software, design and name belong to its developers and the University of Cebu – Banilad Campus.',
         'Personal data is handled under the Privacy Notice.',
       ],
     ] },
     { h: 'Subscriptions', blocks: [
-      'During the pilot, access is [free / provided under the arrangement agreed with your institution]. If paid plans are introduced later, the price and conditions will be shown before you subscribe.',
+      'During the pilot, access is free or provided under the arrangement agreed with your institution. If paid plans are introduced later, the price and conditions will be shown before you subscribe.',
     ] },
     { h: 'Suspension and Ending Access', blocks: [
       'We may suspend or remove an account that violates these Terms or puts the system or other users at risk. You or your institution may stop using ActivKlass at any time. Data deletion requests follow the Privacy Notice.',
@@ -160,7 +160,7 @@ export const TERMS = {
     { h: 'Changes to These Terms', blocks: [
       'We may update these Terms as the system develops. We will change the version and date, and ask you to accept the new version if the change is significant.',
     ] },
-    { h: 'Contact', blocks: ['[to be provided]'] },
+    { h: 'Contact', blocks: ['For questions about these Terms, contact us at activklassteam.2026@gmail.com.'] },
   ],
 }
 
