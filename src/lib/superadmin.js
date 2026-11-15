@@ -146,7 +146,8 @@ export function updateSubscriber(ownerId, { plan, status, limits } = {}) {
 
 /**
  * Permanently purge a school request and its unverified/test data.
- * Guarded server-side: refuses if the institution already has active classes.
+ * Guarded server-side: refuses if the school has paid or shares records outside
+ * itself; otherwise everything the school owns goes with it (T-256 Option B).
  */
 export function purgeRequest(requestId) {
   return api(`/api/superadmin/requests/${requestId}/purge`, { method: 'POST' })
@@ -162,7 +163,8 @@ export function purgeTeacher(uid) {
 
 /**
  * Permanently purge a subscriber (institution or solo teacher).
- * Guarded server-side: refuses if classes exist.
+ * Guarded server-side: refuses if it has paid, if a solo teacher has classes, or
+ * if an institution shares records outside itself (T-256 Option B).
  */
 export function purgeSubscriber(ownerId) {
   return api(`/api/superadmin/subscribers/${ownerId}/purge`, { method: 'POST' })

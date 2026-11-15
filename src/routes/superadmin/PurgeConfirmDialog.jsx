@@ -1,10 +1,20 @@
 import { Dialog } from './index'
 
+const ACCOUNT_GUARD =
+  'If this account has any active classes or enrolled students, the operation will be blocked automatically to prevent data corruption.'
+
+// T-256 Option B: a school purge no longer stops at classes -- it removes
+// everything the school owns. What still blocks it is said here, so the
+// Super Admin is not promised a guard the server does not apply.
+export const SCHOOL_PURGE_GUARD =
+  "Everything this school owns is deleted with it: its admin, teacher and student accounts, classes, gradebooks, attendance, quizzes, tasks, submissions, learning materials and uploaded files. Payment records are kept. Blocked automatically if the school has paid, or if a class, quiz or syllabus is shared with someone outside the school."
+
 export default function PurgeConfirmDialog({
   title = 'Purge Account',
   name,
   email,
   detail,
+  guard = ACCOUNT_GUARD,
   onClose,
   onConfirm,
   isPending,
@@ -27,8 +37,7 @@ export default function PurgeConfirmDialog({
             will become available for fresh testing.
           </p>
           <p className="mt-2 text-zinc-400">
-            <strong>Guarded:</strong> If this account has any active classes or enrolled students, the operation
-            will be blocked automatically to prevent data corruption.
+            <strong>Guarded:</strong> {guard}
           </p>
         </div>
 

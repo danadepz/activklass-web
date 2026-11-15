@@ -7,7 +7,7 @@ import { approveRequest, declineRequest, purgeRequest, resendApprovalNotice } fr
 import { approvalMessage } from '@/lib/approvalMessage'
 import { toast } from '@/components/ui/toast'
 import MessageDialog from './MessageDialog'
-import PurgeConfirmDialog from './PurgeConfirmDialog'
+import PurgeConfirmDialog, { SCHOOL_PURGE_GUARD } from './PurgeConfirmDialog'
 import { isIncompletePurge, purgeErrorMessage, purgeResultMessage } from '@/lib/purgeFeedback'
 import { PENDING_REQUESTS_KEY, fetchPendingRequests } from './queues'
 import { SkeletonTable } from '@/components/ui/Skeleton'
@@ -422,7 +422,8 @@ export default function SuperAdminRequestsPage() {
           title="Purge School Request & Account"
           name={purging.name}
           email={purging.email}
-          detail="This will permanently delete the subscription request, the associated school records (if 0 classes), and the admin's login."
+          detail="This will permanently delete the subscription request, the admin's login, and the school with everything it owns."
+          guard={SCHOOL_PURGE_GUARD}
           isPending={purge.isPending}
           onClose={() => setPurging(null)}
           onConfirm={() => purge.mutate(purging.id)}

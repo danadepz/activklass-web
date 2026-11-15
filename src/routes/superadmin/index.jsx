@@ -14,7 +14,7 @@ import { SEGMENTS, STATUSES, analyticsFor, filterRows, segmentOf } from '@/lib/s
 import AnalyticsBand from './AnalyticsBand'
 import AbsorbDialog from './AbsorbDialog'
 import MessageDialog from './MessageDialog'
-import PurgeConfirmDialog from './PurgeConfirmDialog'
+import PurgeConfirmDialog, { SCHOOL_PURGE_GUARD } from './PurgeConfirmDialog'
 import { PENDING_REQUESTS_KEY } from './queues'
 import { isIncompletePurge, purgeErrorMessage, purgeResultMessage } from '@/lib/purgeFeedback'
 import { toast } from '@/components/ui/toast'
@@ -663,9 +663,12 @@ export default function SuperAdminSubscribersPage() {
         <PurgeConfirmDialog
           title={`Purge ${purgingSubscriber.type === 'institution' ? 'Institution' : 'Solo Teacher'} Subscription`}
           name={purgingSubscriber.name}
-          detail={`This will permanently delete the subscription document, associated ${
-            purgingSubscriber.type === 'institution' ? 'school doc and all unassigned accounts' : 'teacher profile and auth credentials'
-          } (if 0 classes exist).`}
+          detail={
+            purgingSubscriber.type === 'institution'
+              ? 'This will permanently delete the subscription, the school, and everything it owns.'
+              : 'This will permanently delete the subscription, teacher profile and auth credentials (if 0 classes exist).'
+          }
+          guard={purgingSubscriber.type === 'institution' ? SCHOOL_PURGE_GUARD : undefined}
           isPending={purgeSub.isPending}
           onClose={() => setPurgingSubscriber(null)}
           onConfirm={() => purgeSub.mutate(purgingSubscriber.id)}
