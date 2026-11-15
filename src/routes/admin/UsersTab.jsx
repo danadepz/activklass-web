@@ -307,7 +307,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
   // 'student' by the time this component mounts.
   const blank = {
     firstName: '', middleName: '', lastName: '', password: '',
-    level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
+    level: 'g12', studentNumber: '', gradeSection: '', courseYear: '',
     birthdate: '', employeeNumber: '', department: '', personalEmail: '',
   }
   const [form, setForm] = useState(blank)
@@ -319,7 +319,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
   // learners carry no LRN (manuscript Fig. 49-50) so theirs come from the
   // student number. Teachers use their employee ID.
   const isG12 = form.level === 'g12'
-  const idSource = role === 'student' ? (isG12 ? form.lrn : form.studentNumber) : form.employeeNumber
+  const idSource = role === 'student' ? form.studentNumber : form.employeeNumber
   const loginPreview = issuedLoginId(prefix, idSource)
 
   const mut = useMutation({
@@ -356,11 +356,11 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       // an email when given.
       (form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
       (role === 'student'
-        ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
+        ? idNumberError(form.studentNumber, { label: 'LRN/ID number' }) ||
           (isG12
-            ? lrnError(form.lrn, { collegePath: 'set Level to College' })
+            ? lrnError(form.studentNumber, { collegePath: 'set Level to College' })
             : (String(form.studentNumber).replace(/\D/g, '').length < 6
-                ? 'The student number needs at least 6 digits — the last six become their login.'
+                ? 'The LRN/ID number needs at least 6 digits — the last six become their login.'
                 : '')) ||
           // Parental-access linking age-gates on the birthdate, so a student
           // without one breaks guardian invites later (rule in lib/validation).
@@ -434,8 +434,10 @@ function CreateUserForm({ onCreated, settings, users, role }) {
         ...(role === 'student' ? (() => {
           const [a, b] = splitPair(isG12 ? form.gradeSection : form.courseYear)
           return {
+            // One LRN/ID Number field: for Grade 12 & below it is the LRN and
+            // also fills student_number, which the server requires.
             student_number: form.studentNumber.trim(),
-            ...(isG12 ? { lrn: form.lrn.trim() } : {}),
+            ...(isG12 ? { lrn: form.studentNumber.trim() } : {}),
             birthdate: form.birthdate,
             ...(isG12
               ? { ...(a ? { year_level: a } : {}), ...(b ? { section: b } : {}) }
@@ -485,24 +487,26 @@ function CreateUserForm({ onCreated, settings, users, role }) {
                 <option value="college">College</option>
               </select>
             </label>
+            {/* One field for the learner's identifier (owner request,
+                2026-11-15), replacing the separate Student Number and LRN
+                fields. Grade 12 & below: a 12-digit DepEd LRN, sent as both
+                `lrn` and `student_number` (the server requires a student
+                number on every student). College: the student ID, sent as
+                `student_number`. The hint says which applies, under the
+                Level picked above it (T-24). */}
             <label style={labelStyle}>
-              Student Number
+              LRN/ID Number
               <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
-                     onChange={set('studentNumber')} placeholder="e.g. 2024-00123" />
+                     onChange={set('studentNumber')}
+                     inputMode={isG12 ? 'numeric' : undefined}
+                     maxLength={isG12 ? 12 : undefined}
+                     placeholder={isG12 ? '12-digit LRN' : 'e.g. 2024-00123'} />
+              <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
+                {isG12
+                  ? 'DepEd LRN, 12 digits. College students have none — choose College above.'
+                  : 'Student ID number, at least 6 digits — the last six become their login.'}
+              </span>
             </label>
-            {isG12 && (
-              <label style={labelStyle}>
-                LRN
-                <input style={{ ...field, marginTop: 6 }} inputMode="numeric" maxLength={12}
-                       value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" />
-                {/* Level defaults to G12, so an admin entering a college learner
-                    meets this field first and reads its 12-digit rule as the
-                    whole story (T-24). Say who has an LRN before the rule fires. */}
-                <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-                  DepEd LRN, 12 digits. College students have none — choose College above.
-                </span>
-              </label>
-            )}
             {isG12 ? (
               <label style={labelStyle}>
                 Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>

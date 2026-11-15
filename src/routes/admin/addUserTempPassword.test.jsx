@@ -42,9 +42,11 @@ vi.mock('react', async (importOriginal) => {
       // employee number (teacher) and LRN (student, the g12 default level)
       // so `loginPreview` is truthy and the sign-in callout actually renders,
       // instead of the "Their login will be <prefix>-<...>" fallback that an
-      // untouched blank form always falls through to.
+      // untouched blank form always falls through to. Since 2026-11-15 the
+      // student's LRN is typed into the one LRN/ID Number field, which is
+      // `studentNumber` in form state (there is no separate `lrn` any more).
       if (init && typeof init === 'object' && 'employeeNumber' in init) {
-        return real.useState({ ...init, employeeNumber: 'T-2024-018', lrn: '123456789012' })
+        return real.useState({ ...init, employeeNumber: 'T-2024-018', studentNumber: '123456789012' })
       }
       return real.useState(init)
     },
