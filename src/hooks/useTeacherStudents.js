@@ -99,6 +99,10 @@ async function loadClassRows(c) {
       firstName: u.first_name ?? '',
       lastName: u.last_name ?? '',
       lrn: u.lrn ?? u.student_number ?? null,
+      // Read-only passthrough for the directory's Last Active column. Nothing
+      // writes this field yet (see components/ActivityTimestamp.jsx), so it
+      // is null until the backend records sign-ins onto the profile.
+      lastActiveAt: u.last_active_at ?? null,
       classId: c.id,
       classLabel: classLabel(c),
       subject: c.subject ?? c.subject_title ?? '',

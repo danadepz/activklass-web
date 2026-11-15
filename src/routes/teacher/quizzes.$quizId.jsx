@@ -769,6 +769,22 @@ function GrantAttemptButton({ quizId, studentId, refetch }) {
   )
 }
 
+/**
+ * The Attempt Notes cell's lines, in the order the column has always shown
+ * them: lock, then the attempt's own state, then time away from the page.
+ * Tone is read off the attempt's fields, not the sentence, so a wording
+ * change in lib/quizAttempts.js cannot silently recolour a line.
+ */
+export function attemptNotes({ lockedAttempt, notable }) {
+  const notes = []
+  if (lockedAttempt) notes.push({ key: 'lock', text: describeLock(lockedAttempt), tone: 'warn' })
+  const state = describeAttemptActivity(notable)
+  if (state) notes.push({ key: 'state', text: state, tone: notable?.expired_at_submit ? 'warn' : 'info' })
+  const focus = describeFocus(notable)
+  if (focus) notes.push({ key: 'focus', text: focus, tone: 'warn' })
+  return notes
+}
+
 export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
   const [detailsFor, setDetailsFor] = useState(null)
   const queryClient = useQueryClient()
@@ -827,7 +843,7 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
             <th style={{ ...thHead, textAlign: 'center' }}>Best Score</th>
             <th style={thHead}>Status</th>
             <th style={thHead}>Access</th>
-            <th style={thHead}>Activity</th>
+            <th style={thHead}>Attempt Notes</th>
             <th style={thHead}></th>
           </tr>
         </thead>
@@ -844,13 +860,13 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                one, otherwise the most recent finished one. */
             const notable = live ?? finished[finished.length - 1] ?? null
             const lockedAttempt = studentAttempts.find((a) => a?.status === 'locked')
-            const activity = [
-              lockedAttempt ? describeLock(lockedAttempt) : null,
-              describeAttemptActivity(notable),
-              describeFocus(notable),
-            ]
-              .filter(Boolean)
-              .join(' · ')
+            /* One note per line, toned by what it means rather than all amber:
+               'warn' for what a teacher may act on (the lock, leaving the page,
+               the clock running out), 'info' for plain facts (in progress, a
+               reopen, an attempt the teacher discarded). The wording is the
+               helpers' own (lib/quizAttempts.js, mirrored in mobile) -- only
+               the presentation lives here. */
+            const notes = attemptNotes({ lockedAttempt, notable })
             const allowed = attemptsAllowedFor(quiz, s.student_id)
             const granted = Number(quiz?.extra_attempts?.[s.student_id]) || 0
             const access = studentAccessStatus({ quiz, studentId: s.student_id, attempts: studentAttempts })
@@ -946,8 +962,22 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                 {/* Reopens and away-events, stated as observations. A dropped
                     connection and a deliberate walk-away look identical from
                     here, so the wording describes rather than accuses. */}
-                <td style={{ padding: '12px 18px', fontSize: 12, color: activity ? goldDeep : faint }}>
-                  {activity || '—'}
+                <td style={{ padding: '12px 18px', fontSize: 12, minWidth: 180 }}>
+                  {notes.length === 0 ? (
+                    <span style={{ color: faint }}>—</span>
+                  ) : (
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 3, lineHeight: 1.4 }}>
+                      {notes.map((n) => (
+                        <li
+                          key={n.key}
+                          data-tone={n.tone}
+                          style={{ color: n.tone === 'warn' ? goldDeep : muted, fontWeight: n.tone === 'warn' ? 600 : 500 }}
+                        >
+                          {n.text}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </td>
                 <td style={{ padding: '12px 18px', textAlign: 'right' }}>
                   <div className="flex items-center justify-end gap-1.5">

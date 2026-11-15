@@ -6,6 +6,7 @@ import { RISK_CAVEAT } from '@/hooks/useClassRisk'
 import { isPassingGrade } from '@/lib/grading'
 import { navy, navyDeep, ink, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
+import ActivityTimestamp, { toMillis } from '@/components/ActivityTimestamp'
 import { useMySubscription } from '@/hooks/useMySubscription'
 import StudentAccounts from './StudentAccounts'
 
@@ -49,9 +50,11 @@ const COLUMNS = {
   },
   grade: { label: 'Grade', fn: missingLast((r) => r.grade) },
   risk: { label: 'Risk', fn: missingLast((r) => r.riskScore) },
+  active: { label: 'Last Active', fn: missingLast((r) => toMillis(r.lastActiveAt)) },
 }
 // First click on a column gives the order a teacher most likely wants.
-const FIRST_DIR = { name: 'asc', class: 'asc', grade: 'asc', risk: 'desc' }
+// Last Active: most recent first; "No activity recorded" sorts last.
+const FIRST_DIR = { name: 'asc', class: 'asc', grade: 'asc', risk: 'desc', active: 'desc' }
 
 const th = { padding: '11px 16px', fontSize: 11, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
 const td = { padding: '14px 16px', fontSize: 14, color: ink, verticalAlign: 'middle' }
@@ -193,7 +196,7 @@ export default function StudentsPage() {
       <div>
         {header}
         <div className="mb-4"><SkeletonStats count={1} label="Loading students" /></div>
-        <SkeletonTable rows={6} cols={4} label="Loading students" />
+        <SkeletonTable rows={6} cols={5} label="Loading students" />
       </div>
     )
   }
@@ -320,10 +323,10 @@ export default function StudentsPage() {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${line}`, background: 'rgba(14,42,92,0.02)' }}>
-                  {[['name', 'left'], ['class', 'left'], ['grade', 'right'], ['risk', 'left']].map(([key, align]) => {
+                  {[['name', 'left'], ['class', 'left'], ['grade', 'right'], ['risk', 'left'], ['active', 'left']].map(([key, align]) => {
                     const active = sort.key === key
                     return (
                       <th
@@ -372,6 +375,9 @@ export default function StudentsPage() {
                     </td>
                     <td style={td}>
                       <RiskBadge score={r.riskScore} status={r.riskStatus} />
+                    </td>
+                    <td style={td}>
+                      <ActivityTimestamp value={r.lastActiveAt} />
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <Link

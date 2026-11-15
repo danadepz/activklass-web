@@ -34,6 +34,7 @@ import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
+import BloomsBreakdown from '@/components/BloomsBreakdown'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { resolveSyllabus } from './classSyllabus'
 import InfoTooltip from './InfoTooltip'
@@ -1208,6 +1209,17 @@ export default function ScaffoldTopicsPage() {
           </div>
         </div>
       )}
+
+      {/* Feature 4: mastery by Bloom's level. Deliberately handed no data --
+          no question records a Bloom's level yet, so there is nothing true to
+          show, and the component says so ("Not connected yet") in a compact
+          card rather than inventing numbers. It sits last so the tab's real,
+          time-sensitive topic data comes first; once `levels` /
+          `recommendations` are wired here (see components/BloomsBreakdown.jsx
+          for the data contract), it can move up under the count strip. */}
+      <div style={{ marginTop: 22 }}>
+        <BloomsBreakdown levels={null} recommendations={null} />
+      </div>
     </div>
   )
 }

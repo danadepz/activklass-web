@@ -16,7 +16,7 @@ import { describeBankResult } from '@/lib/questionBank'
 import { LIFECYCLE_TABS, lifecycleOf } from '@/lib/quizAttempts'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { useAuth } from '@/context/useAuth'
-import { ArrowRight, Plus, Sparkles, Trash, Edit, BookOpen, Lock } from '@/components/icons'
+import { ArrowRight, Plus, Sparkles, Trash, Edit, BookOpen, Lock, Check } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useQuizzes } from '@/hooks/useQuizzes'
@@ -29,6 +29,7 @@ import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { useMySubscription } from '@/hooks/useMySubscription'
 import { PaidPlanHint } from '@/components/SubscriptionBadge'
+import { BLOOMS_LEVELS } from '@/components/BloomsBreakdown'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
@@ -63,6 +64,22 @@ export const FILTER_EMPTY_STATES = {
   scheduled: 'No scheduled quizzes yet.',
   draft: 'No draft quizzes yet.',
   past: 'No closed or completed quizzes yet.',
+}
+
+/* Bloom's Taxonomy, in level order -- one list shared with the Scaffold
+   Topics breakdown (components/BloomsBreakdown.jsx). `key` is the word the
+   generator's prompt has always received (lowercase, as the old <select>
+   sent it). Nothing stores the pick -- it only shapes the AI draft, through
+   the existing hints.bloomsLevel text (lib/ai.js buildQuizNotes), so several
+   levels travel as one comma-separated line. */
+export { BLOOMS_LEVELS }
+
+/** "Level 1 – Remember, Level 3 – Apply" in level order, or '' for none
+ *  (an empty hint is dropped by buildQuizNotes, so the AI picks the level). */
+export function bloomsHint(keys = []) {
+  return BLOOMS_LEVELS.filter((b) => keys.includes(b.key))
+    .map((b) => `Level ${b.level} – ${b.label}`)
+    .join(', ')
 }
 
 const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: ink, marginBottom: 7 }
@@ -140,7 +157,9 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
     topic_id: initialTopicId,
     topic: '',
     count: 10,
-    blooms_level: 'apply',
+    // Multi-select (Feature 2). Apply alone is the old single default, so a
+    // teacher who never touches the checklist generates exactly as before.
+    blooms_levels: ['apply'],
     types: ['mcq'],
     // On by default: the bank exists to be reused, and a teacher who has to
     // opt in every time ends up with the empty bank we started with. It is
@@ -171,7 +190,13 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
     setError(null)
   }
   const selectStyle = { ...fieldStyle, cursor: 'pointer' }
-  const BLOOMS_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']
+  const bloomsSelected = BLOOMS_LEVELS.filter((b) => (form.blooms_levels ?? []).includes(b.key))
+  function toggleBloom(key) {
+    setForm((f) => {
+      const cur = f.blooms_levels ?? []
+      return { ...f, blooms_levels: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] }
+    })
+  }
   const COUNT_OPTIONS = [5, 10, 15, 20]
   // Labelled for teachers; the keys are what /api/quizzes/generate accepts.
   const TYPE_LABELS = {
@@ -265,7 +290,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
         types: form.types,
         instructions: form.extra_context,
         hints: {
-          bloomsLevel: form.blooms_level,
+          bloomsLevel: bloomsHint(form.blooms_levels ?? []),
           subject: selectedClassMeta?.subject,
           subjectCode: selectedClassMeta?.subject_code,
         },
@@ -421,15 +446,60 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
                 ))}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Thinking level (Bloom's)</label>
-              <select className="ak-input capitalize" value={form.blooms_level} onChange={(e) => setForm((f) => ({ ...f, blooms_level: e.target.value }))} style={selectStyle}>
-                {BLOOMS_LEVELS.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            </div>
           </div>
+
+          {/* Feature 2: checkboxes instead of a single <select>, so a quiz can
+              aim at more than one level. Native inputs keep keyboard and
+              screen-reader behaviour for free; the pill around each one is
+              the Question types toggle's shape, tinted rather than filled so
+              the navy tick stays visible. */}
+          <fieldset style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
+            <legend style={{ ...labelStyle, padding: 0 }}>Thinking level (Bloom's)</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" style={{ marginTop: 1 }}>
+              {BLOOMS_LEVELS.map((b) => {
+                const on = (form.blooms_levels ?? []).includes(b.key)
+                return (
+                  <label
+                    key={b.key}
+                    className="flex items-center gap-2.5 transition hover:brightness-[0.98]"
+                    style={{
+                      padding: '9px 12px',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      lineHeight: 1.3,
+                      background: on ? 'rgba(14,42,92,0.07)' : '#FFFFFF',
+                      border: `1.5px solid ${on ? navy : 'rgba(14,42,92,0.14)'}`,
+                      color: on ? navy : muted,
+                      fontWeight: on ? 700 : 600,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => toggleBloom(b.key)}
+                      style={{ width: 16, height: 16, flexShrink: 0, accentColor: navy, cursor: 'pointer' }}
+                    />
+                    <span>
+                      <span style={{ fontVariantNumeric: 'tabular-nums', color: on ? navy : muted }}>Level {b.level}</span>
+                      {' – '}
+                      {b.label}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+            <p role="status" style={{ fontSize: 12, fontWeight: 600, color: bloomsSelected.length ? navy : goldDeep, margin: '8px 0 0' }}>
+              {bloomsSelected.length === 0 ? (
+                'None selected — the AI picks a mix of levels.'
+              ) : (
+                <>
+                  <Check className="mr-1 inline h-3.5 w-3.5" style={{ verticalAlign: '-2px' }} />
+                  {bloomsSelected.length === 1 ? '1 level selected' : `${bloomsSelected.length} levels selected`}: {bloomsSelected.map((b) => b.label).join(', ')}
+                </>
+              )}
+            </p>
+          </fieldset>
           <p style={{ fontSize: 11.5, color: faint, margin: '-6px 0 0', lineHeight: 1.45 }}>
             Thinking level is how hard students must think: Remember recalls facts, Apply uses them, Create makes something new.
           </p>

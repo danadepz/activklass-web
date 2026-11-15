@@ -24,6 +24,7 @@ import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
 import { SUPPORT_EMAIL } from './SubscriptionTab'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import ActivityTimestamp from '@/components/ActivityTimestamp'
 
 const ROLE_TINT = {
   admin: { fg: navy, bg: 'rgba(14,42,92,0.08)' },
@@ -871,6 +872,14 @@ export function UserRow({ user, isSelf, onChanged }) {
         </div>
       </td>
 
+      <td style={{ padding: '12px 14px' }}>
+        {/* users/{uid}.last_active_at -- not written by anything yet, so this
+            reads "No activity recorded" until the backend records sign-ins
+            (see components/ActivityTimestamp.jsx). Not updated_at: that is
+            stamped by admin edits like the role and status changes above. */}
+        <ActivityTimestamp value={user.last_active_at} />
+      </td>
+
       <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
         {/* Parents get neither action: they self-register with their own real
             email, so recovery is theirs (self-service reset), and their access
@@ -975,7 +984,7 @@ export default function UsersTab() {
                       ariaLabel="Filter users by role" />
         </div>
 
-        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={6} label="Loading users" /></div>}
+        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={7} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
         {!isLoading && !isError && (
@@ -996,21 +1005,22 @@ export default function UsersTab() {
                     their content, the nowrap Status and action columns squeezed
                     ID / LRN until "EMP-2026-004" broke over three lines while
                     Sign-in sat far too wide. Name takes whatever is left. */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1180 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1320 }}>
                   <colgroup>
                     <col />
                     <col style={{ width: 240 }} />
                     <col style={{ width: 150 }} />
                     <col style={{ width: 130 }} />
                     <col style={{ width: 240 }} />
+                    <col style={{ width: 140 }} />
                     <col style={{ width: 280 }} />
                   </colgroup>
                   <thead>
                     {/* Solid, not the usual translucent tint -- sticky, it would
                         otherwise show scrolled-past rows bleeding through it. */}
                     <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0 }}>
-                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', ''].map((h, i) => (
-                        <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === 5 ? 'right' : 'left' }}>{h}</th>
+                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', 'Last Active', ''].map((h, i, all) => (
+                        <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === all.length - 1 ? 'right' : 'left' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
