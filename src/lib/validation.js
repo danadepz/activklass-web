@@ -417,6 +417,17 @@ export function normalizePhone(value) {
 }
 
 /**
+ * The School Year input mask: keeps digits only (at most eight) and shows them
+ * as `2026 - 2027`. This only shapes what can be typed — whether the two years
+ * are consecutive is not checked on the client.
+ * @param {string} value
+ */
+export function formatSchoolYear(value) {
+  const digits = String(value ?? '').replace(/\D/g, '').slice(0, 8)
+  return digits.length > 4 ? `${digits.slice(0, 4)} - ${digits.slice(4)}` : digits
+}
+
+/**
  * The message when a phone number already belongs to another account
  * (T-88). Whether it does is answered by the server, not this file — a
  * client-side lookup over `users` would work under the rules but would hand

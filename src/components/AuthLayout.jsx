@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Eye, EyeOff, AlertCircle, ArrowRight } from './icons'
+import { Check, Eye, EyeOff, AlertCircle } from './icons'
 import { ink, navy, gold, goldDeep, inkMuted, muted, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
 import Modal from '@/components/ui/Modal'
 import DotField from '@/components/DotField'
@@ -61,9 +61,6 @@ export function SubmitButton({ children, ...props }) {
       }}
     >
       {children}
-      <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', background: gold, color: navy }}>
-        <ArrowRight className="h-3.5 w-3.5" />
-      </span>
     </button>
   )
 }
@@ -294,7 +291,7 @@ export function BrandMark({ size = 32, onNavy = false }) {
 
 // --- shell ---------------------------------------------------------------
 
-export default function AuthLayout({ title, subtitle, titleSize, variant, dotBackground = false, children }) {
+export default function AuthLayout({ title, subtitle, titleSize, variant, anchorTop = false, dotBackground = false, children }) {
   // T-141: one popup, shared by whichever variant renders below -- the
   // trigger differs (the chip each variant used to show its own copy of),
   // the modal does not.
@@ -386,10 +383,14 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, dotBac
           </section>
 
           {/* RIGHT half — heading + form, centred. */}
-          <main className="flex items-center justify-center px-6 py-12 md:px-12">
+          {/* anchorTop (register): the column is stretched instead of centred,
+              so the heading stays put at the top and the caller can pin its
+              own footer to the bottom with `mt-auto` -- nothing moves when a
+              step's fields are taller or shorter than the last one. */}
+          <main className={`flex justify-center px-6 md:px-12 ${anchorTop ? 'py-10' : 'items-center py-12'}`}>
             {/* Wide enough for a two-column form, and the same on every
                 step, so the container never resizes as the form advances. */}
-            <div className="w-full" style={{ maxWidth: 680 }}>
+            <div className={`w-full ${anchorTop ? 'flex flex-col' : ''}`} style={{ maxWidth: 680 }}>
               <div className="mb-8 flex justify-center lg:hidden">
                 <Link to="/" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
                   <BrandMark />
@@ -402,7 +403,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, dotBac
               </h1>
               {subtitle && <p style={{ fontSize: 15, color: muted, margin: '0 0 28px', lineHeight: 1.5, textAlign: 'center' }}>{subtitle}</p>}
 
-              {children}
+              {anchorTop ? <div className="flex flex-1 flex-col">{children}</div> : children}
             </div>
           </main>
           {policyModal}

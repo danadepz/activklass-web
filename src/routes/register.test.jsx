@@ -855,19 +855,55 @@ describe('T-185 — the Abbreviation placeholder is generic, not one school\'s i
   })
 })
 
-/* T-186 (andecobs-289, Derickk 2026-10-15; owner decision (c), 2026-10-24):
-   "remove the left arrow from Back" -- built literally as asked, at BOTH
-   places this control renders (the step navigation and ParentAppQr),
-   since changing only one would leave two Back buttons that disagree.
-   SubmitButton (the "Next" button's right arrow) is untouched -- option
-   (b) would have gone there; (c) does not. */
-describe('T-186 — both Back controls lose the left arrow, Next keeps its own', () => {
-  it('neither "← Back" occurrence survives', () => {
+/* T-186 (andecobs-289, Derickk 2026-10-15; owner decision (c), 2026-10-24) took
+   the left arrow off Back. Superseded 2026-11-15 on the owner's own request:
+   one shared BackLink, a plain "‹ Back" at the top left of the form, no longer
+   beside the main button. It is one component used at BOTH places the control
+   renders (the step navigation and ParentAppQr) so the two cannot disagree. */
+describe('Back is one shared top-left "‹ Back" link, not a button beside Next', () => {
+  it('has no literal "← Back" and reads plain "Back" inside BackLink', () => {
     expect(registerSource).not.toMatch(/← Back/)
+    expect(registerSource.match(/>\s*Back\s*</g)?.length).toBe(1)
   })
 
-  it('both instances still read plain "Back"', () => {
-    expect(registerSource.match(/>\s*Back\s*</g)?.length).toBe(2)
+  it('is used by both the step form and ParentAppQr', () => {
+    expect(registerSource.match(/<BackLink /g)?.length).toBe(2)
+  })
+
+  it('sits above the fields, not in the submit row', () => {
+    expect(registerSource.indexOf('<BackLink onClick={back} />'))
+      .toBeLessThan(registerSource.indexOf('{step === 2 && ('))
+    expect(registerSource).not.toMatch(/<div className="flex items-center gap-4"[^>]*>\s*\{!\(completing/)
+  })
+})
+
+describe('Institution seats: School Year, Teachers and Students Per Teacher sit side by side', () => {
+  it('has a digits-only School Year input in the same row, not saved with the request', () => {
+    expect(registerSource).toContain('id="reg-school-year"')
+    expect(registerSource).toMatch(/schoolYear: formatSchoolYear\(e\.target\.value\)/)
+    // front-end input only: it is not part of the subscription_requests write
+    const write = registerSource.slice(registerSource.indexOf("collection(db, 'subscription_requests')"))
+    expect(write.slice(0, write.indexOf('})'))).not.toMatch(/schoolYear|school_year/)
+  })
+
+  it('wraps all three inputs in one three-column grid', () => {
+    const at = registerSource.indexOf('id="reg-teacher-seats"')
+    const grid = registerSource.lastIndexOf('grid-cols-3', at)
+    const second = registerSource.indexOf('id="reg-students-per-teacher"')
+    expect(grid).toBeGreaterThan(registerSource.indexOf("step === 5 && kind === 'institution'"))
+    expect(second).toBeGreaterThan(at)
+    expect(registerSource.indexOf('</div>', at)).toBeGreaterThan(second)
+  })
+})
+
+describe('Privacy Notice and Terms are agreed on the last step', () => {
+  it('shows the consent checkboxes only on the last step', () => {
+    expect(registerSource).toMatch(/step === lastStep && \(\s*<LegalConsentChecks/)
+  })
+
+  it('keeps the final submit disabled until both are ticked, and refuses in the handler too', () => {
+    expect(registerSource).toMatch(/disabled=\{submitting \|\| \(step === lastStep && !consented\)\}/)
+    expect(registerSource).toMatch(/if \(!consented\)/)
   })
 })
 

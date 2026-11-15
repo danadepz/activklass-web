@@ -234,7 +234,7 @@ export default function Landing() {
               className="inline-flex items-center gap-1.5 rounded-[10px] px-4 py-2.5 text-sm font-semibold transition hover:brightness-110"
               style={{ background: navy, color: '#FAFAF6', boxShadow: `0 2px 0 ${navyDeep}` }}
             >
-              Go to Portal <span style={{ color: gold }}>→</span>
+              Go to Portal
             </Link>
           </div>
         </div>
@@ -286,9 +286,6 @@ export default function Landing() {
                 style={{ background: navy, color: '#FAFAF6', boxShadow: `0 3px 0 ${navyDeep}, 0 10px 30px -10px rgba(14,42,92,0.4)` }}
               >
                 Go to Portal
-                <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', background: gold, color: navy }}>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </span>
               </Link>
               <a
                 href="#how"
