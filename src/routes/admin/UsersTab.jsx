@@ -816,7 +816,7 @@ export function UserRow({ user, isSelf, onChanged }) {
         {/* Issued accounts show the login people actually type (snhs-789012);
             the email field holds the internal identifier and stays hidden.
             Admins and parents sign in with a real email, so that shows here. */}
-        <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>
+        <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, overflowWrap: 'anywhere' }}>
           {user.login_id ?? user.email}
         </span>
       </td>
@@ -827,10 +827,10 @@ export function UserRow({ user, isSelf, onChanged }) {
             LRN), teachers employee_number. Admins and parents have neither, so
             the cell stays blank rather than showing a dash that reads as data. */}
         {idNumber && (
-          <div style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>{idNumber}</div>
+          <div style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, whiteSpace: 'nowrap' }}>{idNumber}</div>
         )}
         {user.lrn && (
-          <div style={{ ...mono, fontSize: 11, color: faint, marginTop: idNumber ? 2 : 0 }}>LRN {user.lrn}</div>
+          <div style={{ ...mono, fontSize: 11, color: faint, marginTop: idNumber ? 2 : 0, whiteSpace: 'nowrap' }}>LRN {user.lrn}</div>
         )}
       </td>
 
@@ -992,7 +992,19 @@ export default function UsersTab() {
             // changes for a small school.
             <div style={{ overflowX: 'auto' }}>
               <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                {/* Fixed layout with explicit widths: left to size themselves from
+                    their content, the nowrap Status and action columns squeezed
+                    ID / LRN until "EMP-2026-004" broke over three lines while
+                    Sign-in sat far too wide. Name takes whatever is left. */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1180 }}>
+                  <colgroup>
+                    <col />
+                    <col style={{ width: 240 }} />
+                    <col style={{ width: 150 }} />
+                    <col style={{ width: 130 }} />
+                    <col style={{ width: 240 }} />
+                    <col style={{ width: 280 }} />
+                  </colgroup>
                   <thead>
                     {/* Solid, not the usual translucent tint -- sticky, it would
                         otherwise show scrolled-past rows bleeding through it. */}

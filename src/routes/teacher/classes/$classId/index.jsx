@@ -38,11 +38,6 @@ const STATUS_STYLE = {
   mastered: 'bg-indigo-50 text-indigo-700',
 }
 
-const ENROLLMENT_STYLE = {
-  AC: 'bg-green-50 text-green-700',
-  IN: 'bg-slate-100 text-slate-500',
-}
-
 /* Account-state labels, kept here rather than added to STATUS_LABELS in
    lib/roster.js — that file is the logic lane's, and its map is the academic
    one. See the note above STATUS_STYLE about the overloaded field. */
@@ -2064,8 +2059,7 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-semibold">Name</th>
                 <th className="px-5 py-2.5 font-semibold">Program / Year</th>
                 <th className="px-5 py-2.5 font-semibold">Remarks</th>
-                <th className="px-5 py-2.5 font-semibold text-center">Enrollment</th>
-                <th className="px-5 py-2.5 font-semibold">Progress</th>
+                <th className="px-5 py-2.5 font-semibold">Status</th>
                 {/* T-62: View · Edit · Disable per row — Remove dropped (owner's word, dawny808-89) */}
                 <th className="px-5 py-2.5 font-semibold text-right">Actions</th>
               </tr>
@@ -2073,7 +2067,6 @@ export default function ClassDetailPage() {
             <tbody>
               {filteredStudents.map((s) => {
                 const status = s.status ?? 'active'
-                const enrollment = s.enrollment_status ?? 'AC'
                 const dropped = isDroppedFromClass(clazz, s.id)
                 const courseYear = [s.course, s.year_level].filter(Boolean).join(' · ')
                 return (
@@ -2107,11 +2100,6 @@ export default function ClassDetailPage() {
                     </td>
                     <td className="px-5 py-3 text-slate-600">{courseYear || '—'}</td>
                     <td className="px-5 py-3 text-slate-600">{s.remarks ?? '—'}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ENROLLMENT_STYLE[enrollment]}`}>
-                        {enrollment}
-                      </span>
-                    </td>
                     <td className="px-5 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${dropped ? STATUS_STYLE.inactive : STATUS_STYLE[status]}`}>
                         {/* T-70: Disabled here means dropped from THIS class,
