@@ -352,8 +352,8 @@ function CheckoutBanner({ state, receipt, dismiss }) {
   const balancePaid = state === 'paid' && receipt?.kind === 'installment_balance'
   const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : balancePaid ? 'balancePaid' : state]
   // T-69: once paid, say what happened to the receipt too -- never left as
-  // a silent "did that actually send" guess. No receipt is sent for a balance.
-  const receiptLine = state === 'paid' && receipt && !balancePaid
+  // a silent "did that actually send" guess. The balance payment has its own receipt.
+  const receiptLine = state === 'paid' && receipt
     ? (receipt.receiptSentTo
         ? `A receipt was sent to ${receipt.receiptSentTo}.`
         : 'We could not send the receipt — it is on your Account page.')
@@ -385,7 +385,7 @@ function CheckoutBanner({ state, receipt, dismiss }) {
 }
 
 function SubscriptionCard() {
-  const { profile, school } = useAuth()
+  const { profile, school, isSuperAdmin } = useAuth()
   const qc = useQueryClient()
   const [err, setErr] = useState('')
   const checkout = useCheckoutReturn(profile.id)
@@ -537,7 +537,9 @@ function SubscriptionCard() {
           }}>
             {sub.status}
           </span>
-          <div style={{ marginTop: 10 }}>
+          {/* change_plan is superadmin-only on the server; for anyone else this
+              could only ever answer "handled by support". */}
+          {isSuperAdmin && <div style={{ marginTop: 10 }}>
             <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
               Plan
             </label>
@@ -568,7 +570,7 @@ function SubscriptionCard() {
                 <option key={name} value={name}>{name} — {l.student_seats} students</option>
               ))}
             </select>
-          </div>
+          </div>}
         </div>
       </div>
 
