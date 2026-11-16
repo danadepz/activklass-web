@@ -91,3 +91,30 @@ export function markDemoCancelled(demoId) {
 export function startDemoBalanceCheckout(demoId) {
   return demo(`/${encodeURIComponent(demoId)}/balance`, { method: 'POST' })
 }
+
+/**
+ * The status panel's view of a live subscription's 50% plan, from the
+ * `installment` block `GET /api/subscription/{owner}` returns. Null when the
+ * current term has no installment plan (legacy or full payment before Option B).
+ */
+export function installmentToView(subscription, installment) {
+  if (!subscription || !installment) return null
+  const remaining = installment.remaining_centavos ?? 0
+  return {
+    costing: {
+      plan: subscription.type === 'institution' ? 'institution' : 'individual',
+      teacher_seats: installment.teacher_seats,
+      student_capacity: installment.student_capacity,
+      total_centavos: installment.total_centavos,
+    },
+    subscription: { status: subscription.status, paid_through: subscription.paid_through },
+    payment: {
+      status: installment.status,
+      amount_paid_centavos: installment.paid_centavos,
+      remaining_centavos: remaining,
+      balance_due_at: installment.balance_due_at,
+      overdue_warning: installment.overdue_warning,
+      balance_checkout_available: remaining > 0,
+    },
+  }
+}

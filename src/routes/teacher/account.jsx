@@ -11,6 +11,7 @@ import {
   formatDecimalBytes, recordTermsAcceptance, startCheckout, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
 import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
+import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -249,7 +250,7 @@ function PayButton({ ownerId }) {
   const { isSuperAdmin } = useAuth()
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: async ({ pricingVersion, totalPhp, termsVersion }) => {
+    mutationFn: async ({ pricingVersion, totalPhp, termsVersion, paymentOption }) => {
       let termsAcceptanceId
       if (termsVersion) {
         const acceptance = await recordTermsAcceptance(ownerId, { termsVersion })
@@ -257,7 +258,7 @@ function PayButton({ ownerId }) {
       }
       return startCheckout(ownerId, {
         quoteReviewed: true, pricingVersion, quoteTotalPhp: totalPhp,
-        termsVersion, termsAcceptanceId,
+        termsVersion, termsAcceptanceId, paymentOption,
       })
     },
     onSuccess: (res) => { window.location.href = res.checkout_url },
@@ -265,7 +266,7 @@ function PayButton({ ownerId }) {
   })
   return (
     <div style={{ marginTop: 12 }}>
-      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
+      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption }) }} />
       <Notice>{err}</Notice>
     </div>
   )
@@ -335,6 +336,7 @@ export const CHECKOUT_BANNER = {
   // T-?: a seat top-up is not a renewal, so it gets its own text rather than
   // claiming a subscription event that did not happen.
   seatsAdded: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
+  balancePaid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your remaining balance is paid. Nothing more is due this term.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
     text: 'Payment is still unconfirmed by the server. If you completed it, refresh in a moment; do not assume it succeeded.',
@@ -347,10 +349,11 @@ export const CHECKOUT_BANNER = {
 function CheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
   const seatIncrease = state === 'paid' && receipt?.kind === 'seat_increase'
-  const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : state]
+  const balancePaid = state === 'paid' && receipt?.kind === 'installment_balance'
+  const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : balancePaid ? 'balancePaid' : state]
   // T-69: once paid, say what happened to the receipt too -- never left as
-  // a silent "did that actually send" guess.
-  const receiptLine = state === 'paid' && receipt
+  // a silent "did that actually send" guess. No receipt is sent for a balance.
+  const receiptLine = state === 'paid' && receipt && !balancePaid
     ? (receipt.receiptSentTo
         ? `A receipt was sent to ${receipt.receiptSentTo}.`
         : 'We could not send the receipt — it is on your Account page.')
@@ -495,6 +498,11 @@ function SubscriptionCard() {
   return (
     <div style={card}>
       <CheckoutBanner {...checkout} />
+      {sub.type !== 'institution' && data.installment ? (
+        <div style={{ marginBottom: 18 }}>
+          <InstallmentStatus ownerId={profile.id} subscription={sub} installment={data.installment} />
+        </div>
+      ) : null}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your subscription</h2>

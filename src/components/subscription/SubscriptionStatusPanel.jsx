@@ -35,7 +35,7 @@ export default function SubscriptionStatusPanel({ view, onPayBalance, busy = fal
   return (
     <section aria-label="Subscription status" style={{ border: `1px solid ${line}`, borderRadius: 16, padding: 20, background: '#FFFFFF' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
-        <h2 style={{ ...heading, fontSize: 18, color: ink, margin: 0 }}>Your subscription</h2>
+        <h2 style={{ ...heading, fontSize: 18, color: ink, margin: 0 }}>Payment status</h2>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: badge.color, background: badge.bg, padding: '4px 10px', borderRadius: 999 }}>
           {badge.label}
         </span>

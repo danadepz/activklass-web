@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import SubscriptionCostBreakdown from './SubscriptionCostBreakdown'
 import PaymentConfirmModal from './PaymentConfirmModal'
 import SubscriptionStatusPanel from './SubscriptionStatusPanel'
-import { ACK_COSTS, canConfirm, formatCentavos, legacyQuoteToCosting } from '@/lib/subscriptionPayment'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import InstallmentStatus from './InstallmentStatus'
+import { ACK_COSTS, canConfirm, formatCentavos, installmentToView, legacyQuoteToCosting } from '@/lib/subscriptionPayment'
 
 // Shapes as the backend returns them (app/services/installments.py).
 const institution = {
@@ -145,5 +147,35 @@ describe('SubscriptionStatusPanel', () => {
     expect(t).toContain('Fully paid')
     expect(t).not.toContain('Overdue Balance')
     expect(t).not.toContain('Pay remaining')
+  })
+})
+
+describe('live installment status (GET /api/subscription installment block)', () => {
+  const withQuery = (el) => <QueryClientProvider client={new QueryClient()}>{el}</QueryClientProvider>
+  const sub = { type: 'teacher', status: 'active', paid_through: 1825920000 }
+  const plan = { option: 'half', total_centavos: 240000, paid_centavos: 120000, remaining_centavos: 120000,
+    teacher_seats: 1, student_capacity: 80, balance_due_at: 1802592000 }
+
+  it('maps the server block to the panel and offers the balance while one is owed', () => {
+    const view = installmentToView(sub, { ...plan, status: 'partially_paid', overdue_warning: null })
+    expect(view.costing).toMatchObject({ plan: 'individual', total_centavos: 240000, student_capacity: 80 })
+    expect(view.payment.balance_checkout_available).toBe(true)
+    const t = text(renderToStaticMarkup(withQuery(<InstallmentStatus ownerId="u1" subscription={sub} installment={{ ...plan, status: 'partially_paid' }} />)))
+    expect(t).toContain('Partially paid')
+    expect(t).toContain('Pay remaining ₱1,200')
+  })
+
+  it('shows the overdue warning with access still active, and nothing to pay once settled', () => {
+    const warning = 'Your remaining subscription balance is overdue. Please settle your payment to avoid possible limitations to your access.'
+    const overdue = text(renderToStaticMarkup(withQuery(<InstallmentStatus ownerId="u1" subscription={sub} installment={{ ...plan, status: 'overdue', overdue_warning: warning }} />)))
+    expect(overdue).toContain(warning)
+    expect(overdue).toContain('Status Active')
+    const settled = text(renderToStaticMarkup(withQuery(<InstallmentStatus ownerId="u1" subscription={sub} installment={{ ...plan, status: 'fully_paid', paid_centavos: 240000, remaining_centavos: 0 }} />)))
+    expect(settled).toContain('Fully paid')
+    expect(settled).not.toContain('Pay remaining')
+  })
+
+  it('renders nothing for a term with no installment plan', () => {
+    expect(installmentToView(sub, null)).toBe(null)
   })
 })

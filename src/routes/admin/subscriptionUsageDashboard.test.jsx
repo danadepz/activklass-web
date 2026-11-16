@@ -129,16 +129,33 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
         status: 'available_estimated',
         granted: 1000000,
         remaining: 0,
-        student_protected: 500000,
-        student_remaining: 0,
-        teacher_used: 500000,
-        student_used: 500000,
+        // the shape read_resource_usage (backend) actually returns
+        pools: {
+          teacher: { status: 'available_estimated', granted: 500000, reserved: 0, consumed: 500000, remaining: 0 },
+          student: { status: 'available_estimated', granted: 500000, reserved: 0, consumed: 500000, remaining: 0 },
+        },
       },
       storage: { status: 'unavailable', used_bytes: null },
     }
     html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
     expect(html).toContain('0 credits remaining (Exhausted)')
     expect(html).toContain('Policy Note:</strong> AI credits and daily balances: Exhausted.')
+
+    // 3. Granted (Option B, 3 teachers x 90 students): the student pool shows its own balance
+    state.resourceUsage = {
+      ai_credits: {
+        status: 'available_estimated', granted: 300000, reserved: 0, consumed: 0, remaining: 300000,
+        pools: {
+          teacher: { status: 'available_estimated', granted: 150000, reserved: 0, consumed: 0, remaining: 150000 },
+          student: { status: 'available_estimated', granted: 150000, reserved: 0, consumed: 0, remaining: 150000 },
+        },
+      },
+      storage: { status: 'unavailable', used_bytes: null },
+    }
+    html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
+    expect(html).toContain('300,000 credits available')
+    expect(html).toContain('150,000 protected')
+    expect(html).not.toContain('Exhausted')
   })
 
   it('never displays project-wide storage as school storage when tenant storage is unprovisioned', () => {

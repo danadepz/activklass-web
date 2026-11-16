@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import Button from '@/components/ui/Button'
 import SubscriptionCostBreakdown from '@/components/subscription/SubscriptionCostBreakdown'
 import PaymentConfirmModal from '@/components/subscription/PaymentConfirmModal'
+import PaymentOptionPicker from '@/components/subscription/PaymentOptionPicker'
 import { fetchSubscriptionQuote } from '@/lib/subscription'
 import { legacyQuoteToCosting } from '@/lib/subscriptionPayment'
 import { ink, muted, line, red } from '@/theme'
@@ -19,6 +20,9 @@ import { ink, muted, line, red } from '@/theme'
 export default function SubscriptionQuoteReview({ ownerId, disabled = false, onContinue }) {
   const [confirming, setConfirming] = useState(false)
   const [openCount, setOpenCount] = useState(0)
+  const [option, setOption] = useState('full')
+  // Read once: the real deadline is set from the verified payment time.
+  const [openedAt] = useState(() => Date.now() / 1000)
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['subscription-quote', ownerId],
@@ -28,12 +32,19 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   })
 
   const quote = data?.quote
+  // Option B: the server sends its own costing, both payment schedules and
+  // the versioned Terms text. Legacy: the per-seat quote, full payment only.
+  const optionB = quote?.policy === 'option_b'
   const terms = quote?.terms || { required: false, available: false }
-  const termsReady = Boolean(terms.available && terms.version && terms.url)
-  const paymentClosed = Boolean(terms.required) && !termsReady
-  const costing = quote ? legacyQuoteToCosting(quote) : null
-  const schedule = quote
-    ? { option: 'full', due_now_centavos: quote.payment_due_php * 100, remaining_centavos: 0 }
+  const termsReady = Boolean(terms.available && terms.version && (terms.url || terms.document))
+  const balanceOwed = optionB && quote.outstanding_balance > 0
+  const paymentClosed = (Boolean(terms.required) && !termsReady) || balanceOwed
+  const costing = !quote ? null : optionB ? quote.costing : legacyQuoteToCosting(quote)
+  const schedule = !quote ? null : optionB
+    ? quote.payment_options[option]
+    : { option: 'full', due_now_centavos: quote.payment_due_php * 100, remaining_centavos: 0 }
+  const dueDate = schedule?.remaining_centavos
+    ? { seconds: openedAt + 30 * 86400, estimate: true }
     : null
 
   return (
@@ -55,9 +66,25 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
 
       {quote ? (
         <>
-          <SubscriptionCostBreakdown costing={costing} schedule={schedule} />
+          {optionB ? (
+            <div style={{ margin: '0 0 16px' }}>
+              <PaymentOptionPicker value={option} onChange={setOption} disabled={disabled || balanceOwed} />
+            </div>
+          ) : null}
 
-          {paymentClosed ? (
+          <SubscriptionCostBreakdown costing={costing} schedule={schedule} dueDate={dueDate} />
+
+          {quote.test_mode ? (
+            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: muted }}>
+              Test mode: payment runs on PayMongo's test environment. No real money is charged.
+            </p>
+          ) : null}
+
+          {balanceOwed ? (
+            <p role="note" style={{ margin: '16px 0 0', fontSize: 13.5, color: muted, lineHeight: 1.5 }}>
+              Pay the remaining balance on your current subscription before starting a new term.
+            </p>
+          ) : paymentClosed ? (
             <p role="note" style={{ margin: '16px 0 0', fontSize: 13.5, color: muted, lineHeight: 1.5 }}>
               Online payment is not available for this account yet. Contact ActivKlass support to activate your subscription.
             </p>
@@ -68,9 +95,10 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
             open={confirming}
             costing={costing}
             schedule={schedule}
-            terms={termsReady ? { url: terms.url } : null}
+            dueDate={dueDate}
+            terms={!termsReady ? null : terms.document || { url: terms.url }}
             onBack={() => setConfirming(false)}
-            onConfirm={() => { setConfirming(false); onContinue(quote) }}
+            onConfirm={() => { setConfirming(false); onContinue(quote, optionB ? option : undefined) }}
           />
         </>
       ) : null}

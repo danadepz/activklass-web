@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   changePlan, confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
@@ -242,11 +243,12 @@ function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
           <div>
             <div style={{ color: muted, fontSize: 11.5 }}>Student-Protected Credit Pool</div>
             <span>
-              {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.student_remaining ?? 0) <= 0
-                ? '0 credits remaining (Exhausted)'
-                : resourceUsage?.ai_credits?.student_protected
-                  ? `${Number(resourceUsage.ai_credits.student_remaining ?? resourceUsage.ai_credits.student_protected).toLocaleString()} protected`
-                  : 'Unavailable (not configured in this release)'}
+              {/* The server reports the pool as ai_credits.pools.student (read_resource_usage). */}
+              {resourceUsage?.ai_credits?.pools?.student?.status !== 'available_estimated'
+                ? 'Unavailable (not configured in this release)'
+                : resourceUsage.ai_credits.pools.student.remaining <= 0
+                  ? '0 credits remaining (Exhausted)'
+                  : `${Number(resourceUsage.ai_credits.pools.student.remaining).toLocaleString()} protected`}
             </span>
           </div>
           <div>
@@ -289,8 +291,11 @@ export const SEAT_CHECKOUT_BANNER = {
 
 function SeatCheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
-  const s = SEAT_CHECKOUT_BANNER[state]
-  const seatsLine = state === 'paid' && receipt?.newLimits
+  const balancePaid = state === 'paid' && receipt?.kind === 'installment_balance'
+  const s = balancePaid
+    ? { ...SEAT_CHECKOUT_BANNER.paid, text: 'Payment received — the remaining balance is paid. Nothing more is due this term.' }
+    : SEAT_CHECKOUT_BANNER[state]
+  const seatsLine = state === 'paid' && !balancePaid && receipt?.newLimits
     ? `Your school now has ${receipt.newLimits.teacher_seats} teacher seats and `
       + `${receipt.newLimits.student_seats} student seats.`
     : null
@@ -624,6 +629,8 @@ export default function SubscriptionTab() {
   return (
     <div style={{ display: 'grid', gap: 22 }}>
       <SeatCheckoutBanner {...checkout} />
+
+      <InstallmentStatus ownerId={ownerId} subscription={subscription} installment={data.installment} />
 
       <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} plans={plans}
                 onChanged={refresh} />
