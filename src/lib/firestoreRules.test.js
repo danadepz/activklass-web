@@ -1467,6 +1467,37 @@ describe('payments · the PayMongo checkout flip (T-68)', () => {
   })
 })
 
+/* Checkout (Flask _payment_refusal) opens to a solo teacher only when
+ * verification_status == 'approved', so the rules are what keep that field
+ * out of everyone's reach but the Super Admin. */
+describe('users · only the Super Admin approves a teacher (the gate on paying)', () => {
+  const SOLO = 'solo-teacher'
+  const seedPending = () => testEnv.withSecurityRulesDisabled(async (admin) => {
+    await setDoc(doc(admin.firestore(), 'users', SOLO), { role: 'teacher', email: 'solo@example.test', verification_status: 'pending' })
+    await setDoc(doc(admin.firestore(), 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+  })
+
+  it('refuses a self-registration that starts approved', async () => {
+    await assertFails(setDoc(doc(ctx('new-teacher', { email: 'new@example.test' }), 'users', 'new-teacher'),
+      { role: 'teacher', email: 'new@example.test', verification_status: 'approved' }))
+  })
+
+  it('refuses a pending teacher approving themselves', async () => {
+    await seedPending()
+    await assertFails(updateDoc(doc(ctx(SOLO), 'users', SOLO), { verification_status: 'approved' }))
+  })
+
+  it('refuses a school admin approving a solo teacher', async () => {
+    await seedPending()
+    await assertFails(updateDoc(doc(ctx(ADMIN), 'users', SOLO), { verification_status: 'approved' }))
+  })
+
+  it('lets the Super Admin approve', async () => {
+    await seedPending()
+    await assertSucceeds(updateDoc(doc(ctx('dev-1', { superadmin: true }), 'users', SOLO), { verification_status: 'approved' }))
+  })
+})
+
 describe('payment_test_accounts · TEST-payment enrollment is server-only', () => {
   it('refuses an owner enrolling themselves', async () => {
     await assertFails(setDoc(doc(ctx(TEACHER), 'payment_test_accounts', TEACHER), { enabled: true }))
