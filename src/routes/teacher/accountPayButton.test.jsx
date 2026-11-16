@@ -58,7 +58,8 @@ const DAY = 24 * 60 * 60 * 1000
 
 function page({ profile = {}, subscription = null, noDoc = false } = {}) {
   state.noDoc = noDoc
-  state.profile = { id: 'T1', role: 'teacher', first_name: 'Solo', last_name: 'Teacher', ...profile }
+  // A solo teacher who pays has passed the Super Admin's ID check; the locked cases override it.
+  state.profile = { id: 'T1', role: 'teacher', first_name: 'Solo', last_name: 'Teacher', verification_status: 'approved', ...profile }
   state.subscription = subscription
   return renderToStaticMarkup(<MemoryRouter><TeacherAccountPage /></MemoryRouter>)
 }
@@ -113,5 +114,65 @@ describe('self-service seat increase — the Account page offers "Add student se
 
   it('never offers it on the self-registered path with no subscription document yet', () => {
     expect(page({ profile: { subscription_status: 'trial', trial_ends_at: Date.now() + 5 * DAY }, noDoc: true })).not.toContain(ADD_SEATS)
+  })
+})
+
+describe('payment stays closed until the account is approved — the same rule the backend enforces', () => {
+  const LOCKED = 'Payment opens once ActivKlass has verified your teacher account.'
+  const trial = { type: 'teacher', status: 'trial', trial_ends_at: Date.now() + 20 * DAY }
+  const active = { type: 'teacher', status: 'active', paid_through: Date.now() + 300 * DAY }
+
+  it.each(['pending', 'rejected'])('no Pay for a self-registered teacher whose verification is %s', (status) => {
+    for (const html of [page({ profile: { verification_status: status }, subscription: trial }),
+                        page({ profile: { verification_status: status, subscription_status: 'trial' }, noDoc: true })]) {
+      expect(html).not.toContain(PAY)
+      expect(html).toContain(LOCKED)
+    }
+  })
+
+  it('an existing account with no verification on file gets the ID form instead of Pay', () => {
+    for (const html of [page({ profile: { verification_status: undefined }, subscription: trial }),
+                        page({ profile: { verification_status: undefined, subscription_status: 'trial' }, noDoc: true })]) {
+      expect(html).not.toContain(PAY)
+      expect(html).toContain('Send for review')
+      expect(html).toContain('your classes and records stay open')
+    }
+  })
+
+  it('no Add student seats for an existing subscriber with no verification — they get the ID form', () => {
+    const html = page({ profile: { verification_status: undefined }, subscription: active })
+    expect(html).not.toContain(ADD_SEATS)
+    expect(html).toContain('Send for review')
+  })
+
+  it('an existing account that sent its ID waits, with its classes open', () => {
+    const html = page({ profile: { verification_status: 'pending', verification_context: 'payment' }, subscription: active })
+    expect(html).not.toContain(ADD_SEATS)
+    expect(html).toContain('Your ID is with the ActivKlass team')
+    expect(html).not.toContain('Send for review')
+  })
+
+  it('an existing account that was sent back sees the reviewer note and can send again', () => {
+    const html = page({ profile: { verification_status: 'rejected', verification_context: 'payment', verification_note: 'Photo is blurry' }, subscription: trial })
+    expect(html).not.toContain(PAY)
+    expect(html).toContain('Photo is blurry')
+    expect(html).toContain('Send again')
+  })
+
+  it('a school teacher never gets the individual ID form', () => {
+    const html = page({ profile: { verification_status: undefined, school_id: 'S1' }, noDoc: true })
+    expect(html).not.toContain('Send for review')
+    expect(html).not.toContain(PAY)
+  })
+
+  it("tells a pending institution requester it is the school's approval they are waiting on", () => {
+    const html = page({ profile: { verification_status: undefined, school_request_pending: true }, subscription: trial })
+    expect(html).not.toContain(PAY)
+    expect(html).toContain('Your school&#x27;s request is still being reviewed')
+    expect(html).not.toContain(LOCKED)
+  })
+
+  it('a verified teacher sees no lock note', () => {
+    expect(page({ subscription: trial })).not.toContain(LOCKED)
   })
 })

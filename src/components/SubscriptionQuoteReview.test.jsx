@@ -29,6 +29,11 @@ const queryMock = vi.hoisted(() => ({
 
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => queryMock }))
 vi.mock('@/lib/subscription', () => ({ fetchSubscriptionQuote: vi.fn() }))
+// Captures what the popup is handed, so the Pay Now wiring is checkable without a DOM.
+const modalProps = vi.hoisted(() => ({ last: null }))
+vi.mock('@/components/subscription/PaymentConfirmModal', () => ({
+  default: (props) => { modalProps.last = props; return null },
+}))
 
 const render = () => renderToStaticMarkup(<SubscriptionQuoteReview ownerId="teacher-1" onContinue={() => {}} />)
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
@@ -60,13 +65,11 @@ describe('SubscriptionQuoteReview', () => {
     queryMock.data.quote.terms = orig
   })
 
-  it('keeps payment closed for an account the server has not enrolled for TEST payments', () => {
+  it('never closes payment for TEST enrollment, even if an older server still sends payments_enabled: false', () => {
     queryMock.data.quote.payments_enabled = false
     const html = render()
-    expect(html).toContain('Online payment is not available for this account yet')
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
-    queryMock.data.quote.payments_enabled = true
-    expect(render()).not.toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
+    expect(html).not.toContain('Online payment is not available for this account yet')
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
     delete queryMock.data.quote.payments_enabled
   })
 
@@ -89,5 +92,27 @@ describe('SubscriptionQuoteReview', () => {
     expect(t).toContain('Teacher seats 10 × ₱1,200 ₱12,000')
     expect(t).toContain('Total subscription cost ₱36,000')
     queryMock.data = { quote: orig }
+  })
+})
+
+describe('Pay Now wiring — the popup stays in charge until checkout opens', () => {
+  it('hands the popup a busy state and an error slot', () => {
+    render()
+    expect(modalProps.last).toHaveProperty('busy', false)
+    expect(modalProps.last).toHaveProperty('error', '')
+  })
+
+  it('Pay Now waits on the checkout request instead of closing first', async () => {
+    let settle
+    const onContinue = vi.fn(() => new Promise((resolve) => { settle = resolve }))
+    renderToStaticMarkup(<SubscriptionQuoteReview ownerId="teacher-1" onContinue={onContinue} />)
+    let done = false
+    const pending = Promise.resolve(modalProps.last.onConfirm()).then(() => { done = true })
+    await Promise.resolve()
+    expect(onContinue).toHaveBeenCalledTimes(1)
+    expect(done).toBe(false) // still awaiting the request -- the old handler returned at once
+    settle({})
+    await pending
+    expect(done).toBe(true)
   })
 })

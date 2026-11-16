@@ -65,7 +65,7 @@ export function colleagueGroup(profile, school) {
 export function pickColleagues(users, selfId) {
   return users
     .filter((u) => u.id !== selfId)
-    .filter((u) => !u.verification_status || u.verification_status === 'approved')
+    .filter((u) => !u.verification_status || u.verification_status === 'approved' || u.verification_context === 'payment')
     .filter((u) => u.status !== 'inactive' && !u.disabled)
     .sort((a, b) =>
       String(a.last_name ?? '').localeCompare(String(b.last_name ?? ''))

@@ -102,3 +102,20 @@ describe('RoleHomeRedirect — the same gate, so "/" agrees with every other rou
     expect(redirectTarget(html)).toBe('/superadmin')
   })
 })
+
+describe('ProtectedRoute — an existing account verifying only to pay keeps its classes', () => {
+  const teacher = (p) => ({ profile: { role: 'teacher', is_temp_password: false, ...p } })
+
+  it('still holds a self-registered teacher on /pending-verification', () => {
+    for (const status of ['pending', 'rejected']) {
+      expect(redirectTarget(protectedRoute({ roles: ['teacher'] }, teacher({ verification_status: status })))).toBe('/pending-verification')
+    }
+  })
+
+  it('lets an existing account through while its payment verification is pending or sent back', () => {
+    for (const status of ['pending', 'rejected']) {
+      const html = protectedRoute({ roles: ['teacher'] }, teacher({ verification_status: status, verification_context: 'payment' }))
+      expect(html).toContain('OUTLET')
+    }
+  })
+})

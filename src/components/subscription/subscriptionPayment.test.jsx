@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import SubscriptionCostBreakdown from './SubscriptionCostBreakdown'
 import PaymentConfirmModal from './PaymentConfirmModal'
 import SubscriptionStatusPanel from './SubscriptionStatusPanel'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import InstallmentStatus from './InstallmentStatus'
-import { ACK_COSTS, canConfirm, formatCentavos, installmentToView, legacyQuoteToCosting } from '@/lib/subscriptionPayment'
+import { ACK_COSTS, canConfirm, confirmPayment, formatCentavos, installmentToView, legacyQuoteToCosting } from '@/lib/subscriptionPayment'
 
 // Shapes as the backend returns them (app/services/installments.py).
 const institution = {
@@ -111,6 +111,46 @@ describe('PaymentConfirmModal', () => {
 
   it('renders nothing when closed', () => {
     expect(renderToStaticMarkup(<PaymentConfirmModal open={false} costing={institution} onBack={() => {}} onConfirm={() => {}} />)).toBe('')
+  })
+  it('shows a refusal inside the popup, beside Pay Now', () => {
+    const t = text(renderToStaticMarkup(
+      <PaymentConfirmModal open costing={institution} schedule={half} error="Your teacher account must be verified before you can subscribe." onBack={() => {}} onConfirm={() => {}} />,
+    ))
+    expect(t).toContain('Your teacher account must be verified before you can subscribe.')
+    expect(t).toContain('Pay Now')
+  })
+
+  it('locks the button while checkout opens', () => {
+    const html = renderToStaticMarkup(<PaymentConfirmModal open busy costing={institution} schedule={half} onBack={() => {}} onConfirm={() => {}} />)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Opening checkout…/)
+  })
+})
+
+/* Pay Now used to close the popup before the request, so a refusal was drawn
+   off-screen and the button looked dead. confirmPayment is the handler now. */
+describe('confirmPayment — what Pay Now does', () => {
+  const spies = () => ({ setPaying: vi.fn(), setPayError: vi.fn() })
+
+  it('locks, starts checkout, and stays locked once it resolves (the browser is leaving)', async () => {
+    const s = spies()
+    const start = vi.fn().mockResolvedValue({ checkout_url: 'https://checkout.example.test' })
+    await confirmPayment(start, s)
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(s.setPaying.mock.calls).toEqual([[true]])
+    expect(s.setPayError.mock.calls).toEqual([['']])
+  })
+
+  it('reports the server refusal and unlocks so the user can go back or retry', async () => {
+    const s = spies()
+    await confirmPayment(() => Promise.reject(new Error('This school must be approved before it can subscribe.')), s)
+    expect(s.setPayError).toHaveBeenLastCalledWith('This school must be approved before it can subscribe.')
+    expect(s.setPaying.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('never shows an empty error', async () => {
+    const s = spies()
+    await confirmPayment(() => Promise.reject(new Error('')), s)
+    expect(s.setPayError).toHaveBeenLastCalledWith('Could not open checkout. Try again.')
   })
 })
 

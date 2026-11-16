@@ -5,7 +5,7 @@ import SubscriptionCostBreakdown from '@/components/subscription/SubscriptionCos
 import PaymentConfirmModal from '@/components/subscription/PaymentConfirmModal'
 import PaymentOptionPicker from '@/components/subscription/PaymentOptionPicker'
 import { fetchSubscriptionQuote } from '@/lib/subscription'
-import { legacyQuoteToCosting } from '@/lib/subscriptionPayment'
+import { confirmPayment, legacyQuoteToCosting } from '@/lib/subscriptionPayment'
 import { ink, muted, line, red } from '@/theme'
 
 /**
@@ -21,6 +21,11 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   const [confirming, setConfirming] = useState(false)
   const [openCount, setOpenCount] = useState(0)
   const [option, setOption] = useState('full')
+  // Pay Now keeps the popup open until the browser leaves for checkout: a
+  // refusal is shown beside the button, not rendered off-screen behind a
+  // popup that already closed (which read as "Pay Now does nothing").
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState('')
   // Read once: the real deadline is set from the verified payment time.
   const [openedAt] = useState(() => Date.now() / 1000)
 
@@ -38,8 +43,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   const terms = quote?.terms || { required: false, available: false }
   const termsReady = Boolean(terms.available && terms.version && (terms.url || terms.document))
   const balanceOwed = optionB && quote.outstanding_balance > 0
-  // payments_enabled: false = the account is not enrolled for TEST payments.
-  const paymentClosed = (Boolean(terms.required) && !termsReady) || balanceOwed || quote?.payments_enabled === false
+  const paymentClosed = (Boolean(terms.required) && !termsReady) || balanceOwed
   const costing = !quote ? null : optionB ? quote.costing : legacyQuoteToCosting(quote)
   const schedule = !quote ? null : optionB
     ? quote.payment_options[option]
@@ -101,8 +105,10 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
             schedule={schedule}
             dueDate={dueDate}
             terms={!termsReady ? null : terms.document || { url: terms.url }}
+            busy={paying}
+            error={payError}
             onBack={() => setConfirming(false)}
-            onConfirm={() => { setConfirming(false); onContinue(quote, optionB ? option : undefined) }}
+            onConfirm={() => confirmPayment(() => onContinue(quote, optionB ? option : undefined), { setPaying, setPayError })}
           />
         </>
       ) : null}
@@ -111,7 +117,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
         <Button
           block
           style={{ padding: '16px 24px', fontSize: 16 }}
-          onClick={() => { setOpenCount((n) => n + 1); setConfirming(true) }}
+          onClick={() => { setOpenCount((n) => n + 1); setPayError(''); setConfirming(true) }}
           disabled={!quote || paymentClosed || disabled || isFetching}
         >
           {disabled ? 'Opening PayMongo…' : 'Proceed to Payment'}

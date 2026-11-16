@@ -77,7 +77,19 @@ export default function SuperAdminVerificationsPage() {
   })
 
   const review = useMutation({
-    mutationFn: async ({ uid, status, note }) => {
+    mutationFn: async ({ uid, status, note, teacher }) => {
+      /* An existing account verifying only to pay (teacher/account.jsx) is
+         already open and may already be subscribed: approving it writes the
+         verification fields and nothing else -- no new trial, no "your free
+         month has started" email. */
+      if (teacher?.verification_context === 'payment') {
+        await updateDoc(doc(db, 'users', uid), {
+          verification_status: status,
+          verification_note: status === 'rejected' ? note.trim() : '',
+          verification_reviewed_at: serverTimestamp(),
+        })
+        return { trialEndsAt: null, notice: null, paymentOnly: true }
+      }
       /* Computed once and both written and returned, so the date in the
          letter is the date in the database. Building it again in onSuccess
          would be a second clock reading, and a teacher told the wrong last
@@ -102,8 +114,18 @@ export default function SuperAdminVerificationsPage() {
       const notice = status === 'approved' ? await notifyTeacherApproval(uid).catch(() => null) : null
       return { trialEndsAt, notice }
     },
-    onSuccess: ({ trialEndsAt, notice }, { status, name, teacher }) => {
+    onSuccess: ({ trialEndsAt, notice, paymentOnly }, { status, name, teacher }) => {
       const emailed = notice?.sent
+      if (paymentOnly) {
+        toast.success(status === 'approved'
+          ? `${name} verified — they can now subscribe. Their account and any existing plan are unchanged.`
+          : `${name} sent back with your note.`)
+        setRejecting(null)
+        setNote('')
+        queryClient.invalidateQueries({ queryKey: PENDING_TEACHERS_KEY })
+        queryClient.invalidateQueries({ queryKey: APPROVED_TEACHERS_KEY })
+        return
+      }
       toast.success(
         status === 'approved'
           ? `${name} approved — their account is open and the free month has started.` +
@@ -184,6 +206,11 @@ export default function SuperAdminVerificationsPage() {
                   <div className="min-w-0">
                     <div className="text-base font-semibold text-zinc-100">{name}</div>
                     <div className="mt-0.5 font-mono text-xs text-zinc-500">{t.email}{t.phone ? ` · ${t.phone}` : ''}</div>
+                    {t.verification_context === 'payment' ? (
+                      <div className="mt-2 inline-block rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200">
+                        Existing account — verifying to pay. Approval changes no trial or plan.
+                      </div>
+                    ) : null}
                     <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
                       <dt className="text-zinc-500">School</dt>
                       <dd className="text-zinc-300">
@@ -253,7 +280,7 @@ export default function SuperAdminVerificationsPage() {
                       <button
                         type="button"
                         disabled={busy || !note.trim()}
-                        onClick={() => review.mutate({ uid: t.id, status: 'rejected', note, name })}
+                        onClick={() => review.mutate({ uid: t.id, status: 'rejected', note, name, teacher: t })}
                         className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-400 disabled:opacity-50"
                       >
                         Send back
@@ -296,13 +323,17 @@ export default function SuperAdminVerificationsPage() {
                   <div className="min-w-0 text-sm">
                     <span className="font-semibold text-zinc-200">{name}</span>
                     <span className="text-zinc-500"> · {t.email} · {when(t.verification_reviewed_at)}</span>
-                    {t.verification_notice_sent_at ? (
+                    {t.verification_context === 'payment' ? (
+                      <span className="ml-2 text-xs text-zinc-400">existing account, verified to pay</span>
+                    ) : t.verification_notice_sent_at ? (
                       <span className="ml-2 text-xs text-emerald-400">emailed</span>
                     ) : (
                       <span className="ml-2 text-xs text-amber-400">not sent — copy it</span>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {/* The welcome letter announces a new free month -- never true for an existing account. */}
+                    {t.verification_context !== 'payment' && (<>
                     <button
                       type="button"
                       disabled={resend.isPending && resend.variables === t.id}
@@ -330,6 +361,7 @@ export default function SuperAdminVerificationsPage() {
                     >
                       Welcome notice
                     </button>
+                    </>)}
                     <button
                       type="button"
                       disabled={purge.isPending}
