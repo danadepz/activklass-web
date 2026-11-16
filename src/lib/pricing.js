@@ -8,9 +8,9 @@ export const TRIAL_DAYS = 30
  * 2026-08-29), whatever the calendar.
  */
 export const CALENDARS = [
-  { value: 'school_year', label: 'School year (DepEd K-12)' },
-  { value: 'semestral', label: 'Semesters (2 per year)' },
-  { value: 'trimestral', label: 'Trimesters (3 per year)' },
+  { value: 'school_year', label: 'Full School Year (DepEd K-12)' },
+  { value: 'semestral', label: 'Semestral' },
+  { value: 'trimestral', label: 'Trimestral' },
 ]
 
 /** When a trial that starts now ends — a Date, for a Firestore Timestamp. */
