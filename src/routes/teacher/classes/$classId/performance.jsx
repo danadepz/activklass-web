@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
+import { useQuizzes } from '@/hooks/useQuizzes'
+import { useAutoPostScores } from '@/hooks/useQuizRecordSync'
+import { quizzesToAutoPost } from '@/lib/quizToRecord'
 import { computeFinalGrade, gradePolicy, isPassingGrade, pointScaleBands } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
@@ -129,13 +132,28 @@ function EmptyBox({ children }) {
 export default function PerformancePage() {
   const { classId } = useParams()
   const [periodId, setPeriodId] = useState(null)
-
+  const queryClient = useQueryClient()
   const { data: bundle, isLoading, isError } = useQuery({
     queryKey: ['fs-record', classId],
     queryFn: () => loadPerf(classId),
   })
+  const { data: quizzes, isLoading: quizzesLoading, isError: quizzesError } = useQuizzes({ enabled: !!bundle?.configured })
 
-  if (isLoading) {
+  const refreshRecord = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['fs-record', classId] }),
+    [queryClient, classId],
+  )
+  // Performance uses the same idempotent poster as Class Record. The record
+  // route is not mounted here, so this is the single active sync process; it
+  // preserves hand-entered scores through quizScoreCells before writing.
+  const autoPost = useAutoPostScores({
+    classId,
+    quizzes: quizzesToAutoPost(quizzes ?? [], classId),
+    enabled: !!bundle?.configured && !quizzesLoading && !quizzesError,
+    onPosted: refreshRecord,
+  })
+
+  if (isLoading || quizzesLoading || (bundle?.configured && autoPost.status === 'posting')) {
     return (
       <>
         <div className="mb-4"><SkeletonStats count={4} label="Loading performance" /></div>
@@ -143,7 +161,15 @@ export default function PerformancePage() {
       </>
     )
   }
-  if (isError || !bundle) return <p style={{ color: red }}>Class not found.</p>
+  if (!bundle) return <p style={{ color: red }}>Performance data could not be loaded. Try again in a moment.</p>
+
+  const syncNotice = isError
+    ? 'The latest gradebook data could not be refreshed. Showing the last available results.'
+    : quizzesError
+      ? 'Quiz results could not be refreshed. Performance may not include recent quiz submissions.'
+    : autoPost.skipped.length
+      ? `Some quiz scores could not be refreshed: ${autoPost.skipped.join(' ')}`
+      : null
 
   const header = (
     <h1 className="text-[clamp(26px,3.5vw,32px)]" style={{ ...serif, lineHeight: 1.1, letterSpacing: '-0.01em', margin: '0 0 4px', color: ink, display: 'flex', alignItems: 'center' }}>
@@ -164,6 +190,7 @@ export default function PerformancePage() {
     return (
       <div>
         {header}
+        {syncNotice && <p role="status" className="mb-3" style={{ color: goldDeep, fontSize: 13 }}>{syncNotice}</p>}
         <div className="mt-6 text-center" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 40 }}>
           <p style={{ color: muted, margin: 0 }}>Set up grading periods and components first — analytics are computed from the class record.</p>
           <Link to={`/teacher/classes/${classId}/grading`} className="mt-4 inline-flex transition hover:brightness-110" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
@@ -265,6 +292,7 @@ export default function PerformancePage() {
 
   return (
     <div>
+      {syncNotice && <p role="status" className="mb-3" style={{ color: goldDeep, fontSize: 13 }}>{syncNotice}</p>}
       <div className="flex flex-wrap items-start justify-between gap-4" style={{ marginBottom: 22 }}>
         <div>
           {header}

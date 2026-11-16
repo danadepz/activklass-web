@@ -2,7 +2,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ bundle: null }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: state.bundle }) }))
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: state.bundle, isLoading: false, isError: false }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}))
+vi.mock('@/hooks/useQuizzes', () => ({ useQuizzes: () => ({ data: [], isLoading: false, isError: false }) }))
+vi.mock('@/hooks/useQuizRecordSync', () => ({ useAutoPostScores: () => ({ status: 'done', skipped: [] }) }))
 vi.mock('react-router-dom', async (load) => ({ ...(await load()), useParams: () => ({ classId: 'c' }) }))
 vi.mock('@/components/PredictedRisk', () => ({ default: () => null }))
 import PerformancePage from './performance.jsx'

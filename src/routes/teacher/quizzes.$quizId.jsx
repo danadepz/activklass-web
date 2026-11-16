@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { deleteQuizWithKey, loadQuizWithKey, writeQuizWithKey } from '@/lib/quizAnswerKey'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
+import { remediationReturnPath } from '@/lib/remediationNavigation'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
 import { ArrowRight, Sparkles, BookOpen, Lock, Eye, EyeOff } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -1600,6 +1601,15 @@ function describeAssignment(assignedClasses) {
 function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [returnNotice, setReturnNotice] = useState(false)
+  const remediationPath = remediationReturnPath(location.state?.remediationReturn)
+
+  useEffect(() => {
+    if (!returnNotice || !remediationPath) return undefined
+    const timer = window.setTimeout(() => navigate(remediationPath, { replace: true }), 3000)
+    return () => window.clearTimeout(timer)
+  }, [returnNotice, remediationPath, navigate])
   const initialSettings = {
     title: quiz.title,
     // The sub-module the quiz is filed under. Kept in settings so a change
@@ -1924,6 +1934,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       else toast.success('Published and added to the class record.')
 
       refetch()
+      if (remediationPath) setReturnNotice(true)
     } catch (err) {
       // The mapping modal has closed by now, so the banner alone would be the
       // same invisible refusal the validation above had.
@@ -1954,6 +1965,22 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
 
   return (
     <div>
+      {returnNotice && remediationPath && (
+        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3" data-testid="remediation-return-notice">
+          <span style={{ fontSize: 13, color: ink }}>Quiz published. Returning to the remediation plan in 3 seconds.</span>
+          <button
+            type="button"
+            onClick={() => {
+              setReturnNotice(false)
+              navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+            }}
+            className="font-bold underline"
+            style={{ color: navy, background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+          >
+            Stay on Quiz
+          </button>
+        </div>
+      )}
       {error && (
         <p className="mt-4" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px' }}>{error}</p>
       )}

@@ -21,6 +21,7 @@ import {
   loadRecoveryTargets,
   previewRecovery,
 } from '@/features/classes/gradeRecovery'
+import { remediationEvidenceSummary } from '@/features/classes/remediationEvidence'
 import {
   PASSING,
   RECOVERY_POLICIES,
@@ -158,6 +159,7 @@ async function loadScaffolds(classId) {
       attemptCount,
       studentsAffected: affectedIds.length,
       affectedNames: affectedIds.map((sid) => nameById[sid] ?? sid),
+      evidenceByStudent: bestByStudent,
       // Ids as well as names: a remediation plan targets student_ids, and the
       // display names cannot be turned back into uids.
       affectedIds,
@@ -575,7 +577,7 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
 }
 
 /** Edit a plan: its text, its linked practice quiz, and who receives it. */
-function RemediationEditor({ plan, quizzes, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz }) {
+function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvidence, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz, onViewQuiz }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a remediation plan', closeOnBackdrop: false })
   const [title, setTitle] = useState(plan.title ?? '')
   const [guidance, setGuidance] = useState(plan.guidance ?? '')
@@ -584,6 +586,7 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, busy, onClose, 
   const working = busy === `save:${plan.id}` || busy === `publish:${plan.id}`
   const generating = busy === `quiz:${plan.id}`
   const quizBlock = practiceQuizBlocker(plan, quizzes)
+  const quiz = (quizzes ?? []).find((q) => q.id === plan.recommended_quiz_id)
   const patch = () => ({
     title: title.trim() || plan.title,
     guidance: guidance.trim(),
@@ -638,9 +641,15 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, busy, onClose, 
             <div style={{ fontSize: 13, color: ink }}>
               <strong>Practice quiz:</strong>{' '}
               {plan.recommended_quiz_id ? (
-                <Link to={`/teacher/quizzes/${plan.recommended_quiz_id}`} style={{ color: blueText, fontWeight: 600 }}>
-                  open in quiz editor
-                </Link>
+                <button
+                  type="button"
+                  onClick={() => onViewQuiz(patch())}
+                  disabled={working}
+                  className="underline disabled:opacity-50"
+                  style={{ color: blueText, fontWeight: 700, background: 'none', border: 0, padding: 0, cursor: 'pointer' }}
+                >
+                  {quiz?.generated_by === 'ai_generated' ? 'View AI-Generated Quiz' : 'Open Quiz in Editor'}
+                </button>
               ) : (
                 <span style={{ color: muted }}>none attached</span>
               )}
@@ -664,6 +673,16 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, busy, onClose, 
               {quizBlock}
             </p>
           )}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3" data-testid="remediation-performance-explanation">
+          <p style={{ fontSize: 12.5, color: ink, margin: 0, lineHeight: 1.5 }}>
+            <strong>Why this review is suggested</strong><br />
+            {remediationEvidenceSummary(performanceEvidence, targets)}
+          </p>
+          <p style={{ fontSize: 12, color: muted, margin: '7px 0 0', lineHeight: 1.5 }}>
+            Suggested support: review this syllabus topic with worked examples, then use the practice quiz after teacher review. Question-level Bloom data is not recorded here, so this screen cannot identify a Bloom level or conclude that a student lacks a prerequisite skill.
+          </p>
         </div>
 
         <div className="mt-4">
@@ -737,6 +756,19 @@ export default function ScaffoldTopicsPage() {
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['fs-scaffolds', classId] })
+
+  const planToRestore = searchParams.get('editPlan')
+  const restoredPlan = data?.remediation?.plans?.find((item) => item.id === planToRestore)
+  const activeEditingPlan = editingPlan ?? restoredPlan
+
+  function closePlanEditor() {
+    setEditingPlan(null)
+    if (searchParams.has('editPlan')) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('editPlan')
+      setSearchParams(next, { replace: true })
+    }
+  }
 
   /**
    * Start a remediation for a weak topic.
@@ -1152,31 +1184,49 @@ export default function ScaffoldTopicsPage() {
         />
       )}
 
-      {editingPlan && (
+      {activeEditingPlan && (
         <RemediationEditor
-          plan={editingPlan}
+          plan={activeEditingPlan}
           quizzes={data.quizzes ?? []}
           nameById={data.nameById ?? {}}
           rosterIds={data.rosterIds ?? []}
+          performanceEvidence={data.rows.find((row) => row.id === activeEditingPlan.topic_id)}
           busy={busy}
-          onClose={() => setEditingPlan(null)}
+          onClose={closePlanEditor}
           onSave={async (patch) => {
-            const ok = await runPlanAction(editingPlan, 'save', () =>
-              updateRemediationPlan(editingPlan.id, patch),
+            const ok = await runPlanAction(activeEditingPlan, 'save', () =>
+              updateRemediationPlan(activeEditingPlan.id, patch),
             )
-            if (ok) setEditingPlan(null)
+            if (ok) closePlanEditor()
           }}
           onSaveAndPublish={async (patch) => {
-            const merged = { ...editingPlan, ...patch }
-            const ok = await runPlanAction(editingPlan, 'publish', async () => {
-              await updateRemediationPlan(editingPlan.id, patch)
+            const merged = { ...activeEditingPlan, ...patch }
+            const ok = await runPlanAction(activeEditingPlan, 'publish', async () => {
+              await updateRemediationPlan(activeEditingPlan.id, patch)
               await publishRemediation(merged)
             })
-            if (ok) setEditingPlan(null)
+            if (ok) closePlanEditor()
           }}
           onGenerateQuiz={() =>
-            buildPack({ id: editingPlan.topic_id, title: editingPlan.topic }, editingPlan)
+            buildPack({ id: activeEditingPlan.topic_id, title: activeEditingPlan.topic }, activeEditingPlan)
           }
+          onViewQuiz={async (patch) => {
+            const quizId = activeEditingPlan.recommended_quiz_id
+            if (!quizId) return
+            setBusy(`save:${activeEditingPlan.id}`)
+            setError(null)
+            try {
+              await updateRemediationPlan(activeEditingPlan.id, patch)
+              await refresh()
+              navigate(`/teacher/quizzes/${quizId}`, {
+                state: { remediationReturn: { classId, planId: activeEditingPlan.id } },
+              })
+            } catch (err) {
+              setError(err.message)
+            } finally {
+              setBusy(null)
+            }
+          }}
         />
       )}
 

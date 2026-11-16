@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({ quiz: null }))
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, ...p }) => <a {...p}>{children}</a>,
+  useLocation: () => ({ state: null, pathname: '/teacher/quizzes/q1', search: '' }),
   useNavigate: () => vi.fn(),
   useParams: () => ({ quizId: state.quiz?.id ?? 'q1' }),
 }))
