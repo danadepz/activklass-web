@@ -59,9 +59,15 @@ describe('the registration dropdown (A, B, E, F)', () => {
     expect((await fetchSchoolDirectory()).some((s) => s.id === 'rg')).toBe(false)
   })
 
-  it('reads `retired` and `retiring` as unavailable — a missing status is active', () => {
+  it('reads `retired`, `retiring`, `purged`, `deleted`, `inactive`, and `archived` as unavailable — a missing status is active', () => {
     expect(isRetiredSchool({ status: 'retired' })).toBe(true)
     expect(isRetiredSchool({ status: 'retiring' })).toBe(true)
+    expect(isRetiredSchool({ status: 'purged' })).toBe(true)
+    expect(isRetiredSchool({ status: 'deleted' })).toBe(true)
+    expect(isRetiredSchool({ status: 'inactive' })).toBe(true)
+    expect(isRetiredSchool({ status: 'archived' })).toBe(true)
+    expect(isRetiredSchool({ active: false })).toBe(true)
+    expect(isRetiredSchool({ is_active: false })).toBe(true)
     expect(isRetiredSchool({})).toBe(false)
     expect(isRetiredSchool({ status: 'active' })).toBe(false)
     expect(isRetiredSchool(null)).toBe(false)
