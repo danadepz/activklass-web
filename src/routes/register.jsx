@@ -825,7 +825,7 @@ export default function Register() {
                       type={showPassword ? 'text' : 'password'}
                       required
                       autoComplete="new-password"
-                      placeholder="Type it again"
+                      placeholder="Confirm Password"
                       value={form.confirm}
                       onChange={set('confirm')}
                       style={{
