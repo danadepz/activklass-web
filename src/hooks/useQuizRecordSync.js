@@ -36,13 +36,13 @@ import {
 } from '@/lib/quizToRecord'
 
 /** Attempts for one quiz in one class, keyed by student. */
-async function attemptsByStudentFor(quizId, classId) {
+async function attemptsByStudentFor(quizId, classId, firestore = db) {
   // Both fields in the query: the rules let a teacher read an attempt only
   // for a class they own, and they can prove that only from a class_id
   // filter on the query itself. The (quiz_id, class_id) composite index is
   // in the backend's firestore.indexes.json.
   const snap = await getDocs(
-    query(collection(db, 'quiz_attempts'), where('quiz_id', '==', quizId), where('class_id', '==', classId)),
+    query(collection(firestore, 'quiz_attempts'), where('quiz_id', '==', quizId), where('class_id', '==', classId)),
   )
   const byStudent = {}
   snap.docs.forEach((d) => {
@@ -65,8 +65,10 @@ async function attemptsByStudentFor(quizId, classId) {
  * Returns the per-student counts for the toast, plus `skipped` when the
  * gradebook will not accept the row at all.
  */
-export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
-  const gbSnap = await getDoc(doc(db, 'gradebooks', classId))
+export async function syncQuizToClassRecord({
+  quiz, classId, mapping, firestore = db, loadStudents = fetchUsersByIds, updateEntries = syncEntries,
+}) {
+  const gbSnap = await getDoc(doc(firestore, 'gradebooks', classId))
   const gb = gbSnap.exists() ? gbSnap.data() : null
   if (!gb?.configured) {
     return { skipped: 'This class has no Grade Config yet.' }
@@ -85,11 +87,11 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
   }
 
   const totalPoints = quizTotalPoints(quiz)
-  const assessmentRef = doc(db, 'gradebooks', classId, 'assessments', assessmentIdForQuiz(quiz.id))
+  const assessmentRef = doc(firestore, 'gradebooks', classId, 'assessments', assessmentIdForQuiz(quiz.id))
 
-  const classSnap = await getDoc(doc(db, 'classes', classId))
+  const classSnap = await getDoc(doc(firestore, 'classes', classId))
   const studentIds = classSnap.exists() ? (classSnap.data().student_ids ?? []) : []
-  const students = studentIds.length ? await fetchUsersByIds(studentIds) : []
+  const students = studentIds.length ? await loadStudents(studentIds) : []
 
   // Read before writing: a score a teacher typed, or a recovery already
   // applied, must never be recomputed from the attempt underneath it.
@@ -97,7 +99,7 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
   const existing = existingSnap.exists() ? existingSnap.data() : null
 
   const { scores, pendingEssays, notTaken, versionMismatch, kept } = quizScoreCells({
-    attemptsByStudent: await attemptsByStudentFor(quiz.id, classId),
+    attemptsByStudent: await attemptsByStudentFor(quiz.id, classId, firestore),
     students,
     totalPoints,
     // The teacher's choice, not this module's. It used to be hardcoded to the
@@ -129,7 +131,7 @@ export async function syncQuizToClassRecord({ quiz, classId, mapping }) {
   // derived from the assessments above. Without this the teacher sees the
   // posted scores and the student still sees the class as ungraded.
   try {
-    await syncEntries(classId)
+    await updateEntries(classId)
   } catch {
     /* Entries are derived; the next record save re-syncs them. Failing the
        whole post over this would lose scores that did land. */
@@ -350,8 +352,18 @@ export function useAutoPostScores({ classId, quizzes = [], enabled = true, onPos
         }
       }
       if (cancelled) return
+      // A caller may invalidate/refetch its gradebook query here. Keep the
+      // hook in `posting` until that refetch settles so Performance never
+      // renders its pre-sync snapshot as if it were current.
+      if (written > 0) {
+        try {
+          await onPosted?.()
+        } catch {
+          skipped.push('Scores were posted, but the latest gradebook view could not be refreshed.')
+        }
+      }
+      if (cancelled) return
       setState({ status: 'done', written, kept, skipped })
-      if (written > 0) onPosted?.()
     })()
     return () => {
       cancelled = true

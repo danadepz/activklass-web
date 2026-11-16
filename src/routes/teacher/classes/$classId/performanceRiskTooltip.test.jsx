@@ -14,7 +14,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ seeded: false }))
 
@@ -49,7 +49,10 @@ const bundle = {
 vi.mock('@tanstack/react-query', async (importOriginal) => ({
   ...(await importOriginal()),
   useQuery: () => ({ data: bundle, isLoading: false, isError: false }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
+vi.mock('@/hooks/useQuizzes', () => ({ useQuizzes: () => ({ data: [], isLoading: false, isError: false }) }))
+vi.mock('@/hooks/useQuizRecordSync', () => ({ useAutoPostScores: () => ({ status: 'done', skipped: [] }) }))
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...(await importOriginal()),
   useParams: () => ({ classId: 'C1' }),
