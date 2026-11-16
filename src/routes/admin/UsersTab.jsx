@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { adminUsersKey, useAdminUsers, setUserRole, setUserStatus } from '@/hooks/useAdminUsers'
+import { studentAccountsDestination } from '@/lib/studentAccountsNavigation'
 import {
   createUser, resetPassword, setAccountDisabled,
   adminSchoolKey, fetchSchoolSettings, saveSchoolSettings,
@@ -340,7 +341,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       )
       setForm(blank)
       setError('')
-      onCreated()
+      onCreated({ role, user: res.user })
     },
     onError: (e) => { setError(e.message); setDone('') },
   })
@@ -681,7 +682,13 @@ export function AddUserSection({ onCreated, settings, users }) {
           changed role, and this keeps that. */}
       {mode === 'bulk' && role && (
         <div style={{ marginTop: 18 }}>
-          <BulkUpload key={role} role={role} onDone={onCreated} settings={settings} users={users} />
+          <BulkUpload
+            key={role}
+            role={role}
+            onDone={(created) => onCreated({ role: role === 'student' ? 'bulk-student' : 'bulk-teacher', created })}
+            settings={settings}
+            users={users}
+          />
         </div>
       )}
       {mode === 'individual' && role && (
@@ -916,9 +923,19 @@ export default function UsersTab() {
   } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const accountsRef = useRef(null)
 
   const refresh = () => qc.invalidateQueries({ queryKey: adminUsersKey })
   const refreshSchool = () => qc.invalidateQueries({ queryKey: adminSchoolKey })
+
+  function onAccountCreated(result) {
+    refresh()
+    const destination = studentAccountsDestination(result)
+    if (!destination) return
+    setRoleFilter(destination.roleFilter)
+    setSearch(destination.search)
+    requestAnimationFrame(() => accountsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   const shown = useMemo(
     () => filterUsers(users, roleFilter, search),
@@ -940,14 +957,14 @@ export default function UsersTab() {
                        onRetry={refetchSchool} onSaved={refreshSchool} />
       <TermDatesCard settings={settings} pending={schoolPending} error={schoolError}
                      onRetry={refetchSchool} onSaved={refreshSchool} />
-      <AddUserSection onCreated={refresh} settings={settings} users={users} />
+      <AddUserSection onCreated={onAccountCreated} settings={settings} users={users} />
 
-      <section style={{ ...card, overflow: 'hidden' }}>
+      <section ref={accountsRef} data-testid="student-accounts-section" style={{ ...card, overflow: 'hidden', scrollMarginTop: 24 }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
           <CardHead
             icon={<Users className="w-5 h-5" style={{ color: blueText }} />}
             tint="rgba(63,169,245,0.13)"
-            title="Users"
+            title={roleFilter === 'student' ? 'Student Accounts' : 'Users'}
             count={shown.length}
             action={
               <div className="flex flex-wrap items-center gap-3">
