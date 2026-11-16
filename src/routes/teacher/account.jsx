@@ -431,8 +431,22 @@ function CheckoutBanner({ state, receipt, dismiss }) {
   )
 }
 
+/* The backend opens a solo checkout only to a verified teacher
+   (subscriptions._payment_refusal); this mirrors it so the button never
+   leads to a refusal. Wording matches the server's. */
+function PaymentLocked({ profile }) {
+  return (
+    <p style={{ fontSize: 13, color: muted, margin: '12px 0 0', lineHeight: 1.6 }}>
+      {profile.school_request_pending
+        ? "Your school's request is still being reviewed. Your school can subscribe once ActivKlass approves it."
+        : 'Payment opens once ActivKlass has verified your teacher account.'}
+    </p>
+  )
+}
+
 function SubscriptionCard() {
   const { profile, school, isSuperAdmin } = useAuth()
+  const verified = profile.verification_status === 'approved'
   const qc = useQueryClient()
   const [err, setErr] = useState('')
   const checkout = useCheckoutReturn(profile.id)
@@ -492,7 +506,8 @@ function SubscriptionCard() {
             </p>
             {/* No subscriptions doc exists yet -- the self-registered solo
                 path, until the first payment creates one (T-68). */}
-            {(view.kind === 'trial' || view.kind === 'expired') && <PayButton ownerId={profile.id} />}
+            {(view.kind === 'trial' || view.kind === 'expired') &&
+              (verified ? <PayButton ownerId={profile.id} /> : <PaymentLocked profile={profile} />)}
           </>
         )}
       </div>
@@ -570,7 +585,7 @@ function SubscriptionCard() {
               completed (T-68). Never for an institution: the school's admin
               pays for it, not this teacher's own screen. */}
           {sub.type !== 'institution' && (sub.status === 'trial' || sub.status === 'expired') && (
-            <PayButton ownerId={profile.id} />
+            verified ? <PayButton ownerId={profile.id} /> : <PaymentLocked profile={profile} />
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -619,7 +634,8 @@ function SubscriptionCard() {
         </div>
       </div>
 
-      {sub.type !== 'institution' && sub.status === 'active' && (
+      {sub.type !== 'institution' && sub.status === 'active' && !verified && <PaymentLocked profile={profile} />}
+      {sub.type !== 'institution' && sub.status === 'active' && verified && (
         <AddStudentSeatsControl
           ownerId={profile.id}
           currentSeats={sub.limits?.student_seats}
