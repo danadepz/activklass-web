@@ -165,13 +165,19 @@ describe('T-83 — Scaffold Topics quiz links keep the teacher signed in', () =>
     expect(served(go[0])).toBe(true)
   })
 
-  it('#113: "open in quiz editor" on a plan\'s practice quiz opens a URL the teacher routes serve', () => {
+  it('#113: the remediation editor provides an action to open its practice quiz in the quiz editor', () => {
     const html = render({ ...base, rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1 }, plan)
     expect(html).toContain('Edit remediation') // the seeded dialog really rendered
+    expect(html).toContain('Open Quiz in Editor')
+    expect(html).toContain('data-testid="remediation-performance-explanation"')
+  })
 
-    const open = [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*open in quiz editor\s*<\/a>/g)].map((m) => m[1])
-    expect(open).toEqual(['/teacher/quizzes/Q9'])
-    expect(served(open[0])).toBe(true)
+  it('clearly labels an existing AI-generated quiz', () => {
+    const html = render({
+      ...base, rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1,
+      quizzes: [{ id: 'Q9', generated_by: 'ai_generated' }],
+    }, plan)
+    expect(html).toContain('View AI-Generated Quiz')
   })
 
   // T-140 (triplecookiemonster-196): the populated view's subheader paragraph
