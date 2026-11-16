@@ -177,3 +177,13 @@ export const SEAT_KEYS = [
   { key: 'student_seats', label: 'Student seats' },
   { key: 'storage_gb', label: 'Storage (GB)' },
 ]
+
+/** Accounts enrolled for PayMongo TEST checkout. */
+export function fetchTestPaymentAccounts() {
+  return api('/api/superadmin/test-payment-accounts')
+}
+
+/** Enroll or disable one owner. The server refuses an owner with payment history. */
+export function setTestPaymentAccount(ownerId, enabled, note = '') {
+  return api(`/api/superadmin/test-payment-accounts/${encodeURIComponent(ownerId)}`, { method: 'PUT', body: { enabled, note } })
+}

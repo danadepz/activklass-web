@@ -108,15 +108,24 @@ export function changePlan(ownerId, plan) {
  * an Account page to return to. Only takes effect server-side when
  * `ownerId` is actually a pending school; harmless to pass otherwise.
  */
-export function startCheckout(ownerId, { flow, quoteReviewed = false, pricingVersion, quoteTotalPhp, termsVersion, termsAcceptanceId } = {}) {
+export function startCheckout(ownerId, { flow, quoteReviewed = false, pricingVersion, quoteTotalPhp, termsVersion, termsAcceptanceId, paymentOption } = {}) {
   const body = {}
   if (flow) body.flow = flow
+  if (paymentOption) body.payment_option = paymentOption
   if (quoteReviewed) body.quote_reviewed = true
   if (pricingVersion) body.pricing_version = pricingVersion
   if (quoteTotalPhp !== undefined) body.quote_total_php = quoteTotalPhp
   if (termsVersion) body.terms_version = termsVersion
   if (termsAcceptanceId) body.terms_acceptance_id = termsAcceptanceId
   return api(`/api/subscription/${ownerId}/checkout`, { method: 'POST', body })
+}
+
+/**
+ * Start the PayMongo test checkout for the remaining 50% balance. The
+ * server charges the stored balance; nothing about the amount is sent.
+ */
+export function startBalanceCheckout(ownerId) {
+  return api(`/api/subscription/${ownerId}/balance/checkout`, { method: 'POST', body: {} })
 }
 
 /**

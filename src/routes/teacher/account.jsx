@@ -11,10 +11,12 @@ import {
   formatDecimalBytes, recordTermsAcceptance, startCheckout, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
 import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
+import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
+import PaymentUnavailableNote from '@/components/subscription/PaymentUnavailableNote'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
 import { ID_TYPES } from '@/routes/pending-verification'
 
@@ -249,7 +251,7 @@ function PayButton({ ownerId }) {
   const { isSuperAdmin } = useAuth()
   const [err, setErr] = useState('')
   const mut = useMutation({
-    mutationFn: async ({ pricingVersion, totalPhp, termsVersion }) => {
+    mutationFn: async ({ pricingVersion, totalPhp, termsVersion, paymentOption }) => {
       let termsAcceptanceId
       if (termsVersion) {
         const acceptance = await recordTermsAcceptance(ownerId, { termsVersion })
@@ -257,7 +259,7 @@ function PayButton({ ownerId }) {
       }
       return startCheckout(ownerId, {
         quoteReviewed: true, pricingVersion, quoteTotalPhp: totalPhp,
-        termsVersion, termsAcceptanceId,
+        termsVersion, termsAcceptanceId, paymentOption,
       })
     },
     onSuccess: (res) => { window.location.href = res.checkout_url },
@@ -265,7 +267,7 @@ function PayButton({ ownerId }) {
   })
   return (
     <div style={{ marginTop: 12 }}>
-      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined }) }} />
+      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption }) }} />
       <Notice>{err}</Notice>
     </div>
   )
@@ -335,6 +337,7 @@ export const CHECKOUT_BANNER = {
   // T-?: a seat top-up is not a renewal, so it gets its own text rather than
   // claiming a subscription event that did not happen.
   seatsAdded: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your new seats are now available.' },
+  balancePaid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your remaining balance is paid. Nothing more is due this term.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
     text: 'Payment is still unconfirmed by the server. If you completed it, refresh in a moment; do not assume it succeeded.',
@@ -347,9 +350,10 @@ export const CHECKOUT_BANNER = {
 function CheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
   const seatIncrease = state === 'paid' && receipt?.kind === 'seat_increase'
-  const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : state]
+  const balancePaid = state === 'paid' && receipt?.kind === 'installment_balance'
+  const s = CHECKOUT_BANNER[seatIncrease ? 'seatsAdded' : balancePaid ? 'balancePaid' : state]
   // T-69: once paid, say what happened to the receipt too -- never left as
-  // a silent "did that actually send" guess.
+  // a silent "did that actually send" guess. The balance payment has its own receipt.
   const receiptLine = state === 'paid' && receipt
     ? (receipt.receiptSentTo
         ? `A receipt was sent to ${receipt.receiptSentTo}.`
@@ -382,7 +386,7 @@ function CheckoutBanner({ state, receipt, dismiss }) {
 }
 
 function SubscriptionCard() {
-  const { profile, school } = useAuth()
+  const { profile, school, isSuperAdmin } = useAuth()
   const qc = useQueryClient()
   const [err, setErr] = useState('')
   const checkout = useCheckoutReturn(profile.id)
@@ -495,6 +499,11 @@ function SubscriptionCard() {
   return (
     <div style={card}>
       <CheckoutBanner {...checkout} />
+      {sub.type !== 'institution' && data.installment ? (
+        <div style={{ marginBottom: 18 }}>
+          <InstallmentStatus ownerId={profile.id} subscription={sub} installment={data.installment} />
+        </div>
+      ) : null}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your subscription</h2>
@@ -529,7 +538,9 @@ function SubscriptionCard() {
           }}>
             {sub.status}
           </span>
-          <div style={{ marginTop: 10 }}>
+          {/* change_plan is superadmin-only on the server; for anyone else this
+              could only ever answer "handled by support". */}
+          {isSuperAdmin && <div style={{ marginTop: 10 }}>
             <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
               Plan
             </label>
@@ -560,11 +571,14 @@ function SubscriptionCard() {
                 <option key={name} value={name}>{name} — {l.student_seats} students</option>
               ))}
             </select>
-          </div>
+          </div>}
         </div>
       </div>
 
-      {sub.type !== 'institution' && sub.status === 'active' && (
+      {sub.type !== 'institution' && sub.status === 'active' && data?.payments_enabled === false && (
+        <PaymentUnavailableNote />
+      )}
+      {sub.type !== 'institution' && sub.status === 'active' && data?.payments_enabled !== false && (
         <AddStudentSeatsControl
           ownerId={profile.id}
           currentSeats={sub.limits?.student_seats}

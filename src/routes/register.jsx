@@ -231,6 +231,7 @@ export default function Register() {
   })
   const registrationPolicy = registrationPolicyQuery.data
   const registrationLimits = registrationPolicy?.registration_limits
+  const optionBLive = registrationPolicy?.policy_mode === 'option_b_active'
   const teacherBounds = registrationLimits?.institution?.teacher_seats
   const perTeacherBounds = registrationLimits?.institution?.students_per_teacher
   const soloStudentBounds = registrationLimits?.teacher?.student_capacity
@@ -872,7 +873,7 @@ export default function Register() {
                   Your seat carries the AI generation and your records; each student seat is
                   records only. You can change this number later as your load changes.
                 </div>
-                <OptionBDemoQuote subscriptionType="teacher" teacherSeats={1} studentCapacity={Number(form.soloStudents)} />
+                {optionBLive ? null : <OptionBDemoQuote subscriptionType="teacher" teacherSeats={1} studentCapacity={Number(form.soloStudents)} />}
               </div>
             </>
           )}
@@ -974,7 +975,7 @@ export default function Register() {
                   These numbers are an estimate and capacity can change later.
                   Your final quote follows from these numbers and comes with your setup.
                 </div>
-                <OptionBDemoQuote subscriptionType="institution" teacherSeats={Number(form.teacherSeats)} studentsPerTeacher={Number(form.studentsPerTeacher)} />
+                {optionBLive ? null : <OptionBDemoQuote subscriptionType="institution" teacherSeats={Number(form.teacherSeats)} studentsPerTeacher={Number(form.studentsPerTeacher)} />}
               </div>
               <AuthNotice>
                 <strong>Schools are onboarded by the ActivKlass team.</strong> We will contact you

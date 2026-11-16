@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import InstallmentStatus from '@/components/subscription/InstallmentStatus'
+import PaymentUnavailableNote from '@/components/subscription/PaymentUnavailableNote'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  changePlan, confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
+  confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
   formatDecimalBytes, formatBytes, startSeatIncreaseCheckout, toMillis, useCheckoutReturn,
 } from '@/lib/subscription'
 import {
@@ -104,37 +106,7 @@ function Meter({ label, used, total, unit, over, resourceType = 'seats', formatV
   )
 }
 
-function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
-  const [error, setError] = useState('')
-  const catalogue = plans?.[sub.type] ?? {}
-  const names = Object.keys(catalogue)
-
-  const mut = useMutation({
-    mutationFn: (plan) => changePlan(ownerId, plan),
-    onSuccess: () => { setError(''); onChanged() },
-    onError: (e) => setError(e.message),
-  })
-
-  async function pick(e) {
-    // Captured before the await: the dialog is asynchronous now, and the
-    // revert below has to reach the same <select> afterwards.
-    const select = e.target
-    const plan = select.value
-    if (plan === sub.plan) return
-    const now = catalogue[sub.plan]
-    const next = catalogue[plan]
-    const downgrade = next && now && next.student_seats < now.student_seats
-    if (downgrade && !(await confirmDialog({
-      title: `Downgrade to ${plan}?`,
-      message:
-        `Student seats drop from ${now.student_seats} to ${next.student_seats}. ` +
-        'Existing accounts are not removed — you would simply be over the limit.',
-      confirmLabel: 'Downgrade',
-      tone: 'danger',
-    }))) { select.value = sub.plan; return }
-    mut.mutate(plan)
-  }
-
+function PlanCard({ ownerId, sub, usage, resourceUsage }) {
   const storageBytes = (sub.limits?.storage_gb ?? 0) * GB
   const trialEndsMs = toMillis(sub.trial_ends_at)
   const trialEndsLabel = trialEndsMs
@@ -184,19 +156,6 @@ function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
           }}>
             {sub.status}
           </span>
-          <div style={{ marginTop: 10 }}>
-            <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
-              Plan
-            </label>
-            <select value={sub.plan} onChange={pick} disabled={mut.isPending}
-                    style={{ ...field, width: 'auto', padding: '8px 12px', fontSize: 13, cursor: 'pointer' }}>
-              {names.map((n) => (
-                <option key={n} value={n}>
-                  {n.charAt(0).toUpperCase() + n.slice(1)} — {catalogue[n].student_seats} Students
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -242,11 +201,12 @@ function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
           <div>
             <div style={{ color: muted, fontSize: 11.5 }}>Student-Protected Credit Pool</div>
             <span>
-              {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.student_remaining ?? 0) <= 0
-                ? '0 credits remaining (Exhausted)'
-                : resourceUsage?.ai_credits?.student_protected
-                  ? `${Number(resourceUsage.ai_credits.student_remaining ?? resourceUsage.ai_credits.student_protected).toLocaleString()} protected`
-                  : 'Unavailable (not configured in this release)'}
+              {/* The server reports the pool as ai_credits.pools.student (read_resource_usage). */}
+              {resourceUsage?.ai_credits?.pools?.student?.status !== 'available_estimated'
+                ? 'Unavailable (not configured in this release)'
+                : resourceUsage.ai_credits.pools.student.remaining <= 0
+                  ? '0 credits remaining (Exhausted)'
+                  : `${Number(resourceUsage.ai_credits.pools.student.remaining).toLocaleString()} protected`}
             </span>
           </div>
           <div>
@@ -267,7 +227,6 @@ function PlanCard({ ownerId, sub, usage, resourceUsage, plans, onChanged }) {
         </p>
       </div>
 
-      {error && <div style={{ marginTop: 14 }}><PlanChangeNotice error={error} /></div>}
     </section>
   )
 }
@@ -289,10 +248,16 @@ export const SEAT_CHECKOUT_BANNER = {
 
 function SeatCheckoutBanner({ state, receipt, dismiss }) {
   if (!state) return null
-  const s = SEAT_CHECKOUT_BANNER[state]
-  const seatsLine = state === 'paid' && receipt?.newLimits
+  const balancePaid = state === 'paid' && receipt?.kind === 'installment_balance'
+  const s = balancePaid
+    ? { ...SEAT_CHECKOUT_BANNER.paid, text: 'Payment received — the remaining balance is paid. Nothing more is due this term.' }
+    : SEAT_CHECKOUT_BANNER[state]
+  const seatsLine = state === 'paid' && !balancePaid && receipt?.newLimits
     ? `Your school now has ${receipt.newLimits.teacher_seats} teacher seats and `
       + `${receipt.newLimits.student_seats} student seats.`
+    : null
+  const receiptLine = balancePaid
+    ? (receipt.receiptSentTo ? `A receipt was sent to ${receipt.receiptSentTo}.` : 'We could not send the receipt.')
     : null
   return (
     <div style={{
@@ -302,6 +267,7 @@ function SeatCheckoutBanner({ state, receipt, dismiss }) {
       <span style={{ fontSize: 13.5, color: s.color, fontWeight: 600 }}>
         {s.text}
         {seatsLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{seatsLine}</span>}
+        {receiptLine && <span style={{ display: 'block', fontWeight: 400, marginTop: 3 }}>{receiptLine}</span>}
       </span>
       {state !== 'checking' && (
         <button
@@ -625,18 +591,21 @@ export default function SubscriptionTab() {
     <div style={{ display: 'grid', gap: 22 }}>
       <SeatCheckoutBanner {...checkout} />
 
-      <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} plans={plans}
-                onChanged={refresh} />
+      <InstallmentStatus ownerId={ownerId} subscription={subscription} installment={data.installment} />
+
+      <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} />
 
       {subscription.type === 'institution' && subscription.status === 'active' && (
-        <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
+        data.payments_enabled === false
+          ? <section style={{ ...card, padding: 22 }}><PaymentUnavailableNote style={{ margin: 0 }} /></section>
+          : <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
       )}
 
       <TeacherSeatsCard onChanged={refresh} />
 
       <ChangePassword />
 
-      {plans && (
+      {plans && !data.installment && (
         <section style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
             <CardHead

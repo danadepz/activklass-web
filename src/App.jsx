@@ -21,6 +21,13 @@ const ForcedChangePassword = lazyRoute(() => import('@/routes/change-password'),
 const PendingVerification = lazyRoute(() => import('@/routes/pending-verification'), { full: true })
 const PayToActivate = lazyRoute(() => import('@/routes/pay-to-activate'), { full: true })
 
+// Local, unauthenticated preview of the subscription payment UI. Vite folds
+// import.meta.env.DEV to false in a production build, so neither the route
+// nor its chunk exists there.
+const SubscriptionPreview = import.meta.env.DEV
+  ? lazyRoute(() => import('@/routes/dev/subscription-preview'), { full: true })
+  : null
+
 // ─── Student portal ──────────────────────────────────────────────────────────
 const StudentLayout       = lazyRoute(() => import('@/routes/student/_layout'), { full: true })
 const StudentDashboard    = lazyRoute(() => import('@/routes/student/index'))
@@ -74,6 +81,7 @@ export default function App() {
       <Route path="/forgot-password" element={ForgotPassword} />
       <Route path="/reset-password" element={ResetPassword} />
       <Route path="/portal"   element={<RoleHomeRedirect />} />
+      {SubscriptionPreview && <Route path="/dev/subscription-preview" element={SubscriptionPreview} />}
 
       {/* Signed in, but still on the password an admin issued. ProtectedRoute
           sends every other route here until it is replaced, so this one route
