@@ -96,43 +96,46 @@ export default function PaymentConfirmModal({ open, costing, schedule, dueDate, 
         subtitle="Check the details below. You will finish payment on PayMongo's secure page."
         size="md"
         closeOnBackdrop={!busy}
+        // The agreements live in the pinned footer, beside Pay Now, so they stay
+        // in view however far the cost details have to scroll.
         footer={(
-          <>
-            <Button variant="quiet" onClick={onBack} disabled={busy}>Go Back</Button>
-            <Button onClick={() => ready && onConfirm()} disabled={!ready}>
-              {busy ? 'Opening checkout…' : 'Pay Now'}
-            </Button>
-          </>
+          <div style={{ width: '100%', display: 'grid', gap: 16 }}>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <label style={checkRow}>
+                <input type="checkbox" checked={costsReviewed} onChange={(e) => setCostsReviewed(e.target.checked)} style={checkBox} />
+                <span>{ACK_COSTS}</span>
+              </label>
+              <label style={checkRow}>
+                <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} style={checkBox} />
+                <span>
+                  I have read and agree to the{' '}
+                  <button
+                    type="button"
+                    style={link}
+                    // A control inside a label must not tick the box it sits beside.
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true) }}
+                  >
+                    Terms and Conditions
+                  </button>
+                  .
+                </span>
+              </label>
+
+              {!ready && !busy ? (
+                <p style={{ margin: 0, fontSize: 12.5, color: muted }}>Tick both boxes to continue.</p>
+              ) : null}
+              {error ? <p role="alert" style={{ margin: 0, fontSize: 13, color: red, fontWeight: 600 }}>{error}</p> : null}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <Button variant="quiet" onClick={onBack} disabled={busy}>Go Back</Button>
+              <Button onClick={() => ready && onConfirm()} disabled={!ready}>
+                {busy ? 'Opening checkout…' : 'Pay Now'}
+              </Button>
+            </div>
+          </div>
         )}
       >
-        <SubscriptionCostBreakdown costing={costing} schedule={schedule} dueDate={dueDate} title="Subscription" />
-
-        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${line}`, display: 'grid', gap: 12 }}>
-          <label style={checkRow}>
-            <input type="checkbox" checked={costsReviewed} onChange={(e) => setCostsReviewed(e.target.checked)} style={checkBox} />
-            <span>{ACK_COSTS}</span>
-          </label>
-          <label style={checkRow}>
-            <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} style={checkBox} />
-            <span>
-              I have read and agree to the{' '}
-              <button
-                type="button"
-                style={link}
-                // A control inside a label must not tick the box it sits beside.
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true) }}
-              >
-                Terms and Conditions
-              </button>
-              .
-            </span>
-          </label>
-
-          {!ready && !busy ? (
-            <p style={{ margin: 0, fontSize: 12.5, color: muted }}>Tick both boxes to continue.</p>
-          ) : null}
-          {error ? <p role="alert" style={{ margin: 0, fontSize: 13, color: red, fontWeight: 600 }}>{error}</p> : null}
-        </div>
+        <SubscriptionCostBreakdown costing={costing} schedule={schedule} dueDate={dueDate} title="Subscription" compact />
       </Modal>
 
       <Modal
