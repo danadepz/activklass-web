@@ -10,7 +10,6 @@ import { emptyClassForm } from '@/lib/classForm'
 import { parseSchedule, scheduleOverlap } from '@/lib/schedule'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useAuth } from '@/context/useAuth'
-import { uploadAttachment } from '@/lib/attachments'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -34,13 +33,6 @@ export const DIALOG_LABEL_MAX = 60
    Subject Description alone allows up to SUBJECT_MAX (200) characters, more
    than a one-line summary row should ever show. */
 export const SUMMARY_FIELD_MAX = 60
-
-const MAX_SYLLABUS_BYTES = 10 * 1024 * 1024
-const ALLOWED_SYLLABUS_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-]
 
 const FIRST_YEAR = 2026
 const YEARS = Array.from({ length: 10 }, (_, i) => String(FIRST_YEAR + i))
@@ -394,11 +386,9 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const [fromYear, setFromYear] = useState(() => normalizeAcademicYear(form.academic_year).from)
   const [toYear, setToYear] = useState(() => normalizeAcademicYear(form.academic_year).to)
 
-  const [syllabusFile, setSyllabusFile] = useState(null)
   const [error, setError] = useState(null)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
-  const fileRef = useRef(null)
   const formRef = useRef(null)
 
   const invalidCount = FIELD_ORDER.filter((key) => errors[key]).length
@@ -500,33 +490,6 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     clearError('academic_year')
   }
 
-  const clearFile = () => {
-    setSyllabusFile(null)
-    if (fileRef.current) fileRef.current.value = ''
-  }
-
-  function handleFile(e) {
-    const file = e.target.files?.[0]
-    setError(null)
-    if (!file) {
-      setSyllabusFile(null)
-      return
-    }
-    const looksLikeDoc =
-      ALLOWED_SYLLABUS_TYPES.includes(file.type) || /\.(pdf|docx?)$/i.test(file.name)
-    if (!looksLikeDoc) {
-      reportError('Syllabus must be a PDF or Word document.')
-      clearFile()
-      return
-    }
-    if (file.size > MAX_SYLLABUS_BYTES) {
-      reportError('Syllabus file must be under 10 MB.')
-      clearFile()
-      return
-    }
-    setSyllabusFile(file)
-  }
-
   async function submit(e) {
     e.preventDefault()
     const nextErrors = validate(form, selectedDays, originalMaxStudents, enrolledCount)
@@ -573,28 +536,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           created_at: serverTimestamp(),
         })
       }
-      const targetId = mode === 'edit' ? classId : targetRef.id
-
-      let warning = null
-      if (syllabusFile) {
-        try {
-          const path = `syllabi/${targetId}/${syllabusFile.name}`
-          const url = await uploadAttachment(path, syllabusFile)
-          await updateDoc(targetRef, {
-            syllabus_file: {
-              name: syllabusFile.name,
-              url,
-              path,
-              content_type: syllabusFile.type,
-              size: syllabusFile.size,
-              uploaded_at: new Date().toISOString(),
-            },
-          })
-        } catch (err) {
-          warning = `Class saved, but the syllabus file was not attached. ${err.message}`
-        }
-      }
-      onSaved({ warning })
+      onSaved()
     } catch (err) {
       reportError(err.message)
       setSaving(false)
@@ -923,36 +865,20 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           </div>
           )}
 
-          {/* Syllabus Upload */}
+          {/* Existing class syllabus metadata remains readable for backward
+              compatibility. New uploads belong in the Syllabus workflow. */}
           <div className="border-t border-slate-200 pt-4">
             <span className="text-sm font-medium text-slate-700">
-              Syllabus <span className="text-slate-400 font-normal">(Optional)</span>
+              Existing Syllabus
             </span>
-            {currentSyllabusFile && !syllabusFile && (
+            {currentSyllabusFile && (
               <p className="text-xs text-slate-500 mt-1">
                 Current:{' '}
                 <a href={currentSyllabusFile.url} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: '#0E2A5C' }}>
                   {currentSyllabusFile.name}
                 </a>{' '}
-                — choose a file to replace it.
+                — class creation no longer uploads or extracts syllabus files.
               </p>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={handleFile}
-              className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-white file:px-4 file:py-2 file:font-medium hover:file:opacity-90 cursor-pointer"
-            />
-            {syllabusFile ? (
-              <p className="text-xs text-slate-500 mt-1">
-                Attached: {syllabusFile.name} ({Math.ceil(syllabusFile.size / 1024)} KB) ·{' '}
-                <button type="button" onClick={clearFile} className="hover:underline" style={{ color: '#0E2A5C' }}>
-                  remove
-                </button>
-              </p>
-            ) : (
-              <p className="text-xs text-slate-400 mt-1">Attach a PDF or Word document, up to 10 MB.</p>
             )}
           </div>
 

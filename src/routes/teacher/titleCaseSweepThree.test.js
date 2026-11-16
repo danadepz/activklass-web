@@ -172,7 +172,8 @@ describe('T-176 — New Class dialog (ClassFormModal.jsx, 259)', () => {
     expect(classFormModalSrc).not.toContain("'Create class'")
   })
 
-  it('also title-cases the Syllabus (optional) field label touched in this pass', () => {
-    expect(classFormModalSrc).toContain('Syllabus <span className="text-slate-400 font-normal">(Optional)</span>')
+  it('keeps only the read-only legacy syllabus label in the class form', () => {
+    expect(classFormModalSrc).toContain('Existing Syllabus')
+    expect(classFormModalSrc).not.toContain('Syllabus <span className="text-slate-400 font-normal">(Optional)</span>')
   })
 })
