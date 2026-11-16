@@ -178,15 +178,12 @@ export const SEAT_KEYS = [
   { key: 'storage_gb', label: 'Storage (GB)' },
 ]
 
-/** Accounts enrolled for PayMongo TEST checkout, and whether enrollment is open. */
+/** Accounts enrolled for PayMongo TEST checkout. */
 export function fetchTestPaymentAccounts() {
   return api('/api/superadmin/test-payment-accounts')
 }
-export function fetchTestPaymentEligibility() {
-  return api('/api/superadmin/test-payment-accounts/eligibility')
-}
 
-/** Enroll or disable one owner. The server refuses accounts that existed before the release. */
+/** Enroll or disable one owner. The server refuses an owner with payment history. */
 export function setTestPaymentAccount(ownerId, enabled, note = '') {
   return api(`/api/superadmin/test-payment-accounts/${encodeURIComponent(ownerId)}`, { method: 'PUT', body: { enabled, note } })
 }

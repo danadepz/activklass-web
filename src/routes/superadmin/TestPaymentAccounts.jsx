@@ -1,19 +1,18 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchTestPaymentAccounts, fetchTestPaymentEligibility, setTestPaymentAccount } from '@/lib/superadmin'
+import { fetchTestPaymentAccounts, setTestPaymentAccount } from '@/lib/superadmin'
 
 const KEY = ['sa-test-payment-accounts']
 
 /**
- * Enroll a fresh demonstration account for PayMongo TEST checkout, or disable one.
- * The server decides eligibility (created after the enrollment cutoff, no payment
- * history); this card only asks and shows the answer.
+ * Approve an account for PayMongo TEST checkout, or disable one. The server
+ * decides eligibility (no payment history); this card only asks and shows the
+ * answer. Approving changes no subscription by itself.
  */
 export default function TestPaymentAccounts() {
   const queryClient = useQueryClient()
   const [ownerId, setOwnerId] = useState('')
   const [error, setError] = useState('')
-  const { data: elig } = useQuery({ queryKey: [...KEY, 'eligibility'], queryFn: fetchTestPaymentEligibility })
   const { data } = useQuery({ queryKey: KEY, queryFn: fetchTestPaymentAccounts })
   const accounts = data?.accounts ?? []
 
@@ -37,9 +36,8 @@ export default function TestPaymentAccounts() {
     <section className="mt-8 rounded-xl border border-zinc-800 p-5" aria-labelledby="tpa-title">
       <h2 id="tpa-title" className="text-sm font-bold text-zinc-100">TEST payment accounts</h2>
       <p className="mt-1 text-xs text-zinc-400">
-        {elig?.open
-          ? `Only accounts created after ${new Date(elig.created_after).toLocaleString()} can be enrolled. Existing subscribers, unpaid schools and trials are refused.`
-          : 'Enrollment is closed: no enrollment cutoff is set on the server.'}
+        Approved accounts can pay with PayMongo TEST cards. Approving changes no subscription by itself.
+        An account with payment history is refused; use the isolated demonstration checkout for it.
       </p>
       <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
         <label htmlFor="tpa-owner" className="sr-only">Teacher uid or school id</label>
@@ -52,7 +50,7 @@ export default function TestPaymentAccounts() {
         />
         <button
           type="submit"
-          disabled={!elig?.open || !ownerId.trim() || mut.isPending}
+          disabled={!ownerId.trim() || mut.isPending}
           className="rounded-lg bg-amber-400 px-4 py-1.5 text-xs font-bold text-zinc-950 hover:bg-amber-300 disabled:opacity-40"
         >
           Enroll
