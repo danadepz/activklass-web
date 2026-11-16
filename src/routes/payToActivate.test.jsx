@@ -65,8 +65,8 @@ describe('/pay-to-activate — the admin who owes the payment', () => {
       school: APPROVED_UNPAID_SCHOOL,
       subscription: { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 2400 } },
     })
-    expect(html).toContain('Pay for this school year')
-    expect(html).toContain('Review subscription details')
+    expect(html).toContain('Proceed to Payment')
+    expect(html).toContain('Review your subscription')
     expect(html).toContain('Subscription price breakdown')
   })
 
@@ -89,7 +89,7 @@ describe('/pay-to-activate — anyone else in the school', () => {
       school: APPROVED_UNPAID_SCHOOL,
       subscription: { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 2400 } },
     })
-    expect(html).not.toContain('Pay for this school year')
+    expect(html).not.toContain('Proceed to Payment')
     expect(html).toContain('administrator pays for the year')
   })
 })
@@ -123,7 +123,7 @@ describe('/pay-to-activate — coming back from a cancelled payment', () => {
       paymentState: 'checking', url: '/pay-to-activate?checkout_cancelled=1&checkout_ref=ref-1' })
     expect(html).toContain('Checking payment status with ActivKlass')
     expect(html).not.toContain('Payment cancelled — nothing was charged.')
-    expect(html).toContain('Pay for this school year')
+    expect(html).toContain('Proceed to Payment')
     expect(html).toContain('Sign out')
     expect(html.toLowerCase()).not.toContain('paymongo')
   })

@@ -52,7 +52,7 @@ vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn() }))
 
 import TeacherAccountPage, { CHECKOUT_BANNER } from './account.jsx'
 
-const PAY = 'Pay for this school year'
+const PAY = 'Proceed to Payment'
 const ADD_SEATS = 'Add student seats'
 const DAY = 24 * 60 * 60 * 1000
 
