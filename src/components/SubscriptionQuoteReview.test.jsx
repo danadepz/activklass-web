@@ -60,6 +60,16 @@ describe('SubscriptionQuoteReview', () => {
     queryMock.data.quote.terms = orig
   })
 
+  it('keeps payment closed for an account the server has not enrolled for TEST payments', () => {
+    queryMock.data.quote.payments_enabled = false
+    const html = render()
+    expect(html).toContain('Online payment is not available for this account yet')
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
+    queryMock.data.quote.payments_enabled = true
+    expect(render()).not.toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
+    delete queryMock.data.quote.payments_enabled
+  })
+
   it('enables Proceed to Payment when checkout is open', () => {
     expect(render()).not.toMatch(/<button[^>]*disabled=""[^>]*>Proceed to Payment/)
   })

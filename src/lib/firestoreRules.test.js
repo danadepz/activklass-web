@@ -1467,6 +1467,19 @@ describe('payments · the PayMongo checkout flip (T-68)', () => {
   })
 })
 
+describe('payment_test_accounts · TEST-payment enrollment is server-only', () => {
+  it('refuses an owner enrolling themselves', async () => {
+    await assertFails(setDoc(doc(ctx(TEACHER), 'payment_test_accounts', TEACHER), { enabled: true }))
+  })
+
+  it('refuses an owner reading their own enrollment', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'payment_test_accounts', TEACHER), { enabled: true })
+    })
+    await assertFails(getDoc(doc(ctx(TEACHER), 'payment_test_accounts', TEACHER)))
+  })
+})
+
 /* ────────────────────────────────────────────────────────────────────────
  * A teacher handles the students in their own classes (2026-08-31).
  *
