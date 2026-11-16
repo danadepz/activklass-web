@@ -1264,6 +1264,19 @@ describe('subscription_requests · the Institution path on /register', () => {
     )
   })
 
+  // Option B (owner, 2026-11-16): an Institution may start at 3 teachers.
+  // The rule is the floor of both policies; approval enforces the active one.
+  it('accepts a 3-teacher request and refuses 2 teachers (Option B minimum)', async () => {
+    await assertSucceeds(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')),
+        request({ teacher_seats: 3, students_per_teacher: 30, student_seats: 90 })),
+    )
+    await assertFails(
+      setDoc(doc(collection(ctx(TEACHER), 'subscription_requests')),
+        request({ teacher_seats: 2, students_per_teacher: 30, student_seats: 60 })),
+    )
+  })
+
   it('lets a middle name through', async () => {
     await assertSucceeds(
       setDoc(
