@@ -763,12 +763,24 @@ export default function Register() {
                   T-242 (triplecookiemonster-319, Kristine): dropped the individual
                   Position dropdown too, defaulting to 'teacher' in state.
                   Academic Calendar is now the sole field in this row. */}
-              <Field id="reg-calendar" label="Academic Calendar">
-                <select id="reg-calendar" className="ak-input" required value={form.calendar} onChange={set('calendar')} style={selectStyle(form.calendar)}>
-                  <option value="" disabled>Select</option>
-                  {CALENDARS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-              </Field>
+              <div className="grid gap-3.5 md:grid-cols-2">
+                <Field id="reg-school-year" label="School Year" hint="current">
+                  <input
+                    id="reg-school-year"
+                    className="ak-input"
+                    readOnly
+                    tabIndex={-1}
+                    value="S.Y. 2026 – 2027"
+                    style={{ ...authInputStyle, background: 'rgba(14,42,92,0.03)', cursor: 'default', color: '#1B2559' }}
+                  />
+                </Field>
+                <Field id="reg-calendar" label="Academic Calendar">
+                  <select id="reg-calendar" className="ak-input" required value={form.calendar} onChange={set('calendar')} style={selectStyle(form.calendar)}>
+                    <option value="" disabled>Select</option>
+                    {CALENDARS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </Field>
+              </div>
             </>
           )}
 

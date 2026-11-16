@@ -727,6 +727,8 @@ describe('T-129 — Title Case on the field labels', () => {
   it('steps 3 and 4, read off the source: School Type, Academic Calendar, Confirm Password', () => {
     expect(registerSource).toContain('label="School Type"')
     expect(registerSource).toContain('label="Academic Calendar"')
+    expect(registerSource).toContain('label="School Year"')
+    expect(registerSource).toContain('S.Y. 2026 – 2027')
     expect(registerSource).toContain('label="Confirm Password"')
     expect(registerSource).not.toContain('label="School type"')
     expect(registerSource).not.toContain('label="Academic calendar"')
