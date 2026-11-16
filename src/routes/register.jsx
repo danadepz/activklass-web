@@ -33,6 +33,7 @@ import AuthLayout, {
   EyeToggle,
   AuthNotice,
 } from '@/components/AuthLayout'
+import PasswordChecklist from '@/components/PasswordChecklist'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import { navy, gold, goldDeep, muted, blue, blueText, violet, violetDeep } from '@/theme'
 import { BookOpen, Users, ShieldCheck, Check } from '@/components/icons'
@@ -54,7 +55,7 @@ const FRIENDLY_ERRORS = {
   // refused (createAccount below), so the address is not theirs to finish.
   'auth/email-already-in-use':
     'That email already has an account, and this password does not match it. Sign in with the right password, reset it from "Forgot your password?", or use a different email address.',
-  'auth/weak-password': 'Password must be at least 6 characters.',
+  'auth/weak-password': 'Password must be at least 8 characters.',
   'auth/invalid-email': 'That email address is not valid.',
 }
 
@@ -102,18 +103,6 @@ const STEPS = {
   individual: ['Account type', 'About you', 'Your school', 'Sign-in details', 'Verify identity', 'Students'],
   institution: ['Account type', 'About you', 'Your school', 'Sign-in details', 'Seats'],
 }
-
-// 0–3 heuristic strength score, mirrored by the three-segment meter.
-function scorePassword(v = '') {
-  if (!v) return 0
-  let sc = 0
-  if (v.length >= 6) sc++
-  if (v.length >= 10 || (/[0-9]/.test(v) && /[a-zA-Z]/.test(v))) sc++
-  if (/[^a-zA-Z0-9]/.test(v) && v.length >= 8) sc++
-  return sc
-}
-const PW_LABELS = ['', 'Weak', 'Fair', 'Strong']
-const pwColor = (score) => (score >= 3 ? '#1F8A5B' : score === 2 ? gold : '#E0794B')
 
 const selectStyle = (hasValue) => ({
   ...authInputStyle,
@@ -281,10 +270,6 @@ export default function Register() {
     registrationQuoteQuery.data?.policy_version === registrationPolicy.policy_version &&
     registrationQuoteQuery.data?.quote?.pricing_version === registrationPolicy.policy_version
   )
-
-  const pwScore = scorePassword(form.password)
-  const pwStrength = pwColor(pwScore)
-  const segIdle = 'rgba(14,42,92,0.1)'
 
   // Same rules as every other form that collects these fields, checked one
   // step at a time so the message points at what is on screen.
@@ -800,22 +785,14 @@ export default function Register() {
                       required
                       minLength={8}
                       autoComplete="new-password"
-                      placeholder="Create a password"
+                      placeholder="At least 8 characters"
                       value={form.password}
                       onChange={set('password')}
                       style={{ ...authInputStyle, paddingRight: 46 }}
                     />
                     <EyeToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />
                   </div>
-                  <div className="flex items-center gap-1" style={{ marginTop: 10 }}>
-                    {[1, 2, 3].map((seg) => (
-                      <span key={seg} style={{ flex: 1, height: 4, borderRadius: 2, background: pwScore >= seg ? pwStrength : segIdle, transition: 'background 0.25s' }} />
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between" style={{ fontSize: 12, color: '#9AA6BD', marginTop: 8 }}>
-                    <span>At least 6 characters.</span>
-                    {pwScore > 0 && <span style={{ fontWeight: 700, color: pwStrength }}>{PW_LABELS[pwScore]}</span>}
-                  </div>
+                  <PasswordChecklist value={form.password} />
                 </Field>
                 <Field id="reg-confirm" label="Confirm Password">
                   <div style={{ position: 'relative' }}>

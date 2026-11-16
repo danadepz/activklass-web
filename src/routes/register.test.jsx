@@ -737,8 +737,8 @@ describe('T-129 — three helper paragraphs removed; field-level rule hints kept
     expect(registerSource).not.toMatch(/Write the full official name without abbreviations/)
   })
 
-  it('keeps the password-rule hint -- the ask was about explanatory prose, not validation help', () => {
-    expect(registerSource).toContain('At least 6 characters.')
+  it('keeps the password-rule hint -- uses PasswordChecklist matching change password', () => {
+    expect(registerSource).toContain('<PasswordChecklist value={form.password} />')
   })
 })
 
