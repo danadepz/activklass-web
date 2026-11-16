@@ -1496,6 +1496,24 @@ describe('users · only the Super Admin approves a teacher (the gate on paying)'
     await seedPending()
     await assertSucceeds(updateDoc(doc(ctx('dev-1', { superadmin: true }), 'users', SOLO), { verification_status: 'approved' }))
   })
+
+  // An existing account with no status verifies from the Account page to pay.
+  const seedLegacy = () => testEnv.withSecurityRulesDisabled(async (admin) => {
+    await setDoc(doc(admin.firestore(), 'users', SOLO), { role: 'teacher', email: 'solo@example.test', subscription_status: 'active' })
+  })
+
+  it('lets an existing teacher with no status send their ID for review', async () => {
+    await seedLegacy()
+    await assertSucceeds(updateDoc(doc(ctx(SOLO), 'users', SOLO), {
+      verification_status: 'pending', verification_context: 'payment', verification_id_type: 'prc',
+      verification_id_number: '1234567', verification_id_link: 'https://example.test/id', verification_submitted_at: serverTimestamp(),
+    }))
+  })
+
+  it('refuses an existing teacher with no status approving themselves', async () => {
+    await seedLegacy()
+    await assertFails(updateDoc(doc(ctx(SOLO), 'users', SOLO), { verification_status: 'approved', verification_context: 'payment' }))
+  })
 })
 
 describe('payment_test_accounts · TEST-payment enrollment is server-only', () => {

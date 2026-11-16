@@ -122,7 +122,7 @@ describe('payment stays closed until the account is approved — the same rule t
   const trial = { type: 'teacher', status: 'trial', trial_ends_at: Date.now() + 20 * DAY }
   const active = { type: 'teacher', status: 'active', paid_through: Date.now() + 300 * DAY }
 
-  it.each([undefined, 'pending', 'rejected'])('no Pay for a teacher whose verification is %s', (status) => {
+  it.each(['pending', 'rejected'])('no Pay for a self-registered teacher whose verification is %s', (status) => {
     for (const html of [page({ profile: { verification_status: status }, subscription: trial }),
                         page({ profile: { verification_status: status, subscription_status: 'trial' }, noDoc: true })]) {
       expect(html).not.toContain(PAY)
@@ -130,10 +130,39 @@ describe('payment stays closed until the account is approved — the same rule t
     }
   })
 
-  it('no Add student seats for an unverified teacher on an active plan', () => {
+  it('an existing account with no verification on file gets the ID form instead of Pay', () => {
+    for (const html of [page({ profile: { verification_status: undefined }, subscription: trial }),
+                        page({ profile: { verification_status: undefined, subscription_status: 'trial' }, noDoc: true })]) {
+      expect(html).not.toContain(PAY)
+      expect(html).toContain('Send for review')
+      expect(html).toContain('your classes and records stay open')
+    }
+  })
+
+  it('no Add student seats for an existing subscriber with no verification — they get the ID form', () => {
     const html = page({ profile: { verification_status: undefined }, subscription: active })
     expect(html).not.toContain(ADD_SEATS)
-    expect(html).toContain(LOCKED)
+    expect(html).toContain('Send for review')
+  })
+
+  it('an existing account that sent its ID waits, with its classes open', () => {
+    const html = page({ profile: { verification_status: 'pending', verification_context: 'payment' }, subscription: active })
+    expect(html).not.toContain(ADD_SEATS)
+    expect(html).toContain('Your ID is with the ActivKlass team')
+    expect(html).not.toContain('Send for review')
+  })
+
+  it('an existing account that was sent back sees the reviewer note and can send again', () => {
+    const html = page({ profile: { verification_status: 'rejected', verification_context: 'payment', verification_note: 'Photo is blurry' }, subscription: trial })
+    expect(html).not.toContain(PAY)
+    expect(html).toContain('Photo is blurry')
+    expect(html).toContain('Send again')
+  })
+
+  it('a school teacher never gets the individual ID form', () => {
+    const html = page({ profile: { verification_status: undefined, school_id: 'S1' }, noDoc: true })
+    expect(html).not.toContain('Send for review')
+    expect(html).not.toContain(PAY)
   })
 
   it("tells a pending institution requester it is the school's approval they are waiting on", () => {

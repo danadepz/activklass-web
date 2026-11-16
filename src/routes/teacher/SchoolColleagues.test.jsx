@@ -41,6 +41,11 @@ describe('pickColleagues', () => {
     ]
     expect(pickColleagues(users, 'me').map((u) => u.id)).toEqual(['s', 'z'])
   })
+
+  it('keeps an existing colleague listed while they verify only to pay', () => {
+    const users = [{ id: 'l', last_name: 'Lim', verification_status: 'pending', verification_context: 'payment' }]
+    expect(pickColleagues(users, 'me').map((u) => u.id)).toEqual(['l'])
+  })
 })
 
 describe('SchoolColleaguesCard', () => {

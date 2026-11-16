@@ -86,6 +86,9 @@ export default function ProtectedRoute({
 
 function awaitingVerification(profile) {
   const v = profile?.verification_status
+  // An existing account verifying only to pay (teacher/account.jsx) keeps its
+  // classes open while it waits; the backend still refuses payment until approved.
+  if (profile?.verification_context === 'payment') return false
   return profile?.role === 'teacher' && Boolean(v) && v !== 'approved'
 }
 

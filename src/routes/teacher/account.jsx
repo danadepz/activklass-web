@@ -14,7 +14,7 @@ import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import SubscriptionExpiry from '@/components/SubscriptionExpiry'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
-import { nameError } from '@/lib/validation'
+import { linkError, nameError, verificationIdError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
@@ -431,14 +431,95 @@ function CheckoutBanner({ state, receipt, dismiss }) {
 
 /* The backend opens a solo checkout only to a verified teacher
    (subscriptions._payment_refusal); this mirrors it so the button never
-   leads to a refusal. Wording matches the server's. */
+   leads to a refusal. Wording matches the server's.
+
+   An account made before ID checks existed, or provisioned by a Super Admin,
+   has no verification_status, and the /pending-verification gate never sees
+   it. It verifies here instead, with the same fields that page uses, tagged
+   verification_context: 'payment' so ProtectedRoute keeps its classes open
+   while the review is pending and the Super Admin's approval does not restart
+   a trial. Only the superadmin claim can write 'approved' (firestore.rules). */
+export const PAYMENT_VERIFICATION = 'payment'
+const paymentNote = { fontSize: 13, color: muted, margin: '12px 0 0', lineHeight: 1.6 }
+
 function PaymentLocked({ profile }) {
+  const { refreshProfile } = useAuth()
+  const status = profile.verification_status
+  const [idType, setIdType] = useState(profile.verification_id_type ?? ID_TYPES[0].value)
+  const [idNumber, setIdNumber] = useState(profile.verification_id_number ?? '')
+  const [idLink, setIdLink] = useState(profile.verification_id_link ?? '')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (profile.school_request_pending) {
+    return <p style={paymentNote}>Your school&apos;s request is still being reviewed. Your school can subscribe once ActivKlass approves it.</p>
+  }
+  if (status && profile.verification_context !== PAYMENT_VERIFICATION) {
+    return <p style={paymentNote}>Payment opens once ActivKlass has verified your teacher account.</p>
+  }
+  if (status === 'pending') {
+    return (
+      <p style={paymentNote}>
+        Your ID is with the ActivKlass team. Payment opens once it is approved — your classes and
+        records stay open in the meantime.
+      </p>
+    )
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    setError('')
+    const problem = verificationIdError(idNumber, idType) || linkError(idLink)
+    if (problem) { setError(problem); return }
+    setBusy(true)
+    try {
+      // Moving one's own status to 'pending' is allowed; only the review approves.
+      await updateDoc(doc(db, 'users', profile.id), {
+        verification_status: 'pending',
+        verification_context: PAYMENT_VERIFICATION,
+        verification_id_type: idType,
+        verification_id_number: idNumber.trim(),
+        verification_id_link: idLink.trim(),
+        verification_submitted_at: serverTimestamp(),
+      })
+      await refreshProfile()
+    } catch {
+      setError('Could not send that. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <p style={{ fontSize: 13, color: muted, margin: '12px 0 0', lineHeight: 1.6 }}>
-      {profile.school_request_pending
-        ? "Your school's request is still being reviewed. Your school can subscribe once ActivKlass approves it."
-        : 'Payment opens once ActivKlass has verified your teacher account.'}
-    </p>
+    <form onSubmit={submit} aria-label="Verify your identity to subscribe" style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+      <p style={{ ...paymentNote, margin: 0 }}>
+        {status === 'rejected'
+          ? 'We could not verify the ID you sent. Fix it and send it again — your classes and records stay open.'
+          : 'Before you can pay, ActivKlass verifies every individual teacher’s identity. Send a teacher ID for review — your classes and records stay open while we check.'}
+      </p>
+      {status === 'rejected' && profile.verification_note ? (
+        <Notice tone="error"><strong>From the reviewer:</strong> {profile.verification_note}</Notice>
+      ) : null}
+      <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+        ID type
+        <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={idType} onChange={(e) => setIdType(e.target.value)}>
+          {ID_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+      </label>
+      <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+        ID number
+        <input style={{ ...field, marginTop: 6 }} value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
+      </label>
+      <label style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+        Link to a photo of the ID
+        <input style={{ ...field, marginTop: 6 }} type="url" placeholder="https://drive.google.com/…" value={idLink} onChange={(e) => setIdLink(e.target.value)} />
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: faint, marginTop: 6 }}>
+          Share the photo from Google Drive or OneDrive with “anyone with the link”.
+        </span>
+      </label>
+      <Notice>{error}</Notice>
+      <div><Button type="submit" disabled={busy}>{busy ? 'Sending…' : status === 'rejected' ? 'Send again' : 'Send for review'}</Button></div>
+    </form>
   )
 }
 
