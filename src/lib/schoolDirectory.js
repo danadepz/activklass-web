@@ -52,19 +52,9 @@ export function schoolNameKey(name) {
  * the write — this filter is the courtesy, not the guard.
  */
 export function isRetiredSchool(entry) {
-  // T-256 / T-272: A purged, retired, or inactive school is closed to new registrations.
-  // Handles retired, retiring, purged, deleted, inactive, and archived status values.
-  if (!entry) return false
-  if (entry.active === false || entry.is_active === false) return true
-  const status = String(entry.status ?? '').trim().toLowerCase()
-  return (
-    status === 'retired' ||
-    status === 'retiring' ||
-    status === 'purged' ||
-    status === 'deleted' ||
-    status === 'inactive' ||
-    status === 'archived'
-  )
+  // T-256: 'retiring' is a school a purge has started removing. It is closed to
+  // new registrations exactly like a retired one until the purge finishes.
+  return entry?.status === 'retired' || entry?.status === 'retiring'
 }
 
 /** Every selectable directory entry, A→Z by name: [{id, name, abbreviation}]. */
