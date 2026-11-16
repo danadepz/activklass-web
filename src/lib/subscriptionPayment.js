@@ -29,6 +29,22 @@ export const ACK_COSTS = 'I have reviewed and understood the subscription costs 
 /** Both confirmation boxes ticked, and not already submitting. */
 export const canConfirm = (costsReviewed, termsAccepted, busy) => costsReviewed === true && termsAccepted === true && !busy
 
+/**
+ * Pay Now: start the checkout and keep the popup locked while it runs. A
+ * refusal is reported back for the popup to show; success leaves it locked,
+ * because the caller is sending the browser to checkout.
+ */
+export async function confirmPayment(start, { setPaying, setPayError }) {
+  setPayError('')
+  setPaying(true)
+  try {
+    await start()
+  } catch (e) {
+    setPayError(e?.message || 'Could not open checkout. Try again.')
+    setPaying(false)
+  }
+}
+
 export const PLAN_LABEL = { individual: 'Individual Teacher', institution: 'Institution' }
 export const OPTION_LABEL = { full: 'Full payment (100%)', half: '50% down payment' }
 

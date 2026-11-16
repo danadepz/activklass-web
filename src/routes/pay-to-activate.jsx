@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { schoolApprovedUnpaid } from '@/lib/schoolStatus'
 import { fetchSubscription, recordTermsAcceptance, startCheckout, useCheckoutReturn } from '@/lib/subscription'
 import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
-import AuthLayout, { AuthNotice, AuthError } from '@/components/AuthLayout'
+import AuthLayout, { AuthNotice } from '@/components/AuthLayout'
 import SignOutButton from '@/components/SignOutButton'
 import { ink, muted, line } from '@/theme'
 
@@ -32,7 +32,6 @@ import { ink, muted, line } from '@/theme'
 export default function PayToActivate() {
   const { profile, school, isSuperAdmin, refreshProfile } = useAuth()
   const navigate = useNavigate()
-  const [err, setErr] = useState('')
   // T-257: PayMongo's cancel link returns here (subscriptions.py cancel_url).
   const paymentReturn = useCheckoutReturn(school?.id)
 
@@ -64,8 +63,8 @@ export default function PayToActivate() {
         paymentOption,
       })
     },
+    // A refusal is shown inside the confirm popup (SubscriptionQuoteReview).
     onSuccess: (res) => { window.location.href = res.checkout_url },
-    onError: (e) => setErr(e.message),
   })
 
   // Once paid, subscriptions.py's _mark_paid flips schools/{id}'s own
@@ -118,8 +117,7 @@ export default function PayToActivate() {
           </p>
         ) : isAdmin ? (
           <>
-            <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption }) }} />
-            {err && <div style={{ marginTop: 16 }}><AuthError>{err}</AuthError></div>}
+            <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => mut.mutateAsync({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption })} />
           </>
         ) : (
           <p style={{ fontSize: 13.5, color: muted, margin: '16px 0 0', lineHeight: 1.5 }}>

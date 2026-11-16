@@ -295,7 +295,6 @@ function PlanType({ label, detail }) {
  */
 function PayButton({ ownerId }) {
   const { isSuperAdmin } = useAuth()
-  const [err, setErr] = useState('')
   const mut = useMutation({
     mutationFn: async ({ pricingVersion, totalPhp, termsVersion, paymentOption }) => {
       let termsAcceptanceId
@@ -308,13 +307,12 @@ function PayButton({ ownerId }) {
         termsVersion, termsAcceptanceId, paymentOption,
       })
     },
+    // A refusal is shown inside the confirm popup (SubscriptionQuoteReview).
     onSuccess: (res) => { window.location.href = res.checkout_url },
-    onError: (e) => setErr(e.message),
   })
   return (
     <div style={{ marginTop: 12 }}>
-      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption }) }} />
-      <Notice>{err}</Notice>
+      <SubscriptionQuoteReview ownerId={ownerId} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => mut.mutateAsync({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption })} />
     </div>
   )
 }
