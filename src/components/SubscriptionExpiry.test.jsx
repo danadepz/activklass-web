@@ -6,13 +6,13 @@ import { formatExpirationCountdown } from '@/lib/subscription'
 const NOW = new Date('2026-11-16T00:00:00.000Z').getTime()
 
 describe('formatExpirationCountdown', () => {
-  it('shows days, hours, and minutes from a Firestore-style timestamp', () => {
+  it('shows human-readable days or hours left from a timestamp', () => {
     const expiry = { toMillis: () => NOW + (5 * 24 * 60 + 12 * 60 + 8) * 60_000 }
-    expect(formatExpirationCountdown(expiry, NOW)).toBe('5 days, 12 hours, 8 minutes remaining')
+    expect(formatExpirationCountdown(expiry, NOW)).toBe('5 days left')
   })
 
   it('rounds partial minutes up and describes an elapsed expiry', () => {
-    expect(formatExpirationCountdown(NOW + 1, NOW)).toBe('1 minute remaining')
+    expect(formatExpirationCountdown(NOW + 1, NOW)).toBe('1 minute left')
     expect(formatExpirationCountdown(NOW, NOW)).toBe('Expired')
   })
 
@@ -30,13 +30,13 @@ describe('SubscriptionExpiry', () => {
 
   afterEach(() => vi.useRealTimers())
 
-  it('renders the date and current days, hours and minutes', () => {
+  it('renders the date and days left', () => {
     const html = renderToStaticMarkup(
       <SubscriptionExpiry label="Trial ends" expiresAt={NOW + (2 * 24 * 60 + 3 * 60 + 8) * 60_000} />,
     )
     expect(html).toContain('Trial ends')
     expect(html).toContain('November 18, 2026')
-    expect(html).toContain('2 days, 3 hours, 8 minutes remaining')
+    expect(html).toContain('2 days left')
   })
 
   it('refreshes every minute and immediately after focus/visibility changes', () => {

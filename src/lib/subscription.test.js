@@ -49,13 +49,13 @@ describe('toMillis', () => {
 describe('formatExpirationCountdown', () => {
   const now = new Date('2026-11-16T00:00:00Z').getTime()
 
-  it('formats days, hours and minutes from a Firestore Timestamp', () => {
+  it('formats human-readable days left from a timestamp', () => {
     const expiresAt = { toMillis: () => now + (5 * 24 * 60 + 12 * 60 + 8) * 60_000 }
-    expect(formatExpirationCountdown(expiresAt, now)).toBe('5 days, 12 hours, 8 minutes remaining')
+    expect(formatExpirationCountdown(expiresAt, now)).toBe('5 days left')
   })
 
   it('rounds partial minutes up and labels an elapsed expiry', () => {
-    expect(formatExpirationCountdown(now + 1, now)).toBe('1 minute remaining')
+    expect(formatExpirationCountdown(now + 1, now)).toBe('1 minute left')
     expect(formatExpirationCountdown(now, now)).toBe('Expired')
   })
 

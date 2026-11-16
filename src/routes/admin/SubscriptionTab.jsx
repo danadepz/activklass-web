@@ -50,31 +50,50 @@ export function PlanChangeNotice({ error }) {
 function Meter({ label, used, total, unit, over, resourceType = 'seats', formatValue = (value) => value }) {
   const numericUsed = typeof used === 'number' ? used : null
   const numericTotal = typeof total === 'number' ? total : null
-  const pct = numericTotal && numericUsed != null ? Math.min(100, Math.round((numericUsed / numericTotal) * 100)) : null
+  const isOver = Boolean(over || (numericTotal != null && numericUsed != null && numericUsed > numericTotal))
+  const overCount = isOver && numericUsed != null && numericTotal != null ? numericUsed - numericTotal : 0
   const available = numericTotal != null && numericUsed != null ? Math.max(0, numericTotal - numericUsed) : null
+  const pct = numericTotal && numericUsed != null ? Math.round((numericUsed / numericTotal) * 100) : null
+  const barPct = pct != null ? Math.min(100, pct) : null
 
-  const isExhausted = over || (pct != null && pct >= 100)
+  const isExhausted = isOver || (numericTotal != null && numericUsed != null && numericUsed === numericTotal)
   const isCritical = !isExhausted && pct != null && pct >= 90
   const isWarning = !isExhausted && !isCritical && pct != null && pct >= 80
 
-  const barColor = isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#D97706' : green
+  const barColor = isOver ? '#D97706' : isExhausted ? '#EA580C' : isCritical ? '#EA580C' : isWarning ? '#D97706' : green
+  const amberTone = '#B45309'
+
+  const secondaryLabel = isOver
+    ? `${overCount} over plan`
+    : available != null
+      ? `${formatValue(available)}${unit ? ` ${unit}` : ''} available`
+      : null
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>{label}</span>
-        <span style={{ ...mono, fontSize: 12.5, color: isExhausted ? red : isCritical ? '#EA580C' : isWarning ? '#B45309' : muted }}>
-          {formatValue(used)}{unit ? ` ${unit}` : ''} / {total == null ? 'unlimited' : `${formatValue(total)}${unit ? ` ${unit}` : ''}`}
-          {available != null && (
-            <span style={{ fontSize: 11, marginLeft: 6, color: isExhausted ? red : muted }}>
-              ({formatValue(available)} available)
+        <span style={{ fontSize: 12.5, color: isOver || isExhausted ? amberTone : isCritical ? '#EA580C' : muted, fontVariantNumeric: 'tabular-nums' }}>
+          <strong>{formatValue(used)}{unit ? ` ${unit}` : ''}</strong> of {total == null ? 'unlimited' : `${formatValue(total)}${unit ? ` ${unit}` : ''}`} used
+          {secondaryLabel && (
+            <span style={{ fontSize: 11.5, marginLeft: 6, color: isOver ? amberTone : muted, fontWeight: isOver ? 600 : 400 }}>
+              ({secondaryLabel})
             </span>
           )}
         </span>
       </div>
-      <div style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}>
-        {pct != null && (
-          <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width .25s' }} />
+
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={numericUsed ?? 0}
+        aria-valuemin={0}
+        aria-valuemax={numericTotal ?? 100}
+        aria-valuetext={secondaryLabel ? `${formatValue(used)} of ${total ?? 'unlimited'}, ${secondaryLabel}` : `${formatValue(used)} of ${total ?? 'unlimited'}`}
+        style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}
+      >
+        {barPct != null && (
+          <div style={{ width: `${barPct}%`, height: '100%', background: barColor, transition: 'width .25s' }} />
         )}
       </div>
 
@@ -90,15 +109,45 @@ function Meter({ label, used, total, unit, over, resourceType = 'seats', formatV
         </div>
       )}
 
-      {isExhausted && (
-        <div style={{ fontSize: 11.5, color: red, marginTop: 5, lineHeight: 1.4 }}>
+      {isOver && (
+        <div style={{
+          fontSize: 11.5,
+          color: amberTone,
+          background: 'rgba(217, 119, 6, 0.08)',
+          border: '1px solid rgba(217, 119, 6, 0.25)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          marginTop: 6,
+          lineHeight: 1.4,
+        }}>
+          <strong>Over plan limit ({pct}% used):</strong>{' '}
+          {resourceType === 'storage'
+            ? 'Storage capacity is informational in this release. New uploads are not blocked, and existing files remain accessible.'
+            : `${overCount} seats over your plan. Existing students and teachers retain full access to active classes and records. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).`}
+          <div style={{ fontSize: 11, marginTop: 3 }}>
+            No automatic charges or data deletions will ever occur.
+          </div>
+        </div>
+      )}
+
+      {!isOver && isExhausted && (
+        <div style={{
+          fontSize: 11.5,
+          color: amberTone,
+          background: 'rgba(217, 119, 6, 0.08)',
+          border: '1px solid rgba(217, 119, 6, 0.25)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          marginTop: 6,
+          lineHeight: 1.4,
+        }}>
           <strong>Resource limit reached (100%):</strong>{' '}
           {resourceType === 'seats'
             ? 'Existing students and teachers retain full access to active classes and records. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).'
             : resourceType === 'ai'
               ? 'Non-AI academic features (grading, attendance, lesson plans, rosters) remain fully usable.'
               : 'Storage capacity is informational in this release. New uploads are not blocked, and existing files remain accessible.'}
-          <div style={{ fontSize: 11, color: red, marginTop: 2 }}>
+          <div style={{ fontSize: 11, marginTop: 3 }}>
             No automatic charges or data deletions will ever occur.
           </div>
         </div>
@@ -169,55 +218,66 @@ function PlanCard({ ownerId, sub, usage, resourceUsage }) {
         border: `1px solid ${line}`,
         borderRadius: 10,
       }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: navy, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-          Institutional Resource Allowances &amp; Allocation Summary
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: navy, marginBottom: 10 }}>
+          Resource allowances &amp; policy
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, fontSize: 12.5, color: ink }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12, fontSize: 12.5, color: ink }}>
           <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>Teacher Seats</div>
-            <span><strong>{usage.teachers.used} occupied</strong> ({Math.max(0, (usage.teachers.seats || 0) - usage.teachers.used)} available of {usage.teachers.seats || 'unlimited'} total)</span>
-          </div>
-          <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>Shared Student Capacity</div>
-            <span><strong>{usage.students.used} occupied</strong> ({Math.max(0, (usage.students.seats || 0) - usage.students.used)} available of {usage.students.seats || 'unlimited'} total)</span>
-          </div>
-          <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>School-wide AI Credits</div>
+            <div style={{ color: muted, fontSize: 11.5, marginBottom: 2 }}>School-wide AI Credits</div>
             <span>
               {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.remaining ?? 0) <= 0
                 ? '0 credits remaining (Exhausted)'
                 : resourceUsage?.ai_credits?.granted
                   ? `${Number(resourceUsage.ai_credits.remaining ?? resourceUsage.ai_credits.granted).toLocaleString()} credits available`
-                  : 'Unavailable (subscription credit wallet unprovisioned; standard daily quotas apply)'}
+                  : 'Not included in your plan. Standard daily AI limits apply.'}
             </span>
           </div>
           <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>Student-Protected Credit Pool</div>
+            <div style={{ color: muted, fontSize: 11.5, marginBottom: 2 }}>Teacher Daily Generations</div>
+            <span>200 AI generations per day</span>
+          </div>
+          <div>
+            <div style={{ color: muted, fontSize: 11.5, marginBottom: 2 }}>Student-Protected Credit Pool</div>
             <span>
-              {/* The server reports the pool as ai_credits.pools.student (read_resource_usage). */}
               {resourceUsage?.ai_credits?.pools?.student?.status !== 'available_estimated'
-                ? 'Unavailable (not configured in this release)'
+                ? 'Coming soon'
                 : resourceUsage.ai_credits.pools.student.remaining <= 0
                   ? '0 credits remaining (Exhausted)'
                   : `${Number(resourceUsage.ai_credits.pools.student.remaining).toLocaleString()} protected`}
             </span>
           </div>
           <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>Teacher / Student Consumption</div>
+            <div style={{ color: muted, fontSize: 11.5, marginBottom: 2 }}>Teacher &amp; Student Usage</div>
             <span>
               {resourceUsage?.ai_credits?.teacher_used != null
                 ? `Teachers: ${resourceUsage.ai_credits.teacher_used}, Students: ${resourceUsage.ai_credits.student_used}`
-                : 'Unavailable (unmetered at institutional level; individual user quotas apply)'}
+                : 'Not tracked school-wide. Each user has their own daily limit.'}
             </span>
           </div>
-          <div>
-            <div style={{ color: muted, fontSize: 11.5 }}>Shared Storage Allowance</div>
-            <span>{formatDecimalBytes(storageBytes)} (per-file security limits enforced)</span>
-          </div>
         </div>
-        <p role="status" style={{ fontSize: 11.5, color: muted, lineHeight: 1.5, margin: '10px 0 0' }}>
-          <strong>Policy Note:</strong> AI credits and daily balances: {resourceUsage?.ai_credits?.status === 'available_estimated' ? ((resourceUsage.ai_credits.remaining ?? 0) <= 0 ? 'Exhausted.' : 'Active.') : 'Unavailable for this subscription (unprovisioned).'} Existing AI access remains unchanged. At capacity, existing students and teachers retain full access to active classes. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled. Non-AI academic tools remain usable at AI quota limits. No automatic charges or data deletions will ever occur.
-        </p>
+
+        <details
+          open={Boolean(usage.teachers.over || usage.students.over)}
+          style={{ marginTop: 14, borderTop: `1px solid ${line}`, paddingTop: 10 }}
+        >
+          <summary style={{ fontSize: 12, fontWeight: 600, color: navy, cursor: 'pointer', userSelect: 'none' }}>
+            How limits work
+          </summary>
+          <div style={{ fontSize: 12, color: muted, lineHeight: 1.55, marginTop: 8 }}>
+            <p style={{ margin: '0 0 6px' }}>
+              <strong>Going over your limit won&apos;t lock anyone out or delete data.</strong>
+            </p>
+            <p style={{ margin: '0 0 6px' }}>
+              At capacity, existing students and teachers retain full access to active classes and academic records. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled.
+            </p>
+            <p style={{ margin: '0 0 6px' }}>
+              At AI limits, non-AI academic features (gradebooks, rosters, attendance) remain fully operational.
+            </p>
+            <p style={{ margin: 0 }}>
+              No automatic charges or data deletions will ever occur.
+            </p>
+          </div>
+        </details>
       </div>
 
     </section>
@@ -372,15 +432,12 @@ function StorageMeter({ limitBytes, resourceUsage }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>Storage</span>
-        <span style={{ ...mono, fontSize: 12.5, color: muted }}>
+        <span style={{ fontSize: 13, color: ink, fontWeight: 600 }}>
           {formatDecimalBytes(limitBytes)} capacity
         </span>
       </div>
-      <div style={{ height: 8, borderRadius: 99, background: 'rgba(14,42,92,0.08)', overflow: 'hidden' }}>
-        <div style={{ width: '0%', height: '100%', background: green }} />
-      </div>
-      <div style={{ fontSize: 11.5, color: muted, lineHeight: 1.45, marginTop: 5 }}>
-        Per-file upload caps (5–25 MB) enforced. School-attributed storage metering is unprovisioned; project-wide storage is not allocated per institution.
+      <div style={{ fontSize: 12, color: muted, lineHeight: 1.45, marginTop: 4 }}>
+        Upload limit: 5–25 MB per file · Usage not tracked school-wide
       </div>
     </div>
   )

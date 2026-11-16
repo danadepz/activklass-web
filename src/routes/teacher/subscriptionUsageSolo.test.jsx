@@ -76,15 +76,16 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('Your subscription')
     expect(html).toContain('Paid through')
-    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+    expect(html).toMatch(/\d+ days? left/)
     expect(html.toLowerCase()).toContain('early renewal preserves remaining days')
     expect(html).toContain('40')
+    expect(html).toContain('of 150 used')
     expect(html).toContain('110 available')
-    expect(html).toContain('Resource Allowances &amp; Usage Policy')
-    expect(html).toContain('Student Capacity')
+    expect(html).toContain('Resource allowances &amp; policy')
     expect(html).toContain('Teacher Daily Generations')
     expect(html).toContain('Student Daily Explanations')
-    expect(html).toContain('Storage Allowance')
+    expect(html).toContain('Storage')
+    expect(html).toContain('Upload limit: 5–25 MB per file')
   })
 
   it('shows a trial expiry countdown on the individual account', () => {
@@ -95,7 +96,7 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
     }
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('Trial ends')
-    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+    expect(html).toMatch(/\d+ days? left/)
   })
 
   it('renders 80% informational warning when student capacity reaches 80%', () => {
@@ -121,14 +122,16 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
       students: { used: 155, seats: 150, over: true },
     }
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
-    expect(html).toContain('Seat limit reached (100%):')
-    expect(html).toContain('Existing students and classes retain full access. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).')
+    expect(html).toContain('Over plan limit')
+    expect(html).toContain('5 over plan')
+    expect(html).toContain('Existing students and classes retain full access')
     expect(html).toContain('No automatic charges or data deletions will ever occur.')
   })
 
   it('displays protective invariants ensuring non-AI academic features remain operational', () => {
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('At AI limits, non-AI academic features (gradebooks, rosters, attendance) remain fully operational.')
+    expect(html).toContain('How limits work')
   })
 
   it('clearly distinguishes unavailable AI credits from exhausted credits for solo teachers', () => {
@@ -137,7 +140,7 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
       storage: { status: 'unavailable', used_bytes: null },
     }
     let html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
-    expect(html).toContain('Unavailable (unprovisioned; standard daily user quotas apply)')
+    expect(html).toContain('Not included in your plan. Standard daily AI limits apply.')
 
     state.resourceUsage = {
       ai_credits: { status: 'available_estimated', granted: 30000, remaining: 0 },

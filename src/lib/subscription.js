@@ -422,7 +422,7 @@ export function toMillis(value) {
   return Number.isNaN(parsed) ? null : parsed
 }
 
-/** Format a subscription expiry as a minute-updated days/hours/minutes countdown. */
+/** Format a subscription expiry countdown without false minute precision when days remain. */
 export function formatExpirationCountdown(expiresAt, now = Date.now()) {
   const expiresMs = toMillis(expiresAt)
   if (expiresMs == null || !Number.isFinite(expiresMs)) return null
@@ -433,12 +433,13 @@ export function formatExpirationCountdown(expiresAt, now = Date.now()) {
   const days = Math.floor(totalMinutes / (24 * 60))
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
   const minutes = totalMinutes % 60
-  const unit = (count, singular) => `${count} ${singular}${count === 1 ? '' : 's'}`
-  const parts = []
-  if (days) parts.push(unit(days, 'day'))
-  if (hours) parts.push(unit(hours, 'hour'))
-  if (minutes || !parts.length) parts.push(unit(minutes, 'minute'))
-  return `${parts.join(', ')} remaining`
+  if (days >= 1) {
+    return `${days} day${days === 1 ? '' : 's'} left`
+  }
+  if (hours >= 1) {
+    return `${hours} hour${hours === 1 ? '' : 's'} left`
+  }
+  return `${minutes} minute${minutes === 1 ? '' : 's'} left`
 }
 
 /**

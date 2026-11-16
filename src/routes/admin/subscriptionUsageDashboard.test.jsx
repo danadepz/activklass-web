@@ -70,17 +70,16 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
 
     const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
     expect(html).toContain('St. Jude Academy')
-    expect(html).toContain('10 occupied')
+    expect(html).toContain('of 20 used')
     expect(html).toContain('10 available')
-    expect(html).toContain('1200 occupied')
+    expect(html).toContain('of 2400 used')
     expect(html).toContain('1200 available')
-    expect(html).toContain('Institutional Resource Allowances')
+    expect(html).toContain('Resource allowances &amp; policy')
     expect(html).toContain('School-wide AI Credits')
     expect(html).toContain('Student-Protected Credit Pool')
-    expect(html).toContain('Teacher / Student Consumption')
     expect(html).toContain('25 GB')
     expect(html).toContain('Paid through')
-    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+    expect(html).toMatch(/\d+ days? left/)
   })
 
   it('shows a trial expiry countdown in the school administrator subscription screen', () => {
@@ -91,7 +90,7 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
     }
     const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
     expect(html).toContain('Trial ends')
-    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+    expect(html).toMatch(/\d+ days? left/)
   })
 
   it('renders 80% informational warning when capacity reaches 80%', () => {
@@ -120,7 +119,8 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
       students: { used: 2450, seats: 2400, over: true },
     }
     const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
-    expect(html).toContain('Resource limit reached (100%):')
+    expect(html).toContain('Over plan limit')
+    expect(html).toContain('50 over plan')
     expect(html).toContain('Existing students and teachers retain full access to active classes and records. Capacity is informational and new enrollments are not blocked while subscription-wide enforcement is disabled (plan upgrade recommended).')
     expect(html).toContain('No automatic charges or data deletions will ever occur.')
   })
@@ -132,8 +132,8 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
       storage: { status: 'unavailable', used_bytes: null },
     }
     let html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
-    expect(html).toContain('Unavailable (subscription credit wallet unprovisioned; standard daily quotas apply)')
-    expect(html).toContain('Unavailable (not configured in this release)')
+    expect(html).toContain('Not included in your plan. Standard daily AI limits apply.')
+    expect(html).toContain('Not tracked school-wide. Each user has their own daily limit.')
 
     // 2. Exhausted case
     state.resourceUsage = {
@@ -151,7 +151,7 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
     }
     html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
     expect(html).toContain('0 credits remaining (Exhausted)')
-    expect(html).toContain('Policy Note:</strong> AI credits and daily balances: Exhausted.')
+    expect(html).toContain('How limits work')
 
     // 3. Granted (Option B, 3 teachers x 90 students): the student pool shows its own balance
     state.resourceUsage = {
@@ -175,7 +175,7 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
       storage: { status: 'unavailable', used_bytes: null },
     }
     const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
-    expect(html).toContain('School-attributed storage metering is unprovisioned; project-wide storage is not allocated per institution.')
+    expect(html).toContain('Upload limit: 5–25 MB per file · Usage not tracked school-wide')
   })
 
   it('reads the backend storage.bytes contract and does not claim uploads are blocked at the informational allowance', () => {
@@ -184,7 +184,8 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
       storage: { status: 'attributed', bytes: 25_000_000_000, objects: 100, allowance_bytes: 25_000_000_000 },
     }
     const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
-    expect(html).toContain('25 GB / 25 GB')
+    expect(html).toContain('25 GB')
+    expect(html).toContain('of 25 GB used')
     expect(html).toContain('0 B available')
     expect(html).toContain('Storage capacity is informational in this release. New uploads are not blocked')
     expect(html).not.toContain('Uploads are paused until storage is expanded')
