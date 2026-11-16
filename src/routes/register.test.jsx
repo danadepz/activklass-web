@@ -735,6 +735,10 @@ describe('T-129 — Title Case on the field labels', () => {
     expect(registerSource).not.toContain('label="Confirm password"')
   })
 
+  it('solo teachers do not have the fixed school year unlike the institution', () => {
+    expect(registerSource).toMatch(/kind === 'institution'\s*\?[\s\S]*?label="School Year"[\s\S]*?S\.Y\. 2026 – 2027[\s\S]*?:[\s\S]*?label="Academic Calendar"/)
+  })
+
   it('the institution seat field: Students Per Teacher, not "Students per teacher"', () => {
     expect(registerSource).toContain('label="Students Per Teacher"')
     expect(registerSource).not.toContain('label="Students per teacher"')
