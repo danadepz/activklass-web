@@ -101,6 +101,17 @@ describe('institution trial disclosure', () => {
   })
 })
 
+describe('registration error notifications', () => {
+  const source = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
+
+  it('keeps actionable errors visible until dismissed or a new attempt clears them', () => {
+    expect(source).toMatch(/const errorToastId = useRef\(null\)/)
+    expect(source).toMatch(/toast\.dismiss\(errorToastId\.current\)/)
+    expect(source).toMatch(/message \? toast\.error\(message\) : null/)
+    expect(source).not.toMatch(/toast\.error\(message,\s*\{\s*duration:\s*6000\s*\}\)/)
+  })
+})
+
 /* T-56 (maykel_64440-73, -75, -76): registering on a browser still signed in
    as Marites handed the tester HER dashboard — the submit saw a session, took
    it for a registration to resume, found a finished profile and went to the

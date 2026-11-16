@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -170,11 +170,12 @@ export default function Register() {
     schoolYear: '',
   })
   const [showPassword, setShowPassword] = useState(false)
-  // Problems appear as a popup that fades on its own, not a banner that stays
-  // in the form, so there is no error state to clear: raising one shows the
-  // popup, and `setError(null)` (a new attempt starting) has nothing to do.
+  // Actionable registration errors stay visible until dismissed or a new
+  // attempt clears them. A later error replaces the previous one.
+  const errorToastId = useRef(null)
   const setError = (message) => {
-    if (message) toast.error(message, { duration: 6000 })
+    if (errorToastId.current != null) toast.dismiss(errorToastId.current)
+    errorToastId.current = message ? toast.error(message) : null
   }
   const [submitting, setSubmitting] = useState(false)
   // Privacy Notice + Terms and Conditions, agreed on the last step. Front-end

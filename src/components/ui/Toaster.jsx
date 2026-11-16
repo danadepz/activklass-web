@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { green, red, blueText, ink, muted, sansFamily, navy, cream } from '@/theme'
+import { green, red, blueText, goldDeep, ink, muted, sansFamily, navy, cream } from '@/theme'
 import { dismissToast, getToasts, subscribeToasts } from '@/components/ui/toast'
 
 /* ------------------------------------------------------------------ *
@@ -15,6 +15,7 @@ const TONES = {
   success: { accent: green, ring: false, icon: 'M3 8.5 6.2 12 13 4.5' },
   error: { accent: red, ring: true, icon: 'M8 4v5.2M8 11.6v.6' },
   info: { accent: blueText, ring: true, icon: 'M8 7.2v4.6M8 4.4v.6' },
+  warning: { accent: goldDeep, ring: true, icon: 'M8 4.2v4.9M8 11.3v.7' },
 }
 
 function Toast({ item }) {

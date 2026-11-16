@@ -76,7 +76,8 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('Your subscription')
     expect(html).toContain('Paid through')
-    expect(html).toContain('early renewal preserves remaining days')
+    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+    expect(html.toLowerCase()).toContain('early renewal preserves remaining days')
     expect(html).toContain('40')
     expect(html).toContain('110 available')
     expect(html).toContain('Resource Allowances &amp; Usage Policy')
@@ -84,6 +85,17 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
     expect(html).toContain('Teacher Daily Generations')
     expect(html).toContain('Student Daily Explanations')
     expect(html).toContain('Storage Allowance')
+  })
+
+  it('shows a trial expiry countdown on the individual account', () => {
+    state.subscription = {
+      type: 'teacher', status: 'trial',
+      trial_ends_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      limits: { teacher_seats: 1, student_seats: 150, storage_gb: 5 },
+    }
+    const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
+    expect(html).toContain('Trial ends')
+    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
   })
 
   it('renders 80% informational warning when student capacity reaches 80%', () => {

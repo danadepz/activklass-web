@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { api } from './api'
-import { accountKind, describeSubscription, fetchRegistrationPolicy, fetchRegistrationQuote, fetchSeatIncreaseQuote, formatDecimalBytes, recordTermsAcceptance, toMillis } from './subscription'
+import { accountKind, describeSubscription, fetchRegistrationPolicy, fetchRegistrationQuote, fetchSeatIncreaseQuote, formatDecimalBytes, formatExpirationCountdown, recordTermsAcceptance, toMillis } from './subscription'
 
 vi.mock('./api', () => ({ api: vi.fn() }))
 
@@ -43,6 +43,25 @@ describe('toMillis', () => {
     expect(toMillis({ seconds: NOW / 1000, nanoseconds: 0 })).toBe(NOW)
     expect(toMillis('2026-08-29T08:00:00Z')).toBe(NOW)
     expect(toMillis('not a date')).toBeNull()
+  })
+})
+
+describe('formatExpirationCountdown', () => {
+  const now = new Date('2026-11-16T00:00:00Z').getTime()
+
+  it('formats days, hours and minutes from a Firestore Timestamp', () => {
+    const expiresAt = { toMillis: () => now + (5 * 24 * 60 + 12 * 60 + 8) * 60_000 }
+    expect(formatExpirationCountdown(expiresAt, now)).toBe('5 days, 12 hours, 8 minutes remaining')
+  })
+
+  it('rounds partial minutes up and labels an elapsed expiry', () => {
+    expect(formatExpirationCountdown(now + 1, now)).toBe('1 minute remaining')
+    expect(formatExpirationCountdown(now, now)).toBe('Expired')
+  })
+
+  it('returns null for missing or invalid timestamps', () => {
+    expect(formatExpirationCountdown(null, now)).toBeNull()
+    expect(formatExpirationCountdown('not a date', now)).toBeNull()
   })
 })
 

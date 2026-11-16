@@ -12,6 +12,7 @@ import {
 } from '@/lib/subscription'
 import SubscriptionQuoteReview from '@/components/SubscriptionQuoteReview'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
+import SubscriptionExpiry from '@/components/SubscriptionExpiry'
 import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/institution'
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
@@ -455,15 +456,6 @@ function SubscriptionCard() {
 
   const { subscription: sub, usage, resource_usage: resourceUsage } = data
   const catalogue = plansRes?.plans?.[sub.type] ?? {}
-  const trialEndsMs = toMillis(sub.trial_ends_at)
-  const trialEndsLabel = trialEndsMs
-    ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : null
-  const paidThroughMs = toMillis(sub.paid_through)
-  const paidThroughLabel = paidThroughMs
-    ? new Date(paidThroughMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : null
-
   // Absorbed: the school took over the bill, so there is no plan of their own
   // left to show or change. Without this the card would render a cancelled
   // subscription complete with a plan picker, which reads as "your account
@@ -513,13 +505,20 @@ function SubscriptionCard() {
               picker sitting right under it. */}
           <PlanType label={typeLabel(sub.type === 'institution')}
                     detail={sub.type === 'institution' ? schoolName : null} />
-          {sub.status === 'trial' && trialEndsLabel && (
-            <p style={{ fontSize: 13, color: muted, margin: 0 }}>
-              Trial ends {trialEndsLabel}
-            </p>
+          {sub.status === 'trial' && (
+            <SubscriptionExpiry label="Trial ends" expiresAt={sub.trial_ends_at} />
           )}
-          {sub.status === 'active' && paidThroughLabel && (
-            <p style={{ fontSize: 13, color: muted, margin: '4px 0 0' }}>Paid through {paidThroughLabel} (early renewal preserves remaining days)</p>
+          {sub.status === 'active' && (
+            <SubscriptionExpiry
+              label="Paid through"
+              expiresAt={sub.paid_through}
+              style={{ marginTop: 4 }}
+            />
+          )}
+          {sub.status === 'active' && sub.paid_through && (
+            <p style={{ fontSize: 12, color: faint, margin: '3px 0 0' }}>
+              Early renewal preserves remaining days.
+            </p>
           )}
           {/* A subscriptions doc exists but is still trial/expired -- an
               admin-provisioned trial, or a first Pay attempt that was never

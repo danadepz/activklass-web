@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
+import SubscriptionExpiry from '@/components/SubscriptionExpiry'
 import PaymentUnavailableNote from '@/components/subscription/PaymentUnavailableNote'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -108,15 +109,6 @@ function Meter({ label, used, total, unit, over, resourceType = 'seats', formatV
 
 function PlanCard({ ownerId, sub, usage, resourceUsage }) {
   const storageBytes = (sub.limits?.storage_gb ?? 0) * GB
-  const trialEndsMs = toMillis(sub.trial_ends_at)
-  const trialEndsLabel = trialEndsMs
-    ? new Date(trialEndsMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : null
-  const paidThroughMs = toMillis(sub.paid_through)
-  const paidThroughLabel = paidThroughMs
-    ? new Date(paidThroughMs).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : null
-
   return (
     <section style={{ ...card, padding: 22 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
@@ -135,14 +127,15 @@ function PlanCard({ ownerId, sub, usage, resourceUsage }) {
             <h2 style={{ ...serif, fontSize: 24, color: ink, margin: '4px 0 2px' }}>
               {sub.name || sub.school_name || ownerId}
             </h2>
-            {sub.status === 'trial' && trialEndsLabel && (
-              <div style={{ fontSize: 13, color: muted }}>
-                Trial ends {trialEndsLabel}
-              </div>
+            {sub.status === 'trial' && (
+              <SubscriptionExpiry label="Trial ends" expiresAt={sub.trial_ends_at} />
             )}
-            {sub.status === 'active' && paidThroughLabel && (
-              <div style={{ fontSize: 13, color: muted }}>
-                Paid through {paidThroughLabel} · Early renewal preserves remaining days
+            {sub.status === 'active' && (
+              <SubscriptionExpiry label="Paid through" expiresAt={sub.paid_through} />
+            )}
+            {sub.status === 'active' && sub.paid_through && (
+              <div style={{ fontSize: 12, color: faint, marginTop: 3 }}>
+                Early renewal preserves remaining days.
               </div>
             )}
           </div>

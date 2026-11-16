@@ -80,6 +80,18 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
     expect(html).toContain('Teacher / Student Consumption')
     expect(html).toContain('25 GB')
     expect(html).toContain('Paid through')
+    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
+  })
+
+  it('shows a trial expiry countdown in the school administrator subscription screen', () => {
+    state.subscription = {
+      type: 'institution', name: 'St. Jude Academy', status: 'trial',
+      trial_ends_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      limits: { teacher_seats: 20, student_seats: 2400, storage_gb: 25 },
+    }
+    const html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
+    expect(html).toContain('Trial ends')
+    expect(html).toMatch(/\d+ days?(, \d+ hours?)?(, \d+ minutes?)? remaining/)
   })
 
   it('renders 80% informational warning when capacity reaches 80%', () => {

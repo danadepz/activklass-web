@@ -422,6 +422,25 @@ export function toMillis(value) {
   return Number.isNaN(parsed) ? null : parsed
 }
 
+/** Format a subscription expiry as a minute-updated days/hours/minutes countdown. */
+export function formatExpirationCountdown(expiresAt, now = Date.now()) {
+  const expiresMs = toMillis(expiresAt)
+  if (expiresMs == null || !Number.isFinite(expiresMs)) return null
+
+  const totalMinutes = Math.ceil((expiresMs - now) / 60_000)
+  if (totalMinutes <= 0) return 'Expired'
+
+  const days = Math.floor(totalMinutes / (24 * 60))
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+  const minutes = totalMinutes % 60
+  const unit = (count, singular) => `${count} ${singular}${count === 1 ? '' : 's'}`
+  const parts = []
+  if (days) parts.push(unit(days, 'day'))
+  if (hours) parts.push(unit(hours, 'hour'))
+  if (minutes || !parts.length) parts.push(unit(minutes, 'minute'))
+  return `${parts.join(', ')} remaining`
+}
+
 /**
  * The one-line status a teacher sees on their dashboard and beside their name.
  *

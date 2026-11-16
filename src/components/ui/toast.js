@@ -13,6 +13,7 @@
  *   toast.error    — it did not work; stays until dismissed, because an error
  *                    that fades before it is read is worse than none
  *   toast.info     — neutral progress
+ *   toast.warning  — a temporary, non-critical caution
  *   alertDialog()  — must be read before continuing (see dialogs.js)
  *
  * `action` is what makes a destructive flow forgiving without building an
@@ -25,8 +26,8 @@
  * Store and API only; Toaster.jsx renders it and main.jsx mounts that once.
  * ------------------------------------------------------------------ */
 
-/** 0 means "until dismissed" — the deliberate default for errors. */
-const DEFAULT_MS = { success: 4000, info: 4500, error: 0 }
+/** 0 means "until dismissed" — the deliberate default for actionable errors. */
+const DEFAULT_MS = { success: 3000, info: 3000, warning: 3000, error: 0 }
 
 let seq = 0
 let items = []
@@ -69,6 +70,7 @@ export const toast = Object.assign(
     success: (message, options) => show('success', message, options),
     error: (message, options) => show('error', message, options),
     info: (message, options) => show('info', message, options),
+    warning: (message, options) => show('warning', message, options),
     dismiss: dismissToast,
   },
 )
