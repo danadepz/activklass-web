@@ -47,10 +47,13 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   const dueDate = schedule?.remaining_centavos
     ? { seconds: openedAt + 30 * 86400, estimate: true }
     : null
+  // A boxed note, so "payment not available" reads as its own message rather
+  // than a line squeezed between the breakdown and the button.
+  const noteBox = { margin: '24px 0 0', padding: '14px 16px', fontSize: 13.5, color: muted, lineHeight: 1.6, background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 12 }
 
   return (
-    <section aria-label="Subscription price breakdown" style={{ border: `1px solid ${line}`, borderRadius: 16, padding: 20, marginTop: 16, background: '#FFFFFF', color: ink }}>
-      <h3 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 700, color: ink }}>Review your subscription</h3>
+    <section aria-label="Subscription price breakdown" style={{ border: `1px solid ${line}`, borderRadius: 16, padding: 'clamp(18px, 3.5vw, 32px)', marginTop: 24, background: '#FFFFFF', color: ink }}>
+      <h3 style={{ margin: '0 0 24px', fontSize: 19, fontWeight: 700, color: ink }}>Review your subscription</h3>
 
       {isLoading ? <p role="status" style={{ fontSize: 13.5, color: muted, margin: 0 }}>Loading your price…</p> : null}
 
@@ -68,7 +71,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
       {quote ? (
         <>
           {optionB ? (
-            <div style={{ margin: '0 0 16px' }}>
+            <div style={{ margin: '0 0 28px' }}>
               <PaymentOptionPicker value={option} onChange={setOption} disabled={disabled || balanceOwed} />
             </div>
           ) : null}
@@ -76,17 +79,17 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
           <SubscriptionCostBreakdown costing={costing} schedule={schedule} dueDate={dueDate} />
 
           {quote.test_mode ? (
-            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: muted }}>
+            <p style={{ margin: '16px 0 0', fontSize: 12.5, color: muted, lineHeight: 1.5 }}>
               Test mode: payment runs on PayMongo's test environment. No real money is charged.
             </p>
           ) : null}
 
           {balanceOwed ? (
-            <p role="note" style={{ margin: '16px 0 0', fontSize: 13.5, color: muted, lineHeight: 1.5 }}>
+            <p role="note" style={noteBox}>
               Pay the remaining balance on your current subscription before starting a new term.
             </p>
           ) : paymentClosed ? (
-            <p role="note" style={{ margin: '16px 0 0', fontSize: 13.5, color: muted, lineHeight: 1.5 }}>
+            <p role="note" style={noteBox}>
               Online payment is not available for this account yet. Contact ActivKlass support to activate your subscription.
             </p>
           ) : null}
@@ -104,8 +107,10 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
         </>
       ) : null}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 18 }}>
+      <div style={{ marginTop: 28, paddingTop: 24, borderTop: `1px solid ${line}` }}>
         <Button
+          block
+          style={{ padding: '16px 24px', fontSize: 16 }}
           onClick={() => { setOpenCount((n) => n + 1); setConfirming(true) }}
           disabled={!quote || paymentClosed || disabled || isFetching}
         >

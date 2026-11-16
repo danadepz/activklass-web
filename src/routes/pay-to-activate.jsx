@@ -83,17 +83,18 @@ export default function PayToActivate() {
 
   return (
     <AuthLayout
+      wide
       title="One step left — pay for the school year"
       subtitle={`${school?.name ?? 'Your school'} is approved. Paying for the year opens the dashboard for everyone.`}
     >
-      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
+      <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 20, padding: 'clamp(20px, 4vw, 36px)' }}>
         {paymentReturn.state === 'checking' && (
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 16 }}>
             <AuthNotice><strong>Checking payment status with ActivKlass…</strong></AuthNotice>
           </div>
         )}
         {paymentReturn.state && paymentReturn.state !== 'checking' && paymentReturn.state !== 'paid' && (
-          <div style={{ marginBottom: 12 }}><AuthNotice>{
+          <div style={{ marginBottom: 16 }}><AuthNotice>{
             paymentReturn.state === 'expired'
               ? 'The payment provider reports that this checkout expired. You may start a new checkout.'
               : paymentReturn.state === 'attempt_failed'
@@ -118,7 +119,7 @@ export default function PayToActivate() {
         ) : isAdmin ? (
           <>
             <SubscriptionQuoteReview ownerId={school.id} disabled={mut.isPending} isSuperAdmin={isSuperAdmin} showOptionBComparison onContinue={(quote, paymentOption) => { setErr(''); mut.mutate({ pricingVersion: quote.pricing_version, totalPhp: quote.total_contract_php, termsVersion: quote.terms?.available ? quote.terms.version : undefined, paymentOption }) }} />
-            {err && <div style={{ marginTop: 12 }}><AuthError>{err}</AuthError></div>}
+            {err && <div style={{ marginTop: 16 }}><AuthError>{err}</AuthError></div>}
           </>
         ) : (
           <p style={{ fontSize: 13.5, color: muted, margin: '16px 0 0', lineHeight: 1.5 }}>
@@ -127,10 +128,10 @@ export default function PayToActivate() {
           </p>
         )}
 
-        <p style={{ fontSize: 12.5, color: muted, margin: '18px 0 0', lineHeight: 1.5 }}>
-          Signed in as <strong style={{ color: ink }}>{profile?.login_id ?? profile?.email}</strong>.
-        </p>
-        <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 28, paddingTop: 20, borderTop: `1px solid ${line}` }}>
+          <p style={{ fontSize: 12.5, color: muted, margin: 0, lineHeight: 1.5 }}>
+            Signed in as <strong style={{ color: ink }}>{profile?.login_id ?? profile?.email}</strong>.
+          </p>
           <SignOutButton />
         </div>
       </div>

@@ -291,7 +291,7 @@ export function BrandMark({ size = 32, onNavy = false }) {
 
 // --- shell ---------------------------------------------------------------
 
-export default function AuthLayout({ title, subtitle, titleSize, variant, anchorTop = false, dotBackground = false, children }) {
+export default function AuthLayout({ title, subtitle, titleSize, variant, anchorTop = false, dotBackground = false, wide = false, children }) {
   // T-141: one popup, shared by whichever variant renders below -- the
   // trigger differs (the chip each variant used to show its own copy of),
   // the modal does not.
@@ -416,14 +416,16 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, anchor
 
   return (
     <div
-      className="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr]"
+      // wide (pay-to-activate): the content is a long payment review, so the
+      // brand panel gives up width to it instead of out-sizing it.
+      className={`min-h-screen lg:grid ${wide ? 'lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]' : 'lg:grid-cols-[1.05fr_1fr]'}`}
       style={{ background: cream, color: ink, fontFamily: sans }}
     >
       {/* LEFT — navy brand panel (desktop only); pinned so it stays in view
           while a tall form (register) scrolls the right column. */}
       <aside
         className="relative hidden overflow-hidden lg:flex lg:flex-col lg:items-center lg:sticky lg:top-0 lg:self-start lg:h-screen"
-        style={{ background: navy, color: cream, padding: 56 }}
+        style={{ background: navy, color: cream, padding: wide ? 44 : 56 }}
       >
         {dotBackground ? (
           <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
@@ -466,7 +468,7 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, anchor
             </span>
           </div>
 
-          <h2 style={{ ...serif, fontSize: 'clamp(44px, 5vw, 62px)', lineHeight: 1.0, letterSpacing: '-0.025em', margin: '0 0 40px', textWrap: 'balance' }}>
+          <h2 style={{ ...serif, fontSize: wide ? 'clamp(36px, 3.4vw, 48px)' : 'clamp(44px, 5vw, 62px)', lineHeight: 1.0, letterSpacing: '-0.025em', margin: '0 0 40px', textWrap: 'balance' }}>
             Class records that don't just <em style={{ fontStyle: 'italic', color: gold }}>record.</em>
           </h2>
 
@@ -491,8 +493,8 @@ export default function AuthLayout({ title, subtitle, titleSize, variant, anchor
       </aside>
 
       {/* RIGHT — form panel */}
-      <main className="flex items-center justify-center px-6 py-12 md:px-10">
-        <div className="w-full" style={{ maxWidth: 420 }}>
+      <main className={`flex items-center justify-center py-12 ${wide ? 'px-4 sm:px-6 md:px-12 lg:py-16' : 'px-6 md:px-10'}`}>
+        <div className="w-full" style={{ maxWidth: wide ? 760 : 420 }}>
           {/* mobile brand (the panel is hidden on small screens) */}
           <div className="mb-8 flex justify-center lg:hidden">
             <Link to="/" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
