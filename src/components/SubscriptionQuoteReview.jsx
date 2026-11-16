@@ -38,8 +38,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   const terms = quote?.terms || { required: false, available: false }
   const termsReady = Boolean(terms.available && terms.version && (terms.url || terms.document))
   const balanceOwed = optionB && quote.outstanding_balance > 0
-  // payments_enabled: false = the account is not enrolled for TEST payments.
-  const paymentClosed = (Boolean(terms.required) && !termsReady) || balanceOwed || quote?.payments_enabled === false
+  const paymentClosed = (Boolean(terms.required) && !termsReady) || balanceOwed
   const costing = !quote ? null : optionB ? quote.costing : legacyQuoteToCosting(quote)
   const schedule = !quote ? null : optionB
     ? quote.payment_options[option]

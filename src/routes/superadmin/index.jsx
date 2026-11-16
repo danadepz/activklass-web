@@ -13,7 +13,6 @@ import { absorbMessage } from '@/lib/approvalMessage'
 import { SEGMENTS, STATUSES, analyticsFor, filterRows, segmentOf } from '@/lib/superadminAnalytics'
 import AnalyticsBand from './AnalyticsBand'
 import AbsorbDialog from './AbsorbDialog'
-import TestPaymentAccounts from './TestPaymentAccounts'
 import MessageDialog from './MessageDialog'
 import PurgeConfirmDialog, { SCHOOL_PURGE_GUARD } from './PurgeConfirmDialog'
 import { PENDING_REQUESTS_KEY } from './queues'
@@ -600,7 +599,6 @@ export default function SuperAdminSubscribersPage() {
         </table>
       </div>
 
-      <TestPaymentAccounts />
 
       {showProvision && (
         <ProvisionDialog

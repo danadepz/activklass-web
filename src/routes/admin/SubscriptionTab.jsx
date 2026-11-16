@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import SubscriptionExpiry from '@/components/SubscriptionExpiry'
-import PaymentUnavailableNote from '@/components/subscription/PaymentUnavailableNote'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   confirmSeatIncrease, fetchMyOwnerId, fetchPlans, fetchStorageUsage, fetchSubscription,
@@ -646,9 +645,7 @@ export default function SubscriptionTab() {
       <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} />
 
       {subscription.type === 'institution' && subscription.status === 'active' && (
-        data.payments_enabled === false
-          ? <section style={{ ...card, padding: 22 }}><PaymentUnavailableNote style={{ margin: 0 }} /></section>
-          : <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
+        <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
       )}
 
       <TeacherSeatsCard onChanged={refresh} />

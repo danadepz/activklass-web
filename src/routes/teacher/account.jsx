@@ -17,7 +17,6 @@ import { acceptInvite, declineInvite, fetchMyInvites, isAbsorbed } from '@/lib/i
 import { nameError } from '@/lib/validation'
 import { ink, gold, navy, muted, faint, green, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
-import PaymentUnavailableNote from '@/components/subscription/PaymentUnavailableNote'
 import SchoolColleaguesCard from '@/routes/teacher/SchoolColleagues'
 import { ID_TYPES } from '@/routes/pending-verification'
 
@@ -620,10 +619,7 @@ function SubscriptionCard() {
         </div>
       </div>
 
-      {sub.type !== 'institution' && sub.status === 'active' && data?.payments_enabled === false && (
-        <PaymentUnavailableNote />
-      )}
-      {sub.type !== 'institution' && sub.status === 'active' && data?.payments_enabled !== false && (
+      {sub.type !== 'institution' && sub.status === 'active' && (
         <AddStudentSeatsControl
           ownerId={profile.id}
           currentSeats={sub.limits?.student_seats}
