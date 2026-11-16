@@ -178,3 +178,33 @@ export const SEAT_KEYS = [
   { key: 'storage_gb', label: 'Storage (GB)' },
 ]
 
+/**
+ * Option B: School Directory Management for Super Admin.
+ *
+ * Retrieves all directory entries with their registration status, linked
+ * institutions, and active teacher profile counts.
+ */
+export function fetchSchoolDirectoryAdmin() {
+  return api('/api/superadmin/directory')
+}
+
+/** Detailed inspection of a single school directory entry. */
+export function fetchDirectoryEntryAdmin(directoryId) {
+  return api(`/api/superadmin/directory/${directoryId}`)
+}
+
+/**
+ * Super Admin single-entry retirement with strict T-272 protections.
+ *
+ * Never deletes the document; marks it status: 'retired' and logs an audit
+ * record. Refused server-side if linked to an active institution or in use
+ * by active teacher profiles.
+ */
+export function retireDirectoryEntryAdmin(directoryId, { reason, confirmed = false, evidence = null } = {}) {
+  return api(`/api/superadmin/directory/${directoryId}/retire`, {
+    method: 'POST',
+    body: { reason, confirmed, evidence },
+  })
+}
+
+

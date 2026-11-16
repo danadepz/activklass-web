@@ -6,10 +6,12 @@ const layoutSource = readFileSync(fileURLToPath(new URL('./_layout.jsx', import.
 const appSource = readFileSync(fileURLToPath(new URL('../../App.jsx', import.meta.url)), 'utf8')
 
 describe('Superadmin Layout Navigation — Consolidated Approvals Tab', () => {
-  it('defines top-level tabs for Subscribers and Approvals', () => {
+  it('defines top-level tabs for Subscribers, Approvals, and School Directory', () => {
     expect(layoutSource).toMatch(/label:\s*'Subscribers'/)
     expect(layoutSource).toMatch(/label:\s*'Approvals'/)
     expect(layoutSource).toMatch(/waiting:\s*totalPending/)
+    expect(layoutSource).toMatch(/label:\s*'School Directory'/)
+    expect(layoutSource).toMatch(/to:\s*'\/superadmin\/directory'/)
   })
 
   it('aggregates pending teachers and school requests for the Approvals badge', () => {
@@ -23,7 +25,8 @@ describe('Superadmin Layout Navigation — Consolidated Approvals Tab', () => {
     expect(layoutSource).toMatch(/aria-label="Approvals Queues"/)
   })
 
-  it('provides route redirect for /superadmin/approvals in App.jsx', () => {
+  it('provides route redirect for /superadmin/approvals in App.jsx and defines /superadmin/directory', () => {
     expect(appSource).toMatch(/<Route path="approvals" element={<Navigate to="\/superadmin\/requests" replace \/>} \/>/)
+    expect(appSource).toMatch(/<Route path="directory" element={SuperAdminDirectoryPage} \/>/)
   })
 })

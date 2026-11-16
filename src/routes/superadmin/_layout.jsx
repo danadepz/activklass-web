@@ -62,6 +62,11 @@ export default function SuperAdminLayout() {
       waiting: totalPending,
       active: isApprovals,
     },
+    {
+      to: '/superadmin/directory',
+      label: 'School Directory',
+      active: pathname.startsWith('/superadmin/directory'),
+    },
   ]
 
   const approvalSubTabs = [
