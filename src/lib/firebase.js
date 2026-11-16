@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -27,3 +27,11 @@ export const auth = firebaseConfigured ? getAuth(firebaseApp) : null
 export const db = firebaseConfigured ? getFirestore(firebaseApp) : null
 // Cloud Storage holds optional file attachments (e.g. class syllabus uploads).
 export const storage = firebaseConfigured ? getStorage(firebaseApp) : null
+
+// Local, isolated testing only: `VITE_FIREBASE_EMULATORS=1 npm run dev` sends
+// Auth and Firestore to the Firebase emulators so a test flow (test payments
+// included) never writes to the real project. A production build drops it.
+if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_EMULATORS === '1' && firebaseConfigured) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+}
