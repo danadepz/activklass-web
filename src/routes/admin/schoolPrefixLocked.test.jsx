@@ -48,10 +48,25 @@ describe('School & Login Prefix card after registration (T-255)', () => {
     expect(card(html)).toContain('Contact ActivKlass support')
   })
 
+  it('locked fields cannot be clicked or tabbed into, so they never look editable (2026-11-17)', () => {
+    state.school = { name: 'University of San Carlos', login_prefix: 'usc' }
+    const html = renderToStaticMarkup(<UsersTab />)
+    for (const placeholder of ['e.g. UCB', 'e.g. University of Cebu-Banilad']) {
+      const el = input(html, placeholder)
+      expect(el, placeholder).toContain('tabindex="-1"')
+      expect(el, placeholder).toMatch(/pointer-events:\s*none/)
+      // Disabled, so a click on the wrapping label cannot put a caret in it.
+      expect(el, placeholder).toContain('disabled=""')
+    }
+  })
+
   it('still lets a school with no prefix yet set it once', () => {
     state.school = { name: 'Lorma Colleges, Inc.', login_prefix: '' }
     const html = renderToStaticMarkup(<UsersTab />)
     expect(input(html, 'e.g. UCB')).not.toContain('readOnly')
+    expect(input(html, 'e.g. UCB')).not.toContain('tabindex="-1"')
+    expect(input(html, 'e.g. UCB')).not.toContain('disabled')
+    expect(input(html, 'e.g. UCB')).not.toMatch(/pointer-events:\s*none/)
     expect(card(html)).toMatch(/>Save</)
   })
 })
