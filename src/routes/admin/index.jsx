@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
-import SignOutButton from '@/components/SignOutButton'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
-import { btnGhost } from './ui'
+import AccountMenu from './AccountMenu'
 import UsersTab from './UsersTab'
 import ClassesTab from './ClassesTab'
 import SubscriptionTab from './SubscriptionTab'
@@ -37,6 +36,14 @@ export default function AdminPage() {
     return TABS.some((t) => t.key === requested) ? requested : 'users'
   })
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
+  // Account menu → Change Password: open Subscription (where the form lives)
+  // and tell it to scroll to the form. A counter, so choosing it again while
+  // already on that tab still jumps back to the form.
+  const [passwordRequest, setPasswordRequest] = useState(0)
+  function openChangePassword() {
+    setTab('subscription')
+    setPasswordRequest((n) => n + 1)
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: cream, fontFamily: sans }}>
@@ -50,19 +57,19 @@ export default function AdminPage() {
             box exactly, at every height and every scroll position, which a
             viewport-fixed filler (used on the sticky teacher nav) could not. */}
         <div aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: -24, width: 24, background: navy, pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        {/* 1440 (was 1100): the Users table's seven columns did not fit at
+            1100 and scrolled sideways. Header and main share the width so
+            their edges line up. */}
+        <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         gap: 16, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ ...serif, fontSize: 22, lineHeight: 1.1 }}>
-                ActivKlass <span style={{ color: gold }}>Admin</span>
-              </div>
-              <div style={{ fontSize: 12.5, opacity: 0.75 }}>
-                Signed in as {profile.first_name} {profile.last_name}
-              </div>
+            <div style={{ ...serif, fontSize: 22, lineHeight: 1.1 }}>
+              ActivKlass <span style={{ color: gold }}>Admin</span>
             </div>
-            <SignOutButton style={{ ...btnGhost, background: 'transparent', color: cream,
-                                    borderColor: 'rgba(250,250,246,0.35)' }} />
+            {/* Who is signed in, and Sign Out inside its menu -- replaces the
+                old signed-in caption and the lone Sign Out button. Change
+                Password opens the Subscription tab, where that form lives. */}
+            <AccountMenu profile={profile} onChangePassword={openChangePassword} />
           </div>
 
           <nav style={{ display: 'flex', gap: 4, marginTop: 18 }}>
@@ -93,11 +100,11 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '22px 24px 60px' }}>
+      <main style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 60px' }}>
         <p style={{ fontSize: 13, color: faint, margin: '0 0 18px' }}>{active.hint}</p>
         {tab === 'users' && <UsersTab />}
         {tab === 'classes' && <ClassesTab />}
-        {tab === 'subscription' && <SubscriptionTab />}
+        {tab === 'subscription' && <SubscriptionTab passwordRequest={passwordRequest} />}
       </main>
     </div>
   )
