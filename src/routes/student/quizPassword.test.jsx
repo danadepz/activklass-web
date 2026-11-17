@@ -65,12 +65,12 @@ describe('a wrong password does not start the attempt', () => {
 describe('the start card asks only when it must', () => {
   it('password quiz: a password box, and Start off until something is typed', () => {
     const html = render(quiz({ password_required: true }))
-    expect(html).toContain('Quiz password')
+    expect(html).toContain('Quiz Password')
     expect(html).toMatch(/<button[^>]* disabled=""[^>]*>Start<\/button>/)
   })
   it('ordinary quiz: no password box, Start on', () => {
     const html = render(quiz())
-    expect(html).not.toContain('Quiz password')
+    expect(html).not.toContain('Quiz Password')
     expect(html).not.toMatch(/<button[^>]* disabled=""[^>]*>Start<\/button>/)
   })
 })

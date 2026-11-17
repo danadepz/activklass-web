@@ -381,11 +381,11 @@ describe('T-238 destructive same-page transitions', () => {
     await transition('Lock Period')
     expect(h.bundle.periods[0].locked).toBe(true)
     expect(h.confirm).toHaveBeenCalledTimes(1)
-    expect(h.confirm).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Lock this period?' }))
+    expect(h.confirm).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Lock This Period?' }))
     await transition('Unlock Period')
     expect(h.bundle.periods[0].locked).toBe(false)
     expect(h.confirm).toHaveBeenCalledTimes(2)
-    expect(h.confirm).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Unlock this period?' }))
+    expect(h.confirm).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Unlock This Period?' }))
   })
 
   it('clicking the already-active period does not prompt or remount', async () => {

@@ -21,6 +21,7 @@ import { useMySubscription } from '@/hooks/useMySubscription'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { Plus } from '@/components/icons'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { formatSchedule } from '@/lib/schedule'
 
@@ -280,7 +281,7 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
             onClick={(e) => { e.stopPropagation(); setShowColors((s) => !s) }}
             style={{ ...menuItemBase, color: ink }}
           >
-            <span style={{ flex: 1 }}>Change badge color</span>
+            <span style={{ flex: 1 }}>Change Badge Color</span>
             <span style={{ color: faint, fontSize: 11 }}>{showColors ? '▲' : '▼'}</span>
           </button>
 
@@ -316,14 +317,14 @@ function ClassMenu({ cls, onColorChange, onArchive, onDelete }) {
             onClick={(e) => { e.stopPropagation(); onArchive(); setOpen(false) }}
             style={{ ...menuItemBase, color: ink }}
           >
-            Archive class
+            Archive Class
           </button>
 
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); setOpen(false) }}
             style={{ ...menuItemBase, color: '#C0392B' }}
           >
-            Delete class
+            Delete Class
           </button>
         </div>
       )}
@@ -651,7 +652,7 @@ export default function ClassesPage() {
             className="inline-flex items-center gap-2 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-2"
             style={{ padding: '13px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}, 0 10px 24px -12px rgba(14,42,92,0.5)` }}
           >
-            <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy, fontSize: 14, lineHeight: 1 }}>+</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy, flexShrink: 0 }}><Plus className="h-3 w-3" strokeWidth={2.5} /></span>
             New Class
           </button>
         </div>

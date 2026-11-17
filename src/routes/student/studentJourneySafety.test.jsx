@@ -156,7 +156,7 @@ describe('1. Student query gating & authentication readiness', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter><StudentClassesIndex /></MemoryRouter>,
     )
-    expect(html).toContain('Could not load your classes')
+    expect(html).toContain('Could Not Load Your Classes')
     expect(html).toContain('Permission denied by Firestore rules')
     expect(html).toContain('Retry')
     expect(html).not.toContain('No classes yet')

@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, isDroppedFromClass } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
-import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X } from '@/components/icons'
+import { BookOpen, ClipboardList, CalendarCheck, Megaphone, FileText, BarChart, Check, Clock, X, ChevronLeft } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono } from '@/theme'
 import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from '@/lib/quizAttempts'
 import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicAnchorId, topicMastery } from '../../scaffolding'
@@ -230,7 +230,7 @@ function TaskRow({ task, onReadInstructions, classId = '', studentId = '', onSub
                 onClick={onReadInstructions}
                 style={{ fontSize: 11.5, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
               >
-                Read instructions
+                Read Instructions
               </button>
             )}
           </div>
@@ -742,7 +742,7 @@ function ContestCellGrade({ contest, onContest }) {
         </span>
         {contest.excuse_url && (
           <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontWeight: 600, color: blueText }}>
-            View document
+            View Document
           </a>
         )}
         {contest.status === 'rejected' && contest.resolution_note && (
@@ -801,7 +801,7 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
       <div {...panelProps} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
-          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest score</h3>
+          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest Score</h3>
           <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
             <X className="h-4 w-4" />
           </button>
@@ -868,7 +868,7 @@ function GradesTab({ entry, classId, studentId, studentName, gradeContestsByAsse
       {/* Final grade */}
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '18px 22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: muted }}>Current grade</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: muted }}>Current Grade</div>
           <div style={{ fontSize: 13, color: faint, marginTop: 2 }}>Your latest computed grade for this class · {passNote(entry.mode, entry)}</div>
         </div>
         <div style={{ ...serif, fontSize: 44, lineHeight: 1, color: gradeColor(entry.final_grade, entry.mode, entry) }}>
@@ -1036,7 +1036,7 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
       <div {...panelProps} style={{ width: '100%', maxWidth: 460, background: '#FFFFFF', borderRadius: 18, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden' }}>
         <div className="flex items-center justify-between" style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${line}` }}>
-          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest attendance</h3>
+          <h3 style={{ ...serif, fontSize: 22, color: ink, margin: 0 }}>Contest Attendance</h3>
           <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', color: faint, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
             <X className="h-4 w-4" />
           </button>
@@ -1132,7 +1132,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
                             </span>
                             {contest.excuse_url && (
                               <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, fontWeight: 600, color: blueText }}>
-                                View document
+                                View Document
                               </a>
                             )}
                             {contest.status === 'rejected' && contest.resolution_note && (
@@ -1245,7 +1245,7 @@ function QuizzesTab({ classId, quizzes, attemptsByQuiz, studentId, dropped = fal
                     to={`/student/quizzes/${latest.id}/result`}
                     style={{ padding: '9px 15px', fontSize: 13, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, textDecoration: 'none' }}
                   >
-                    View result
+                    View Result
                   </Link>
                 )}
                 {startable ? (
@@ -1568,7 +1568,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column' }}>
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2" style={{ marginBottom: 10 }}>
             <div>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>Performance trend</div>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>Performance Trend</div>
               <div style={{ fontSize: 12.5, color: faint, marginTop: 2 }}>Your score vs the class average on each graded item, over time.</div>
             </div>
             <PerfLegend />
@@ -1581,7 +1581,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
         </div>
 
         <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, padding: '18px 20px 10px' }}>Item scores</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, padding: '18px 20px 10px' }}>Item Scores</div>
           <div className="overflow-auto" style={{ flex: 1, maxHeight: 264 }}>
             <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
@@ -1620,7 +1620,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
 
       {/* Component breakdown */}
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, marginBottom: 14 }}>Component breakdown</div>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: ink, marginBottom: 14 }}>Component Breakdown</div>
         <div className="flex flex-col gap-3">
           {compRows.map((r) => (
             <div key={r.name}>
@@ -1817,8 +1817,13 @@ export default function StudentClassDetail() {
   return (
     <div>
       {/* Breadcrumb */}
-      <Link to="/student/classes" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: muted, textDecoration: 'none', marginBottom: 14 }}>
-        ← My Classes
+      <Link
+        to="/student/classes"
+        className="inline-flex items-center gap-1 rounded transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        style={{ fontSize: 13, fontWeight: 600, color: '#0E2A5C', textDecoration: 'none', marginBottom: 14 }}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+        My Classes
       </Link>
 
       {/* Course header */}

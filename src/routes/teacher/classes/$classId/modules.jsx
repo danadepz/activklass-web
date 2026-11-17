@@ -434,7 +434,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
   }
 
   const published = task?.status === 'published'
-  const heading = editing ? `Edit ${KIND_LABEL[form.kind].toLowerCase()}` : `New ${KIND_LABEL[form.kind].toLowerCase()}`
+  const heading = editing ? `Edit ${KIND_LABEL[form.kind]}` : `New ${KIND_LABEL[form.kind]}`
 
   return (
     <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
@@ -456,7 +456,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
               <option value="activity">Activity</option>
               <option value="assignment">Assignment</option>
               <option value="exam">Exam (paper)</option>
-              <option value="other">Other task</option>
+              <option value="other">Other Task</option>
             </select>
           </div>
           <div>
@@ -552,7 +552,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
                   <p style={{ ...mono, fontSize: 11, color: faint, margin: '6px 0 0', lineHeight: 1.5 }}>{LINK_HINT}</p>
                   <div className="mt-2 flex justify-end gap-2">
                     <button type="button" onClick={resetAttach} style={{ ...smallBtn, color: muted, borderColor: 'transparent' }}>Cancel</button>
-                    <button type="button" onClick={addLink} style={{ ...smallBtn, color: '#FAFAF6', background: navy, borderColor: navy }}>Add link</button>
+                    <button type="button" onClick={addLink} style={{ ...smallBtn, color: '#FAFAF6', background: navy, borderColor: navy }}>Add Link</button>
                   </div>
                 </>
               )}
@@ -594,7 +594,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
                 style={{ marginTop: 3, accentColor: navy, width: 15, height: 15 }}
               />
               <span>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Accept submissions through the app</span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: ink }}>Accept Submissions Through the App</span>
                 <span style={{ display: 'block', fontSize: 11.5, color: faint, marginTop: 2, lineHeight: 1.45 }}>
                   {form.accepts_submissions
                     ? 'Students hand in a file or a link on their class page, and can replace it until you untick this — unticking is how the bin closes. You see who submitted and when; grading stays in the class record.'
@@ -608,12 +608,12 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
         {/* Counts toward: the record column this task creates on publish.
             Pre-filled from the kind; "Not graded" leaves the record alone. */}
         <div className="mt-4" style={{ background: 'rgba(14,42,92,0.03)', border: `1px solid ${line}`, borderRadius: 11, padding: '12px 14px' }}>
-          <span style={{ ...label, marginBottom: 0 }}>Counts toward</span>
+          <span style={{ ...label, marginBottom: 0 }}>Counts Toward</span>
           {gradable ? (
             <>
               <div className="mt-2 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
                 <div>
-                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-component">Grade component</label>
+                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-component">Grade Component</label>
                   <select id="task-component" className="ak-input" value={form.component_id} onChange={setMapping('component_id')} style={{ ...field, cursor: 'pointer' }}>
                     <option value="">— Not graded —</option>
                     {gradebook.components.map((c) => (
@@ -622,7 +622,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
                   </select>
                 </div>
                 <div>
-                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-period">Grading period</label>
+                  <label style={{ ...label, fontSize: 11.5 }} htmlFor="task-period">Grading Period</label>
                   <select id="task-period" className="ak-input" value={form.grading_period_id} onChange={setMapping('grading_period_id')} disabled={!form.component_id} style={{ ...field, cursor: form.component_id ? 'pointer' : 'not-allowed', opacity: form.component_id ? 1 : 0.55 }}>
                     <option value="">—</option>
                     {gradebook.periods.map((p) => (
@@ -790,7 +790,7 @@ export default function ModulesPage() {
       message: published
         ? `It is removed from every student's Modules tab and dashboard. This cannot be undone.${task.component_id ? ' Its column in the Class Record stays, with any scores typed into it — delete that from the record if it should go too.' : ''}`
         : 'It was never published, so no student has seen it. This cannot be undone.',
-      confirmLabel: `Delete ${KIND_LABEL[task.kind]?.toLowerCase() ?? 'task'}`,
+      confirmLabel: `Delete ${KIND_LABEL[task.kind] ?? 'Task'}`,
       tone: 'danger',
       ...(published ? { typeToConfirm: 'DELETE' } : {}),
     })
@@ -830,7 +830,7 @@ export default function ModulesPage() {
           </InfoTooltip>
         </h1>
       </div>
-      <Link to="/teacher/syllabus" style={{ ...smallBtn, textDecoration: 'none', padding: '8px 14px' }}>Open Syllabus page</Link>
+      <Link to="/teacher/syllabus" style={{ ...smallBtn, textDecoration: 'none', padding: '8px 14px' }}>Open Syllabus Page</Link>
     </div>
   )
 

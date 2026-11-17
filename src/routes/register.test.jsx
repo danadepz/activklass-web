@@ -142,14 +142,14 @@ describe('registering while another account is signed in', () => {
   /* Six steps is a long way to walk before hearing it, so the page says so
      from step 2 on, with the way out beside it. Only for a FINISHED account —
      the half-made one keeps its own "just complete your profile" notice. */
-  it('tells a signed-in teacher up front, with a Sign out beside it', () => {
+  it('tells a signed-in teacher up front, with a Sign Out beside it', () => {
     authState.current = { status: 'signed_in', firebaseUser: { email: MARITES }, profile: { role: 'teacher' }, user: null }
     searchState.current = 'type=institution'
     try {
       const html = renderToStaticMarkup(<Register />)
       expect(html).toContain(`signed in as <strong>${MARITES}</strong>`)
       expect(html).toContain('Sign out to create a')
-      expect(html).toMatch(/<button[^>]*>Sign out<\/button>/)
+      expect(html).toMatch(/<button[^>]*>Sign Out<\/button>/)
     } finally {
       authState.current = { status: 'signed_out', firebaseUser: null, profile: null, user: null }
       searchState.current = ''
@@ -481,7 +481,7 @@ describe('T-82 — Option C: the pending-school checkout is gone, sign-up is req
    no clean way to retry — exactly the "half-registered completing" state
    `:305-306`'s comment says the school-abbreviation check exists to avoid,
    except nothing was undoing it for THIS check. Her suggested fix (drop the
-   "Signed in as…" notice and the Sign out link) would have removed the only
+   "Signed in as…" notice and the Sign Out link) would have removed the only
    explanation of the state and the only way out of it — the real fix is to
    undo the account this submit itself just created, never one a RETURNING
    person is resuming.

@@ -171,7 +171,7 @@ export default function AttachmentField({
                   cursor: link.trim() ? 'pointer' : 'not-allowed',
                   opacity: link.trim() ? 1 : 0.5,
                 }}>
-          Use link
+          Use Link
         </button>
       </div>
 

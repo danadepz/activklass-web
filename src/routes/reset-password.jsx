@@ -154,7 +154,7 @@ export default function ResetPassword() {
         {state === INVALID && (
           <div className="flex flex-col gap-4" style={{ textAlign: 'center' }}>
             <h1 style={{ fontSize: 21, fontWeight: 800, color: navy, margin: 0, fontFamily: sans }}>
-              This link no longer works
+              This Link No Longer Works
             </h1>
             <p style={{ fontSize: 14, color: muted, margin: 0, lineHeight: 1.6 }}>
               Reset links can only be used once and expire after a while.

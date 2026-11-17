@@ -260,7 +260,7 @@ function PlanCard({ ownerId, sub, usage, resourceUsage }) {
           style={{ marginTop: 14, borderTop: `1px solid ${line}`, paddingTop: 10 }}
         >
           <summary style={{ fontSize: 12, fontWeight: 600, color: navy, cursor: 'pointer', userSelect: 'none' }}>
-            How limits work
+            How Limits Work
           </summary>
           <div style={{ fontSize: 12, color: muted, lineHeight: 1.55, marginTop: 8 }}>
             <p style={{ margin: '0 0 6px' }}>
@@ -383,7 +383,7 @@ function SeatIncreaseCard({ ownerId, sub }) {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
           <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
-            Teacher seats
+            Teacher Seats
           </label>
           <input
             type="number" min={curTeacher} step={1} value={teacherSeats}
@@ -394,7 +394,7 @@ function SeatIncreaseCard({ ownerId, sub }) {
         </div>
         <div>
           <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
-            Student seats
+            Student Seats
           </label>
           <input
             type="number" min={curStudent} step={1} value={studentSeats}
@@ -534,7 +534,7 @@ function TeacherSeatsCard({ onChanged }) {
                 disabled={busy}
                 onClick={async () => {
                   if (await confirmDialog({
-                    title: 'Withdraw this invitation?',
+                    title: 'Withdraw This Invitation?',
                     message: `${i.email} will no longer be able to accept it. You can invite them again later.`,
                     confirmLabel: 'Withdraw',
                   })) revoke.mutate(i.id)
@@ -550,7 +550,7 @@ function TeacherSeatsCard({ onChanged }) {
       {accepted.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 8 }}>
-            On your plan
+            On Your Plan
           </div>
           {accepted.map((i) => (
             <div key={i.id} style={rowStyle}>

@@ -112,7 +112,7 @@ describe('Student Grade Center Display Verification', () => {
     const { text } = renderGradesTab(labEntry)
 
     // Current overall grade (formatGrade rounds percentage to whole number for report card: 82.7 -> 83)
-    expect(text).toContain('Current grade')
+    expect(text).toContain('Current Grade')
     expect(text).toContain('83')
 
     // Midterm period (84.73 rounds to 85)
@@ -163,7 +163,7 @@ describe('Student Grade Center Display Verification', () => {
     }
 
     const { text } = renderGradesTab(pointEntry)
-    expect(text).toContain('Current grade')
+    expect(text).toContain('Current Grade')
     expect(text).toContain('2.25')
     expect(text).toContain('Grade 2.25')
   })

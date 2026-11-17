@@ -73,8 +73,8 @@ export function toDraftState(tree, source) {
 export const UNSAVED_DRAFT_LEAVE_PROMPT = {
   title: "This draft isn't saved yet",
   message: 'Leaving now discards the whole AI-generated draft — nothing has been written yet. Save it first, or discard it and leave.',
-  confirmLabel: 'Discard and leave',
-  cancelLabel: 'Keep editing',
+  confirmLabel: 'Discard and Leave',
+  cancelLabel: 'Keep Editing',
   tone: 'danger',
 }
 
@@ -386,7 +386,7 @@ export function TopicResourceEditor({ syllabusId, topic, onChange }) {
                     before Save; nothing reaches students until the syllabus is saved. */}
                 {res.resource_type === 'rich_text' && (
                   <details className="mt-1">
-                    <summary className="cursor-pointer text-[11px] text-slate-500">Read and edit</summary>
+                    <summary className="cursor-pointer text-[11px] text-slate-500">Read and Edit</summary>
                     <textarea
                       aria-label={`Edit ${res.title}`}
                       rows={6}
@@ -678,7 +678,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
         <div>
           <label className="block text-sm font-medium text-slate-700">Curriculum</label>
           <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} className={inputCls}>
-            <option value="">Choose a curriculum…</option>
+            <option value="">Choose a Curriculum…</option>
             {CURRICULA.map((c) => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
@@ -750,7 +750,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
             disabled={generating || isBlank}
             className="mr-auto text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:opacity-40 disabled:hover:no-underline"
           >
-            Clear form
+            Clear Form
           </button>
           <button
             onClick={onClose}
@@ -1009,7 +1009,7 @@ export function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, cla
                         linkedQuizNote(linked.length).replace('linked to it', 'linked to its sub-modules'),
                         'Nothing is written until you save the syllabus, so leaving without saving still undoes this.',
                       ].filter(Boolean).join(' '),
-                      confirmLabel: 'Remove module',
+                      confirmLabel: 'Remove Module',
                       tone: 'danger',
                     })) {
                       setModules(tree.modules.filter((_, i) => i !== mIdx))
@@ -1044,7 +1044,7 @@ export function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, cla
                         if (await confirmDialog({
                           title: `Remove "${topic.title || `Sub-module ${tIdx + 1}`}"?`,
                           message: `${linkedQuizNote(linked.length)} Nothing is written until you save the syllabus.`,
-                          confirmLabel: 'Remove sub-module',
+                          confirmLabel: 'Remove Sub-Module',
                           tone: 'danger',
                         })) remove()
                       }}
@@ -1210,9 +1210,9 @@ export default function SyllabusIndexPage() {
 
   async function handleDelete(syllabusId) {
     if (!(await confirmDialog({
-      title: 'Delete this syllabus?',
+      title: 'Delete This Syllabus?',
       message: 'Every class currently linked to it loses that link, and students stop seeing it. This cannot be undone.',
-      confirmLabel: 'Delete syllabus',
+      confirmLabel: 'Delete Syllabus',
       tone: 'danger',
       typeToConfirm: 'DELETE',
     }))) return

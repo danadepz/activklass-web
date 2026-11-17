@@ -27,7 +27,7 @@ import {
   startAttempt,
 } from '@/hooks/useAttemptSession'
 import { matchingChoices, matchingLefts } from '@/lib/quizGrading'
-import { Clock, ArrowRight, AlertCircle, Check } from '@/components/icons'
+import { Clock, ArrowRight, AlertCircle, Check, ChevronLeft } from '@/components/icons'
 import { navy, navyDeep, ink, gold, muted, faint, green, red, line, serif, mono } from '@/theme'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 
@@ -292,14 +292,19 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
-      <Link to={`/student/classes/${classId}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: muted, textDecoration: 'none', marginBottom: 14 }}>
-        ← Back to class
+      <Link
+        to={`/student/classes/${classId}`}
+        className="inline-flex items-center gap-1 rounded transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        style={{ fontSize: 13, fontWeight: 600, color: '#0E2A5C', textDecoration: 'none', marginBottom: 14 }}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+        Back to Class
       </Link>
 
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, overflow: 'hidden' }}>
         <div style={{ background: navy, color: '#FAFAF6', padding: '22px 26px' }}>
           <div style={{ ...mono, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: gold }}>
-            Before you start
+            Before You Start
           </div>
           <h1 style={{ ...serif, fontSize: 26, lineHeight: 1.15, margin: '8px 0 0' }}>{quiz.title}</h1>
         </div>
@@ -317,7 +322,7 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
           <li style={{ display: 'flex', gap: 14, padding: '15px 26px', borderBottom: '1px solid rgba(14,42,92,0.06)' }}>
             <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: gold, flexShrink: 0, marginTop: 7 }} />
             <span>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: ink }}>Fullscreen and tab switches</span>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: ink }}>Fullscreen and Tab Switches</span>
               <span style={{ display: 'block', fontSize: 13, color: muted, marginTop: 2, lineHeight: 1.5 }}>
                 The quiz will open in fullscreen. Switching tabs or leaving the page is recorded for your teacher. You get two warnings; the third time locks your attempt until your teacher reopens it. Your answers are kept.
               </span>
@@ -333,7 +338,7 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
           )}
           {needsPassword && (
             <label style={{ display: 'block', marginBottom: 14 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink, marginBottom: 6 }}>Quiz password</span>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: ink, marginBottom: 6 }}>Quiz Password</span>
               <input
                 type="password"
                 autoComplete="off"
@@ -864,7 +869,7 @@ export function Runner({ quiz, attempt, isResume }) {
                 className="transition hover:brightness-110"
                 style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}
               >
-                Return to quiz
+                Return to Quiz
               </button>
             </div>
           </div>
@@ -888,7 +893,7 @@ export function Runner({ quiz, attempt, isResume }) {
             )}
             <div className="flex justify-end gap-3">
               <button onClick={() => setConfirm(false)} disabled={submitting} style={{ padding: '11px 18px', fontSize: 14, fontWeight: 600, color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer' }}>
-                Keep working
+                Keep Working
               </button>
               <button onClick={submit} disabled={submitting} className="transition hover:brightness-110 disabled:opacity-50" style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer' }}>
                 {submitting ? 'Submitting…' : 'Submit now'}

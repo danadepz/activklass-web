@@ -79,7 +79,7 @@ export function SubscriptionBox() {
               href={`mailto:${adminEmail}`}
               style={{ ...mono, fontSize: 10.5, color: tone.fg, opacity: 0.85, textDecoration: 'underline', marginTop: 2 }}
             >
-              Ask your admin
+              Ask Your Admin
             </a>
           )}
         </span>

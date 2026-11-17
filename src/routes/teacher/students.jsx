@@ -218,7 +218,7 @@ export default function StudentsPage() {
         {tabs}
         {tab === 'accounts' ? <StudentAccounts classes={[]} rows={[]} /> : (
         <div className="text-center" style={{ background: '#FFFFFF', border: '1px dashed rgba(14,42,92,0.18)', borderRadius: 16, padding: '56px 28px', maxWidth: 920 }}>
-          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No classes yet</h3>
+          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No Classes Yet</h3>
           <p style={{ fontSize: 14, color: muted, margin: '0 0 20px' }}>Create a class and add a roster to see students here.</p>
           <Link to="/teacher/classes" className="inline-flex transition hover:brightness-110" style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
             Go to My Classes
@@ -255,7 +255,7 @@ export default function StudentsPage() {
             className="ak-input"
             style={{ padding: '11px 14px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: 'pointer' }}
           >
-            <option value="all">All classes</option>
+            <option value="all">All Classes</option>
             {(classes ?? []).map((c) => (
               <option key={c.id} value={c.id}>{classLabel(c)}</option>
             ))}

@@ -7,7 +7,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { remediationReturnPath } from '@/lib/remediationNavigation'
 import { fetchUsersByIds, STATUS_LABELS } from '@/lib/roster'
-import { ArrowRight, Sparkles, BookOpen, Lock, Eye, EyeOff } from '@/components/icons'
+import { ArrowRight, Sparkles, BookOpen, Lock, Eye, EyeOff, Plus, ChevronLeft } from '@/components/icons'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useSyllabi } from '@/hooks/useSyllabi'
@@ -60,7 +60,7 @@ const fieldStyle = {
   transition: 'border-color 0.15s, box-shadow 0.15s',
 }
 const btnGhost = {
-  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', fontSize: 13,
+  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', fontSize: 13, whiteSpace: 'nowrap',
   fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF',
   border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 10, cursor: 'pointer',
 }
@@ -74,10 +74,17 @@ const btnPrimary = {
   borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}`,
 }
 const btnGold = {
-  padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: goldDeep,
+  padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: goldDeep, whiteSpace: 'nowrap',
   background: 'rgba(245,197,24,0.18)', border: '1.5px solid rgba(245,197,24,0.55)', borderRadius: 10, cursor: 'pointer',
 }
 const linkBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }
+/* Compact outlined button for actions that sit in a card header or beside a row. A bare
+   bold word (linkBtn) reads as a label; the border and white fill say "click me". */
+const btnOutlineSm = {
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: 12.5,
+  fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', whiteSpace: 'nowrap',
+  border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, cursor: 'pointer',
+}
 const iconBtn = { color: faint, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontSize: 14, lineHeight: 1 }
 
 const btnModalGhost = {
@@ -310,7 +317,7 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
             </div>
           ))}
           <button onClick={() => setOptions([...q.options, { _key: newKey(), id: null, text: '', is_correct: false }])} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
-            <span style={{ color: gold }}>+</span> Add option
+            <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> Add Option
           </button>
         </div>
       )}
@@ -322,7 +329,7 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
           the student to pick between two statements about correctness. */}
       {q.qtype === 'true_false' && (
         <div className="mt-2 flex flex-col gap-1.5">
-          <span style={{ fontSize: 11, color: faint }}>Select the correct answer</span>
+          <span style={{ fontSize: 11, color: faint }}>Select the Correct Answer</span>
           <div className="flex gap-4" style={{ fontSize: 13, color: '#3A4A6B' }}>
             {[true, false].map((v) => (
               <label key={String(v)} className="flex items-center gap-1.5" style={{ cursor: 'pointer' }}>
@@ -349,7 +356,7 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
             </div>
           ))}
           <button onClick={() => update({ pairs: [...q.pairs, { _key: newKey(), left: '', right: '' }] })} className="transition hover:opacity-70" style={{ ...linkBtn, fontSize: 12.5, alignSelf: 'flex-start', marginTop: 2 }}>
-            <span style={{ color: gold }}>+</span> Add pair
+            <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> Add Pair
           </button>
         </div>
       )}
@@ -414,7 +421,7 @@ function LiveSettings({ quiz, refetch }) {
   })
 
   return (
-    <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 20 }}>
+    <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 26 }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Quiz Settings</h3>
         <span style={{ fontSize: 12, color: faint }}>
@@ -446,7 +453,7 @@ function LiveSettings({ quiz, refetch }) {
             onChange={(e) => setUnlimited(e.target.checked)}
             style={{ accentColor: navy, width: 16, height: 16 }}
           />
-          Unlimited attempts until it closes
+          Unlimited Attempts Until It Closes
         </label>
         <div style={{ minWidth: 230, flex: '0 1 260px' }}>
           <label style={labelStyle}>Closing Date and Time</label>
@@ -471,7 +478,7 @@ function LiveSettings({ quiz, refetch }) {
 
       <p style={{ fontSize: 12.5, color: muted, margin: '12px 0 0', lineHeight: 1.5 }}>
         Raising the class-wide allowance never removes an individual grant — the two add up. To give
-        one student another try, use <strong>+1 attempt</strong> on their row below.
+        one student another try, use <strong>+1 Attempt</strong> on their row below.
       </p>
     </div>
   )
@@ -561,7 +568,7 @@ function DiscardAttemptButton({ attempt, studentName, refetch }) {
         'Nothing they typed was ever saved to the server, so there is no work to lose — but if they ' +
         'are sitting it right now, they will lose the sitting. ' +
         'The attempt is kept on record as discarded, and their attempt is given back.',
-      confirmLabel: 'Discard attempt',
+      confirmLabel: 'Discard Attempt',
       tone: 'danger',
     }))) return
     try {
@@ -611,7 +618,7 @@ function UnlockAttemptButton({ attempt, studentName, refetch, refetchResults }) 
           ? `They get back the ${formatAway(attempt.remaining_ms_at_lock)} that was left on the timer. `
           : `They will have ${extension} minutes to finish if the quiz has closed. `) +
         'They get three fresh warnings; every earlier tab switch stays on record.',
-      confirmLabel: 'Reopen attempt',
+      confirmLabel: 'Reopen Attempt',
     }))) return
     try {
       await unlockAttempt(attempt.id, { extensionMinutes: extension })
@@ -719,7 +726,7 @@ function ToggleStudentAccessButton({ quizId, studentId, studentName, access, has
           whiteSpace: 'nowrap',
         }}
       >
-        {toggling ? '…' : isOpen ? 'Close quiz' : 'Open quiz'}
+        {toggling ? '…' : isOpen ? 'Close Quiz' : 'Open Quiz'}
       </button>
       {hasOverride && (
         <button
@@ -765,7 +772,7 @@ function GrantAttemptButton({ quizId, studentId, refetch }) {
       className="transition hover:brightness-105 disabled:opacity-40"
       style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.2)`, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}
     >
-      {granting ? '…' : '+1 attempt'}
+      {granting ? '…' : '+1 Attempt'}
     </button>
   )
 }
@@ -845,7 +852,7 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
             <th style={thHead}>Status</th>
             <th style={thHead}>Access</th>
             <th style={thHead}>Attempt Notes</th>
-            <th style={thHead}></th>
+            <th style={{ ...thHead, textAlign: 'center' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -980,8 +987,8 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                     </ul>
                   )}
                 </td>
-                <td style={{ padding: '12px 18px', textAlign: 'right' }}>
-                  <div className="flex items-center justify-end gap-1.5">
+                <td style={{ padding: '12px 18px', textAlign: 'center' }}>
+                  <div className="flex items-center justify-center gap-1.5">
                     {pendingEssay && (
                       <button
                         type="button"
@@ -1003,7 +1010,7 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        Review essay
+                        Review Essay
                       </button>
                     )}
                     {/* Only for an attempt that is actually open — there is
@@ -1284,7 +1291,7 @@ export function StudentDetailsModal({ detailsFor, classId, quiz, totalPoints, on
           )}
 
           <div>
-            <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 6 }}>This quiz</div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: faint, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 6 }}>This Quiz</div>
             <p style={{ fontSize: 13, color: muted, margin: 0 }}>
               {attempts.length} of {attemptsLabel(allowed)} attempt{attempts.length === 1 ? '' : 's'} used
               {best !== null && <> · Best {best} / {totalPoints}</>}
@@ -1514,7 +1521,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, existin
                       onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, component_id: e.target.value, inherited: false } })}
                       style={{ ...fieldStyle, fontSize: 13, padding: '8px 10px' }}
                     >
-                      <option value="">Choose a component…</option>
+                      <option value="">Choose a Component…</option>
                       <ComponentOptions gb={gb} />
                     </select>
                   </div>
@@ -1527,7 +1534,7 @@ function PublishModal({ isOpen, onClose, assignedClasses, gradebooksMap, existin
                       onChange={(e) => setMappings({ ...mappings, [c.id]: { ...current, grading_period_id: e.target.value, inherited: false } })}
                       style={{ ...fieldStyle, fontSize: 13, padding: '8px 10px' }}
                     >
-                      <option value="">Choose a period…</option>
+                      <option value="">Choose a Period…</option>
                       {gb?.periods?.map((per) => (
                         <option key={per.id} value={per.id}>{per.name} ({per.weight_percent}%)</option>
                       ))}
@@ -1738,9 +1745,9 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       e.preventDefault()
       e.stopPropagation()
       confirmDialog({
-        title: 'Leave without saving?',
+        title: 'Leave Without Saving?',
         message: 'This quiz has changes that have not been saved. Leaving now discards them.',
-        confirmLabel: 'Discard changes',
+        confirmLabel: 'Discard Changes',
         tone: 'danger',
       }).then((leave) => {
         if (leave) navigate(href)
@@ -1948,9 +1955,9 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
 
   async function deleteQuiz() {
     if (!(await confirmDialog({
-      title: 'Delete this draft quiz?',
+      title: 'Delete This Draft Quiz?',
       message: 'It has never been published, so no student has seen it. This cannot be undone.',
-      confirmLabel: 'Delete draft',
+      confirmLabel: 'Delete Draft',
       tone: 'danger',
     }))) return
     try {
@@ -1997,7 +2004,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           <div>
             <label style={labelStyle}>Time Limit</label>
             <select className="ak-input" value={settings.time_limit_minutes} onChange={set('time_limit_minutes')} style={{ ...fieldStyle, cursor: 'pointer' }}>
-              <option value="">No time limit</option>
+              <option value="">No Time Limit</option>
               {timeLimitOptions(settings.time_limit_minutes).map((minutes) => (
                 <option key={minutes} value={minutes}>{minutes} minutes</option>
               ))}
@@ -2223,10 +2230,11 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         />
       ))}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pb-8">
+      <div className="mt-4 pb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2.5">
           <button onClick={() => setQuestions([...questions, blankQuestion()])} className="transition hover:brightness-105" style={btnGhost}>
-            <span style={{ color: gold }}>+</span> Add question
+            <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> Add Question
           </button>
           <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
             <BookOpen className="h-3.5 w-3.5" /> Import from Bank
@@ -2239,7 +2247,25 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           </button>
         </div>
         <div className="flex items-center gap-2.5">
-          {/* Next to Save draft rather than at the top of the form: this is
+          <button type="button" onClick={() => setPreviewOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
+            Preview
+          </button>
+          <button onClick={save} disabled={saving} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={{ ...btnGhost, minWidth: 104, justifyContent: 'center' }}>
+            {saving ? 'Saving…' : 'Save draft'}
+          </button>
+          <button onClick={publish} disabled={saving || publishing || !!publishBlocker} className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" style={{ ...btnPrimary, minWidth: 176, justifyContent: 'center' }}>
+            {publishing ? 'Publishing…' : 'Publish'}
+            <GoldArrow />
+          </button>
+        </div>
+      </div>
+      {/* Status sits under the buttons, not inside them: when it was in the
+          right-hand cluster, "Unsaved changes" or a publish blocker widened
+          the cluster until it wrapped to its own row, so the same buttons
+          sat in a different place depending on the draft's state. */}
+      {(dirty && !saving) || publishBlocker ? (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {/* By the Save draft button rather than at the top of the form: this is
               where a teacher looks when they are deciding whether they are
               finished, and it is the one place the answer is actionable. */}
           {dirty && !saving && (
@@ -2250,17 +2276,8 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
           {publishBlocker && (
             <span role="status" style={{ ...mono, fontSize: 11.5, color: goldDeep }}>{publishBlocker}</span>
           )}
-          <button type="button" onClick={() => setPreviewOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
-            Preview
-          </button>
-          <button onClick={save} disabled={saving} className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
-            {saving ? 'Saving…' : 'Save draft'}
-          </button>
-          <button onClick={publish} disabled={saving || publishing || !!publishBlocker} className="transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed" style={btnPrimary}>
-            {publishing ? 'Publishing…' : 'Publish'}
-            <GoldArrow />
-          </button>
         </div>
+      ) : null}
       </div>
 
       {previewOpen && (
@@ -2329,7 +2346,7 @@ export function PreviewModal({ title, instructions, questions, onClose }) {
           ))}
         </div>
         <div style={{ padding: '16px 28px', background: '#FFFFFF', borderTop: '1px solid rgba(14,42,92,0.07)', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-          <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnModalGhost}>Close preview</button>
+          <button type="button" onClick={onClose} className="transition hover:brightness-105" style={btnModalGhost}>Close Preview</button>
         </div>
       </div>
     </div>
@@ -2639,7 +2656,7 @@ export function QuizPasswordCard({ quiz, refetch }) {
     <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 14, padding: '12px 16px' }}>
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-2" style={{ fontSize: 14, fontWeight: 700, color: ink }}>
-          <Lock className="h-4 w-4" /> Quiz password
+          <Lock className="h-4 w-4" /> Quiz Password
           <span style={{ ...mono, fontSize: 11, fontWeight: 600, color: on ? green : muted }}>{on ? 'ON' : 'OFF'}</span>
         </span>
         <button type="button" onClick={toggleOpen} className="transition hover:opacity-70" style={linkBtn}>
@@ -2666,7 +2683,7 @@ export function QuizPasswordCard({ quiz, refetch }) {
               Generate
             </button>
             <button type="button" disabled={busy || draft.trim().length < 4 || draft.trim() === saved} onClick={() => save({ password: draft }, 'Password saved. Students who entered the old one need this one to start.')} className="disabled:opacity-50 disabled:cursor-not-allowed" style={btnGhost}>
-              Save password
+              Save Password
             </button>
           </div>
           <label className="flex items-center gap-2" style={{ fontSize: 13, color: ink }}>
@@ -2679,7 +2696,7 @@ export function QuizPasswordCard({ quiz, refetch }) {
           {error && <p role="alert" style={{ fontSize: 13, color: red, margin: 0 }}>{error}</p>}
           {state && (
             <div>
-              <p style={{ ...labelStyle, marginBottom: 4 }}>Password entries</p>
+              <p style={{ ...labelStyle, marginBottom: 4 }}>Password Entries</p>
               {(state.log ?? []).length === 0 ? (
                 <p style={{ fontSize: 12.5, color: muted, margin: 0 }}>No one has entered it yet.</p>
               ) : (
@@ -2775,7 +2792,7 @@ export function ChangeScoringModal({ quiz, onClose, refetch }) {
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
       <div {...panelProps} style={{ width: '100%', maxWidth: 640, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '22px 28px 16px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
-          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Change scoring</h2>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Change Scoring</h2>
           <p style={{ fontSize: 13, color: muted, margin: '6px 0 0' }}>Points and answers only. Students who already finished are regraded, and you see whose marks change before anything is saved.</p>
         </div>
         <div style={{ padding: '18px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
@@ -2888,7 +2905,7 @@ function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
     <div {...overlayProps} style={{ position: 'fixed', inset: 0, background: 'rgba(14,23,51,0.55)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 }}>
       <div {...panelProps} style={{ width: '100%', maxWidth: 560, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
         <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid rgba(14,42,92,0.07)', flexShrink: 0 }}>
-          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Edit wording</h2>
+          <h2 style={{ ...serif, fontSize: 22, margin: 0, color: ink }}>Edit Wording</h2>
           <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 0' }}>
             Fix a typo in a question or an option. The question type, its points, and which
             option is correct stay exactly as published — changing those needs a regrade,
@@ -3077,9 +3094,9 @@ export default function QuizBuilderPage() {
         return
       }
       if (!(await confirmDialog({
-        title: 'Take this quiz back to draft?',
+        title: 'Take This Quiz Back to Draft?',
         message: "Students haven't started it yet. It goes back to a draft you can edit, and comes off the class record until you publish again.",
-        confirmLabel: 'Back to draft',
+        confirmLabel: 'Back to Draft',
         tone: 'danger',
       }))) return
 
@@ -3127,9 +3144,9 @@ export default function QuizBuilderPage() {
 
   async function closeQuiz() {
     if (!(await confirmDialog({
-      title: 'Close this quiz?',
+      title: 'Close This Quiz?',
       message: 'Students can no longer take it. Attempts already submitted are kept and stay in the gradebook.',
-      confirmLabel: 'Close quiz',
+      confirmLabel: 'Close Quiz',
       tone: 'danger',
     }))) return
     try {
@@ -3169,10 +3186,12 @@ export default function QuizBuilderPage() {
     // leaving half of a wide screen empty. Undoing it is this one wrapper.
     // Widened 2026-11-15 (owner request) from the old 768px column, where the
     // results table squeezed until "6 / 14" wrapped onto two lines. 1024px
-    // matches the Quizzes list page this one is opened from.
-    <div className="mx-auto max-w-5xl">
-      <Link to="/teacher/quizzes" className="inline-flex items-center gap-1.5 transition hover:opacity-70" style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}>
-        ← Back to quizzes
+    // matches the Quizzes list page this one is opened from. Widened again to
+    // 1280px (owner request) -- at 1024 a wide screen left wide empty bands.
+    <div className="mx-auto max-w-7xl">
+      <Link to="/teacher/quizzes" className="inline-flex items-center gap-1 transition hover:opacity-70" style={{ fontSize: 13, fontWeight: 600, color: navy, textDecoration: 'none' }}>
+        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+        Back to Quizzes
       </Link>
       <div className="mt-2 flex items-start justify-between gap-4">
         <div>
@@ -3194,12 +3213,12 @@ export default function QuizBuilderPage() {
           </p>
         </div>
         {quiz.status === 'published' && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button onClick={backToDraft} className="transition hover:brightness-105" style={btnGhost} title="Only while nobody has started it">
-              Back to draft
+              Back to Draft
             </button>
             <button onClick={closeQuiz} className="transition hover:brightness-105" style={btnGold}>
-              Close quiz
+              Close Quiz
             </button>
           </div>
         )}
@@ -3234,7 +3253,7 @@ export default function QuizBuilderPage() {
           {quiz.status === 'published' && <LiveSettings quiz={quiz} refetch={refetch} />}
           {assignedClasses.length > 0 ? (
             <div>
-              <div className="flex flex-wrap items-start gap-3 mb-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 18, minWidth: 0 }}>
+              <div className="flex flex-wrap items-start gap-3 mt-6 mb-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22, minWidth: 0 }}>
                 <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap', flexShrink: 0 }}>View Results For Class:</label>
                 <select
                   className="ak-input"
@@ -3258,10 +3277,10 @@ export default function QuizBuilderPage() {
             <p style={{ color: faint }}>This quiz is not assigned to any classes yet.</p>
           )}
 
-          <div className="mt-4" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 22 }}>
-            <div className="flex flex-wrap items-center justify-between gap-2" style={{ marginBottom: 12 }}>
+          <div className="mt-6" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 28 }}>
+            <div className="flex flex-wrap items-center justify-between gap-3" style={{ marginBottom: 16 }}>
               <div className="flex flex-wrap items-center gap-3">
-                <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Questions and answer key (read-only)</h3>
+                <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Questions and Answer Key (Read-Only)</h3>
                 {(quiz.questions ?? []).length > 1 && (
                   <button
                     type="button"
@@ -3272,20 +3291,20 @@ export default function QuizBuilderPage() {
                         setSelectedQuestionIndices(new Set((quiz.questions ?? []).map((_, i) => i)))
                       }
                     }}
-                    className="transition hover:opacity-70"
-                    style={{ ...linkBtn, fontSize: 12, fontWeight: 500, color: faint }}
+                    className="transition hover:brightness-105"
+                    style={btnOutlineSm}
                   >
                     {selectedQuestionIndices.size === (quiz.questions ?? []).length ? 'Deselect all' : 'Select all'}
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={handleBankFromHeader}
                   disabled={bankingQuestions || !(quiz.questions?.length)}
-                  className="transition hover:opacity-70 disabled:opacity-50"
-                  style={linkBtn}
+                  className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={btnOutlineSm}
                 >
                   <BookOpen className="h-3.5 w-3.5" />
                   {bankingQuestions
@@ -3295,19 +3314,19 @@ export default function QuizBuilderPage() {
                       : 'Add to Quiz Bank'}
                 </button>
                 {quiz.status === 'published' && (
-                  <button onClick={() => setIsEditWordingOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
-                    Edit wording
+                  <button onClick={() => setIsEditWordingOpen(true)} className="transition hover:brightness-105" style={btnOutlineSm}>
+                    Edit Wording
                   </button>
                 )}
                 {quiz.status === 'published' && (
-                  <button type="button" onClick={() => setIsScoringOpen(true)} className="transition hover:opacity-70" style={linkBtn}>
-                    Change scoring
+                  <button type="button" onClick={() => setIsScoringOpen(true)} className="transition hover:brightness-105" style={btnOutlineSm}>
+                    Change Scoring
                   </button>
                 )}
               </div>
             </div>
             {(quiz.questions ?? []).map((q, i) => (
-              <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '10px 0' }}>
+              <div key={q.id || i} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)', padding: '16px 0' }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-2.5 flex-1 min-w-0">
                     <input
@@ -3371,8 +3390,8 @@ export default function QuizBuilderPage() {
                     type="button"
                     onClick={() => handleBankQuestions([q])}
                     disabled={bankingQuestions}
-                    className="transition hover:opacity-70 disabled:opacity-50 flex-shrink-0 text-slate-500 hover:text-navy"
-                    style={{ ...linkBtn, fontSize: 12 }}
+                    className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    style={btnOutlineSm}
                   >
                     Add to Quiz Bank
                   </button>

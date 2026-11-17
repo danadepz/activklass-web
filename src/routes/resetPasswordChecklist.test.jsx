@@ -134,7 +134,7 @@ describe('T-234 — Password reset success page improvements (maykel_64440-322)'
 describe('T-234 — ResetPassword component smoke test', () => {
   it('renders invalid state when no oobCode is present', () => {
     const html = renderToStaticMarkup(<ResetPassword />)
-    expect(html).toContain('This link no longer works')
+    expect(html).toContain('This Link No Longer Works')
     expect(html).toContain('Request a new link')
   })
 })

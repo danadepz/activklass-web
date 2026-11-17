@@ -183,7 +183,7 @@ export default function SuperAdminVerificationsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Teacher verifications</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Teacher Verifications</h1>
           <p className="mt-1 text-sm text-zinc-500">
             Self-registered teachers waiting on an ID check. Their account opens the moment you approve.
           </p>
@@ -283,7 +283,7 @@ export default function SuperAdminVerificationsPage() {
                         onClick={() => review.mutate({ uid: t.id, status: 'rejected', note, name, teacher: t })}
                         className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-400 disabled:opacity-50"
                       >
-                        Send back
+                        Send Back
                       </button>
                     </div>
                   </div>
@@ -310,7 +310,7 @@ export default function SuperAdminVerificationsPage() {
 
       {approved?.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
+          <h2 className="text-base font-bold text-zinc-200">Recently Approved</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
             The welcome email goes out on approval. Resend it to confirm it landed, or open it
             to copy by hand.
@@ -359,7 +359,7 @@ export default function SuperAdminVerificationsPage() {
                       }
                       className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500"
                     >
-                      Welcome notice
+                      Welcome Notice
                     </button>
                     </>)}
                     <button

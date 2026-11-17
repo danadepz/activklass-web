@@ -149,9 +149,9 @@ describe('T-237: Per-student quiz access control', () => {
     )
 
     // Open student has Close quiz control
-    expect(html).toContain('Close quiz')
+    expect(html).toContain('Close Quiz')
     // Closed student has Open quiz control
-    expect(html).toContain('Open quiz')
+    expect(html).toContain('Open Quiz')
     // Students with overrides have a Reset option
     expect(html).toContain('Reset')
   })

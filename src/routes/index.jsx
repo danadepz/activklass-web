@@ -71,7 +71,7 @@ const DESIGNED_FOR = [
 const STEPS = [
   {
     n: '1',
-    title: 'Set up your class record',
+    title: 'Set Up Your Class Record',
     body: 'Create classes, import your roster by CSV, and configure DepEd or CHED grading weights in minutes.',
     lines: [
       'Import roster.csv (32 students)',
@@ -81,7 +81,7 @@ const STEPS = [
   },
   {
     n: '2',
-    title: 'Teach, assess, and grade',
+    title: 'Teach, Assess, and Grade',
     body: 'Record scores in a computed, lockable gradebook. Build or AI-generate quizzes — you approve every draft.',
     lines: [
       'Draft quiz · Linear Equations',
@@ -91,7 +91,7 @@ const STEPS = [
   },
   {
     n: '3',
-    title: 'See who needs help, early',
+    title: 'See Who Needs Help, Early',
     body: 'AI flags at-risk students and least-mastered skills, then suggests targeted remediation you stay in control of.',
     lines: [
       '3 at-risk · advisory class',
@@ -196,7 +196,7 @@ export default function Landing() {
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:px-4 focus:py-2 focus:text-white"
         style={{ background: navy }}
       >
-        Skip to content
+        Skip to Content
       </a>
 
       {/* NAV */}
@@ -349,7 +349,7 @@ export default function Landing() {
             >
               <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: gold, textTransform: 'uppercase' }}>
-                  Skill mastery
+                  Skill Mastery
                 </div>
                 <div className="flex gap-1">
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.3)' }} />
@@ -392,7 +392,7 @@ export default function Landing() {
               <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 11, color: muted, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                    Class record
+                    Class Record
                   </div>
                   <div style={{ ...serif, fontSize: 18, color: ink, lineHeight: 1.1, marginTop: 2 }}>
                     9-Sampaguita · Q2
@@ -485,7 +485,7 @@ export default function Landing() {
         <section id="features" className="mx-auto max-w-[1240px] px-6 pb-20 pt-28 md:px-8">
           <div className="mb-14 grid items-end gap-10 md:grid-cols-[1fr_1.4fr] md:gap-20">
             <div>
-              <Eyebrow>What's inside</Eyebrow>
+              <Eyebrow>What's Inside</Eyebrow>
               <h2 className="text-[clamp(36px,5vw,56px)]" style={{ ...serif, lineHeight: 1.02, letterSpacing: '-0.02em', margin: 0, color: ink, textWrap: 'balance' }}>
                 Everything a class record <em style={{ color: navy }}>should</em> be.
               </h2>
@@ -572,7 +572,7 @@ export default function Landing() {
               <div style={{ marginBottom: 24 }}>
                 <div style={{ border: '1px solid rgba(14,42,92,0.12)', borderRadius: 12, padding: 14, background: 'white' }}>
                   <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-                    <span style={{ fontSize: 11, color: muted, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Consent gate</span>
+                    <span style={{ fontSize: 11, color: muted, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Consent Gate</span>
                     <span style={{ ...mono, fontSize: 10, color: navy, background: 'rgba(14,42,92,0.06)', padding: '3px 6px', borderRadius: 4 }}>RA 10173</span>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -742,7 +742,7 @@ export default function Landing() {
             <div className="relative grid items-center gap-14 md:grid-cols-[1.4fr_1fr]">
               <div>
                 <div style={{ fontSize: 12, color: gold, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 16 }}>
-                  <span style={{ marginRight: 8 }}>✦</span>Join the pilot
+                  <span style={{ marginRight: 8 }}>✦</span>Join the Pilot
                 </div>
                 <h2 className="text-[clamp(36px,5vw,56px)]" style={{ ...serif, lineHeight: 1.02, letterSpacing: '-0.02em', margin: '0 0 18px', textWrap: 'balance' }}>
                   Ready to bring <em style={{ color: gold, fontStyle: 'italic' }}>clarity</em> to your classroom?
@@ -757,7 +757,7 @@ export default function Landing() {
                     className={`${primaryBtnDark} ak-cta-pulse`}
                     style={{ background: gold, color: navy, boxShadow: `0 3px 0 ${goldDeep}` }}
                   >
-                    Create an account
+                    Create an Account
                     <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', background: navy, color: gold }}>
                       <ArrowRight className="h-3.5 w-3.5" />
                     </span>
@@ -773,7 +773,7 @@ export default function Landing() {
                 <p style={{ fontSize: 14, lineHeight: 1.55, color: 'rgba(250,250,246,0.7)', margin: '22px 0 0', maxWidth: 480 }}>
                   Registering a whole school?{' '}
                   <Link to="/register?type=institution" className="font-semibold transition hover:opacity-80" style={{ color: gold, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-                    Request access for your campus
+                    Request Access for Your Campus
                   </Link>
                   {' '}— tell us your seats and the ActivKlass team sets you up.
                 </p>

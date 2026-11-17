@@ -6,7 +6,7 @@
  * to 'closed', and the toast's "Reopen" action undoes exactly that. The gap
  * was reach: come back to a closed quiz later, as maykel did, and the only
  * door was gone. This pins that a **closed** quiz shows a Reopen control
- * where a **published** one shows Close quiz / Back to draft, and that a
+ * where a **published** one shows Close Quiz / Back to Draft, and that a
  * **draft** gets neither -- static markup, the house pattern
  * (`quizAnswerKey.test.jsx`'s mocking shape).
  */
@@ -65,23 +65,23 @@ describe('A closed quiz offers Reopen in the header (T-98)', () => {
     expect(render({ status: 'closed' })).toContain('>Reopen<')
   })
 
-  it('does not show Close quiz or Back to draft on a closed quiz', () => {
+  it('does not show Close Quiz or Back to Draft on a closed quiz', () => {
     const html = render({ status: 'closed' })
-    expect(html).not.toContain('>Close quiz<')
-    expect(html).not.toContain('>Back to draft<')
+    expect(html).not.toContain('>Close Quiz<')
+    expect(html).not.toContain('>Back to Draft<')
   })
 
-  it('shows Close quiz and Back to draft on a published quiz, not Reopen', () => {
+  it('shows Close Quiz and Back to Draft on a published quiz, not Reopen', () => {
     const html = render({ status: 'published' })
-    expect(html).toContain('>Close quiz<')
-    expect(html).toContain('>Back to draft<')
+    expect(html).toContain('>Close Quiz<')
+    expect(html).toContain('>Back to Draft<')
     expect(html).not.toContain('>Reopen<')
   })
 
   it('offers neither control on a draft', () => {
     const html = render({ status: 'draft' })
     expect(html).not.toContain('>Reopen<')
-    expect(html).not.toContain('>Close quiz<')
-    expect(html).not.toContain('>Back to draft<')
+    expect(html).not.toContain('>Close Quiz<')
+    expect(html).not.toContain('>Back to Draft<')
   })
 })

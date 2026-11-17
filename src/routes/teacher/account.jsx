@@ -350,7 +350,7 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
   return (
     <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line}` }}>
       <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
-        Add student seats
+        Add Student Seats
       </label>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -637,7 +637,7 @@ function SubscriptionCard() {
       ) : null}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your subscription</h2>
+          <h2 style={{ ...serif, fontSize: 20, color: ink, margin: '0 0 8px' }}>Your Subscription</h2>
           {/* A record loaded, so its own type is the fact -- not the profile's
               school_id. A school-issued teacher may still hold a plan of their
               own, and calling that "institution" would contradict the plan
@@ -764,7 +764,7 @@ function SubscriptionCard() {
           </div>
           <div>
             <div style={{ color: muted, fontSize: 11, marginBottom: 2 }}>Student Daily Explanations</div>
-            <span>Standard daily limit per student</span>
+            <span>Standard Daily Limit per Student</span>
           </div>
         </div>
 
@@ -773,7 +773,7 @@ function SubscriptionCard() {
           style={{ marginTop: 12, borderTop: `1px solid ${line}`, paddingTop: 8 }}
         >
           <summary style={{ fontSize: 12, fontWeight: 600, color: navy, cursor: 'pointer', userSelect: 'none' }}>
-            How limits work
+            How Limits Work
           </summary>
           <div style={{ fontSize: 11.5, color: muted, lineHeight: 1.5, marginTop: 6 }}>
             <p style={{ margin: '0 0 4px' }}>
@@ -874,11 +874,11 @@ function SchoolInviteCard() {
                   message:
                     'Your own subscription stops and the school covers your plan from now on. '
                     + 'Your classes and student records are not transferred.',
-                  confirmLabel: 'Join the school',
+                  confirmLabel: 'Join the School',
                 })) accept.mutate(inv.id)
               }}
             >
-              Join the school
+              Join the School
             </Button>
           </div>
         </div>

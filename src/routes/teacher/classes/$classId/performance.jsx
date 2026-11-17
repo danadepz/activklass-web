@@ -9,7 +9,8 @@ import { useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { quizzesToAutoPost } from '@/lib/quizToRecord'
 import { computeFinalGrade, gradePolicy, isPassingGrade, pointScaleBands } from '@/lib/grading'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
-import { BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
+import { ArrowRight, BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
+import { GoldArrowDot } from '@/components/ui/Button'
 import { MetricCard, Panel } from '@/components/ui/Card'
 import PredictedRisk from '@/components/PredictedRisk'
 import { SkeletonStats, SkeletonTable } from '@/components/ui/Skeleton'
@@ -195,6 +196,7 @@ export default function PerformancePage() {
           <p style={{ color: muted, margin: 0 }}>Set up grading periods and components first — analytics are computed from the class record.</p>
           <Link to={`/teacher/classes/${classId}/grading`} className="mt-4 inline-flex transition hover:brightness-110" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 11, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
             Open Grading Setup
+            <GoldArrowDot><ArrowRight className="h-3 w-3" /></GoldArrowDot>
           </Link>
         </div>
       </div>

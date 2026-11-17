@@ -8,7 +8,7 @@
  * and the teacher-facing interactive affordances and workflows:
  * 1. "Essay pending review" is an interactive button/badge that opens the essay
  *    review directly, NOT a static dead end.
- * 2. An explicit "Review essay" button is provided in the actions column for
+ * 2. An explicit "Review Essay" button is provided in the actions column for
  *    any student attempt with a pending essay.
  * 3. Opening student details with a pending attempt automatically expands the
  *    attempt answers and grading controls.
@@ -202,7 +202,7 @@ describe('T-199 teacher-facing essay review workflow & affordances', () => {
     expect(statusCellMatch[1]).toMatch(/<button[^>]*>[\s\S]*?Essay pending review[\s\S]*?<\/button>/)
   })
 
-  it('provides an explicit Review essay button in the actions column for pending essays', () => {
+  it('provides an explicit Review Essay button in the actions column for pending essays', () => {
     mockState.resultsData = {
       students: [studentWithPendingEssay],
       attempts: { s1: [pendingAttempt] },
@@ -219,12 +219,12 @@ describe('T-199 teacher-facing essay review workflow & affordances', () => {
       />
     )
 
-    // The rightmost actions column must offer an obvious Review essay button
-    expect(html).toContain('Review essay')
-    expect(html).toMatch(/<button[^>]*title="Review and score essay"[^>]*>\s*Review essay\s*<\/button>/)
+    // The rightmost actions column must offer an obvious Review Essay button
+    expect(html).toContain('Review Essay')
+    expect(html).toMatch(/<button[^>]*title="Review and score essay"[^>]*>\s*Review Essay\s*<\/button>/)
   })
 
-  it('does not display Review essay button when an attempt is already fully graded', () => {
+  it('does not display Review Essay button when an attempt is already fully graded', () => {
     const gradedAttempt = {
       ...pendingAttempt,
       status: 'graded',
@@ -259,7 +259,7 @@ describe('T-199 teacher-facing essay review workflow & affordances', () => {
       />
     )
 
-    expect(html).not.toContain('Review essay')
+    expect(html).not.toContain('Review Essay')
     expect(html).toContain('Graded')
   })
 

@@ -170,7 +170,7 @@ export default function ReportsPage() {
           <div style={{ display: 'inline-grid', placeItems: 'center', width: 56, height: 56, borderRadius: 14, background: 'rgba(14,42,92,0.06)', color: navy, marginBottom: 16 }}>
             <BarChart className="h-[26px] w-[26px]" />
           </div>
-          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No classes yet</h3>
+          <h3 style={{ ...serif, fontSize: 22, margin: '0 0 6px', color: ink }}>No Classes Yet</h3>
           <p style={{ fontSize: 14, color: muted, margin: '0 0 20px' }}>Create a class to start collecting data for reports.</p>
           <Link to="/teacher/classes" className="inline-flex transition hover:brightness-110" style={{ padding: '11px 20px', fontSize: 14, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, borderRadius: 10, textDecoration: 'none', boxShadow: `0 3px 0 ${navyDeep}` }}>
             Go to My Classes

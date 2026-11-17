@@ -199,7 +199,7 @@ function ManualCreate({ classes, prefix, onDone }) {
     if (!(await confirmDialog({
       title: `Create an account for ${form.firstName.trim()} ${form.lastName.trim()}?`,
       message: `They are enrolled in ${chosen ? classLabel(chosen) : 'the class'} and sign in as ${loginPreview}. An account cannot be deleted afterwards, only deactivated.`,
-      confirmLabel: 'Create account',
+      confirmLabel: 'Create Account',
     }))) return
 
     setBusy(true)
@@ -376,7 +376,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
           ? `${dropped} row${dropped === 1 ? ' is' : 's are'} incomplete and will be left out. `
           : '') +
         'Each remaining row becomes a separate account, enrolled and able to sign in straight away. Creating cannot be stopped once it starts.',
-      confirmLabel: 'Create accounts',
+      confirmLabel: 'Create Accounts',
     }))) return
 
     setBusy(true); setResult(null)
@@ -508,7 +508,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
             </ul>
           )}
           <div style={{ marginTop: 10 }}>
-            <button type="button" style={btnGhost} onClick={() => { setResult(null); setRows([]); setFileName('') }}>Upload another file</button>
+            <button type="button" style={btnGhost} onClick={() => { setResult(null); setRows([]); setFileName('') }}>Upload Another File</button>
           </div>
         </div>
         )
@@ -618,13 +618,13 @@ export const signInConfirm = {
   off: (name) => ({
     title: `Turn off ${name}'s sign-in?`,
     message: `This stops ${name} signing in to ActivKlass at all, until you reactivate them. They stay on your rosters. To take them out of one class only, remove them from that class's roster on the class page instead.`,
-    confirmLabel: 'Turn sign-in off',
+    confirmLabel: 'Turn Sign-In Off',
     tone: 'danger',
   }),
   on: (name) => ({
     title: `Reactivate ${name}?`,
     message: `${name} can sign in again, with the password they already have.`,
-    confirmLabel: 'Turn sign-in on',
+    confirmLabel: 'Turn Sign-In On',
   }),
 }
 
@@ -672,11 +672,11 @@ export function AccountRow({ user, classes, onChanged }) {
 
   async function doReset() {
     const pw = await promptDialog({
-      title: 'Set a new password',
+      title: 'Set a New Password',
       message: resetCopy.prompt(user.login_id ?? user.email),
       label: 'New password',
       placeholder: 'at least 8 characters',
-      confirmLabel: 'Set password',
+      confirmLabel: 'Set Password',
       required: true,
       trim: false,
       validate: tempPasswordError,

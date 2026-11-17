@@ -251,15 +251,15 @@ describe('the submission bin on the Modules tab', () => {
     <MemoryRouter><TaskDialog classId="C1" clazz={{ id: 'C1', student_ids: ['S1'] }} syllabusId="syl1" module={syllabus.modules[0]} topic={syllabus.modules[0].topics[0]} task={task} kind={kind} teacherId="T1" onClose={() => {}} onSaved={() => {}} /></MemoryRouter>,
   )
 
-  it('the dialog offers "Accept submissions through the app", unticked, for a new activity', () => {
+  it('the dialog offers "Accept Submissions Through the App", unticked, for a new activity', () => {
     const html = dialog('activity')
-    expect(html).toContain('Accept submissions through the app')
+    expect(html).toContain('Accept Submissions Through the App')
     expect(html).toMatch(/<input type="checkbox" id="task-accepts-submissions"(?![^>]*checked)/)
     expect(html).toContain('grading stays in the class record')
   })
 
   it('hides the box for a paper exam', () => {
-    expect(dialog('exam')).not.toContain('Accept submissions through the app')
+    expect(dialog('exam')).not.toContain('Accept Submissions Through the App')
   })
 
   it('opens ticked on a task whose bin is open, and says unticking closes it', () => {

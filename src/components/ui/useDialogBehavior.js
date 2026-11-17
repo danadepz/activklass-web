@@ -42,15 +42,22 @@ const FOCUSABLE = [
 let lockCount = 0
 let priorOverflow = ''
 
+/* The lock goes on <html>, not <body>. index.css already gives <html>
+   `overflow-x: hidden`, so a body `overflow: hidden` no longer passes up to the
+   viewport: the body becomes a scroll container of its own, and every
+   `position: sticky` element on the page (the auth screens' left brand panel
+   among them) stops sticking and scrolls away behind the dialog, leaving a
+   blank strip. Locking the root element keeps the page a single scroll surface. */
 export function lockBodyScroll() {
+  const root = document.documentElement
   if (lockCount === 0) {
-    priorOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    priorOverflow = root.style.overflow
+    root.style.overflow = 'hidden'
   }
   lockCount += 1
   return () => {
     lockCount = Math.max(0, lockCount - 1)
-    if (lockCount === 0) document.body.style.overflow = priorOverflow
+    if (lockCount === 0) root.style.overflow = priorOverflow
   }
 }
 

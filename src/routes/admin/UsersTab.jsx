@@ -137,7 +137,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
       {loadError && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
-          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try Again</button>
         </div>
       )}
       {school && (
@@ -250,7 +250,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
       {loadError && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
-          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try Again</button>
         </div>
       )}
       {school && (
@@ -428,12 +428,12 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       ? {
         title: `${who} is already on file`,
         message: `${twins.map(describeAccount).join(', ')} — same name. Two people really can share one, so this is only a check: creating another makes a separate account with its own login${signsIn ? `, ${signsIn}` : ''}.`,
-        confirmLabel: 'Create anyway',
+        confirmLabel: 'Create Anyway',
       }
       : {
         title: `Create a ${role} account for ${who}?`,
         message: `They sign in as ${signsIn} straight away, and are asked to choose their own password the first time. An account cannot be deleted afterwards, only deactivated.`,
-        confirmLabel: 'Create account',
+        confirmLabel: 'Create Account',
       })
     if (!ok) return
 
@@ -812,7 +812,7 @@ export function UserRow({ user, isSelf, onChanged }) {
     if (!(await confirmDialog({
       title: `Change role to ${role}?`,
       message: `${user.first_name} ${user.last_name} will get the ${role} portal the next time they sign in.`,
-      confirmLabel: 'Change role',
+      confirmLabel: 'Change Role',
     }))) { select.value = user.role; return }
     run('role', () => setUserRole(user.id, role))
   }

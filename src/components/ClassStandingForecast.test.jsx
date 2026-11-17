@@ -52,7 +52,7 @@ describe('ClassStandingForecast -- the sentence shares the banner\'s measure (T-
 
   it('renders the heading, sentence and banner together', () => {
     const html = render(loaded)
-    expect(html).toContain('Projected standing')
+    expect(html).toContain('Projected Standing')
     expect(html).toContain('A projection, not a grade')
     expect(html).toContain('No warning from this model')
   })

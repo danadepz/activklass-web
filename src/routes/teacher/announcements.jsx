@@ -131,7 +131,7 @@ function AnnouncementCard({ item, onDelete, deleting }) {
             </div>
             {(item.class_id == null || item.broadcast_id) && (
               <div style={{ fontSize: 11, color: '#6A7A95', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Megaphone aria-hidden className="h-3 w-3" /> All classes
+                <Megaphone aria-hidden className="h-3 w-3" /> All Classes
               </div>
             )}
           </div>
@@ -296,7 +296,7 @@ export default function AnnouncementsPage() {
 
   async function handleDelete(id) {
     if (!(await confirmDialog({
-      title: 'Delete this announcement?',
+      title: 'Delete This Announcement?',
       message: 'Students who have not read it yet will never see it. This cannot be undone.',
       confirmLabel: 'Delete',
       tone: 'danger',

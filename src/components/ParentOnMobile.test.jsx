@@ -58,8 +58,8 @@ describe('guardian web screen is in the brand (T-23)', () => {
   })
 
   it('the sign-out button is the theme primary, in navy, with the sign-out text', () => {
-    const btn = html.match(/<button[^>]*>[\s\S]*?Sign out[\s\S]*?<\/button>/)
-    expect(btn, 'no Sign out button rendered').toBeTruthy()
+    const btn = html.match(/<button[^>]*>[\s\S]*?Sign Out[\s\S]*?<\/button>/)
+    expect(btn, 'no Sign Out button rendered').toBeTruthy()
     expect(btn[0]).toContain('ak-primary')
     expect(btn[0]).toMatch(navyRe)
   })

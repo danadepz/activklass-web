@@ -207,7 +207,7 @@ export default function BloomsBreakdown({ levels = null, recommendations = null,
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: ink }}>{levelName(b)}</span>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: red, ...tabular }}>{clamp(levels[b.key])}%</span>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: red, marginTop: 3 }}>Needs improvement</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: red, marginTop: 3 }}>Needs Improvement</div>
                   {pre && (
                     <div style={{ fontSize: 12.5, color: muted, marginTop: 4 }}>
                       Builds on {levelName(pre)}{preWeak ? ' — also below 60%, so review it first.' : '.'}

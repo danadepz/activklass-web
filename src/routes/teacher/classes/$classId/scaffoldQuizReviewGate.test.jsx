@@ -110,7 +110,7 @@ beforeEach(() => {
 describe('T-248 — a remediation plan cannot go out until its AI quiz has been reviewed', () => {
   it('the editor refuses "Save & publish" while the attached AI quiz is an unopened draft, and says why', () => {
     const html = render(data('draft'), plan)
-    expect(html).toContain('Edit remediation')
+    expect(html).toContain('Edit Remediation')
     expect(isDisabled(buttonTag(html, 'Save &amp; publish'))).toBe(true)
     expect(html).toContain('Review the practice quiz first')
     expect(isDisabled(buttonTag(html, 'Save draft'))).toBe(false)

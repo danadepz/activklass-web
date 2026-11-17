@@ -55,7 +55,7 @@ export default function StudentClassesIndex() {
   if (isError) {
     return (
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 44, textAlign: 'center' }}>
-        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could not load your classes</h3>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could Not Load Your Classes</h3>
         <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
           {error?.message || 'We encountered an error loading your enrolled classes.'}
         </p>
@@ -87,7 +87,7 @@ export default function StudentClassesIndex() {
           <div style={{ display: 'inline-grid', placeItems: 'center', width: 48, height: 48, borderRadius: 12, background: 'rgba(14,42,92,0.08)', color: navy }}>
             <BookOpen className="h-6 w-6" />
           </div>
-          <h3 style={{ ...serif, fontSize: 22, margin: '16px 0 6px', color: ink }}>No classes yet</h3>
+          <h3 style={{ ...serif, fontSize: 22, margin: '16px 0 6px', color: ink }}>No Classes Yet</h3>
           <p style={{ fontSize: 14, color: muted, margin: 0 }}>
             Your enrolled classes will show up here automatically once a teacher adds you to a roster.
           </p>

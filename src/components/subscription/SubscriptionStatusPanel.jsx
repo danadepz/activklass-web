@@ -69,7 +69,7 @@ export default function SubscriptionStatusPanel({ view, onPayBalance, busy = fal
       {payment.balance_checkout_available && onPayBalance ? (
         <div style={{ marginTop: 18, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
           <Button onClick={onPayBalance} disabled={busy}>
-            {busy ? 'Opening PayMongo…' : `Pay remaining ${formatCentavos(payment.remaining_centavos)}`}
+            {busy ? 'Opening checkout…' : `Pay remaining ${formatCentavos(payment.remaining_centavos)}`}
           </Button>
           <span style={{ fontSize: 12.5, color: muted }}>Settles this term. It does not add another 300 days.</span>
         </div>

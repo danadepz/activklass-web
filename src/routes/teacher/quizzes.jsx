@@ -403,7 +403,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           <fieldset disabled={needsClass} className="flex flex-col gap-4" style={{ margin: 0, padding: 0, border: 0, minWidth: 0, opacity: needsClass ? 0.45 : 1, pointerEvents: needsClass ? 'none' : 'auto', transition: 'opacity 150ms' }}>
           {needsClass ? null : topics.length > 0 ? (
             <div>
-              <label style={labelStyle}>Syllabus topic</label>
+              <label style={labelStyle}>Syllabus Topic</label>
               <select className="ak-input" value={form.topic_id} onChange={(e) => setForm((f) => ({ ...f, topic_id: e.target.value }))} style={selectStyle}>
                 <option value="">— Describe a topic instead —</option>
                 {topics.map((t) => (
@@ -505,7 +505,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           </p>
 
           <div>
-            <label style={labelStyle}>Question types</label>
+            <label style={labelStyle}>Question Types</label>
             <div className="flex flex-wrap gap-2 mt-1">
               {QUIZ_TYPES.map((t) => {
                 const on = form.types.includes(t)
@@ -581,7 +581,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             disabled={generating || isUntouched}
             className="mr-auto text-sm text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:opacity-40 disabled:hover:no-underline"
           >
-            Clear form
+            Clear Form
           </button>
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
             Cancel
@@ -1138,9 +1138,9 @@ function QuizBankBrowser({ syllabi }) {
 
   const handleDeleteQuestion = async (id) => {
     if (!(await confirmDialog({
-      title: 'Delete this question from the bank?',
+      title: 'Delete This Question from the Bank?',
       message: 'Quizzes that already contain a copy of it are not affected - only the banked original goes.',
-      confirmLabel: 'Delete question',
+      confirmLabel: 'Delete Question',
       tone: 'danger',
     }))) return
     try {
@@ -1394,9 +1394,9 @@ export default function QuizzesIndexPage() {
   async function handleDelete(quizId) {
     const quiz = sqliteQuizzes?.find((q) => q.id === quizId)
     if (!(await confirmDialog({
-      title: 'Delete this quiz?',
+      title: 'Delete This Quiz?',
       message: "Its column comes off the class record in every class it was assigned to, and the grades are recomputed without it. Students' answers are kept, but no longer count. This cannot be undone.",
-      confirmLabel: 'Delete quiz',
+      confirmLabel: 'Delete Quiz',
       tone: 'danger',
       typeToConfirm: 'DELETE',
     }))) return

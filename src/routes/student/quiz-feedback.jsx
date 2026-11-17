@@ -9,7 +9,7 @@ import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { feedbackVisibility } from '@/lib/quizFeedback'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
-import { Check, X, Clock, Sparkles } from '@/components/icons'
+import { Check, X, Clock, Sparkles, ChevronLeft } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono } from '@/theme'
 
 async function loadFeedback(attemptId) {
@@ -122,7 +122,7 @@ export default function QuizFeedback() {
   if (isError || !data?.quiz) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 44, textAlign: 'center' }}>
-        <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 8px' }}>Result not found</h2>
+        <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 8px' }}>Result Not Found</h2>
         <Link to="/student" style={{ fontSize: 13, fontWeight: 700, color: navy }}>← Back to dashboard</Link>
       </div>
     )
@@ -133,7 +133,7 @@ export default function QuizFeedback() {
   if (attempt.student_id !== profile.id) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 44, textAlign: 'center' }}>
-        <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 8px' }}>Not available</h2>
+        <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 8px' }}>Not Available</h2>
         <p style={{ fontSize: 14, color: muted, margin: 0 }}>This result belongs to another student.</p>
       </div>
     )
@@ -149,8 +149,13 @@ export default function QuizFeedback() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <Link to={`/student/classes/${attempt.class_id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 600, color: muted, textDecoration: 'none', marginBottom: 14 }}>
-        ← Back to class
+      <Link
+        to={`/student/classes/${attempt.class_id}`}
+        className="inline-flex items-center gap-1 rounded transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        style={{ fontSize: 13, fontWeight: 600, color: '#0E2A5C', textDecoration: 'none', marginBottom: 14 }}
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+        Back to Class
       </Link>
 
       {/* Score summary */}
@@ -169,7 +174,7 @@ export default function QuizFeedback() {
               </>
             ) : (
               <>
-                <div style={{ ...serif, fontSize: 40, lineHeight: 1.1, marginTop: 8 }}>Answers submitted</div>
+                <div style={{ ...serif, fontSize: 40, lineHeight: 1.1, marginTop: 8 }}>Answers Submitted</div>
                 <div style={{ fontSize: 14, color: 'rgba(250,250,246,0.82)', marginTop: 6, maxWidth: 420 }}>{visible.waitingOn}</div>
               </>
             )}
@@ -204,7 +209,7 @@ export default function QuizFeedback() {
       {/* Question breakdown */}
       {visible.showItems && (
       <>
-      <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '26px 0 14px' }}>Question breakdown</h2>
+      <h2 style={{ ...serif, fontSize: 22, color: ink, margin: '26px 0 14px' }}>Question Breakdown</h2>
       <div className="flex flex-col gap-3">
         {questionsOfAttempt(quiz, attempt).map((q, i) => {
           const pq = byId[q.id] ?? {}

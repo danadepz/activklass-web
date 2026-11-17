@@ -6,7 +6,7 @@
  * already closed, and found no way to open it to a class again. Reopening was
  * built; the only door was the close toast, long gone by the time he came
  * back. What has to stay true is *reach*: the control is on the closed quiz's
- * own header, where Close quiz sits on a published one -- and it is offered
+ * own header, where Close Quiz sits on a published one -- and it is offered
  * for no other status, so a draft or a published quiz is untouched.
  *
  * This lock deliberately goes past "the string Reopen is somewhere on the
@@ -75,7 +75,7 @@ const render = (status, over = {}) => {
 
 // The quiz's actions live in the header row that also carries the title and
 // the status line -- that is the spot maykel was looking at, and the spot
-// Close quiz occupies on a published quiz. Isolate exactly that element by
+// Close Quiz occupies on a published quiz. Isolate exactly that element by
 // walking div depth from its opening tag, so a Reopen button parked somewhere
 // further down the page does not satisfy this lock. (If the header row is
 // ever restyled, update this one anchor -- do not relax the assertion.)
@@ -102,17 +102,17 @@ describe('T-98 — reopening a closed quiz does not depend on the close toast', 
     expect(html).toMatch(/<button[^>]*>\s*Reopen\s*<\/button>/)
   })
 
-  it('puts Reopen in the header actions row, where Close quiz sits on a published quiz', () => {
+  it('puts Reopen in the header actions row, where Close Quiz sits on a published quiz', () => {
     expect(headerRow(render('closed'))).toContain('>Reopen<')
     // Same row, same page region, for the status it replaces.
-    expect(headerRow(render('published'))).toContain('>Close quiz<')
+    expect(headerRow(render('published'))).toContain('>Close Quiz<')
   })
 
-  it('does not offer Reopen on a published quiz, which shows Close quiz instead', () => {
+  it('does not offer Reopen on a published quiz, which shows Close Quiz instead', () => {
     const html = render('published')
     expect(html).not.toContain('>Reopen<')
-    expect(html).toContain('>Close quiz<')
-    expect(html).toContain('>Back to draft<')
+    expect(html).toContain('>Close Quiz<')
+    expect(html).toContain('>Back to Draft<')
   })
 
   it('does not offer Reopen on a draft quiz', () => {
@@ -122,8 +122,8 @@ describe('T-98 — reopening a closed quiz does not depend on the close toast', 
 
   it('offers no closing controls on a closed quiz, only the way back', () => {
     const html = render('closed')
-    expect(html).not.toContain('>Close quiz<')
-    expect(html).not.toContain('>Back to draft<')
+    expect(html).not.toContain('>Close Quiz<')
+    expect(html).not.toContain('>Back to Draft<')
   })
 
   it('still shows the closed quiz its questions beside the Reopen control', () => {

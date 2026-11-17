@@ -872,7 +872,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
                 className="w-full rounded-lg px-4 py-2 font-medium transition hover:brightness-110"
                 style={{ background: '#0E2A5C', color: '#FAFAF6', border: 'none', cursor: 'pointer', borderRadius: 9 }}
               >
-                Continue to bulk upload
+                Continue to Bulk Upload
               </button>
               <button
                 type="button"
@@ -1040,7 +1040,7 @@ function GuardiansSection({ student }) {
     if (!(await confirmDialog({
       title: `Remove ${who} as ${student.first_name}'s guardian?`,
       message: `They lose access to ${student.first_name}'s records at once and cannot re-link with the same code. The student can issue a new code later if that changes.`,
-      confirmLabel: 'Remove guardian',
+      confirmLabel: 'Remove Guardian',
       tone: 'danger',
     }))) return
     setBusyId(link.link_id)
@@ -1058,7 +1058,7 @@ function GuardiansSection({ student }) {
   return (
     <div className="rounded-lg border border-slate-200 p-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">Linked guardians</span>
+        <span className="text-sm font-medium text-slate-700">Linked Guardians</span>
         {links && <span className="text-xs text-slate-500">{links.length}</span>}
       </div>
       {isLoading ? (
@@ -1463,7 +1463,7 @@ export function CsvUploadModal({ classId, classTitle, enrolledIds, maxStudents, 
           </div>
 
           <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-lg text-xs text-blue-900 leading-relaxed">
-            <p className="font-semibold text-blue-950 mb-0.5">Account requirement</p>
+            <p className="font-semibold text-blue-950 mb-0.5">Account Requirement</p>
             <p>
               This upload only enrolls students who already have an account — it never creates one.
               {schoolIssued
@@ -1796,7 +1796,7 @@ export default function ClassDetailPage() {
             'This switches off their sign-in everywhere, not just here: if they are also ' +
             'enrolled in another teacher’s class, it signs them out of that too.\n\n' +
             'To take them off this class only, use Remove instead — their account is untouched.',
-          confirmLabel: 'Disable account',
+          confirmLabel: 'Disable Account',
           tone: 'danger',
         }
       : {
@@ -2010,7 +2010,7 @@ export default function ClassDetailPage() {
               onChange={(e) => setRosterFilter(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0E2A5C]/40"
             >
-              <option value="all">All students</option>
+              <option value="all">All Students</option>
               <option value="AC">Active (AC)</option>
               <option value="IN">Inactive (IN)</option>
               <option value="needs_remediation">Needs Remediation</option>
@@ -2050,7 +2050,7 @@ export default function ClassDetailPage() {
                 <th className="px-5 py-2.5 font-semibold">Remarks</th>
                 <th className="px-5 py-2.5 font-semibold">Status</th>
                 {/* T-62: View · Edit · Disable per row — Remove dropped (owner's word, dawny808-89) */}
-                <th className="px-5 py-2.5 font-semibold text-right">Actions</th>
+                <th className="px-5 py-2.5 font-semibold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2101,8 +2101,8 @@ export default function ClassDetailPage() {
                     {/* T-62: View opens the same modal read-only; Edit opens it live. Remove is gone.
                         T-70: Disable/Enable here is class-scoped (dropped_student_ids); the
                         account-level switch moved inside the View/Edit modal. */}
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-3">
+                    <td className="px-5 py-3 text-center">
+                      <div className="flex items-center justify-center gap-3">
                         <button
                           onClick={() => setModal({ student: s, mode: 'view' })}
                           className="text-xs font-medium hover:underline"

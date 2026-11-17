@@ -56,7 +56,7 @@ describe('T-236 — Fullscreen and tab-switch warnings', () => {
           <StartCard quiz={quiz} attempts={[]} classId="c1" onStarted={() => {}} />
         </MemoryRouter>,
       )
-      expect(html).toContain('Fullscreen and tab switches')
+      expect(html).toContain('Fullscreen and Tab Switches')
       // T-236 revision 2: the briefing now says the third switch locks.
       expect(html).toContain('The quiz will open in fullscreen. Switching tabs or leaving the page is recorded for your teacher.')
       expect(html).toContain('the third time locks your attempt until your teacher reopens it')
@@ -104,9 +104,9 @@ describe('T-236 — Fullscreen and tab-switch warnings', () => {
       expect(quizPlayerSrc).toMatch(/setTabWarning\(count\)/)
     })
 
-    it('renders the tab-switch warning modal with Return to quiz action', () => {
+    it('renders the tab-switch warning modal with Return to Quiz action', () => {
       expect(quizPlayerSrc).toContain('Tab switch warning modal')
-      expect(quizPlayerSrc).toContain('Return to quiz')
+      expect(quizPlayerSrc).toContain('Return to Quiz')
       expect(quizPlayerSrc).toContain('tabSwitchWarningTitle(tabWarning)')
       expect(quizPlayerSrc).toContain('tabSwitchWarningMessage(tabWarning)')
     })

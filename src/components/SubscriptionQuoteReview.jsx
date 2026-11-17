@@ -120,7 +120,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
           onClick={() => { setOpenCount((n) => n + 1); setPayError(''); setConfirming(true) }}
           disabled={!quote || paymentClosed || disabled || isFetching}
         >
-          {disabled ? 'Opening PayMongo…' : 'Proceed to Payment'}
+          {disabled ? 'Opening checkout…' : 'Proceed to Payment'}
         </Button>
       </div>
     </section>

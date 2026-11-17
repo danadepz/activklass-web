@@ -47,7 +47,7 @@ export default function MessageDialog({ title, subtitle, message, onClose, copie
           onClick={copy}
           className="flex-1 rounded-lg bg-amber-400 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-300"
         >
-          Copy message
+          Copy Message
         </button>
         <button
           type="button"

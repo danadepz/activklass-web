@@ -53,7 +53,7 @@ vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn() }))
 import TeacherAccountPage, { CHECKOUT_BANNER } from './account.jsx'
 
 const PAY = 'Proceed to Payment'
-const ADD_SEATS = 'Add student seats'
+const ADD_SEATS = 'Add Student Seats'
 const DAY = 24 * 60 * 60 * 1000
 
 function page({ profile = {}, subscription = null, noDoc = false } = {}) {
@@ -95,7 +95,7 @@ describe('T-68 — the checkout banners never name the gateway', () => {
   })
 })
 
-describe('self-service seat increase — the Account page offers "Add student seats" only once there is a plan to add to', () => {
+describe('self-service seat increase — the Account page offers "Add Student Seats" only once there is a plan to add to', () => {
   it('offers it to a solo teacher already paid up', () => {
     expect(page({ subscription: { type: 'teacher', status: 'active', limits: { teacher_seats: 1, student_seats: 40 } } })).toContain(ADD_SEATS)
   })
@@ -139,7 +139,7 @@ describe('payment stays closed until the account is approved — the same rule t
     }
   })
 
-  it('no Add student seats for an existing subscriber with no verification — they get the ID form', () => {
+  it('no Add Student Seats for an existing subscriber with no verification — they get the ID form', () => {
     const html = page({ profile: { verification_status: undefined }, subscription: active })
     expect(html).not.toContain(ADD_SEATS)
     expect(html).toContain('Send for review')
