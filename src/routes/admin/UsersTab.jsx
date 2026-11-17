@@ -64,6 +64,21 @@ function Pill({ tint, style, children }) {
  * whose school was linked all along was told to go fix a link that was not
  * broken, with the actual failure invisible.
  */
+/* A locked School Name / Abbreviation (T-255) was readOnly but still took a
+   click and Tab: it showed a focus ring and a caret, so it looked editable
+   when it is not (owner, 2026-11-17). Locked now means disabled -- the only
+   state a click on the wrapping <label> cannot focus either (readOnly plus
+   pointer-events alone still let the label put a caret in it) -- no tab stop,
+   and a grey "set, not editable" fill. The text keeps full ink instead of the
+   browser's faded disabled grey (WebkitTextFillColor covers Safari/Chrome).
+   Screen readers still read label and value; the support link says how to
+   change it. */
+const lockedField = {
+  background: '#F2F4F7', borderColor: 'rgba(14,42,92,0.10)', color: ink,
+  WebkitTextFillColor: ink, opacity: 1,
+  pointerEvents: 'none', cursor: 'default', outline: 'none', boxShadow: 'none',
+}
+
 function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   // null = untouched, show the saved value
@@ -129,13 +144,15 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
             School Name
-            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200 }} value={shownName} readOnly={locked}
+            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200, ...(locked ? lockedField : {}) }}
+                   value={shownName} readOnly={locked} disabled={locked} tabIndex={locked ? -1 : undefined}
                    onChange={(e) => { setName(e.target.value); setDone('') }}
                    placeholder="e.g. University of Cebu-Banilad" />
           </label>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             Abbreviation
-            <input style={{ ...field, width: 130, padding: '10px 14px' }} value={shownAbbr} readOnly={locked}
+            <input style={{ ...field, width: 130, padding: '10px 14px', ...(locked ? lockedField : {}) }}
+                   value={shownAbbr} readOnly={locked} disabled={locked} tabIndex={locked ? -1 : undefined}
                    onChange={(e) => { setAbbr(e.target.value); setDone('') }}
                    placeholder="e.g. UCB" />
           </label>
@@ -800,6 +817,15 @@ export function UserRow({ user, isSelf, onChanged }) {
     run('role', () => setUserRole(user.id, role))
   }
 
+  // The Sign-in cell's full value, shown on hover only when it is cut off.
+  const [loginTip, setLoginTip] = useState(null)
+  function showLoginTip(e) {
+    const el = e.currentTarget
+    if (el.scrollWidth <= el.clientWidth) return
+    const r = el.getBoundingClientRect()
+    setLoginTip({ left: r.left, top: r.bottom + 6 })
+  }
+
   async function doReset() {
     const pw = await promptDialog(resetPasswordPromptSpec(user))
     if (pw == null) return
@@ -820,9 +846,30 @@ export function UserRow({ user, isSelf, onChanged }) {
         {/* Issued accounts show the login people actually type (snhs-789012);
             the email field holds the internal identifier and stays hidden.
             Admins and parents sign in with a real email, so that shows here. */}
-        <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, overflowWrap: 'anywhere' }}>
+        {/* One line, always: a long email used to break mid-address
+            ("johnmichaelmendoza1234@gmai / l.com"). The column now fits a
+            typical address in full; one that is still longer is cut with an
+            ellipsis, and hovering it shows the whole value at once. Not the
+            native `title` tooltip: it waits about a second and was missed. */}
+        <span
+          onMouseEnter={showLoginTip}
+          onMouseLeave={() => setLoginTip(null)}
+          style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, display: 'block',
+                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
           {user.login_id ?? user.email}
         </span>
+        {loginTip && (
+          // position: fixed so the table's own scroll box cannot clip it.
+          <span role="tooltip" style={{
+            position: 'fixed', left: loginTip.left, top: loginTip.top, zIndex: 50,
+            ...mono, fontSize: 12.5, color: '#FFFFFF', background: ink,
+            padding: '6px 8px', borderRadius: 6, whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(10,23,51,0.18)', pointerEvents: 'none',
+          }}>
+            {user.login_id ?? user.email}
+          </span>
+        )}
       </td>
 
       <td style={{ padding: '12px 14px' }}>
@@ -1018,15 +1065,23 @@ export default function UsersTab() {
                     their content, the nowrap Status and action columns squeezed
                     ID / LRN until "EMP-2026-004" broke over three lines while
                     Sign-in sat far too wide. Name takes whatever is left. */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1320 }}>
+                {/* 2026-11-17: Sign-in 290 fits a ~32-character email in full on
+                    one line (longer ones truncate, full value on hover); ID / LRN
+                    140 and Role 120 still fit "LRN 136524240004" and the role
+                    select; Status 210 -- just "Active" plus "Default password"
+                    side by side (T-233), it was 240 and left a wide empty band on
+                    every Active-only row; Last Active 160 fits "No activity
+                    recorded"; actions 240 fits Reset Password + Deactivate. Name
+                    takes the rest. */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1340 }}>
                   <colgroup>
                     <col />
-                    <col style={{ width: 240 }} />
-                    <col style={{ width: 150 }} />
-                    <col style={{ width: 130 }} />
-                    <col style={{ width: 240 }} />
+                    <col style={{ width: 290 }} />
                     <col style={{ width: 140 }} />
-                    <col style={{ width: 280 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 210 }} />
+                    <col style={{ width: 160 }} />
+                    <col style={{ width: 240 }} />
                   </colgroup>
                   <thead>
                     {/* Solid, not the usual translucent tint -- sticky, it would

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import SubscriptionExpiry from '@/components/SubscriptionExpiry'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -591,8 +591,15 @@ const rowStyle = {
 }
 
 /** Subscription Management: View Status, View Storage Usage, Upgrade/Downgrade. */
-export default function SubscriptionTab() {
+/**
+ * `passwordRequest` (2026-11-17): the header's account menu → Change Password
+ * bumps this number. Each new value scrolls to the Change Password form and
+ * puts the cursor in its first field -- once the subscription has loaded,
+ * since the form only renders after it does.
+ */
+export default function SubscriptionTab({ passwordRequest = 0 }) {
   const qc = useQueryClient()
+  const passwordRef = useRef(null)
   const { data: plansRes } = useQuery({ queryKey: ['subscription-plans'], queryFn: fetchPlans })
   const { data: mine, isLoading: resolving, isError: resolveFailed, error: resolveError } = useQuery({
     queryKey: ['subscription-owner'],
@@ -612,6 +619,16 @@ export default function SubscriptionTab() {
     qc.invalidateQueries({ queryKey: ['subscription'] })
     qc.invalidateQueries({ queryKey: ['admin-storage'] })
   }
+
+  // Before the early returns below, so the hook order never changes.
+  const loaded = !!data
+  useEffect(() => {
+    if (!passwordRequest || !loaded) return
+    const el = passwordRef.current
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.querySelector('input')?.focus({ preventScroll: true })
+  }, [passwordRequest, loaded])
 
   if (resolving) return <p style={{ color: faint }}>Loading subscription…</p>
   if (resolveFailed) {
@@ -650,7 +667,10 @@ export default function SubscriptionTab() {
 
       <TeacherSeatsCard onChanged={refresh} />
 
-      <ChangePassword />
+      {/* Target of the account menu's Change Password. */}
+      <div ref={passwordRef} id="change-password" style={{ scrollMarginTop: 16 }}>
+        <ChangePassword />
+      </div>
 
       {plans && !data.installment && (
         <section style={{ ...card, overflow: 'hidden' }}>
