@@ -154,7 +154,7 @@ describe('Deactivate / Reactivate on an account row', () => {
   it('the Reactivate confirm says they can sign in again', () => {
     const spec = signInConfirm.on('Skittle Reyes')
     expect(spec.message).toMatch(/Skittle Reyes can sign in again/)
-    expect(spec.confirmLabel).toBe('Turn sign-in on')
+    expect(spec.confirmLabel).toBe('Turn Sign-In On')
   })
 })
 
@@ -273,7 +273,7 @@ describe('Students page', () => {
     state.classes = []
     const html = render(<StudentsPage />)
     expect(html).toContain('>Accounts<')
-    expect(html).toContain('No classes yet')
+    expect(html).toContain('No Classes Yet')
   })
 
   /* T-147 (andecobs-211, andecobs-212): "Students" -> "List of Students".

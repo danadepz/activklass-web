@@ -30,13 +30,13 @@ function ruleBody(css, selector) {
   return bodies.length ? bodies.join('\n') : null
 }
 
-describe('the navbar cluster stays put between scrolling and non-scrolling pages (T-145)', () => {
+describe('a page that does not scroll fills the whole window (reverses T-145 by owner decision)', () => {
   const css = read('./index.css')
 
-  it('html reserves the scrollbar gutter, scrolling or not', () => {
+  it('html does not reserve a scrollbar gutter, so no blank strip shows when there is no scrollbar', () => {
     const html = ruleBody(css, 'html')
     expect(html, 'no `html { }` rule found in index.css').not.toBeNull()
-    expect(html).toMatch(/scrollbar-gutter\s*:\s*stable/)
+    expect(html).not.toMatch(/scrollbar-gutter/)
   })
 
   it('html still clips sideways scroll -- the fix must not have replaced that rule', () => {

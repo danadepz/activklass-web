@@ -125,7 +125,7 @@ describe('the teacher picks unlimited, never guesses a magic number (T-34)', () 
     const boxes = src.match(/checked=\{[^}]*[uU]nlimited[^}]*\}/g) ?? []
     expect(boxes.length, 'the choice is offered in only one of the two places').toBe(2)
     expect(src).toMatch(/Unlimited [Uu]ntil [Ii]t [Cc]loses|Unlimited until it closes/)
-    expect(src).toMatch(/Unlimited attempts until it closes/)
+    expect(src).toMatch(/Unlimited Attempts Until It Closes/)
   })
 
   it('greys the number box out and shows the symbol instead of a number', () => {

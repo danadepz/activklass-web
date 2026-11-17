@@ -85,7 +85,7 @@ const render = (over = {}) => {
 describe('Add quiz questions to the Quiz Bank (T-239)', () => {
   it('renders "Add to Quiz Bank" in Questions and answer key header on a published quiz', () => {
     const html = render({ status: 'published' })
-    expect(html).toContain('Questions and answer key (read-only)')
+    expect(html).toContain('Questions and Answer Key (Read-Only)')
     expect(html).toContain('Add to Quiz Bank')
   })
 
@@ -107,7 +107,7 @@ describe('Add quiz questions to the Quiz Bank (T-239)', () => {
 
   it('renders "Add to Quiz Bank" in Questions and answer key header on a closed quiz', () => {
     const html = render({ status: 'closed' })
-    expect(html).toContain('Questions and answer key (read-only)')
+    expect(html).toContain('Questions and Answer Key (Read-Only)')
     expect(html).toContain('Add to Quiz Bank')
   })
 

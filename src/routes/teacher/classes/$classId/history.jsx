@@ -183,7 +183,7 @@ export default function HistoryPage() {
           Filter
         </Button>
         <Button variant="ghost" size="sm" radius={11} onClick={exportLog} disabled={!events?.length}>
-          Export log
+          Export Log
         </Button>
       </div>
     </div>

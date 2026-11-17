@@ -36,8 +36,11 @@ describe('T-192 — the badge is gone from both modal headers in record.jsx', ()
     expect(recordSrc).toMatch(/<h2 style=\{\{ \.\.\.serif, fontSize: 22, margin: 0, color: ink \}\}>New Assessment/)
   })
 
-  it('Plus is no longer imported in record.jsx -- its only use was the badge', () => {
-    expect(recordSrc).not.toMatch(/\bPlus\b/)
+  it('Plus is back in record.jsx only as the Add Assessment button icon, never as a modal badge', () => {
+    // The badge-sized Plus (18px) is asserted absent above; the button's icon is 3.5.
+    expect(recordSrc.match(/<Plus\b[^>]*>/g)).toEqual([
+      '<Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} />',
+    ])
   })
 
   it('the grade-contest modal header no longer renders the ◆ badge', () => {

@@ -9,7 +9,7 @@ const OPTIONS = [
 export default function PaymentOptionPicker({ value, onChange, disabled = false }) {
   return (
     <fieldset style={{ border: 0, padding: 0, margin: 0 }} disabled={disabled}>
-      <legend style={{ fontSize: 13.5, fontWeight: 700, color: ink, marginBottom: 8 }}>Payment option</legend>
+      <legend style={{ fontSize: 13.5, fontWeight: 700, color: ink, marginBottom: 8 }}>Payment Option</legend>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
         {OPTIONS.map((option) => {
           const selected = value === option.value

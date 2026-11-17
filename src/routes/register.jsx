@@ -621,7 +621,7 @@ export default function Register() {
             in once you hear from us. Nothing to pay today — your quote comes with the setup.
           </p>
           <Link to="/" className="transition hover:opacity-70" style={{ fontWeight: 700, color: navy, fontSize: 14 }}>
-            Back to home
+            Back to Home
           </Link>
         </div>
       ) : choosing ? (
@@ -867,7 +867,7 @@ export default function Register() {
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Your subscription</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Your Subscription</div>
                     <div style={{ fontSize: 17, fontWeight: 700, color: navy, marginTop: 2 }}>
                       You · {Number(form.soloStudents).toLocaleString()} students
                     </div>
@@ -975,7 +975,7 @@ export default function Register() {
               <div style={{ background: 'rgba(14,42,92,0.05)', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 11, padding: '14px 16px' }}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Your subscription</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Your Subscription</div>
                     <div style={{ fontSize: 17, fontWeight: 700, color: navy, marginTop: 2 }}>
                       {Number(form.teacherSeats).toLocaleString()} teachers · {totalStudents.toLocaleString()} students
                     </div>
@@ -1083,7 +1083,7 @@ function SignOutButton({ onClick }) {
       className="transition hover:opacity-70"
       style={{ fontWeight: 700, color: navy, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', textDecoration: 'underline' }}
     >
-      Sign out
+      Sign Out
     </button>
   )
 }

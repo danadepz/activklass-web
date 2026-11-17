@@ -113,7 +113,7 @@ export default function StudentNotificationBell({ dark = false, align = 'right' 
             </span>
             {unread > 0 && (
               <button onClick={markAllRead} className="rounded transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E6FB0] focus-visible:ring-offset-1" style={{ fontSize: 12, fontWeight: 700, color: navy, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
-                Mark all read
+                Mark All Read
               </button>
             )}
           </div>

@@ -58,7 +58,7 @@ describe('Quiz password card (T-259)', () => {
   it('is on the quiz page, closed until the teacher opens it', () => {
     state.quiz = QUIZ
     const html = renderToStaticMarkup(<QuizBuilderPage />)
-    expect(html).toContain('Quiz password')
+    expect(html).toContain('Quiz Password')
     expect(html).toMatch(/<button[^>]*>Manage<\/button>/)
   })
   it('reads ON or OFF from the quiz document', () => {
@@ -67,6 +67,6 @@ describe('Quiz password card (T-259)', () => {
   })
   it('a draft quiz has it too (set the password before publishing)', () => {
     state.quiz = { ...QUIZ, status: 'draft' }
-    expect(renderToStaticMarkup(<QuizBuilderPage />)).toContain('Quiz password')
+    expect(renderToStaticMarkup(<QuizBuilderPage />)).toContain('Quiz Password')
   })
 })

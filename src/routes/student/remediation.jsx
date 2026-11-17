@@ -209,7 +209,7 @@ function TakeTestMastery({ r, quizzes, attemptsByQuiz, studentId }) {
                   className="transition hover:brightness-105"
                   style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.16)', borderRadius: 10, textDecoration: 'none' }}
                 >
-                  View result
+                  View Result
                 </Link>
               ) : (
                 <span style={{ flexShrink: 0, fontSize: 12.5, color: faint }}>Closed</span>
@@ -420,7 +420,7 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOp
           the assignment that is theirs, and the reason the card exists. */}
       {r.guidance?.trim() && (
         <section style={{ marginBottom: 20 }}>
-          <SectionLabel>From your teacher</SectionLabel>
+          <SectionLabel>From Your Teacher</SectionLabel>
           <div style={{ background: 'rgba(245,197,24,0.07)', border: '1px solid rgba(245,197,24,0.4)', borderRadius: 14, padding: '16px 18px' }}>
             <Markdown text={r.guidance} />
           </div>
@@ -429,13 +429,13 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOp
 
       {/* Module: Review Materials — what the teacher attached to this topic. */}
       <section style={{ marginBottom: 20 }}>
-        <SectionLabel>Review materials</SectionLabel>
+        <SectionLabel>Review Materials</SectionLabel>
         <ReviewMaterials syllabus={syllabus} topicId={r.topic_id} onOpenNote={onOpenNote} />
       </section>
 
       {/* Module: Take Test Mastery — sit the quiz, move the mastery figure. */}
       <section>
-        <SectionLabel>Take test mastery</SectionLabel>
+        <SectionLabel>Take Test Mastery</SectionLabel>
         <TakeTestMastery r={r} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={studentId} />
       </section>
     </article>
@@ -480,7 +480,7 @@ export default function StudentRemediation() {
             onClick={() => refetch()}
             style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, color: '#FAFAF6', background: ink, border: 'none', borderRadius: 9, cursor: 'pointer' }}
           >
-            Try again
+            Try Again
           </button>
         </div>
       ) : list.length === 0 ? (

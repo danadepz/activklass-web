@@ -90,7 +90,7 @@ export default function ForgotPassword() {
       // anti-enumeration promise above). A thrown ApiError means the request
       // never reached the server at all (network down, Flask not running).
       await api('/api/auth/forgot-password', { method: 'POST', body: { email: email.trim() }, requireAuth: false })
-      await alertDialog({ title: 'Check your inbox', message: resetRequestedMessage(email.trim()) })
+      await alertDialog({ title: 'Check Your Inbox', message: resetRequestedMessage(email.trim()) })
       setEmail('')
     } catch (err) {
       setError(err.message || 'Could not send a reset link. Check your connection and try again.')

@@ -11,7 +11,7 @@ import { toast } from '@/components/ui/toast'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { navy, ink, gold, goldDeep, muted, red, serif, mono, sansFamily as sans } from '@/theme'
-import { BookOpen, CalendarCheck, Clock, Edit, Trash } from '@/components/icons'
+import { BookOpen, CalendarCheck, ChevronLeft, Clock, Edit, Trash } from '@/components/icons'
 
 // Sub-navbar shown at the top of every page inside a specific class.
 // Paths are relative to /teacher/classes/:classId. The Overview tab is the
@@ -72,9 +72,9 @@ export default function ClassLayout() {
      same confirmation, same typed "DELETE", same roster-only consequence. */
   async function deleteClass() {
     if (!(await confirmDialog({
-      title: 'Delete this class section?',
+      title: 'Delete This Class Section?',
       message: 'The roster list is lost. Student accounts are kept, and so is their work in other classes. This cannot be undone.',
-      confirmLabel: 'Delete section',
+      confirmLabel: 'Delete Section',
       tone: 'danger',
       typeToConfirm: 'DELETE',
     }))) return
@@ -100,19 +100,16 @@ export default function ClassLayout() {
     <div>
       <Link
         to="/teacher/classes"
-        className="inline-flex items-center gap-1.5 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+        className="inline-flex items-center gap-1 transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40 rounded"
         style={{
           fontSize: 13,
           fontWeight: 600,
           color: '#0E2A5C',
-          background: 'rgba(14,42,92,0.07)',
-          border: '1px solid rgba(14,42,92,0.14)',
-          borderRadius: 8,
-          padding: '6px 12px',
           textDecoration: 'none',
         }}
       >
-        ← My Classes
+        <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+        My Classes
       </Link>
 
       {/* Header card — badge + title + one chip per fact, tabs attached below */}

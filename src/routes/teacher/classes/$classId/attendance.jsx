@@ -375,7 +375,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
     <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, overflow: 'hidden' }}>
       <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}` }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>Whole term</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>Whole Term</div>
           <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>
             {columns.length} class {columns.length === 1 ? 'day' : 'days'} · pick a date at the top of a column to mark it
           </div>
@@ -566,11 +566,11 @@ function ContestsPanel({ classId }) {
     // Cancel now aborts. The `?? ''` turned a cancelled prompt into an empty
     // reason and rejected the contest regardless.
     const note = await promptDialog({
-      title: 'Reject this attendance contest',
+      title: 'Reject This Attendance Contest',
       message: 'The student is notified of the outcome and sees this note with it.',
       label: 'Reason (optional)',
       placeholder: 'e.g. The register was taken after the bell.',
-      confirmLabel: 'Reject contest',
+      confirmLabel: 'Reject Contest',
       multiline: true,
       tone: 'danger',
     })
@@ -605,7 +605,7 @@ function ContestsPanel({ classId }) {
     <div className="mb-5" style={{ background: '#FFFFFF', border: `1px solid ${pendingCount ? 'rgba(245,197,24,0.55)' : line}`, borderRadius: 16, overflow: 'hidden' }}>
       <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}`, background: pendingCount ? 'rgba(245,197,24,0.08)' : 'rgba(14,42,92,0.02)' }}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>
-          Attendance disputes
+          Attendance Disputes
           {pendingCount > 0 && (
             <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.22)', borderRadius: 999, padding: '2px 9px' }}>
               {pendingCount} pending

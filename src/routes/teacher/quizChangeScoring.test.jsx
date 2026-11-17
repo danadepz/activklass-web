@@ -72,12 +72,12 @@ function button(html, label) {
   return m[0]
 }
 
-describe('a published quiz offers Change scoring (T-261)', () => {
-  it('beside Edit wording', () => {
+describe('a published quiz offers Change Scoring (T-261)', () => {
+  it('beside Edit Wording', () => {
     state.quiz = QUIZ
     const html = renderToStaticMarkup(<QuizBuilderPage />)
-    expect(html).toContain('Edit wording')
-    expect(html).toMatch(/<button[^>]*>\s*Change scoring\s*<\/button>/)
+    expect(html).toContain('Edit Wording')
+    expect(html).toMatch(/<button[^>]*>\s*Change Scoring\s*<\/button>/)
   })
 })
 

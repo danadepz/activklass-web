@@ -323,7 +323,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
       message: concerns
         ? `${concerns} — each becomes a separate account. Creating cannot be stopped once it starts.`
         : 'Each row becomes a separate account, able to sign in straight away. Creating cannot be stopped once it starts.',
-      confirmLabel: 'Create accounts',
+      confirmLabel: 'Create Accounts',
       tone: blocking ? 'danger' : 'primary',
     })
     if (!ok) return

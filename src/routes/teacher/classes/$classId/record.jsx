@@ -30,7 +30,7 @@ import { correctAnswerText, studentAnswerText } from '@/lib/quizGrading'
 import { loadQuizWithKey } from '@/lib/quizAnswerKey'
 import { questionsOfAttempt } from '@/lib/quizPool'
 import { finishedAttempts } from '@/lib/quizAttempts'
-import { ArrowRight, Check, Clock, X, Lock } from '@/components/icons'
+import { ArrowRight, Check, Clock, X, Lock, Plus } from '@/components/icons'
 import { navy, navyDeep, ink, inkMuted, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -284,6 +284,23 @@ function TrackCell({ value, status, label }) {
       {incomplete && <span style={{ color: goldDeep }} aria-label="incomplete"> !</span>}
     </td>
   )
+}
+
+/* Enter in a score box moves to the same column on the next student's row
+   (Shift+Enter, the previous one), the way a spreadsheet does. Pure focus
+   movement: nothing is saved or sent, so the Save button still decides when
+   scores are written. Each input names its column with data-grid-col; locked
+   (disabled) inputs are skipped, and at either end of the column nothing moves. */
+export function moveFocusOnEnter(e) {
+  if (e.key !== 'Enter' || e.nativeEvent?.isComposing) return
+  const input = e.target
+  const col = input?.dataset?.gridCol
+  if (!col) return
+  e.preventDefault()
+  const column = [...e.currentTarget.querySelectorAll('input[data-grid-col]')]
+    .filter((el) => el.dataset.gridCol === col && !el.disabled)
+  const next = column[column.indexOf(input) + (e.shiftKey ? -1 : 1)]
+  if (next) { next.focus(); next.select() }
 }
 
 const thHead = {
@@ -593,7 +610,7 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
         : assessment.source_task_id
           ? 'Every score recorded against it goes too, and the class average is recomputed without it. This column came from a task on the Modules tab — saving that task again recreates it, empty.'
           : 'Every score recorded against it goes too, and the class average is recomputed without it. This cannot be undone.',
-      confirmLabel: 'Delete assessment',
+      confirmLabel: 'Delete Assessment',
       tone: 'danger',
       typeToConfirm: 'DELETE',
     }))) return
@@ -634,8 +651,8 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
         <div className="flex flex-wrap gap-2.5">
           {!locked && (
             <>
-              <button onClick={() => setShowAdd(true)} className="transition hover:brightness-105" style={btnGhostSm}>
-                <span style={{ color: gold }}>+</span> Add Assessment
+              <button onClick={() => setShowAdd(true)} className="transition hover:brightness-105" style={{ ...btnGhostSm, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> Add Assessment
               </button>
               <button
                 onClick={saveAll}
@@ -677,12 +694,13 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
         tabIndex={0}
         role="region"
         aria-label="Class record grid"
+        onKeyDown={moveFocusOnEnter}
         style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16 }}
       >
         <table style={{ borderCollapse: 'collapse', fontSize: 13, minWidth: '100%' }}>
           <thead>
             <tr>
-              <th rowSpan={2} style={{ ...thHead, position: 'sticky', left: 0, zIndex: 2, textAlign: 'left', borderRight: '1px solid rgba(14,42,92,0.07)', minWidth: 176 }}>
+              <th rowSpan={2} style={{ ...thHead, position: 'sticky', left: 0, zIndex: 2, textAlign: 'center', borderRight: '1px solid rgba(14,42,92,0.07)', minWidth: 176 }}>
                 Student
               </th>
               {byComponent.map((component) => (
@@ -795,9 +813,10 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
                            contested. */
                         const recovered = a.recovery?.[student.student_id]
                         return (
-                          <td key={a.id} style={{ padding: 4, textAlign: 'center' }}>
+                          <td key={a.id} style={{ padding: '10px 6px', textAlign: 'center' }}>
                             <input
                               className="ak-input"
+                              data-grid-col={a.id}
                               value={getCell(a.id, student.student_id)}
                               onChange={(e) => setCell(a.id, student.student_id, e.target.value)}
                               disabled={locked}
@@ -814,7 +833,7 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
                           </td>
                         )
                       }),
-                      <td key={`${component.id}-pct`} style={{ ...mono, padding: '4px 8px', textAlign: 'center', color: navy, fontWeight: 700, borderRight: '1px solid rgba(14,42,92,0.07)' }}>
+                      <td key={`${component.id}-pct`} style={{ ...mono, padding: '10px 8px', textAlign: 'center', color: navy, fontWeight: 700, borderRight: '1px solid rgba(14,42,92,0.07)' }}>
                         {fmt(grade?.components?.[component.id])}
                       </td>,
                     ])}
@@ -824,9 +843,10 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
                         <TrackCell value={grade?.tracks?.lab} status={grade?.tracks?.lab_status} label="Laboratory" />
                       </>
                     )}
-                    <td style={{ padding: 4, textAlign: 'center' }}>
+                    <td style={{ padding: '10px 6px', textAlign: 'center' }}>
                       <input
                         className="ak-input"
+                        data-grid-col="override"
                         value={getOverride(student.student_id)}
                         onChange={(e) => setDirtyOverrides((d) => ({ ...d, [student.student_id]: e.target.value }))}
                         disabled={locked}
@@ -836,7 +856,7 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
                       />
                     </td>
                     <td
-                      style={{ ...mono, padding: '6px 12px', textAlign: 'center', fontWeight: 800, color: gradeColor(grade?.grade) }}
+                      style={{ ...mono, padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: gradeColor(grade?.grade) }}
                       title={grade?.override != null ? `Overridden (computed: ${fmt(grade?.period_grade)})` : undefined}
                     >
                       {fmt(grade?.grade)}
@@ -877,7 +897,7 @@ function SummaryView({ summary }) {
       <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ background: 'rgba(14,42,92,0.03)', borderBottom: '1px solid rgba(14,42,92,0.07)' }}>
-            <th style={{ ...thHead, textAlign: 'left' }}>Student</th>
+            <th style={{ ...thHead, textAlign: 'center' }}>Student</th>
             {summary.periods.map((p) => (
               <th key={p.id} style={{ ...thHead, textAlign: 'center' }}>
                 {p.name} {p.locked && <Lock title="Locked" className="h-3 w-3 inline-block" />}
@@ -1025,7 +1045,7 @@ function ContestReviewModal({ classId, contest, quizId, error, busy, onResolve, 
           {error && <AlertBox>{error}</AlertBox>}
 
           <div style={{ background: 'rgba(245,197,24,0.10)', border: '1px solid rgba(245,197,24,0.45)', borderRadius: 12, padding: '12px 14px' }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: goldDeep, letterSpacing: '0.06em', textTransform: 'uppercase' }}>What the student says</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: goldDeep, letterSpacing: '0.06em', textTransform: 'uppercase' }}>What the Student Says</div>
             <div style={{ fontSize: 13.5, color: ink, lineHeight: 1.55, marginTop: 4 }}>{contest.reason}</div>
             {contest.excuse_url && (
               <a href={contest.excuse_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 600, color: blueText, marginTop: 6 }}>📎 View attached file</a>
@@ -1177,11 +1197,11 @@ function GradeContestsPanel({ classId, assessments = [] }) {
       // into "no reason given" by the `?? ''`, so backing out of the box
       // rejected the dispute anyway - there was no way not to.
       const reason = await promptDialog({
-        title: 'Reject this score dispute',
+        title: 'Reject This Score Dispute',
         message: 'The student is notified of the outcome and sees this note with it.',
         label: 'Reason (optional)',
         placeholder: 'e.g. The recorded score matches the answer sheet.',
-        confirmLabel: 'Reject dispute',
+        confirmLabel: 'Reject Dispute',
         multiline: true,
         tone: 'danger',
       })
@@ -1220,7 +1240,7 @@ function GradeContestsPanel({ classId, assessments = [] }) {
     <div className="mb-6" style={{ background: '#FFFFFF', border: `1px solid ${pendingCount ? 'rgba(245,197,24,0.55)' : line}`, borderRadius: 16, overflow: 'hidden' }}>
       <div className="flex items-center justify-between" style={{ padding: '14px 18px', borderBottom: `1px solid ${line}`, background: pendingCount ? 'rgba(245,197,24,0.08)' : 'rgba(14,42,92,0.02)' }}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: ink }}>
-          Score disputes
+          Score Disputes
           {pendingCount > 0 && (
             <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: goldDeep, background: 'rgba(245,197,24,0.22)', borderRadius: 999, padding: '2px 9px' }}>
               {pendingCount} pending
@@ -1473,12 +1493,12 @@ export default function ClassRecordPage() {
             if (!(await canLeaveGrid())) return
             const ask = locked
               ? {
-                  title: 'Unlock this period?',
+                  title: 'Unlock This Period?',
                   message: 'Scores, assessments and overrides become editable again.',
                   confirmLabel: 'Unlock',
                 }
               : {
-                  title: 'Lock this period?',
+                  title: 'Lock This Period?',
                   message: 'Scores, assessments and overrides become read-only until you unlock it again.',
                   confirmLabel: 'Lock Period',
                 }
@@ -1498,7 +1518,7 @@ export default function ClassRecordPage() {
             <>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 20 }}>
                 <span style={{ fontSize: 11, color: faint, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginRight: 6 }}>
-                  Grading period
+                  Grading Period
                 </span>
                 {bundle.periods.map((p) => (
                   <button key={p.id} onClick={() => changeTab(p.id)} style={pillStyle(tab !== 'summary' && p.id === record.period.id)}>

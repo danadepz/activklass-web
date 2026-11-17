@@ -50,7 +50,7 @@ export default function ParentOnMobile() {
             gap: 10,
           }}
         >
-          Sign out
+          Sign Out
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: gold }} />
         </SignOutButton>
       </div>

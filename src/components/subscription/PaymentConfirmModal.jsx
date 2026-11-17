@@ -93,7 +93,7 @@ export default function PaymentConfirmModal({ open, costing, schedule, dueDate, 
         open={open && !showTerms}
         onClose={busy ? undefined : onBack}
         title="Confirm your subscription"
-        subtitle="Check the details below. You will finish payment on PayMongo's secure page."
+        subtitle="Check the details below. You will finish payment on our secure payment page."
         size="md"
         closeOnBackdrop={!busy}
         // The agreements live in the pinned footer, beside Pay Now, so they stay

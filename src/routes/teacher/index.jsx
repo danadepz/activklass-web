@@ -322,7 +322,7 @@ export default function TeacherDashboard() {
             <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
               <Plus className="h-3.5 w-3.5" />
             </span>
-            Create your first class
+            Create Your First Class
           </Link>
         </div>
       ) : (

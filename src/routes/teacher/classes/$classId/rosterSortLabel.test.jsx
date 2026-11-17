@@ -57,6 +57,6 @@ describe('T-134 — roster sort control: a visible label, and a clearer option',
 
   it('the All students filter select is unchanged -- 176/177 are label-only, scoped to the sort control', () => {
     const html = render()
-    expect(html).toMatch(/<option value="all"[^>]*>All students<\/option>/)
+    expect(html).toMatch(/<option value="all"[^>]*>All Students<\/option>/)
   })
 })

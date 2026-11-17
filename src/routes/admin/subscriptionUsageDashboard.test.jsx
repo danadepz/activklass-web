@@ -151,7 +151,7 @@ describe('Subscription Usage Dashboard & Warning States (Institutions)', () => {
     }
     html = renderToStaticMarkup(<MemoryRouter><SubscriptionTab /></MemoryRouter>)
     expect(html).toContain('0 credits remaining (Exhausted)')
-    expect(html).toContain('How limits work')
+    expect(html).toContain('How Limits Work')
 
     // 3. Granted (Option B, 3 teachers x 90 students): the student pool shows its own balance
     state.resourceUsage = {

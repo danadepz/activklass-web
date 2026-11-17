@@ -60,10 +60,10 @@ function normalizeAcademicYear(value) {
 }
 
 /* School-day bounds. The pickers are 12-hour, so nothing stops a teacher
-   saving a 6:00 AM class -- this catches it. There is deliberately no
+   saving a 3:00 AM class -- this catches it. There is deliberately no
    closing-time cap any more: the pilot had real classes ending after 9 PM,
    and the old DAY_CLOSES check blocked saving them. */
-const DAY_OPENS = 7 * 60      // 7:00 AM
+const DAY_OPENS = 5 * 60      // 5:00 AM -- some schools start early
 const MIN_LENGTH = 60         // one hour
 
 function minutesFromLabel(hour, minute, period) {
@@ -322,7 +322,7 @@ export function saveConfirmSpec(form, { mode, clashText, hasClash }) {
     title: mode === 'edit' ? 'Save changes to this class?' : 'Create this class?',
     message: `${body}\n\n${dialogSummaryFor(form)}`,
     confirmLabel: hasClash ? `${verb} anyway` : mode === 'edit' ? 'Save changes' : 'Create Class',
-    cancelLabel: 'Go back',
+    cancelLabel: 'Go Back',
   }
 }
 
@@ -769,7 +769,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                 aria-describedby={errors.grade_level ? 'err-grade_level' : undefined}
                 className={fieldCls(errors.grade_level)}
               >
-                <option value="">{educationLevel === 'College' ? 'Select year' : 'Select grade'}</option>
+                <option value="">{educationLevel === 'College' ? 'Select Year' : 'Select Grade'}</option>
                 {gradeLevelOffList && <option value={gradeLevelOffList}>{gradeLevelOffList}</option>}
                 {gradeLevelOptions.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
@@ -855,7 +855,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                 aria-describedby={errors.semester ? 'err-semester' : undefined}
                 className={fieldCls(errors.semester)}
               >
-                <option value="">Select semester</option>
+                <option value="">Select Semester</option>
                 {SEMESTERS.map((sem) => (
                   <option key={sem.value} value={sem.value}>{sem.label}</option>
                 ))}
@@ -867,20 +867,17 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
           {/* Existing class syllabus metadata remains readable for backward
               compatibility. New uploads belong in the Syllabus workflow. */}
-          <div className="border-t border-slate-200 pt-4">
-            <span className="text-sm font-medium text-slate-700">
-              Existing Syllabus
-            </span>
-            {currentSyllabusFile && (
-              <p className="text-xs text-slate-500 mt-1">
+          {currentSyllabusFile && (
+            <div className="border-t border-slate-200 pt-4">
+              <p className="text-xs text-slate-500">
                 Current:{' '}
                 <a href={currentSyllabusFile.url} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: '#0E2A5C' }}>
                   {currentSyllabusFile.name}
                 </a>{' '}
                 — class creation no longer uploads or extracts syllabus files.
               </p>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="flex gap-3 justify-end pt-2">
             <button

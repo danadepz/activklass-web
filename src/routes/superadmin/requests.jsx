@@ -181,7 +181,7 @@ export default function SuperAdminRequestsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">School requests</h1>
+          <h1 className="text-2xl font-bold tracking-tight">School Requests</h1>
           <p className="mt-1 text-sm text-zinc-500">
             Schools asking for access from the sign-up page. Approving creates the school and makes the
             requester its admin.
@@ -358,7 +358,7 @@ export default function SuperAdminRequestsPage() {
         <div className="mt-10">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-base font-bold text-zinc-200">Recently approved</h2>
+              <h2 className="text-base font-bold text-zinc-200">Recently Approved</h2>
               <p className="mt-0.5 text-xs text-zinc-500">
                 The welcome email goes out on approval. Resend it to confirm it landed, or open
                 it to copy by hand.
@@ -392,7 +392,7 @@ export default function SuperAdminRequestsPage() {
                     onClick={() => reopen.mutate(r)}
                     className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
                   >
-                    Approval message
+                    Approval Message
                   </button>
                   {r.purge_state === 'incomplete' && <PurgeIncompleteBadge />}
                   <button

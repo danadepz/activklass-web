@@ -101,7 +101,7 @@ function row(html, n) {
 
 describe('a published quiz shows its answer key on the read-only list (T-60)', () => {
   it('says so in the heading', () => {
-    expect(render()).toContain('Questions and answer key (read-only)')
+    expect(render()).toContain('Questions and Answer Key (Read-Only)')
   })
 
   it('lists every option of a multiple-choice question and marks the correct one', () => {
@@ -135,7 +135,7 @@ describe('a published quiz shows its answer key on the read-only list (T-60)', (
 
   it('shows the key on a closed quiz too, which is read-only the same way', () => {
     const html = render({ status: 'closed' })
-    expect(html).toContain('Questions and answer key (read-only)')
+    expect(html).toContain('Questions and Answer Key (Read-Only)')
     expect(row(html, 2)).toMatch(/Answer: <span[^>]*>True</)
   })
 

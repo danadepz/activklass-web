@@ -245,7 +245,7 @@ export default function StudentProfile() {
             disabled={uploading}
             style={{ fontSize: 12.5, color: muted, background: 'none', border: 'none', padding: 0, marginBottom: 12, cursor: 'pointer', textDecoration: 'underline' }}
           >
-            Remove photo
+            Remove Photo
           </button>
         )}
 

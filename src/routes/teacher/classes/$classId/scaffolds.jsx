@@ -326,7 +326,7 @@ function RemediationPanel({ plans, legacy, nameById, attemptsByQuiz, quizzes, bu
                     className="transition hover:brightness-95"
                     style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: green, background: '#FFFFFF', border: '1.5px solid rgba(39,174,96,0.45)', borderRadius: 9, cursor: 'pointer' }}
                   >
-                    Recover marks
+                    Recover Marks
                   </button>
                 ) : null}
                 {published ? (
@@ -601,7 +601,7 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvid
       <div {...panelProps} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 26, width: '100%', maxWidth: 620 }}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit remediation</h3>
+            <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit Remediation</h3>
             <p style={{ fontSize: 12.5, color: muted, margin: '4px 0 0' }}>
               {plan.topic ?? 'Topic'} ·{' '}
               {plan.status === REMEDIATION_PUBLISHED
@@ -625,7 +625,7 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvid
         </div>
 
         <div className="mt-4">
-          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Guidance for the student</label>
+          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Guidance for the Student</label>
           <textarea
             className="ak-input"
             rows={4}
@@ -1030,7 +1030,7 @@ export default function ScaffoldTopicsPage() {
                 <div style={{ background: 'rgba(63,169,245,0.05)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 12, padding: '14px 16px' }}>
                   <div className="mb-2 flex items-center gap-2">
                     <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: 6, background: 'rgba(63,169,245,0.2)', color: blueText }}><Sparkles className="h-3 w-3" /></span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: blueText, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Suggested intervention</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: blueText, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Suggested Intervention</span>
                   </div>
                   <div style={{ fontSize: 13.5, color: ink, lineHeight: 1.45, marginBottom: 10 }}>
                     Re-teach <strong>{t.title}</strong> with worked examples, then assign a targeted remediation quiz to the {t.studentsAffected} student{t.studentsAffected === 1 ? '' : 's'} below mastery.
@@ -1158,7 +1158,7 @@ export default function ScaffoldTopicsPage() {
           if (!(await confirmDialog({
             title: `Delete "${plan.title}"?`,
             message: 'It is removed from every student it was assigned to. This cannot be undone.',
-            confirmLabel: 'Delete plan',
+            confirmLabel: 'Delete Plan',
             tone: 'danger',
             typeToConfirm: 'DELETE',
           }))) return

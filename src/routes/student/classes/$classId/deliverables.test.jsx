@@ -108,10 +108,10 @@ describe('Modules tab -- class tasks under their sub-module', () => {
     const t2 = between(html, 'topic-t2', 'topic-t3')
     expect(t2).toContain('PhET Pendulum Lab (simulation)')
     expect(t2).toContain('>Link<')
-    expect(t2).toContain('Read instructions')
+    expect(t2).toContain('Read Instructions')
     // The exam has no instructions and no attachment: nothing to read, nothing to open.
     const t4 = between(html, 'topic-t4', null)
-    expect(t4).not.toContain('Read instructions')
+    expect(t4).not.toContain('Read Instructions')
   })
 
   it('keeps the anchor the task deep link lands on', () => {

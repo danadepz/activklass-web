@@ -21,14 +21,14 @@ import { describe, expect, it } from 'vitest'
 
 const src = readFileSync(fileURLToPath(new URL('./quizzes.$quizId.jsx', import.meta.url)), 'utf8')
 
-/* 2026-11-15, owner request: the column widened from max-w-3xl to max-w-5xl.
+/* 2026-11-15, owner request: the column widened from max-w-3xl to max-w-5xl, then to max-w-7xl.
    T-35 had kept it at 3xl on purpose (long question text reads better
    narrow), but at that width the results table squeezed until a score like
    "6 / 14" wrapped onto two lines. 5xl matches the Quizzes list page. What
    T-35 actually guarded still holds: one centred wrapper sets the width. */
 describe('quiz editor centring (T-35)', () => {
-  it('centres the whole editor from a single wrapper, at the Quizzes page width', () => {
-    expect(src).toMatch(/className="mx-auto max-w-5xl"/)
+  it('centres the whole editor from a single wrapper, at the wide page width', () => {
+    expect(src).toMatch(/className="mx-auto max-w-7xl"/)
   })
 
   it('leaves no second width block to float out of line with it', () => {
@@ -39,7 +39,7 @@ describe('quiz editor centring (T-35)', () => {
   })
 
   it('the one that remains is the centred one', () => {
-    const only = src.match(/[^\n]*max-w-5xl[^\n]*/)[0]
+    const only = src.match(/[^\n]*max-w-7xl[^\n]*/)[0]
     expect(only).toContain('mx-auto')
   })
 

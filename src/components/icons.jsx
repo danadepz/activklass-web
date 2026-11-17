@@ -146,6 +146,12 @@ export const BarChart = (p) => (
   </Svg>
 )
 
+export const ChevronLeft = (p) => (
+  <Svg {...p}>
+    <path d="m15 6-6 6 6 6" />
+  </Svg>
+)
+
 export const ChevronRight = (p) => (
   <Svg {...p}>
     <path d="m9 6 6 6-6 6" />

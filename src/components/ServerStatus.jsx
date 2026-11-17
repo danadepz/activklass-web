@@ -140,7 +140,7 @@ export default function ServerStatus() {
           cursor: 'pointer',
         }}
       >
-        Check again
+        Check Again
       </button>
     </div>
   )

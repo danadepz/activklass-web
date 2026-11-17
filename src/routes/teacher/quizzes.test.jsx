@@ -252,17 +252,17 @@ describe('Generate Quiz with AI — the class is picked first', () => {
 })
 
 /**
- * Clear form (2026-09-13, owner request) -- the same control as the Generate
+ * Clear Form (2026-09-13, owner request) -- the same control as the Generate
  * Syllabus dialog. Static render, so: present, disabled on open, type="button"
  * (this dialog is a <form>, so anything else would submit), ahead of Cancel.
  */
-describe('Generate Quiz with AI — Clear form', () => {
-  it('opens with a disabled "Clear form" button ahead of Cancel', () => {
+describe('Generate Quiz with AI — Clear Form', () => {
+  it('opens with a disabled "Clear Form" button ahead of Cancel', () => {
     const html = openGenerate()
-    const clear = html.match(/<button[^>]*>Clear form<\/button>/)?.[0]
+    const clear = html.match(/<button[^>]*>Clear Form<\/button>/)?.[0]
     expect(clear).toBeTruthy()
     expect(clear).toContain('type="button"')
     expect(clear).toContain(' disabled=""')
-    expect(html.indexOf('Clear form')).toBeLessThan(html.indexOf('>Cancel<'))
+    expect(html.indexOf('Clear Form')).toBeLessThan(html.indexOf('>Cancel<'))
   })
 })

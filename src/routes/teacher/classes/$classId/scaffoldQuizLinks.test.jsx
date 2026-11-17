@@ -167,7 +167,7 @@ describe('T-83 — Scaffold Topics quiz links keep the teacher signed in', () =>
 
   it('#113: the remediation editor provides an action to open its practice quiz in the quiz editor', () => {
     const html = render({ ...base, rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1 }, plan)
-    expect(html).toContain('Edit remediation') // the seeded dialog really rendered
+    expect(html).toContain('Edit Remediation') // the seeded dialog really rendered
     expect(html).toContain('Open Quiz in Editor')
     expect(html).toContain('data-testid="remediation-performance-explanation"')
   })

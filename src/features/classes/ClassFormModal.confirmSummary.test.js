@@ -68,7 +68,7 @@ describe('saveConfirmSpec — title, body and labels', () => {
   })
 
   it('renames Cancel to "Go back", as asked', () => {
-    expect(saveConfirmSpec(form, { mode: 'create', clashText: '', hasClash: false }).cancelLabel).toBe('Go back')
+    expect(saveConfirmSpec(form, { mode: 'create', clashText: '', hasClash: false }).cancelLabel).toBe('Go Back')
   })
 
   it('the summary is always appended after the body, never replacing it', () => {

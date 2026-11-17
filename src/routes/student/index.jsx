@@ -187,7 +187,7 @@ export default function StudentDashboard() {
   if (isError) {
     return (
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 36, textAlign: 'center' }}>
-        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could not load dashboard</h3>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could Not Load Dashboard</h3>
         <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
           {error?.message || 'We ran into a problem loading your classes. Please try again.'}
         </p>

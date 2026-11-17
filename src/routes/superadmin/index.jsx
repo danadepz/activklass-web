@@ -320,7 +320,7 @@ export default function SuperAdminSubscribersPage() {
             }}
             className="ml-auto text-[11px] font-semibold text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
           >
-            Clear filters
+            Clear Filters
           </button>
         )}
       </div>
@@ -473,7 +473,7 @@ export default function SuperAdminSubscribersPage() {
                         onClick={() => setSearchQuery('')}
                         className="mt-4 rounded-lg border border-zinc-700 px-4 py-1.5 text-xs font-bold text-zinc-300 hover:border-zinc-600"
                       >
-                        Clear search
+                        Clear Search
                       </button>
                     </>
                   ) : filtered ? (
@@ -492,13 +492,13 @@ export default function SuperAdminSubscribersPage() {
                         }}
                         className="mt-5 rounded-lg border border-zinc-700 px-4 py-2 text-xs font-bold text-zinc-300 hover:border-zinc-600"
                       >
-                        Clear filters
+                        Clear Filters
                       </button>
                     </>
                   ) : (
                     <>
                       <p className="text-sm font-semibold text-zinc-300">
-                        No subscribers yet
+                        No Subscribers Yet
                       </p>
                       <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-zinc-500">
                         Provisioning an institution creates its school, its first admin account and
@@ -754,7 +754,7 @@ function ProvisionDialog({ plans, onClose, onDone }) {
           <Field label="Type">
             <select value={form.type} onChange={onType} className={inputCls}>
               <option value="institution">Institution</option>
-              <option value="teacher">Solo teacher</option>
+              <option value="teacher">Solo Teacher</option>
             </select>
           </Field>
           <Field label="Plan">
@@ -913,7 +913,7 @@ function ManageDialog({ subscription, plans, busy, onClose, onSave }) {
 
         <div className="border-t border-zinc-800 pt-4">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-            Negotiated seat limits
+            Negotiated Seat Limits
           </p>
           <p className="mt-1 text-[11px] text-zinc-500">
             Leave a field empty for unlimited. Use this to honour a deal without inventing a plan for

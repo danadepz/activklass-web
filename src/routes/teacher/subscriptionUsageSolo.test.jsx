@@ -74,7 +74,7 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
     }
 
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
-    expect(html).toContain('Your subscription')
+    expect(html).toContain('Your Subscription')
     expect(html).toContain('Paid through')
     expect(html).toMatch(/\d+ days? left/)
     expect(html.toLowerCase()).toContain('early renewal preserves remaining days')
@@ -131,7 +131,7 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
   it('displays protective invariants ensuring non-AI academic features remain operational', () => {
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('At AI limits, non-AI academic features (gradebooks, rosters, attendance) remain fully operational.')
-    expect(html).toContain('How limits work')
+    expect(html).toContain('How Limits Work')
   })
 
   it('clearly distinguishes unavailable AI credits from exhausted credits for solo teachers', () => {

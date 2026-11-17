@@ -36,7 +36,7 @@ import {
 } from '@/lib/gradingTemplates'
 import { explainGradeComputation, fmtFinal, fmtPoint, namedRows, previewWarnings, simulateAllPeriods } from './gradePreview'
 import { useAuth } from '@/context/useAuth'
-import { ArrowRight } from '@/components/icons'
+import { ArrowRight, ChevronRight, Plus } from '@/components/icons'
 import Button, { GoldArrowDot, IconButton } from '@/components/ui/Button'
 import { navy, ink, gold, muted, faint, green, red, line, serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
@@ -321,7 +321,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
           className="transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, fontFamily: sans, color: navy, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
         >
-          <span style={{ color: gold }}>+</span> {addLabel}
+          <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> {addLabel}
         </button>
 
         {/* Convenience only -- the one place this card still moves more than
@@ -334,7 +334,7 @@ function EditorCard({ title, hint, rows, setRows, addLabel, busy = false, onSave
           className="transition hover:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ fontSize: 13, fontWeight: 700, fontFamily: sans, color: muted, background: 'none', border: 'none', cursor: busy ? 'not-allowed' : 'pointer', padding: 0 }}
         >
-          Split evenly
+          Split Evenly
         </button>
       </div>
 
@@ -381,9 +381,10 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
   const bands = pointScaleBands(policy)
   return (
     <div style={{ marginTop: 16, borderTop: '1px solid rgba(14,42,92,0.06)', paddingTop: 14 }}>
-      <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
+      <div className={mode === 'ched_point' ? 'grid grid-cols-1 items-start gap-x-10 gap-y-6 md:grid-cols-2 md:gap-x-12' : ''}>
+        <div style={{ minWidth: 0 }}>
         <label style={{ display: 'block' }}>
-          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Passing score</span>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Passing Score</span>
           <span className="relative" style={{ display: 'inline-block' }}>
             <input
               className="ak-input"
@@ -404,42 +405,12 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
           </span>
         </label>
 
-        {mode === 'ched_point' && (
-          <div>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Point scale</span>
-            <div className="flex flex-wrap gap-2">
-              {POINT_SCALE_DIRECTIONS.map((d) => {
-                const active = direction === d.value
-                return (
-                  <button
-                    key={d.value}
-                    type="button"
-                    onClick={() => setDirection(d.value)}
-                    disabled={busy}
-                    className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{
-                      padding: '9px 14px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
-                      ...(active
-                        ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
-                        : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
-                    }}
-                  >
-                    <div>{d.label}</div>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: muted, marginTop: 2 }}>{d.hint}</div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
       {mode === 'ched_point' && (
-        <div className="overflow-x-auto" style={{ marginTop: 14 }}>
+        <div className="overflow-x-auto" style={{ marginTop: 18 }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12.5, minWidth: 320 }} data-testid="point-scale-table">
             <thead>
               <tr style={{ color: muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                <th style={{ textAlign: 'left', padding: '4px 12px 6px 0', fontWeight: 700 }}>Weighted percent</th>
+                <th style={{ textAlign: 'left', padding: '4px 12px 6px 0', fontWeight: 700 }}>Weighted Percent</th>
                 <th style={{ textAlign: 'right', padding: '4px 12px 6px 0', fontWeight: 700 }}>Grade</th>
                 <th style={{ textAlign: 'left', padding: '4px 0 6px', fontWeight: 700 }}></th>
               </tr>
@@ -466,6 +437,37 @@ function PassRules({ mode, passingPercent, setPassingPercent, direction, setDire
           </table>
         </div>
       )}
+        </div>
+
+        {mode === 'ched_point' && (
+          <div className="w-full" style={{ maxWidth: 400 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>Point Scale</span>
+            <div className="flex flex-col gap-2">
+              {POINT_SCALE_DIRECTIONS.map((d) => {
+                const active = direction === d.value
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => setDirection(d.value)}
+                    disabled={busy}
+                    className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      padding: '9px 14px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, borderRadius: 10, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
+                      ...(active
+                        ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
+                        : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+                    }}
+                  >
+                    <div>{d.label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: muted, marginTop: 2 }}>{d.hint}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -630,7 +632,7 @@ export function PreviewPanel({ periods, components, mode, policy, labOn = false,
     <div className="mt-6" style={{ background: 'rgba(14,42,92,0.025)', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px' }} data-testid="preview-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Preview the whole course</h3>
+          <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 3px' }}>Preview the Whole Course</h3>
           <p style={{ fontSize: 12, color: faint, margin: 0, maxWidth: 600 }}>
             Type a sample percent per component, per period, to see the grade this setup gives —
             each period and the overall grade. A blank is <strong>not</strong> a zero: it is left out and
@@ -672,7 +674,7 @@ export function PreviewPanel({ periods, components, mode, policy, labOn = false,
           >
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: muted }}>
-                Overall course grade
+                Overall Course Grade
               </div>
               <div style={{ fontSize: 12, color: faint, marginTop: 3 }}>
                 {sim.overall == null
@@ -777,12 +779,12 @@ export function TemplatesCard({
 
   async function saveAsTemplate() {
     const name = await promptDialog({
-      title: 'Save this setup as a template',
+      title: 'Save This Setup as a Template',
       message: 'Templates are configurations you can reuse on other classes. Saving one changes no class.',
       label: 'Template name',
       placeholder: 'e.g. College — Lecture with Laboratory',
       required: true,
-      confirmLabel: 'Save template',
+      confirmLabel: 'Save Template',
     })
     if (!name?.trim()) return
     const trimmed = name.trim()
@@ -791,7 +793,7 @@ export function TemplatesCard({
       const overwrite = await confirmDialog({
         title: `Update "${existing.name}"?`,
         message: `A template named "${existing.name}" already exists. Do you want to update it with your current percentages?`,
-        confirmLabel: 'Update template',
+        confirmLabel: 'Update Template',
       })
       if (overwrite) {
         return saveToTemplate(existing)
@@ -810,7 +812,7 @@ export function TemplatesCard({
       message:
         'This replaces the grading periods, components and settings in the form below with the '
         + 'template\u2019s. No class changes until you press Save & Sync.',
-      confirmLabel: 'Load into the form',
+      confirmLabel: 'Load into the Form',
     })
     if (ok) {
       onUse(setupFromTemplate(t), t)
@@ -820,7 +822,7 @@ export function TemplatesCard({
 
   async function rename(t) {
     const name = await promptDialog({
-      title: 'Rename template',
+      title: 'Rename Template',
       label: 'Template name',
       defaultValue: t.name,
       confirmLabel: 'Rename',
@@ -835,7 +837,7 @@ export function TemplatesCard({
       message:
         'The template is removed from your list. Classes already configured from it keep their '
         + 'grading setup and their grades — a class holds its own copy.',
-      confirmLabel: 'Delete template',
+      confirmLabel: 'Delete Template',
       tone: 'danger',
     })
     if (ok) await run(() => deleteTemplate(t.id))
@@ -857,7 +859,7 @@ export function TemplatesCard({
           </p>
         </div>
         <Button onClick={saveAsTemplate} disabled={busy || saving} radius={11}>
-          Save current setup
+          Save Current Setup
           <GoldArrowDot><ArrowRight className="h-3 w-3" /></GoldArrowDot>
         </Button>
       </div>
@@ -1009,7 +1011,7 @@ export function TemplatesCard({
                         disabled={busy || saving}
                         style={templateBtn(navy)}
                       >
-                        Save to template
+                        Save to Template
                       </button>
                     )}
                     <button type="button" onClick={() => run(() => duplicateTemplate(t.id))} disabled={busy || saving} style={templateBtn(muted)}>
@@ -1070,7 +1072,7 @@ function LabRatio({ value, setValue, busy }) {
       <div className="flex flex-wrap items-start gap-x-8 gap-y-4">
         <label style={{ display: 'block' }}>
           <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>
-            Laboratory share of the grade
+            Laboratory Share of the Grade
           </span>
           <span className="relative" style={{ display: 'inline-block' }}>
             <input
@@ -1095,7 +1097,7 @@ function LabRatio({ value, setValue, busy }) {
 
         <div style={{ minWidth: 220 }}>
           <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: ink, marginBottom: 6 }}>
-            Combined period grade
+            Combined Period Grade
           </span>
           {error ? (
             <p style={{ fontSize: 12.5, color: red, margin: 0 }}>Set a valid laboratory share to see the split.</p>
@@ -1473,7 +1475,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       .map(classLabel)
       .join(', ')
     const ok = await confirmDialog({
-      title: 'Save this grading setup?',
+      title: 'Save This Grading Setup?',
       message: selectedClassIds.length
         ? `Saves these grading periods and components, and applies them to ${selectedClassIds.length} `
           + `selected class${selectedClassIds.length === 1 ? '' : 'es'} (${targets}). Grades already `
@@ -1521,37 +1523,43 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
           <span style={{ color: gold }}>✦</span>
           <span style={{ fontSize: 12, color: muted, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Quick-start with a preset</span>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {GRADING_PRESETS.map((p) => (
+        <ul className="overflow-hidden" style={{ listStyle: 'none', margin: 0, padding: 0, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12 }}>
+          {GRADING_PRESETS.map((p, i) => (
+            <li key={p.key} style={{ borderTop: i === 0 ? 'none' : `1px solid ${line}` }}>
             <button
-              key={p.key}
               onClick={async () => {
                 if (await confirmDialog({
                   title: `Apply the "${p.label}" preset?`,
                   message: 'Your current periods and components are replaced by this preset on the selected classes. Recorded grades are recomputed. A setup that would hide existing assessments is refused.',
-                  confirmLabel: 'Apply preset',
+                  confirmLabel: 'Apply Preset',
                 })) {
                   applyPreset.mutate(p)
                 }
               }}
               disabled={busy}
-              className="transition hover:brightness-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ textAlign: 'left', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '14px 16px', cursor: busy ? 'not-allowed' : 'pointer', fontFamily: sans }}
+              className="flex w-full items-center justify-between gap-4 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0E2A5C]/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ textAlign: 'left', background: 'transparent', border: 'none', padding: '14px 18px', cursor: busy ? 'not-allowed' : 'pointer', fontFamily: sans }}
             >
-              <div style={{ fontSize: 14, fontWeight: 800, color: ink, marginBottom: 4 }}>{p.label}</div>
-              <div style={{ fontSize: 12, color: muted, lineHeight: 1.4 }}>
-                {p.periods.length} period{p.periods.length === 1 ? '' : 's'} · {p.components.length} component{p.components.length === 1 ? '' : 's'}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: ink }}>{p.label}</div>
+                {/* A preset whose policy basis we could not verify says so on
+                    its own face, rather than looking as settled as the others. */}
+                {p.note && (
+                  <div style={{ fontSize: 11.5, color: '#8A6400', lineHeight: 1.4, marginTop: 3 }}>
+                    {p.note}
+                  </div>
+                )}
               </div>
-              {/* A preset whose policy basis we could not verify says so on
-                  its own face, rather than looking as settled as the others. */}
-              {p.note && (
-                <div style={{ fontSize: 11, color: '#8A6400', lineHeight: 1.4, marginTop: 4, maxWidth: 230 }}>
-                  {p.note}
-                </div>
-              )}
+              <div className="flex shrink-0 items-center gap-3" style={{ fontSize: 12.5, color: muted }}>
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  {p.periods.length} period{p.periods.length === 1 ? '' : 's'} · {p.components.length} component{p.components.length === 1 ? '' : 's'}
+                </span>
+                <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
+              </div>
             </button>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
 
       {error && <Banner tone="err">{error}</Banner>}
@@ -1617,46 +1625,52 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
         <p style={{ fontSize: 12.5, color: muted, margin: '0 0 14px', maxWidth: 620 }}>
           Choose a grading system based on your institution's standards (DepEd K-12 uses transmutation tables; CHED uses raw percentages or a 1.0–5.0 scale).
         </p>
-        <div className="flex flex-wrap gap-3">
-          {GRADING_MODES.map((m) => {
-            const active = gradingMode === m.value
-            return (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setGradingMode(m.value)}
-                disabled={busy}
-                className="transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  padding: '11px 18px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
-                  ...(active
-                    ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
-                    : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
-                }}
-              >
-                {m.label}
-              </button>
-            )
-          })}
+        {/* List on the left, the picked type's own settings on the right. */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="flex flex-col gap-2" role="group" aria-label="Grading type">
+            {GRADING_MODES.map((m) => {
+              const active = gradingMode === m.value
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setGradingMode(m.value)}
+                  disabled={busy}
+                  className="w-full transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    padding: '12px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, borderRadius: 11, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'left',
+                    ...(active
+                      ? { color: navy, background: 'rgba(245,197,24,0.16)', border: `1.5px solid ${gold}` }
+                      : { color: '#3A4A6B', background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)' }),
+                  }}
+                >
+                  {m.label}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ minWidth: 0 }} className="md:border-l md:pl-6 md:border-slate-200 [&>:first-child]:mt-0! [&>:first-child]:border-t-0! [&>:first-child]:pt-0!">
+            <PassRules
+              mode={gradingMode}
+              passingPercent={passingPercent}
+              setPassingPercent={setPassingPercent}
+              direction={scaleDirection}
+              setDirection={setScaleDirection}
+              busy={busy}
+            />
+            <GradingComputationExplanation
+              mode={gradingMode}
+              components={labOn ? [...components, ...labComponents] : components}
+              policy={gradePolicy({
+                passing_percent: passingPercent,
+                point_scale_direction: scaleDirection,
+                grading_structure: structure,
+                lab_weight_percent: labWeight,
+              })}
+            />
+          </div>
         </div>
-        <PassRules
-          mode={gradingMode}
-          passingPercent={passingPercent}
-          setPassingPercent={setPassingPercent}
-          direction={scaleDirection}
-          setDirection={setScaleDirection}
-          busy={busy}
-        />
-        <GradingComputationExplanation
-          mode={gradingMode}
-          components={labOn ? [...components, ...labComponents] : components}
-          policy={gradePolicy({
-            passing_percent: passingPercent,
-            point_scale_direction: scaleDirection,
-            grading_structure: structure,
-            lab_weight_percent: labWeight,
-          })}
-        />
       </div>
 
       {/* Course Structure — independent of the grading standard above: a

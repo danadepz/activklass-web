@@ -48,29 +48,18 @@
      Set on html so it propagates to the viewport and vertical scrolling and
      the sticky headers keep working.
 
-     scrollbar-gutter: stable reserves that scrollbar's width whether or not
-     the page actually scrolls. Without it, a short page (no scrollbar) is
-     ~15px wider than a tall one (scrollbar), and the full-width navbar's
-     right-hand bell/avatar cluster lands 15px further right on the short
-     page -- the chrome itself never changed, the viewport under it did
-     (T-145, andecobs-209).
-
-     That reserved strip is ~16-17px of html's own box, painted with html's
-     own background -- which was never set. On a page tall enough to scroll,
-     the real scrollbar fills the strip and nothing shows; on a short page
-     there is nothing to fill it, so the bare canvas default (white) showed
-     through as a seam between the page's own background and the true right
-     edge of the window, next to anything pinned there (the navbar's account
-     id, a page's own top-right button) -- read as clipped content and a
-     missing scrollbar (T-168, andecobs-260). Confirmed live: forcing html's
-     background to red on a genuinely non-scrolling page painted red in
-     exactly that strip, right up to the true edge -- nothing was actually
-     being clipped, the strip just had no color of its own. Matching it to
-     the page's own background (the same token body already uses) makes the
-     reserved strip blend in instead of showing bare white. */
+     No `scrollbar-gutter: stable` here, on purpose. It used to reserve the
+     scrollbar's width on every page (T-145, to stop the navbar's bell/avatar
+     cluster moving ~15px between short and tall pages), but on a page that
+     does not scroll the reserved ~16px strip showed as a blank band down the
+     right edge, and beside a dialog's overlay (T-168). Owner decision: a page
+     fills the whole window, and the scrollbar appears only when the page is
+     tall enough to need it. The cost is that the viewport is ~15px narrower on
+     a scrolling page than on a short one, so the navbar's right-hand cluster
+     sits ~15px further left on tall pages. html keeps the page background so
+     any strip that does show matches the page. */
   html {
     overflow-x: hidden;
-    scrollbar-gutter: stable;
     background-color: var(--color-slate-50);
   }
 

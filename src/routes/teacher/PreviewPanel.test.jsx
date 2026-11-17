@@ -135,7 +135,7 @@ describe('PreviewPanel — what the card shows', () => {
     // both periods land on 79 -> 2.50 on the point scale, so the overall is 2.50
     expect(html).toMatch(/data-testid="preview-final"[^>]*>2\.50</)
     expect(t).toMatch(/Passed/)
-    expect(t).toMatch(/Overall course grade/)
+    expect(t).toMatch(/Overall Course Grade/)
     expect(t).toMatch(/Midterm 50% · Finals 50%/)
   })
 
