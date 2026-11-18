@@ -935,7 +935,7 @@ export default function ClassesPage() {
           mode="create"
           initial={emptyClassForm()}
           onClose={() => setShowCreate(false)}
-          onSaved={({ warning: w }) => {
+          onSaved={({ warning: w } = {}) => {
             queryClient.invalidateQueries({ queryKey: ['fs-classes'] })
             setShowCreate(false)
             setWarning(w ?? null)

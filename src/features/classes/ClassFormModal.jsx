@@ -536,7 +536,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           created_at: serverTimestamp(),
         })
       }
-      onSaved()
+      onSaved?.({ warning: null })
     } catch (err) {
       reportError(err.message)
       setSaving(false)
