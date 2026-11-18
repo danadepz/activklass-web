@@ -150,7 +150,7 @@ export default function SuperAdminRequestsPage() {
     // requester's login -- a bare Firestore write left it working. A paid
     // school is refunded there first (T-82).
     mutationFn: ({ id, note }) => declineRequest(id, note.trim()),
-    onSuccess: (res, { school, paid }) => {
+    onSuccess: (res, { school, paid } = {}) => {
       toast.success(
         paid
           ? `${school} declined and refunded${res?.refund ? ` (₱${Number(res.refund.amount).toLocaleString('en-PH')})` : ''}. Their account can no longer sign in.`
@@ -160,7 +160,7 @@ export default function SuperAdminRequestsPage() {
       setNote('')
       queryClient.invalidateQueries({ queryKey: PENDING_REQUESTS_KEY })
     },
-    onError: (err, { paid }) =>
+    onError: (err, { paid } = {}) =>
       toast.error(
         paid
           ? (err.message || 'The refund could not be started, so nothing was declined. Try again in a moment.')
