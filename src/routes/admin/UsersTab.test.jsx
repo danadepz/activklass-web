@@ -32,7 +32,7 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
-vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u3', role: 'admin', school_id: 'srnhs' }, school: { login_prefix: 'srnhs' } }) }))
+vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'u0', role: 'admin', school_id: 'srnhs' }, school: { login_prefix: 'srnhs' } }) }))
 vi.mock('@/hooks/useAdminUsers', () => ({
   adminUsersKey: ['fs-admin-users'],
   useAdminUsers: () => ({ data: USERS, isLoading: false, isError: false, error: null }),

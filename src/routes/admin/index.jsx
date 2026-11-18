@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
@@ -6,6 +6,7 @@ import AccountMenu from './AccountMenu'
 import UsersTab from './UsersTab'
 import ClassesTab from './ClassesTab'
 import SubscriptionTab from './SubscriptionTab'
+import HomeTab from './HomeTab'
 
 /**
  * Admin console.
@@ -18,6 +19,7 @@ import SubscriptionTab from './SubscriptionTab'
  * usage is counted live from the users collection; nothing is enforced.
  */
 const TABS = [
+  { key: 'home', label: 'Home', hint: 'Your account and the password you sign in with' },
   { key: 'users', label: 'Users', hint: 'Create, upload, enable and disable accounts' },
   { key: 'classes', label: 'Class Overview', hint: 'All classes, records and school statistics' },
   { key: 'subscription', label: 'Subscription', hint: 'Plan, seat usage and storage' },
@@ -33,78 +35,76 @@ export default function AdminPage() {
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState(() => {
     const requested = searchParams.get('tab')
-    return TABS.some((t) => t.key === requested) ? requested : 'users'
+    return TABS.some((t) => t.key === requested) ? requested : 'home'
   })
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
-  // Account menu → Change Password: open Subscription (where the form lives)
-  // and tell it to scroll to the form. A counter, so choosing it again while
-  // already on that tab still jumps back to the form.
-  const [passwordRequest, setPasswordRequest] = useState(0)
-  function openChangePassword() {
-    setTab('subscription')
-    setPasswordRequest((n) => n + 1)
-  }
-
+  // Keep the scrollbar track present on every tab. Tabs differ in height, so
+  // without this the scrollbar appears and disappears as you switch and the
+  // whole bar (title, account menu, tabs) jumps sideways by its width.
+  useEffect(() => {
+    const root = document.documentElement
+    const before = root.style.overflowY
+    root.style.overflowY = 'scroll'
+    return () => { root.style.overflowY = before }
+  }, [])
   return (
     <div style={{ minHeight: '100vh', background: cream, fontFamily: sans }}>
-      <header style={{ background: navy, color: cream, padding: '20px 28px 0', position: 'relative' }}>
-        {/* T-184 (andecobs-293): this header is navy edge-to-edge, but its
-            own width is narrowed by the scrollbar-gutter html reserves on
-            the right (src/index.css), leaving a pale strip beside it where
-            html's own background shows instead. This header scrolls away
-            with the page (no sticky/fixed), so the fix has to scroll with
-            it too -- an absolutely-positioned child tracks the header's own
-            box exactly, at every height and every scroll position, which a
-            viewport-fixed filler (used on the sticky teacher nav) could not. */}
+      {/* Title bar and sub navbar stay pinned while the page scrolls. */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 30 }}>
+      <header style={{ background: navy, color: cream, padding: '12px 28px', position: 'relative' }}>
+        {/* T-184 (andecobs-293): navy edge-to-edge filler beside the header;
+            absolutely positioned inside it so it tracks the header's own box
+            and scrolls away with it. */}
         <div aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, right: -24, width: 24, background: navy, pointerEvents: 'none' }} />
         {/* 1440 (was 1100): the Users table's seven columns did not fit at
-            1100 and scrolled sideways. Header and main share the width so
-            their edges line up. */}
-        <div style={{ maxWidth: 1440, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ ...serif, fontSize: 22, lineHeight: 1.1 }}>
-              ActivKlass <span style={{ color: gold }}>Admin</span>
-            </div>
-            {/* Who is signed in, and Sign Out inside its menu -- replaces the
-                old signed-in caption and the lone Sign Out button. Change
-                Password opens the Subscription tab, where that form lives. */}
-            <AccountMenu profile={profile} onChangePassword={openChangePassword} />
+            1100 and scrolled sideways. Header, sub navbar and main share the
+            width so their edges line up. */}
+        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ ...serif, fontSize: 32, lineHeight: 1.1 }}>
+            ActivKlass <span style={{ color: gold }}>School Admin</span>
           </div>
-
-          <nav style={{ display: 'flex', gap: 4, marginTop: 18 }}>
-            {TABS.map((t) => {
-              const on = t.key === tab
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`transition focus-visible:outline-none ${
-                    on
-                      ? 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]'
-                      : 'focus-visible:ring-2 focus-visible:ring-[#FAFAF6] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0E2A5C]'
-                  }`}
-                  style={{
-                    padding: '10px 16px', fontSize: 14, fontWeight: 700, fontFamily: sans,
-                    color: on ? navy : cream,
-                    background: on ? cream : 'transparent',
-                    border: 'none', borderRadius: '10px 10px 0 0', cursor: 'pointer',
-                    opacity: on ? 1 : 0.75,
-                  }}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
-          </nav>
+          {/* Who is signed in, and Sign Out inside its menu. Change Password
+              opens the Subscription tab, where that form lives. */}
+          <div style={{ marginRight: -16 }}>
+            <AccountMenu profile={profile} />
+          </div>
         </div>
       </header>
 
+      {/* Sub navbar: the console's sections live here, so a new section is one
+          more entry in TABS and the title bar above never has to change. */}
+      <nav aria-label="Admin sections" style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(14,42,92,0.08)', padding: '0 28px' }}>
+        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', gap: 4, overflowX: 'auto' }}>
+          {TABS.map((t) => {
+            const on = t.key === tab
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                aria-current={on ? 'page' : undefined}
+                className="whitespace-nowrap transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0E2A5C]/40"
+                style={{
+                  padding: '13px 16px 11px', fontSize: 14, fontWeight: 700, fontFamily: sans,
+                  color: on ? navy : '#5B6B8C',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  borderBottom: on ? `3px solid ${gold}` : '3px solid transparent',
+                }}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+      </div>
+
       <main style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 60px' }}>
         <p style={{ fontSize: 13, color: faint, margin: '0 0 18px' }}>{active.hint}</p>
+        {tab === 'home' && <HomeTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'classes' && <ClassesTab />}
-        {tab === 'subscription' && <SubscriptionTab passwordRequest={passwordRequest} />}
+        {tab === 'subscription' && <SubscriptionTab />}
+
       </main>
     </div>
   )

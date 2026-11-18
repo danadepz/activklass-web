@@ -7,7 +7,7 @@
  * 2. Status was a fixed 240px column, leaving a wide empty band on every
  *    row that shows only "Active". It is 210px: just "Active" plus
  *    "Default password" side by side (T-233 keeps them on one line).
- * 3. The admin page widened from 1100px to 1440px, so the seven columns fit
+ * 3. The admin page widened from 1100px to 1440px, so the six columns fit
  *    without scrolling sideways on a typical desktop.
  *
  * Layout, so read from the source rather than measured.
@@ -46,20 +46,20 @@ describe('Users table: sign-in stays on one line', () => {
 describe('Users table: column widths', () => {
   const cols = [...users.matchAll(/<col(?: style=\{\{ width: (\d+) \}\})? \/>/g)].map((m) => (m[1] ? Number(m[1]) : null))
 
-  it('keeps seven columns, Name taking the remaining width', () => {
-    expect(cols).toHaveLength(7)
+  it('keeps six columns (no Last Active), Name taking the remaining width', () => {
+    expect(cols).toHaveLength(6)
     expect(cols[0]).toBeNull()
   })
 
-  it('sizes Sign-in, Status, Last Active and actions to their content', () => {
-    // Name, Sign-in, ID / LRN, Role, Status, Last Active, actions
-    expect(cols.slice(1)).toEqual([290, 140, 120, 210, 160, 240])
+  it('sizes Sign-in, Status and actions to their content', () => {
+    // Name, Sign-in, ID / LRN, Role, Status, Actions
+    expect(cols.slice(1)).toEqual([290, 140, 120, 210, 130])
   })
 })
 
 describe('Admin page width', () => {
-  it('header and main share a 1440px column (was 1100)', () => {
-    expect(page.match(/maxWidth: 1440, margin: '0 auto'/g)).toHaveLength(2)
+  it('header, sub navbar and main share a 1440px column (was 1100)', () => {
+    expect(page.match(/maxWidth: 1440, margin: '0 auto'/g)).toHaveLength(3)
     expect(page).not.toMatch(/maxWidth: 1100/)
   })
 })

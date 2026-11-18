@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import SubscriptionExpiry from '@/components/SubscriptionExpiry'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,7 +16,6 @@ import Notice from './Notice'
 import CardHead from './CardHead'
 import Button from '@/components/ui/Button'
 import { confirmDialog } from '@/components/ui/dialogs'
-import ChangePassword from '@/components/ChangePassword'
 
 const GB = 1_000_000_000
 
@@ -591,15 +590,8 @@ const rowStyle = {
 }
 
 /** Subscription Management: View Status, View Storage Usage, Upgrade/Downgrade. */
-/**
- * `passwordRequest` (2026-11-17): the header's account menu → Change Password
- * bumps this number. Each new value scrolls to the Change Password form and
- * puts the cursor in its first field -- once the subscription has loaded,
- * since the form only renders after it does.
- */
-export default function SubscriptionTab({ passwordRequest = 0 }) {
+export default function SubscriptionTab() {
   const qc = useQueryClient()
-  const passwordRef = useRef(null)
   const { data: plansRes } = useQuery({ queryKey: ['subscription-plans'], queryFn: fetchPlans })
   const { data: mine, isLoading: resolving, isError: resolveFailed, error: resolveError } = useQuery({
     queryKey: ['subscription-owner'],
@@ -619,16 +611,6 @@ export default function SubscriptionTab({ passwordRequest = 0 }) {
     qc.invalidateQueries({ queryKey: ['subscription'] })
     qc.invalidateQueries({ queryKey: ['admin-storage'] })
   }
-
-  // Before the early returns below, so the hook order never changes.
-  const loaded = !!data
-  useEffect(() => {
-    if (!passwordRequest || !loaded) return
-    const el = passwordRef.current
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    el.querySelector('input')?.focus({ preventScroll: true })
-  }, [passwordRequest, loaded])
 
   if (resolving) return <p style={{ color: faint }}>Loading subscription…</p>
   if (resolveFailed) {
@@ -661,15 +643,16 @@ export default function SubscriptionTab({ passwordRequest = 0 }) {
 
       <PlanCard ownerId={ownerId} sub={subscription} usage={usage} resourceUsage={data?.resource_usage} />
 
-      {subscription.type === 'institution' && subscription.status === 'active' && (
-        <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
-      )}
+      {/* Add Seats on the left, Teachers Included on the right, stretched to one height. auto-fit
+          collapses the empty track, so when Add Seats is not shown (not an
+          active institution) the other card still takes the full width, and
+          on a narrow screen they stack. */}
+      <div style={{ display: 'grid', gap: 22, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))', alignItems: 'stretch' }}>
+        {subscription.type === 'institution' && subscription.status === 'active' && (
+          <SeatIncreaseCard ownerId={ownerId} sub={subscription} />
+        )}
 
-      <TeacherSeatsCard onChanged={refresh} />
-
-      {/* Target of the account menu's Change Password. */}
-      <div ref={passwordRef} id="change-password" style={{ scrollMarginTop: 16 }}>
-        <ChangePassword />
+        <TeacherSeatsCard onChanged={refresh} />
       </div>
 
       {plans && !data.installment && (

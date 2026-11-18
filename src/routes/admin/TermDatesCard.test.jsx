@@ -21,8 +21,8 @@ const { saveSchoolSettings, mutationConfigs } = vi.hoisted(() => ({
 }))
 
 // LoginPrefixCard and TermDatesCard are both top-level, unconditional cards
-// in UsersTab (the Add User form only mounts once a mode is picked), so the
-// first two useMutation calls on a bare render are theirs, in render order.
+// on the Home tab, so the first two useMutation calls on a bare render
+// are theirs, in render order.
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({
     data: { name: 'Lorma Colleges, Inc.', login_prefix: '' },
@@ -49,10 +49,11 @@ vi.mock('@/lib/admin', () => ({
 vi.mock('@/lib/csv', () => ({ downloadCsv: vi.fn(), stampedName: (p) => `${p}.csv` }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true), promptDialog: vi.fn() }))
 vi.mock('./BulkUpload', () => ({ default: () => null }))
+vi.mock('@/components/ChangePassword', () => ({ default: () => null }))
 
-import UsersTab from './UsersTab.jsx'
+import HomeTab from './HomeTab.jsx'
 
-renderToStaticMarkup(<UsersTab />)
+renderToStaticMarkup(<HomeTab />)
 
 describe('Term dates card mutation (T-163)', () => {
   it('sends only term_dates, never the school name or abbreviation it does not own', () => {

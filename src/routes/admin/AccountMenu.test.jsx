@@ -89,20 +89,24 @@ describe('wiring', () => {
     expect(pageSrc).not.toContain('Signed in as')
   })
 
-  it('Change Password opens Subscription AND asks it to jump to the form', () => {
-    expect(pageSrc).toContain('onChangePassword={openChangePassword}')
-    expect(pageSrc).toMatch(/function openChangePassword\(\) \{\s*setTab\('subscription'\)\s*setPasswordRequest\(\(n\) => n \+ 1\)/)
-    expect(pageSrc).toContain('<SubscriptionTab passwordRequest={passwordRequest} />')
+  it('the account menu no longer offers Change Password; it lives on the Home tab', () => {
+    expect(pageSrc).toContain('<AccountMenu profile={profile} />')
+    expect(pageSrc).not.toContain('onChangePassword')
+    expect(pageSrc).toContain("{tab === 'home' && <HomeTab />}")
+    expect(pageSrc).not.toContain("key: 'password'")
   })
 
-  it('the Subscription tab scrolls to and focuses the Change Password form on each request', () => {
+  it('the Subscription tab no longer holds the Change Password form', () => {
     const subSrc = readFileSync(fileURLToPath(new URL('./SubscriptionTab.jsx', import.meta.url)), 'utf8')
-    expect(subSrc).toMatch(/<div ref=\{passwordRef\} id="change-password"[^>]*>\s*<ChangePassword \/>/)
-    expect(subSrc).toContain("el.scrollIntoView({ behavior: 'smooth', block: 'start' })")
-    expect(subSrc).toContain("el.querySelector('input')?.focus({ preventScroll: true })")
-    expect(subSrc).toContain('[passwordRequest, loaded]')
-    // The effect sits before the early returns, so hook order is stable.
-    expect(subSrc.indexOf('[passwordRequest, loaded]')).toBeLessThan(subSrc.indexOf('if (resolving) return'))
+    expect(subSrc).not.toContain('ChangePassword')
+    expect(subSrc).not.toContain('passwordRequest')
+  })
+
+  it('the title bar and sub navbar are pinned while the page scrolls', () => {
+    expect(pageSrc).toMatch(/position: 'sticky', top: 0, zIndex: 30/)
+    const stickyAt = pageSrc.indexOf("position: 'sticky'")
+    expect(stickyAt).toBeLessThan(pageSrc.indexOf('<header'))
+    expect(stickyAt).toBeLessThan(pageSrc.indexOf('<nav aria-label="Admin sections"'))
   })
 
   it('initials fall back sensibly', () => {

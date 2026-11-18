@@ -16,7 +16,7 @@
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { filterUsers } from './UsersTab.jsx'
+import { filterUsers, pageOf, USERS_PER_PAGE } from './UsersTab.jsx'
 
 describe('T-174 — filterUsers narrows by role view, then by search', () => {
   const users = [
@@ -79,21 +79,26 @@ import UsersTab from './UsersTab.jsx'
 const html = renderToStaticMarkup(<UsersTab />)
 
 describe('T-174 — the roster shows role tabs, not a role dropdown', () => {
-  it('renders a role radiogroup naming every role plus "all"', () => {
+  it('renders a role radiogroup with "all", teacher, student and parent -- no admin tab', () => {
     expect(html).toMatch(/role="radiogroup"[^>]*aria-label="Filter users by role"/)
     expect(html).toMatch(/role="radio"[^>]*>all</)
-    expect(html).toMatch(/role="radio"[^>]*>admin</)
+    expect(html).not.toMatch(/role="radio"[^>]*>admin</)
     expect(html).toMatch(/role="radio"[^>]*>teacher</)
     expect(html).toMatch(/role="radio"[^>]*>student</)
     expect(html).toMatch(/role="radio"[^>]*>parent</)
   })
 
   it('ships no second, competing role-filter control', () => {
-    // The old "All roles" dropdown is gone. A per-row re-role <select> still
-    // legitimately exists (UserRow's own role changer) -- that is a
-    // different control for a different job and this card does not touch it.
     expect(html).not.toContain('All roles')
     expect(html).not.toMatch(/<option value="all">/)
+  })
+
+  it('shows each row role as a plain label, not a dropdown to change it', () => {
+    // A student cannot become a teacher, so no row offers a role <select>.
+    expect(html).not.toMatch(/<select/)
+    expect(html).not.toMatch(/<option value="(teacher|student)"/)
+    expect(html).toMatch(/>student</)
+    expect(html).toMatch(/>teacher</)
   })
 
   it('still has the search box, unaffected by the tabs', () => {
@@ -101,13 +106,41 @@ describe('T-174 — the roster shows role tabs, not a role dropdown', () => {
   })
 })
 
-describe('T-174 — the table scrolls inside itself, not the page', () => {
-  it('wraps the table in a capped, viewport-relative scroll container', () => {
-    expect(html).toMatch(/max-height:\s*55vh/)
-    expect(html).toMatch(/overflow-y:\s*auto/)
+describe('Users table is paged, 20 to a page, and scrolls inside itself with a pinned header', () => {
+  it('keeps the capped, viewport-relative inner scroll container', () => {
+    expect(html).toMatch(/max-height:s*55vh/)
+    expect(html).toMatch(/overflow-y:s*auto/)
+  })
+
+  it('shows a Showing / Previous / Page x of y / Next footer', () => {
+    expect(html).toMatch(/Showing/)
+    expect(html).toContain('Previous')
+    expect(html).toMatch(/Page\s*(<!-- -->)?\s*1\s*(<!-- -->)?\s*of/)
+    expect(html).toContain('Next')
+  })
+
+  it('is 20 rows a page', () => {
+    expect(USERS_PER_PAGE).toBe(20)
+  })
+
+  it('pageOf slices 20 at a time and reports the range', () => {
+    const rows = Array.from({ length: 55 }, (_, i) => i)
+    const first = pageOf(rows, 1)
+    expect(first.rows).toHaveLength(20)
+    expect([first.from, first.to, first.pages]).toEqual([1, 20, 3])
+    const last = pageOf(rows, 3)
+    expect(last.rows).toHaveLength(15)
+    expect([last.from, last.to]).toEqual([41, 55])
+  })
+
+  it('pageOf clamps a page that no longer exists and handles an empty list', () => {
+    const rows = Array.from({ length: 25 }, (_, i) => i)
+    expect(pageOf(rows, 9).page).toBe(2)
+    expect(pageOf(rows, 0).page).toBe(1)
+    expect(pageOf([], 1)).toMatchObject({ rows: [], page: 1, pages: 1, from: 0, to: 0 })
   })
 
   it('keeps the header row visible while the body scrolls', () => {
-    expect(html).toMatch(/<tr style="background:#F7F8FA;position:sticky;top:0">/)
+    expect(html).toMatch(/<tr style="background:#F7F8FA;position:sticky;top:0;z-index:1">/)
   })
 })
