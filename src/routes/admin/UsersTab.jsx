@@ -1,8 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
 import { adminUsersKey, useAdminUsers, setUserStatus } from '@/hooks/useAdminUsers'
-import { studentAccountsDestination } from '@/lib/studentAccountsNavigation'
 import {
   createUser, resetPassword, setAccountDisabled,
   adminSchoolKey, fetchSchoolSettings, saveSchoolSettings,
@@ -20,13 +19,12 @@ import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
 import RolePicker from './RolePicker'
 import CardHead from './CardHead'
-import AcademicDateInput from '@/components/AcademicDateInput'
-import { isCalendarDate } from '@/lib/classForm'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
 import { SUPPORT_EMAIL } from './SubscriptionTab'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { relativeActivity } from '@/lib/studentActivity'
 
 const ROLE_TINT = {
   admin: { fg: navy, bg: 'rgba(14,42,92,0.08)' },
@@ -138,7 +136,7 @@ export function LoginPrefixCard({ settings, pending, error: loadError, onRetry, 
       {loadError && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
-          <button type="button" style={btnGhost} onClick={onRetry}>Try Again</button>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
         </div>
       )}
       {school && (
@@ -198,16 +196,6 @@ export function LoginPrefixCard({ settings, pending, error: loadError, onRetry, 
  * active classes uncluttered. A school with no dates set simply continues
  * manual archiving without warnings.
  */
-/* Start then end for each term. The starts (2026-11-22, policy C1/C2) are the
-   school's DEFAULTS: the class form offers the matching one and the teacher
-   confirms or changes each class's own date; saving here never moves a class. */
-const TERM_DATE_FIELDS = [
-  ['school_year_start', 'School Year Start (K-12)'], ['school_year_end', 'School Year End (K-12)'],
-  ['first_sem_start', '1st Semester Start'], ['first_sem_end', '1st Semester End'],
-  ['second_sem_start', '2nd Semester Start'], ['second_sem_end', '2nd Semester End'],
-  ['summer_start', 'Midyear / Summer Start'], ['summer_end', 'Midyear / Summer End'],
-]
-
 export function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   const savedDates = school?.term_dates ?? {}
@@ -244,10 +232,6 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
     e.preventDefault()
     setDone('')
     setError('')
-    // Typed as MM-DD-YYYY; the field passes canonical YYYY-MM-DD on, or the raw
-    // text when it is not a real day -- refused here before anything is sent.
-    const bad = TERM_DATE_FIELDS.find(([key]) => currentDates[key] && !isCalendarDate(currentDates[key]))
-    if (bad) return setError(`${bad[1]}: enter a real date as MM-DD-YYYY, for example 06-15-2026.`)
     mut.mutate(currentDates)
   }
 
@@ -260,7 +244,7 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
         sub={
           loadError ? 'Your school’s details could not be loaded, so term dates cannot be shown yet.'
             : pending ? 'Checking term dates…'
-            : school ? 'Start dates are the default a teacher sees when creating a class; each teacher confirms or changes their own class’s date. Set when each term ends so completed classes archive automatically. Classes still in use with recent activity are kept active. If left blank, classes remain active until manually archived.'
+            : school ? 'Set when each term ends so completed classes archive automatically. Classes still in use with recent activity are kept active. If left blank, classes remain active until manually archived.'
             : 'This admin account is not linked to a school yet, so term dates cannot be set.'
         }
         style={{ marginBottom: school || loadError ? 16 : 0 }}
@@ -269,21 +253,47 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
       {loadError && (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 260px' }}><Notice>{loadError.message}</Notice></div>
-          <button type="button" style={btnGhost} onClick={onRetry}>Try Again</button>
+          <button type="button" style={btnGhost} onClick={onRetry}>Try again</button>
         </div>
       )}
       {school && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'end' }}>
-          {TERM_DATE_FIELDS.map(([key, label]) => (
-            <label key={key} style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {label}
-              <AcademicDateInput
-                style={{ ...field, padding: '9px 12px' }}
-                value={currentDates[key] ?? ''}
-                onChange={(v) => updateField(key, v)}
-              />
-            </label>
-          ))}
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            School Year End (K-12)
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.school_year_end ?? ''}
+              onChange={(e) => updateField('school_year_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            1st Semester End
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.first_sem_end ?? ''}
+              onChange={(e) => updateField('first_sem_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            2nd Semester End
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.second_sem_end ?? ''}
+              onChange={(e) => updateField('second_sem_end', e.target.value)}
+            />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Midyear / Summer End
+            <input
+              type="date"
+              style={{ ...field, padding: '9px 12px' }}
+              value={currentDates.summer_end ?? ''}
+              onChange={(e) => updateField('summer_end', e.target.value)}
+            />
+          </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, gridColumn: '1 / -1', marginTop: 4 }}>
             <button type="submit" style={btnPrimary} disabled={mut.isPending}>
               {mut.isPending ? 'Saving…' : 'Save Term Dates'}
@@ -338,7 +348,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
   // 'student' by the time this component mounts.
   const blank = {
     firstName: '', middleName: '', lastName: '', password: '',
-    level: 'g12', studentNumber: '', gradeSection: '', courseYear: '',
+    level: 'g12', studentNumber: '', lrn: '', gradeSection: '', courseYear: '',
     birthdate: '', employeeNumber: '', department: '', personalEmail: '',
   }
   const [form, setForm] = useState(blank)
@@ -350,7 +360,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
   // learners carry no LRN (manuscript Fig. 49-50) so theirs come from the
   // student number. Teachers use their employee ID.
   const isG12 = form.level === 'g12'
-  const idSource = role === 'student' ? form.studentNumber : form.employeeNumber
+  const idSource = role === 'student' ? (isG12 ? form.lrn : form.studentNumber) : form.employeeNumber
   const loginPreview = issuedLoginId(prefix, idSource)
 
   const mut = useMutation({
@@ -371,7 +381,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       )
       setForm(blank)
       setError('')
-      onCreated({ role, user: res.user })
+      onCreated()
     },
     onError: (e) => { setError(e.message); setDone('') },
   })
@@ -387,11 +397,11 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       // an email when given.
       (form.personalEmail.trim() ? emailError(form.personalEmail) : '') ||
       (role === 'student'
-        ? idNumberError(form.studentNumber, { label: 'LRN/ID number' }) ||
+        ? idNumberError(form.studentNumber, { label: 'Student number' }) ||
           (isG12
-            ? lrnError(form.studentNumber, { collegePath: 'set Level to College' })
+            ? lrnError(form.lrn, { collegePath: 'set Level to College' })
             : (String(form.studentNumber).replace(/\D/g, '').length < 6
-                ? 'The LRN/ID number needs at least 6 digits — the last six become their login.'
+                ? 'The student number needs at least 6 digits — the last six become their login.'
                 : '')) ||
           // Parental-access linking age-gates on the birthdate, so a student
           // without one breaks guardian invites later (rule in lib/validation).
@@ -441,12 +451,12 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       ? {
         title: `${who} is already on file`,
         message: `${twins.map(describeAccount).join(', ')} — same name. Two people really can share one, so this is only a check: creating another makes a separate account with its own login${signsIn ? `, ${signsIn}` : ''}.`,
-        confirmLabel: 'Create Anyway',
+        confirmLabel: 'Create anyway',
       }
       : {
         title: `Create a ${role} account for ${who}?`,
         message: `They sign in as ${signsIn} straight away, and are asked to choose their own password the first time. An account cannot be deleted afterwards, only deactivated.`,
-        confirmLabel: 'Create Account',
+        confirmLabel: 'Create account',
       })
     if (!ok) return
 
@@ -467,7 +477,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           return {
             student_level: isG12 ? 'k12' : 'college',
             student_number: form.studentNumber.trim(),
-            ...(isG12 ? { lrn: form.studentNumber.trim() } : {}),
+            ...(isG12 ? { lrn: form.lrn.trim() } : {}),
             birthdate: form.birthdate,
             ...(isG12
               ? { ...(a ? { year_level: a } : {}), ...(b ? { section: b } : {}) }
@@ -529,18 +539,23 @@ function CreateUserForm({ onCreated, settings, users, role }) {
             </select>
           </label>
           <label style={labelStyle}>
-            LRN/ID Number<Req />
+            Student Number<Req />
             <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
-                   onChange={set('studentNumber')}
-                   inputMode={isG12 ? 'numeric' : undefined}
-                   maxLength={isG12 ? 12 : undefined}
-                   placeholder={isG12 ? '12-digit LRN' : 'e.g. 2024-00123'} />
-            <span style={helperStyle}>
-              {isG12
-                ? 'DepEd LRN, 12 digits.'
-                : 'Student ID, 6+ digits. The last six become their login.'}
-            </span>
+                   onChange={set('studentNumber')} placeholder="e.g. 2024-00123" />
           </label>
+          {isG12 && (
+            <label style={labelStyle}>
+              LRN<Req />
+              <input style={{ ...field, marginTop: 6 }} inputMode="numeric" maxLength={12}
+                     value={form.lrn} onChange={set('lrn')} placeholder="12-digit LRN" />
+              {/* Level defaults to G12, so an admin entering a college learner
+                  meets this field first and reads its 12-digit rule as the
+                  whole story (T-24). Say who has an LRN before the rule fires. */}
+              <span style={helperStyle}>
+                DepEd LRN, 12 digits. College students have none — choose College above.
+              </span>
+            </label>
+          )}
           {isG12 ? (
             <label style={labelStyle}>
               Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
@@ -699,13 +714,7 @@ export function AddUserSection({ onCreated, settings, users }) {
           whatever name/etc. was already typed. */}
       {bulk ? (
         <div style={{ marginTop: 18 }}>
-          <BulkUpload
-            key={role}
-            role={role}
-            onDone={(created) => onCreated({ role: role === 'student' ? 'bulk-student' : 'bulk-teacher', created })}
-            settings={settings}
-            users={users}
-          />
+          <BulkUpload key={role} role={role} onDone={onCreated} settings={settings} users={users} />
         </div>
       ) : (
         <div style={{ marginTop: 18 }}>
@@ -773,7 +782,7 @@ export function resetPasswordPromptSpec(user) {
   }
 }
 
-export function UserRow({ user, isSelf, onChanged }) {
+export function UserRow({ user, isSelf, onChanged, now }) {
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
@@ -802,15 +811,6 @@ export function UserRow({ user, isSelf, onChanged }) {
     })
   }
 
-  // The Sign-in cell's full value, shown on hover only when it is cut off.
-  const [loginTip, setLoginTip] = useState(null)
-  function showLoginTip(e) {
-    const el = e.currentTarget
-    if (el.scrollWidth <= el.clientWidth) return
-    const r = el.getBoundingClientRect()
-    setLoginTip({ left: r.left, top: r.bottom + 6 })
-  }
-
   async function doReset() {
     const pw = await promptDialog(resetPasswordPromptSpec(user))
     if (pw == null) return
@@ -831,30 +831,9 @@ export function UserRow({ user, isSelf, onChanged }) {
         {/* Issued accounts show the login people actually type (snhs-789012);
             the email field holds the internal identifier and stays hidden.
             Admins and parents sign in with a real email, so that shows here. */}
-        {/* One line, always: a long email used to break mid-address
-            ("johnmichaelmendoza1234@gmai / l.com"). The column now fits a
-            typical address in full; one that is still longer is cut with an
-            ellipsis, and hovering it shows the whole value at once. Not the
-            native `title` tooltip: it waits about a second and was missed. */}
-        <span
-          onMouseEnter={showLoginTip}
-          onMouseLeave={() => setLoginTip(null)}
-          style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, display: 'block',
-                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-        >
+        <span style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>
           {user.login_id ?? user.email}
         </span>
-        {loginTip && (
-          // position: fixed so the table's own scroll box cannot clip it.
-          <span role="tooltip" style={{
-            position: 'fixed', left: loginTip.left, top: loginTip.top, zIndex: 50,
-            ...mono, fontSize: 12.5, color: '#FFFFFF', background: ink,
-            padding: '6px 8px', borderRadius: 6, whiteSpace: 'nowrap',
-            boxShadow: '0 4px 12px rgba(10,23,51,0.18)', pointerEvents: 'none',
-          }}>
-            {user.login_id ?? user.email}
-          </span>
-        )}
       </td>
 
       <td style={{ padding: '12px 14px' }}>
@@ -863,11 +842,16 @@ export function UserRow({ user, isSelf, onChanged }) {
             LRN), teachers employee_number. Admins and parents have neither, so
             the cell stays blank rather than showing a dash that reads as data. */}
         {idNumber && (
-          <div style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink, whiteSpace: 'nowrap' }}>{idNumber}</div>
+          <div style={{ ...mono, fontSize: 13, fontWeight: 400, color: ink }}>{idNumber}</div>
         )}
         {user.lrn && (
-          <div style={{ ...mono, fontSize: 11, color: faint, marginTop: idNumber ? 2 : 0, whiteSpace: 'nowrap' }}>LRN {user.lrn}</div>
+          <div style={{ ...mono, fontSize: 11, color: faint, marginTop: idNumber ? 2 : 0 }}>LRN {user.lrn}</div>
         )}
+      </td>
+
+      <td style={{ padding: '12px 14px', whiteSpace: 'nowrap', color: faint, fontSize: 12 }}
+          title={user.last_active_at?.toDate?.()?.toLocaleString?.() ?? undefined}>
+        {user.role === 'student' ? relativeActivity(user.last_active_at, now) : '—'}
       </td>
 
       <td style={{ padding: '12px 14px' }}>
@@ -957,22 +941,18 @@ export default function UsersTab() {
   const { data: settings } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const accountsRef = useRef(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
   // The page belongs to the filter it was chosen under: change the tab or the
   // search and it falls back to page 1 without an effect to do it.
   const filterKey = `${roleFilter}|${search}`
   const [pageState, setPageState] = useState({ key: filterKey, page: 1 })
 
   const refresh = () => qc.invalidateQueries({ queryKey: adminUsersKey })
-
-  function onAccountCreated(result) {
-    refresh()
-    const destination = studentAccountsDestination(result)
-    if (!destination) return
-    setRoleFilter(destination.roleFilter)
-    setSearch(destination.search)
-    requestAnimationFrame(() => accountsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
 
   // The signed-in admin is on the Home tab, not in this list: a school can
   // have thousands of accounts and this table is for the people being managed.
@@ -997,14 +977,14 @@ export default function UsersTab() {
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <AddUserSection onCreated={onAccountCreated} settings={settings} users={users} />
+      <AddUserSection onCreated={refresh} settings={settings} users={users} />
 
-      <section ref={accountsRef} data-testid="student-accounts-section" style={{ ...card, overflow: 'hidden', scrollMarginTop: 24 }}>
+      <section style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '18px 20px', borderBottom: `1px solid ${line}` }}>
           <CardHead
             icon={<Users className="w-5 h-5" style={{ color: blueText }} />}
             tint="rgba(63,169,245,0.13)"
-            title={roleFilter === 'student' ? 'Student Accounts' : 'Users'}
+            title="Users"
             count={shown.length}
             action={
               <div className="flex flex-wrap items-center gap-3">
@@ -1037,7 +1017,7 @@ export default function UsersTab() {
                       ariaLabel="Filter users by role" />
         </div>
 
-        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={6} label="Loading users" /></div>}
+        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={7} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
         {!isLoading && !isError && (
@@ -1061,12 +1041,13 @@ export default function UsersTab() {
                     140 and Role 120 still fit "LRN 136524240004" and the role
                     select; Status 210 -- just "Active" plus "Default password"
                     side by side (T-233), it was 240 and left a wide empty band on
-                    every Active-only row; Actions 130 fits the two icon buttons with room to the
-                    edge. There is no Last Active column. Name takes the rest. */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1080 }}>
+                    every Active-only row; Last Active 140 fits "12 minutes ago"; Actions 130
+                    fits the two icon buttons with room to the edge. Name takes the rest. */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1220 }}>
                   <colgroup>
                     <col />
                     <col style={{ width: 290 }} />
+                    <col style={{ width: 140 }} />
                     <col style={{ width: 140 }} />
                     <col style={{ width: 120 }} />
                     <col style={{ width: 210 }} />
@@ -1076,14 +1057,14 @@ export default function UsersTab() {
                     {/* Solid, not the usual translucent tint -- sticky, it would
                         otherwise show scrolled-past rows bleeding through it. */}
                     <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0, zIndex: 1 }}>
-                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', 'Actions'].map((h) => (
+                      {['Name', 'Sign-in', 'ID / LRN', 'Last Active', 'Role', 'Status', 'Actions'].map((h) => (
                         <th key={h} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: h === 'Actions' ? 'center' : 'left' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {view.rows.map((u) => (
-                      <UserRow key={u.id} user={u} isSelf={u.id === profile.id} onChanged={refresh} />
+                      <UserRow key={u.id} user={u} isSelf={u.id === profile.id} onChanged={refresh} now={now} />
                     ))}
                   </tbody>
                 </table>

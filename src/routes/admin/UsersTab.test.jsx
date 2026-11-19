@@ -19,7 +19,8 @@ import { describe, expect, it, vi } from 'vitest'
 const USERS = [
   { id: 'u1', first_name: 'Beatriz', last_name: 'Aquino', role: 'student', status: 'active',
     login_id: 'srnhs-200011', email: 'srnhs-200011@activklass.internal',
-    student_number: 'S2026-1001', lrn: '136428200011' },
+    student_number: 'S2026-1001', lrn: '136428200011',
+    last_active_at: new Date(Date.now() - 20 * 60_000) },
   { id: 'u2', first_name: 'Grace', last_name: 'Abad', role: 'teacher', status: 'active',
     login_id: 'srnhs-260102', email: 'srnhs-260102@activklass.internal',
     employee_number: 'T-2026-0102' },
@@ -85,6 +86,14 @@ describe('Users list ID / LRN column (T-30)', () => {
 
   it('tells the admin the search box takes an ID now', () => {
     expect(html).toMatch(/placeholder="Search name, email, login or ID"/)
+  })
+})
+
+describe('Users list student activity', () => {
+  it('shows a Last Active column with relative time and a clear missing state', () => {
+    expect(html).toContain('Last Active')
+    expect(rowOf('srnhs-200011')).toMatch(/\d+ minutes? ago/)
+    expect(rowOf('srnhs-260102')).toContain('—')
   })
 })
 

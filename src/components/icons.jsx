@@ -1,4 +1,4 @@
-// Lightweight inline SVG icons (stroke-based, currentColor) so we avoid an
+﻿// Lightweight inline SVG icons (stroke-based, currentColor) so we avoid an
 // icon-library dependency. All are decorative by default (aria-hidden); pass
 // aria-hidden={false} + role/aria-label when an icon must be announced.
 

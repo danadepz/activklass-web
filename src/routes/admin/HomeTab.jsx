@@ -51,8 +51,8 @@ export default function HomeTab() {
   const [error, setError] = useState('')
   const [done, setDone] = useState('')
 
-  const active = (profile.status ?? 'active') === 'active'
-  const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Administrator'
+  const active = (profile?.status ?? 'active') === 'active'
+  const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Administrator'
 
   async function doReset() {
     setDone('')
@@ -120,8 +120,8 @@ export default function HomeTab() {
         </div>
 
         <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', paddingTop: 18 }}>
-          <Field label="Sign-in"><span style={{ ...mono, fontSize: 13 }}>{profile.login_id ?? profile.email}</span></Field>
-          {profile.email && profile.login_id && <Field label="Email">{profile.email}</Field>}
+          <Field label="Sign-in"><span style={{ ...mono, fontSize: 13 }}>{profile?.login_id ?? profile?.email}</span></Field>
+          {profile?.email && profile?.login_id && <Field label="Email">{profile.email}</Field>}
           <Field label="School">{school?.name ?? '—'}</Field>
         </div>
 

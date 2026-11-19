@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
 import AccountMenu from './AccountMenu'
@@ -26,7 +26,6 @@ const TABS = [
 ]
 
 export default function AdminPage() {
-  const navigate = useNavigate()
   const { profile } = useAuth()
   // A PayMongo seat-increase checkout returns to /admin?tab=subscription --
   // read once on mount so that lands on the Subscription tab instead of the
@@ -34,15 +33,22 @@ export default function AdminPage() {
   // pending payment. Not a full URL-synced tab system -- clicking a tab
   // afterward does not write the URL, same as before this.
   const [searchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => {
+  const [tab, setTabRaw] = useState(() => {
     const requested = searchParams.get('tab')
     return TABS.some((t) => t.key === requested) ? requested : 'home'
   })
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
-  function openChangePassword() {
-    setTab('home')
-    navigate('/admin#change-password')
+
+  // F-2: scroll to top when switching tabs so the new panel starts in view
+  const setTab = (key) => {
+    setTabRaw(key)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // ref for the tab panel so the active tabpanel is correctly associated
+  const panelId = (key) => `admin-panel-${key}`
+  const tabId = (key) => `admin-tab-${key}`
+
   // Keep the scrollbar track present on every tab. Tabs differ in height, so
   // without this the scrollbar appears and disappears as you switch and the
   // whole bar (title, account menu, tabs) jumps sideways by its width.
@@ -68,9 +74,9 @@ export default function AdminPage() {
           <div style={{ ...serif, fontSize: 32, lineHeight: 1.1 }}>
             ActivKlass <span style={{ color: gold }}>School Admin</span>
           </div>
-          {/* Change Password opens the form on Home. */}
+          {/* Who is signed in, and Sign Out inside its menu. */}
           <div style={{ marginRight: -16 }}>
-            <AccountMenu profile={profile} onChangePassword={openChangePassword} />
+            <AccountMenu profile={profile} />
           </div>
         </div>
       </header>
@@ -78,15 +84,22 @@ export default function AdminPage() {
       {/* Sub navbar: the console's sections live here, so a new section is one
           more entry in TABS and the title bar above never has to change. */}
       <nav aria-label="Admin sections" style={{ background: '#FFFFFF', borderBottom: '1px solid rgba(14,42,92,0.08)', padding: '0 28px' }}>
-        <div style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', gap: 4, overflowX: 'auto' }}>
+        <div
+          role="tablist"
+          aria-label="Admin sections"
+          style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', gap: 4, overflowX: 'auto' }}
+        >
           {TABS.map((t) => {
             const on = t.key === tab
             return (
               <button
                 key={t.key}
+                role="tab"
+                id={tabId(t.key)}
+                aria-selected={on}
+                aria-controls={panelId(t.key)}
                 onClick={() => setTab(t.key)}
-                aria-current={on ? 'page' : undefined}
-                className="whitespace-nowrap transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0E2A5C]/40"
+                className="whitespace-nowrap transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]"
                 style={{
                   padding: '13px 16px 11px', fontSize: 14, fontWeight: 700, fontFamily: sans,
                   color: on ? navy : '#5B6B8C',
@@ -104,11 +117,20 @@ export default function AdminPage() {
 
       <main style={{ maxWidth: 1440, margin: '0 auto', padding: '22px 24px 60px' }}>
         <p style={{ fontSize: 13, color: faint, margin: '0 0 18px' }}>{active.hint}</p>
-        {tab === 'home' && <HomeTab />}
-        {tab === 'users' && <UsersTab />}
-        {tab === 'classes' && <ClassesTab />}
-        {tab === 'subscription' && <SubscriptionTab />}
-
+        {TABS.map((t) => (
+          <div
+            key={t.key}
+            role="tabpanel"
+            id={panelId(t.key)}
+            aria-labelledby={tabId(t.key)}
+            hidden={tab !== t.key}
+          >
+            {tab === 'home' && t.key === 'home' && <HomeTab />}
+            {tab === 'users' && t.key === 'users' && <UsersTab />}
+            {tab === 'classes' && t.key === 'classes' && <ClassesTab />}
+            {tab === 'subscription' && t.key === 'subscription' && <SubscriptionTab />}
+          </div>
+        ))}
       </main>
     </div>
   )
