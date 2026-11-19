@@ -88,8 +88,11 @@ export function rowProblem(row, prefix) {
       return "student_level must be 'k12' or 'college'"
     }
     if (studentLevel === 'k12' && !row.lrn) return 'K–12 students need a 12-digit LRN'
-    if (!row.lrn && (row.student_number ?? '').replace(/\D/g, '').length < 6) {
-      return 'needs a 12-digit LRN or a student number with 6+ digits'
+    // A college login comes from the student number, never the LRN, so an
+    // LRN on the row must not stand in for a short number: the server would
+    // refuse the row after the preview called it ready.
+    if (studentLevel === 'college' && (row.student_number ?? '').replace(/\D/g, '').length < 6) {
+      return 'college students need a student number with 6+ digits — the last six become their login'
     }
     // Required: parental-access linking age-gates on it (api/admin.py agrees).
     if (!row.birthdate) return 'missing birthdate'
@@ -114,7 +117,9 @@ export function rowProblem(row, prefix) {
 export function rowLogin(row, prefix) {
   if (!CREATABLE_ROLES.includes(row.role)) return undefined
   return issuedLoginId(prefix, row.role === 'student'
-    ? (studentLevelForRow(row) === 'college' ? row.student_number : (row.lrn || row.student_number))
+    // Mirrors _prepare_user with an explicit level: K-12 from the LRN only
+    // (rowProblem requires it), college from the student number only.
+    ? (studentLevelForRow(row) === 'college' ? row.student_number : row.lrn)
     : row.employee_number)
 }
 
