@@ -391,17 +391,9 @@ export default function BulkUpload({ role, onDone, settings, users }) {
           <p style={{ margin: 0, fontSize: 13, color: red, lineHeight: 1.5, fontWeight: 600 }}>
             Before uploading users, please set up your school abbreviation first.
           </p>
-          <a
-            href="#school-login-prefix"
-            style={{
-              fontSize: 12.5,
-              fontWeight: 700,
-              color: navy,
-              textDecoration: 'underline',
-            }}
-          >
-            Set abbreviation in School &amp; Login Prefix ↑
-          </a>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: navy }}>
+            Set the abbreviation in School &amp; Login Prefix on the Home tab
+          </span>
         </div>
       )}
 
@@ -440,9 +432,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
             </>
           : <>
               Before uploading users, please set up your school abbreviation first — set it in the{' '}
-              <a href="#school-login-prefix" style={{ color: red, fontWeight: 700, textDecoration: 'underline' }}>
-                School &amp; Login Prefix card above
-              </a>, or these rows have nothing to issue a login from.
+              <strong style={{ color: red }}>School &amp; Login Prefix card on the Home tab</strong>, or these rows have nothing to issue a login from.
             </>}
       </p>
 

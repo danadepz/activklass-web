@@ -280,5 +280,28 @@ export const UserPlus = (p) => (
   </Svg>
 )
 
+export const Key = (p) => (
+  <Svg {...p}>
+    <circle cx="8" cy="15" r="4" />
+    <path d="m10.8 12.2 9.2-9.2" />
+    <path d="m17 6 3 3" />
+    <path d="m14 9 2 2" />
+  </Svg>
+)
 
+export const UserX = (p) => (
+  <Svg {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <line x1="17" y1="8" x2="22" y2="13" />
+    <line x1="22" y1="8" x2="17" y2="13" />
+  </Svg>
+)
 
+export const UserCheck = (p) => (
+  <Svg {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <polyline points="16 11 18 13 22 9" />
+  </Svg>
+)

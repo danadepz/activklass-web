@@ -25,11 +25,10 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...real,
     useState: (init) => {
-      if (init === '') {
-        seed.calls += 1
-        if (seed.calls === 1) return real.useState(seed.mode)
-        if (seed.calls === 2) return real.useState(seed.role)
-      }
+      // AddUserSection's own two states: bulk (false) then role ('teacher').
+        // seed.calls is a bitmask so each is taken once per render.
+        if (init === false && !(seed.calls & 1)) { seed.calls |= 1; return real.useState(seed.mode === 'bulk') }
+        if (init === 'teacher' && !(seed.calls & 2)) { seed.calls |= 2; return real.useState(seed.role || 'teacher') }
       return real.useState(init)
     },
   }

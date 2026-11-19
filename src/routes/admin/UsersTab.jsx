@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
-import { adminUsersKey, useAdminUsers, setUserRole, setUserStatus } from '@/hooks/useAdminUsers'
+import { adminUsersKey, useAdminUsers, setUserStatus } from '@/hooks/useAdminUsers'
 import { studentAccountsDestination } from '@/lib/studentAccountsNavigation'
 import {
   createUser, resetPassword, setAccountDisabled,
@@ -9,9 +9,9 @@ import {
 } from '@/lib/admin'
 import { issuedLoginId } from '@/lib/logins'
 import { downloadCsv, stampedName } from '@/lib/csv'
-import { navy, ink, muted, faint, green, red, line, mono, goldDeep, blueText } from '@/theme'
-import { School, CalendarCheck, UserPlus, Users } from '@/components/icons'
-import { ROLES, CREATABLE_ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
+import { navy, navyDeep, ink, muted, faint, green, red, line, mono, goldDeep, blueText, sansFamily as sans } from '@/theme'
+import { School, CalendarCheck, UserPlus, Users, Key, UserX, UserCheck } from '@/components/icons'
+import { ROLES, MIN_PASSWORD, card, field, btnPrimary, btnGhost, th } from './ui'
 import {
   emailError, nameError, tempPasswordError,
   idNumberError, lrnError, schoolNameError, schoolAbbrError, birthdateError, BIRTHDATE_HINT,
@@ -25,7 +25,6 @@ import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
 import { SUPPORT_EMAIL } from './SubscriptionTab'
 import { SkeletonTable } from '@/components/ui/Skeleton'
-import ActivityTimestamp from '@/components/ActivityTimestamp'
 
 const ROLE_TINT = {
   admin: { fg: navy, bg: 'rgba(14,42,92,0.08)' },
@@ -79,7 +78,7 @@ const lockedField = {
   pointerEvents: 'none', cursor: 'default', outline: 'none', boxShadow: 'none',
 }
 
-function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved }) {
+export function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   // null = untouched, show the saved value
   const [name, setName] = useState(null)
@@ -141,34 +140,38 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
         </div>
       )}
       {school && (
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10, flex: '1 1 320px' }}>
+        <div style={{ display: 'grid', gap: 14 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
             School Name
-            <input style={{ ...field, padding: '10px 14px', flex: 1, minWidth: 200, ...(locked ? lockedField : {}) }}
+            <input style={{ ...field, padding: '10px 14px', width: '100%', boxSizing: 'border-box', ...(locked ? lockedField : {}) }}
                    value={shownName} readOnly={locked} disabled={locked} tabIndex={locked ? -1 : undefined}
                    onChange={(e) => { setName(e.target.value); setDone('') }}
                    placeholder="e.g. University of Cebu-Banilad" />
           </label>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            Abbreviation
-            <input style={{ ...field, width: 130, padding: '10px 14px', ...(locked ? lockedField : {}) }}
-                   value={shownAbbr} readOnly={locked} disabled={locked} tabIndex={locked ? -1 : undefined}
-                   onChange={(e) => { setAbbr(e.target.value); setDone('') }}
-                   placeholder="e.g. UCB" />
-          </label>
-          <span style={{ ...mono, fontSize: 12.5, color: faint }}>
-            → {(shownAbbr.trim().toLowerCase() || 'prefix')}-789012
-          </span>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              Abbreviation
+              <input style={{ ...field, width: 150, padding: '10px 14px', ...(locked ? lockedField : {}) }}
+                     value={shownAbbr} readOnly={locked} disabled={locked} tabIndex={locked ? -1 : undefined}
+                     onChange={(e) => { setAbbr(e.target.value); setDone('') }}
+                     placeholder="e.g. UCB" />
+            </label>
+            <span style={{ ...mono, fontSize: 12.5, color: faint, paddingBottom: 11 }}>
+              → {(shownAbbr.trim().toLowerCase() || 'prefix')}-789012
+            </span>
+          </div>
           {locked ? (
             <span style={{ fontSize: 12.5, color: muted }}>
               Need to change either? <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: blueText }}>Contact ActivKlass support</a>.
             </span>
           ) : (
-            <button type="submit" style={btnPrimary} disabled={mut.isPending}>
-              {mut.isPending ? 'Saving…' : 'Save'}
-            </button>
+            <div>
+              <button type="submit" style={btnPrimary} disabled={mut.isPending}>
+                {mut.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
           )}
-          <div style={{ flex: '1 1 100%', minWidth: 200 }}>
+          <div style={{ minWidth: 200 }}>
             <Notice>{error}</Notice>
             <Notice tone="ok">{done}</Notice>
           </div>
@@ -193,7 +196,7 @@ function LoginPrefixCard({ settings, pending, error: loadError, onRetry, onSaved
  * active classes uncluttered. A school with no dates set simply continues
  * manual archiving without warnings.
  */
-function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }) {
+export function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   const savedDates = school?.term_dates ?? {}
 
@@ -254,7 +257,7 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
         </div>
       )}
       {school && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'end' }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
             School Year End (K-12)
             <input
@@ -307,6 +310,26 @@ function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }
 /* ─────────────────────────── create user ─────────────────────────── */
 
 const labelStyle = { fontSize: 13, fontWeight: 600, color: ink }
+/** Red star after the label of a field the form will not accept blank. */
+function Req() {
+  return <span aria-hidden="true" style={{ color: red, marginLeft: 3 }}>*</span>
+}
+const helperStyle = { display: 'block', marginTop: 5, fontSize: 12, fontWeight: 400, color: faint, lineHeight: 1.4 }
+
+/** A titled group of fields on the Add User form. */
+function FormSection({ title, children }) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 0 10px' }}>
+        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: navy, whiteSpace: 'nowrap' }}>{title}</h4>
+        <div aria-hidden="true" style={{ flex: 1, height: 1, background: 'rgba(14,42,92,0.3)' }} />
+      </div>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
 
 /* "Grade 9 - Rizal" -> ['Grade 9', 'Rizal']; "BSIT - 3rd Year" -> ['BSIT',
    '3rd Year']; no dash -> [text, '']. One field per the manuscript's Add
@@ -395,7 +418,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
       tempPasswordError(form.password, { required: false })
     if (problem) return setError(problem)
     if (!prefix) {
-      return setError('Set your school’s login prefix above first — it is what their sign-in login is issued from.')
+      return setError('Set your school’s login prefix on the Home tab first — it is what their sign-in login is issued from.')
     }
 
     // Nothing else here notices that a person is already on file: an account
@@ -479,9 +502,12 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           already role-shaped: a student is asked for an LRN, a teacher for
           an employee ID, nothing for an inbox (admin accounts are no longer
           made from this screen at all). */}
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))' }}>
+      {/* Three short sections, so each field sits under the question it
+          answers and every helper line has a column wide enough to hold it in
+          one or two lines. */}
+      <FormSection title="Personal Details">
         <label style={labelStyle}>
-          First Name
+          First Name<Req />
           <input style={{ ...field, marginTop: 6 }} value={form.firstName} onChange={set('firstName')} />
         </label>
         <label style={labelStyle}>
@@ -489,94 +515,94 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           <input style={{ ...field, marginTop: 6 }} value={form.middleName} onChange={set('middleName')} />
         </label>
         <label style={labelStyle}>
-          Last Name
+          Last Name<Req />
           <input style={{ ...field, marginTop: 6 }} value={form.lastName} onChange={set('lastName')} />
         </label>
-
         {role === 'student' && (
-          <>
-            {/* Figure 49: Grade 12 & below carry an LRN alongside their
-                student number; college learners have the student number only. */}
-            <label style={labelStyle}>
-              Level
-              <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.level} onChange={set('level')}>
-                <option value="g12">Grade 12 &amp; below</option>
-                <option value="college">College</option>
-              </select>
-            </label>
-            <label style={labelStyle}>
-              LRN/ID Number
-              <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
-                     onChange={set('studentNumber')}
-                     inputMode={isG12 ? 'numeric' : undefined}
-                     maxLength={isG12 ? 12 : undefined}
-                     placeholder={isG12 ? '12-digit LRN' : 'e.g. 2024-00123'} />
-              <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-                {isG12
-                  ? 'DepEd LRN, 12 digits. College students have none — choose College above.'
-                  : 'Student ID number, at least 6 digits — the last six become their login.'}
-              </span>
-            </label>
-            {isG12 ? (
-              <label style={labelStyle}>
-                Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
-                <input style={{ ...field, marginTop: 6 }} value={form.gradeSection}
-                       onChange={set('gradeSection')} placeholder="e.g. Grade 9 - Rizal" />
-              </label>
-            ) : (
-              <label style={labelStyle}>
-                Course &amp; Year <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
-                <input style={{ ...field, marginTop: 6 }} value={form.courseYear}
-                       onChange={set('courseYear')} placeholder="e.g. BSIT - 3rd Year" />
-              </label>
-            )}
-            <label style={labelStyle}>
-              Birthdate
-              <input style={{ ...field, marginTop: 6 }} type="date" value={form.birthdate} onChange={set('birthdate')} />
-              <span style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 400, color: faint }}>{BIRTHDATE_HINT}</span>
-            </label>
-          </>
+          <label style={labelStyle}>
+            Birthdate<Req />
+            <input style={{ ...field, marginTop: 6 }} type="date" value={form.birthdate} onChange={set('birthdate')} />
+            <span style={helperStyle}>{BIRTHDATE_HINT}</span>
+          </label>
         )}
+      </FormSection>
 
-        {role === 'teacher' && (
-          <>
+      {role === 'student' && (
+        <FormSection title="School ID & Grade">
+          {/* Figure 49: Grade 12 & below carry an LRN alongside their
+              student number; college learners have the student number only. */}
+          <label style={labelStyle}>
+            Level<Req />
+            <select style={{ ...field, marginTop: 6, cursor: 'pointer' }} value={form.level} onChange={set('level')}>
+              <option value="g12">Grade 12 &amp; below</option>
+              <option value="college">College</option>
+            </select>
+          </label>
+          <label style={labelStyle}>
+            LRN/ID Number<Req />
+            <input style={{ ...field, marginTop: 6 }} value={form.studentNumber}
+                   onChange={set('studentNumber')}
+                   inputMode={isG12 ? 'numeric' : undefined}
+                   maxLength={isG12 ? 12 : undefined}
+                   placeholder={isG12 ? '12-digit LRN' : 'e.g. 2024-00123'} />
+            <span style={helperStyle}>
+              {isG12
+                ? 'DepEd LRN, 12 digits.'
+                : 'Student ID, 6+ digits. The last six become their login.'}
+            </span>
+          </label>
+          {isG12 ? (
             <label style={labelStyle}>
-              Employee Number
-              <input style={{ ...field, marginTop: 6 }} value={form.employeeNumber}
-                     onChange={set('employeeNumber')} placeholder="e.g. T-2024-018" />
+              Grade &amp; Section <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
+              <input style={{ ...field, marginTop: 6 }} value={form.gradeSection}
+                     onChange={set('gradeSection')} placeholder="e.g. Grade 9 - Rizal" />
             </label>
+          ) : (
             <label style={labelStyle}>
-              Department <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
-              <input style={{ ...field, marginTop: 6 }} value={form.department}
-                     onChange={set('department')} placeholder="e.g. Mathematics" />
+              Course &amp; Year <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
+              <input style={{ ...field, marginTop: 6 }} value={form.courseYear}
+                     onChange={set('courseYear')} placeholder="e.g. BSIT - 3rd Year" />
             </label>
-          </>
-        )}
+          )}
+        </FormSection>
+      )}
 
+      {role === 'teacher' && (
+        <FormSection title="Employee ID & Department">
+          <label style={labelStyle}>
+            Employee Number<Req />
+            <input style={{ ...field, marginTop: 6 }} value={form.employeeNumber}
+                   onChange={set('employeeNumber')} placeholder="e.g. T-2024-018" />
+          </label>
+          <label style={labelStyle}>
+            Department <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
+            <input style={{ ...field, marginTop: 6 }} value={form.department}
+                   onChange={set('department')} placeholder="e.g. Mathematics" />
+          </label>
+        </FormSection>
+      )}
+
+      <FormSection title="Email & Temporary Password">
         <label style={labelStyle}>
-          Personal Email
+          Personal Email <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="email" value={form.personalEmail}
                  onChange={set('personalEmail')} placeholder="e.g. sample.maria@gmail.com" />
         </label>
-
-        {/* Spans two grid columns -- at one, "Temporary Password (Optional)"
-            is longer than this column's minmax(190px) floor and wraps the
-            "(Optional)" onto its own line, misaligning the input against the
-            row beside it (T-173, andecobs-250). The extra width is no loss:
-            a password field benefits from it more than a name field does. */}
+        {/* Spans two columns so "Temporary Password (Optional)" stays on one
+            line (T-173, andecobs-250) and its helper fits in two. */}
         <label style={{ ...labelStyle, gridColumn: 'span 2' }}>
           Temporary Password <span style={{ color: faint, fontWeight: 400 }}>(Optional)</span>
           <input style={{ ...field, marginTop: 6 }} type="text" value={form.password}
                  onChange={set('password')} />
           {/* The value itself stays server-side (audit F-03: it must not be in
               the public bundle); the success message shows it. */}
-          <span style={{ display: 'block', marginTop: 6, fontSize: 12.5, fontWeight: 400, color: faint }}>
-            Leave blank to use the school’s standard temporary password — it is shown
-            here when the account is created. They must choose their own password
-            the first time they sign in.
+          <span style={helperStyle}>
+            Leave blank to use the school’s standard temporary password, shown
+            once the account is created. They must choose their own password at
+            first sign-in.
           </span>
         </label>
-      </div>
+      </FormSection>
 
       {loginPreview ? (
         /* The one line the admin must carry away from this form — the exact
@@ -597,7 +623,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
           {prefix
             ? `Their login will be ${prefix}-<last 6 digits of their ${
                 role === 'student' ? (isG12 ? 'LRN' : 'student number') : 'employee ID'}>`
-            : 'No login prefix is set for your school yet — set it in the card above.'}
+            : 'No login prefix is set for your school yet — set it in School & Login Prefix on the Home tab.'}
         </p>
       )}
 
@@ -628,20 +654,18 @@ function CreateUserForm({ onCreated, settings, users, role }) {
 
 /* ─────────────────────────── add user ─────────────────────────── */
 
-// The two ways to add people, and who they are -- both asked in order, and
-// neither defaulted (T-113, triplecookiemonster-141 item 7, Kristine's
-// hand-drawn sketch: a single "Add User" heading over a Bulk | Individual
-// control, then a Teacher | Student control, nothing below until both are
-// set). Admin accounts are no longer created from this screen at all --
-// owner, 2026-10-02: "creating an admin wont happen anymore, only teacher
-// and student now" -- existing admins are untouched; only the ability to
-// mint a new one here is gone.
-const ADD_USER_MODES = ['bulk', 'individual']
+// One row of controls: Teacher | Student pick who is being added (Teacher by
+// default), and Bulk is a separate on/off toggle at the end of the same row.
+// Off = type one account in by hand; on = upload a spreadsheet for the picked
+// role. Nothing about the row appears or disappears when either is clicked, so
+// the controls never move. (T-113 started with Bulk | Individual, then
+// Teacher | Student, neither defaulted; reworked to this single row.) Admin
+// accounts are not created from this screen at all -- owner, 2026-10-02.
 const ADD_USER_ROLES = ['teacher', 'student']
 
 export function AddUserSection({ onCreated, settings, users }) {
-  const [mode, setMode] = useState('')
-  const [role, setRole] = useState('')
+  const [bulk, setBulk] = useState(false)
+  const [role, setRole] = useState('teacher')
 
   return (
     <section style={{ ...card, padding: 22 }}>
@@ -649,55 +673,41 @@ export function AddUserSection({ onCreated, settings, users }) {
         icon={<UserPlus className="w-5 h-5" style={{ color: navy }} />}
         tint="rgba(14,42,92,0.07)"
         title="Add User"
-        sub="Create one account at a time, or upload a spreadsheet for many at once. Parents are not added here — they register themselves and claim their student's invitation code."
+        sub="Create one account at a time, or switch on Bulk to upload a spreadsheet for many at once. Parents are not added here — they register themselves and claim their student's invitation code."
         style={{ marginBottom: 18 }}
       />
 
-      {/* Bulk | Individual first, then Teacher | Student -- the owner's
-          confirmed order. No visible labels over either: the two words are
-          the label, and `ariaLabel` keeps each one named for screen readers
-          instead of both reading as "Role". */}
-      <div style={{ display: 'grid', gap: 10, maxWidth: 360, margin: '0 auto' }}>
-        <RolePicker
-          value={mode}
-          options={ADD_USER_MODES}
-          ariaLabel="Add by"
-          onChange={(m) => setMode(m)}
-        />
-        {mode && (
+      <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', maxWidth: 460, margin: '0 auto' }}>
+        <div style={{ flex: 1 }}>
           <RolePicker
             value={role}
             options={ADD_USER_ROLES}
             ariaLabel="Role"
             onChange={(r) => setRole(r)}
           />
-        )}
+        </div>
+        <button
+          type="button"
+          aria-pressed={bulk}
+          onClick={() => setBulk((on) => !on)}
+          className="transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40"
+          style={{
+            minWidth: 96, padding: '0 18px', fontSize: 14, fontWeight: 700, fontFamily: sans, cursor: 'pointer', borderRadius: 12,
+            ...(bulk
+              ? { color: '#FAFAF6', background: navy, border: `1.5px solid ${navy}`, boxShadow: `0 2px 0 ${navyDeep}` }
+              : { color: muted, background: 'rgba(14,42,92,0.05)', border: '1.5px solid rgba(14,42,92,0.14)' }),
+          }}
+        >
+          Bulk
+        </button>
       </div>
-
-      {!mode && (
-        <p style={{
-          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
-          maxWidth: 420, textAlign: 'center',
-        }}>
-          Pick Bulk or Individual first, then who you&apos;re adding — the right form appears once both are set.
-        </p>
-      )}
-      {mode && !role && (
-        <p style={{
-          fontSize: 13, color: muted, margin: '12px auto 0', lineHeight: 1.55,
-          maxWidth: 420, textAlign: 'center',
-        }}>
-          Pick a role and the rest appears, asking for what that kind of account needs and nothing else.
-        </p>
-      )}
 
       {/* Switching role inside Bulk remounts the uploader (key={role}), the
           same clean-slate the old per-card picker gave it -- a file parsed
           under the old role stops meaning what it says. Switching role
-          inside Individual does not remount CreateUserForm: the original
-          form kept whatever name/etc. was already typed when its own picker
-          changed role, and this keeps that. */}
-      {mode === 'bulk' && role && (
+          on the manual form does not remount CreateUserForm: it keeps
+          whatever name/etc. was already typed. */}
+      {bulk ? (
         <div style={{ marginTop: 18 }}>
           <BulkUpload
             key={role}
@@ -707,8 +717,7 @@ export function AddUserSection({ onCreated, settings, users }) {
             users={users}
           />
         </div>
-      )}
-      {mode === 'individual' && role && (
+      ) : (
         <div style={{ marginTop: 18 }}>
           <CreateUserForm role={role} onCreated={onCreated} settings={settings} users={users} />
         </div>
@@ -734,7 +743,9 @@ function userSearchText(u) {
     .map((v) => v ?? '').join(' ').toLowerCase()
 }
 
-const ROLE_VIEWS = ['all', ...ROLES]
+// No Admin tab: admins are few and the signed-in one is on Home, so this table
+// is for the teachers, students and parents being managed.
+const ROLE_VIEWS = ['all', ...ROLES.filter((r) => r !== 'admin')]
 
 /**
  * The Users roster, narrowed by the active role view and then by the search
@@ -777,11 +788,6 @@ export function UserRow({ user, isSelf, onChanged }) {
   const [error, setError] = useState('')
   const active = (user.status ?? 'active') === 'active'
   const isParent = user.role === 'parent'
-  // Another admin's role is locked the same way a parent's is (2026-10-03):
-  // CREATABLE_ROLES no longer lists 'admin', so the <select> below has
-  // nowhere to put one, and re-roling an existing admin down is not this
-  // card's job -- the only thing being closed is minting a NEW one.
-  const isOtherAdmin = !isSelf && user.role === 'admin'
   const idNumber = idNumberOf(user)
   const tint = ROLE_TINT[user.role] ?? ROLE_TINT.student
 
@@ -804,17 +810,6 @@ export function UserRow({ user, isSelf, onChanged }) {
       await setUserStatus(user.id, next)
       await setAccountDisabled(user.id, active)
     })
-  }
-
-  async function changeRole(e) {
-    const select = e.target
-    const role = select.value
-    if (!(await confirmDialog({
-      title: `Change role to ${role}?`,
-      message: `${user.first_name} ${user.last_name} will get the ${role} portal the next time they sign in.`,
-      confirmLabel: 'Change Role',
-    }))) { select.value = user.role; return }
-    run('role', () => setUserRole(user.id, role))
   }
 
   // The Sign-in cell's full value, shown on hover only when it is cut off.
@@ -886,20 +881,12 @@ export function UserRow({ user, isSelf, onChanged }) {
       </td>
 
       <td style={{ padding: '12px 14px' }}>
-        {/* Parents keep a fixed role: their account exists through their
-            student's invitation link, and re-roling would orphan it. Another
-            admin's role is fixed here too: this console creates teachers and
-            students only, and that same rule applies to re-roling someone
-            into 'admin' -- firestore.rules refuses the write server-side
-            either way, this just keeps the control from offering it. */}
-        {isSelf || isParent || isOtherAdmin ? (
-          <Pill tint={tint}>{user.role}</Pill>
-        ) : (
-          <select value={user.role ?? 'student'} onChange={changeRole} disabled={!!busy}
-                  style={{ ...field, padding: '6px 10px', fontSize: 13, cursor: 'pointer', width: 'auto' }}>
-            {CREATABLE_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        )}
+        {/* A role is fixed for the life of the account, shown as a plain label
+            for everyone. A student cannot become a teacher: their student
+            number, LRN and class rosters would stay behind and the sign-in
+            would still be built from the LRN. A person added in the wrong
+            role is deactivated and added again in the right one. */}
+        <Pill tint={tint}>{user.role}</Pill>
       </td>
 
       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
@@ -922,22 +909,15 @@ export function UserRow({ user, isSelf, onChanged }) {
         </div>
       </td>
 
-      <td style={{ padding: '12px 14px' }}>
-        {/* users/{uid}.last_active_at -- not written by anything yet, so this
-            reads "No activity recorded" until the backend records sign-ins
-            (see components/ActivityTimestamp.jsx). Not updated_at: that is
-            stamped by admin edits like the role and status changes above. */}
-        <ActivityTimestamp value={user.last_active_at} />
-      </td>
-
-      <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-        {/* Parents get neither action: they self-register with their own real
+      <td style={{ padding: '12px 14px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+        {/* Icon buttons, each named by its title and aria-label. Parents get neither action: they self-register with their own real
             email, so recovery is theirs (self-service reset), and their access
             is granted and revoked by their student's invitation link, not by
             the school. The API refuses both too (parent_protected). */}
         {!isParent && (
-          <button style={btnGhost} onClick={doReset} disabled={!!busy}>
-            {busy === 'password' ? '…' : 'Reset Password'}
+          <button style={iconBtn} onClick={doReset} disabled={!!busy}
+                  title="Reset Password" aria-label={`Reset Password for ${user.first_name} ${user.last_name}`}>
+            {busy === 'password' ? '…' : <Key className="h-4 w-4" />}
           </button>
         )}
         {isParent ? (
@@ -947,13 +927,14 @@ export function UserRow({ user, isSelf, onChanged }) {
           </span>
         ) : (
           <button
-            style={{ ...btnGhost, marginLeft: 8, color: active ? red : green,
+            style={{ ...iconBtn, marginLeft: 8, color: active ? red : green,
                      borderColor: active ? 'rgba(192,57,43,0.3)' : 'rgba(31,138,91,0.3)' }}
             onClick={toggleActive}
             disabled={!!busy || isSelf}
-            title={isSelf ? 'You cannot deactivate your own account' : undefined}
+            title={isSelf ? 'You cannot deactivate your own account' : active ? 'Deactivate' : 'Reactivate'}
+            aria-label={`${active ? 'Deactivate' : 'Reactivate'} ${user.first_name} ${user.last_name}`}
           >
-            {busy === 'status' ? '…' : active ? 'Deactivate' : 'Reactivate'}
+            {busy === 'status' ? '…' : active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
           </button>
         )}
       </td>
@@ -961,19 +942,38 @@ export function UserRow({ user, isSelf, onChanged }) {
   )
 }
 
+/** Square icon-only version of the row's ghost buttons. */
+const iconBtn = { ...btnGhost, width: 38, height: 38, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', verticalAlign: 'middle' }
+
+/** Users shown per page: enough rows to keep the card one steady size. */
+export const USERS_PER_PAGE = 20
+
+/**
+ * One page of an already-loaded list. The page is clamped, so a list that got
+ * shorter (a filter, a search) never leaves you on a page that no longer exists.
+ */
+export function pageOf(rows, page, perPage = USERS_PER_PAGE) {
+  const pages = Math.max(1, Math.ceil(rows.length / perPage))
+  const current = Math.min(Math.max(1, page), pages)
+  const from = (current - 1) * perPage
+  return { rows: rows.slice(from, from + perPage), page: current, pages, from: rows.length ? from + 1 : 0, to: Math.min(from + perPage, rows.length) }
+}
+
 export default function UsersTab() {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: users = [], isLoading, isError, error } = useAdminUsers(profile.school_id)
-  const {
-    data: settings, isPending: schoolPending, error: schoolError, refetch: refetchSchool,
-  } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
+  // Only the login prefix is read here (Add User); the school's own cards are on Home.
+  const { data: settings } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const [roleFilter, setRoleFilter] = useState('all')
   const [search, setSearch] = useState('')
   const accountsRef = useRef(null)
+  // The page belongs to the filter it was chosen under: change the tab or the
+  // search and it falls back to page 1 without an effect to do it.
+  const filterKey = `${roleFilter}|${search}`
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 })
 
   const refresh = () => qc.invalidateQueries({ queryKey: adminUsersKey })
-  const refreshSchool = () => qc.invalidateQueries({ queryKey: adminSchoolKey })
 
   function onAccountCreated(result) {
     refresh()
@@ -984,10 +984,17 @@ export default function UsersTab() {
     requestAnimationFrame(() => accountsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
+  // The signed-in admin is on the Home tab, not in this list: a school can
+  // have thousands of accounts and this table is for the people being managed.
+  // `users` itself stays whole -- the duplicate checks in Add User still need
+  // to see every account on file.
   const shown = useMemo(
-    () => filterUsers(users, roleFilter, search),
-    [users, roleFilter, search],
+    () => filterUsers(users.filter((u) => u.id !== profile.id), roleFilter, search),
+    [users, roleFilter, search, profile.id],
   )
+
+  const view = pageOf(shown, pageState.key === filterKey ? pageState.page : 1)
+  const goToPage = (n) => setPageState({ key: filterKey, page: n })
 
   function exportCsv() {
     downloadCsv(stampedName('users'), [
@@ -1000,10 +1007,6 @@ export default function UsersTab() {
 
   return (
     <div style={{ display: 'grid', gap: 22 }}>
-      <LoginPrefixCard settings={settings} pending={schoolPending} error={schoolError}
-                       onRetry={refetchSchool} onSaved={refreshSchool} />
-      <TermDatesCard settings={settings} pending={schoolPending} error={schoolError}
-                     onRetry={refetchSchool} onSaved={refreshSchool} />
       <AddUserSection onCreated={onAccountCreated} settings={settings} users={users} />
 
       <section ref={accountsRef} data-testid="student-accounts-section" style={{ ...card, overflow: 'hidden', scrollMarginTop: 24 }}>
@@ -1044,21 +1047,19 @@ export default function UsersTab() {
                       ariaLabel="Filter users by role" />
         </div>
 
-        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={7} label="Loading users" /></div>}
+        {isLoading && <div style={{ padding: 16 }}><SkeletonTable rows={6} cols={6} label="Loading users" /></div>}
         {isError && <div style={{ padding: 20 }}><Notice>{error?.message ?? 'Could not load users.'}</Notice></div>}
 
         {!isLoading && !isError && (
           shown.length === 0 ? (
             <p style={{ padding: 28, textAlign: 'center', color: faint }}>No users match that filter.</p>
           ) : (
-            // The table used to grow with the roster and push this card's own
-            // controls off screen as the page kept scrolling (T-174). It now
-            // scrolls inside its own cap instead -- a viewport-relative height,
-            // not a pixel one, so a laptop still sees more than two rows -- the
-            // same treatment T-171 gives the bulk-upload preview a few hundred
-            // pixels up this screen, so one scroll behaviour reads consistently
-            // down the page. A short roster never hits the cap, so nothing
-            // changes for a small school.
+            // 20 users a page (see USERS_PER_PAGE below the table), and the rows
+            // scroll inside a viewport-relative cap with the header row pinned
+            // (T-174), so the column names stay in view while you read down a
+            // page and the Previous / Next footer never leaves the screen. It
+            // also scrolls sideways on a narrow window.
+            <>
             <div style={{ overflowX: 'auto' }}>
               <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
                 {/* Fixed layout with explicit widths: left to size themselves from
@@ -1070,36 +1071,56 @@ export default function UsersTab() {
                     140 and Role 120 still fit "LRN 136524240004" and the role
                     select; Status 210 -- just "Active" plus "Default password"
                     side by side (T-233), it was 240 and left a wide empty band on
-                    every Active-only row; Last Active 160 fits "No activity
-                    recorded"; actions 240 fits Reset Password + Deactivate. Name
-                    takes the rest. */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1340 }}>
+                    every Active-only row; Actions 130 fits the two icon buttons with room to the
+                    edge. There is no Last Active column. Name takes the rest. */}
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1080 }}>
                   <colgroup>
                     <col />
                     <col style={{ width: 290 }} />
                     <col style={{ width: 140 }} />
                     <col style={{ width: 120 }} />
                     <col style={{ width: 210 }} />
-                    <col style={{ width: 160 }} />
-                    <col style={{ width: 240 }} />
+                    <col style={{ width: 130 }} />
                   </colgroup>
                   <thead>
                     {/* Solid, not the usual translucent tint -- sticky, it would
                         otherwise show scrolled-past rows bleeding through it. */}
-                    <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0 }}>
-                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', 'Last Active', ''].map((h, i, all) => (
-                        <th key={h || i} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: i === all.length - 1 ? 'right' : 'left' }}>{h}</th>
+                    <tr style={{ background: '#F7F8FA', position: 'sticky', top: 0, zIndex: 1 }}>
+                      {['Name', 'Sign-in', 'ID / LRN', 'Role', 'Status', 'Actions'].map((h) => (
+                        <th key={h} style={{ ...th, color: ink, fontWeight: 800, fontSize: 12, textAlign: h === 'Actions' ? 'center' : 'left' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {shown.map((u) => (
+                    {view.rows.map((u) => (
                       <UserRow key={u.id} user={u} isSelf={u.id === profile.id} onChanged={refresh} />
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* 20 users to a page, so the card is the same size however big
+                the school is; Previous / Next move through the rest. */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '14px 20px', borderTop: `1px solid ${line}` }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: ink }}>
+                Showing {view.from}–{view.to} of {shown.length}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button type="button" style={{ ...btnGhost, opacity: view.page <= 1 ? 0.5 : 1, cursor: view.page <= 1 ? 'not-allowed' : 'pointer' }}
+                        disabled={view.page <= 1} onClick={() => goToPage(view.page - 1)}>
+                  ‹ Previous
+                </button>
+                <span style={{ fontSize: 13, fontWeight: 700, color: ink, whiteSpace: 'nowrap' }}>
+                  Page {view.page} of {view.pages}
+                </span>
+                <button type="button" style={{ ...btnPrimary, opacity: view.page >= view.pages ? 0.5 : 1, cursor: view.page >= view.pages ? 'not-allowed' : 'pointer' }}
+                        disabled={view.page >= view.pages} onClick={() => goToPage(view.page + 1)}>
+                  Next ›
+                </button>
+              </div>
+            </div>
+            </>
           )
         )}
       </section>

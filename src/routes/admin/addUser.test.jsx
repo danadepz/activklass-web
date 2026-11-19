@@ -1,18 +1,13 @@
 /**
- * T-113 (triplecookiemonster-141 item 7, Kristine's hand-drawn sketch):
- * Add User asks two ordered questions -- Bulk | Individual, then
- * Teacher | Student -- and nothing below either control renders until BOTH
- * are answered. Before this card, Bulk upload and Add a user were two
- * permanent sibling cards with their own independent role pickers; this
- * pins the new single section's gate.
+ * Add User is one row of controls: Teacher | Student (Teacher by default) and a
+ * Bulk on/off toggle after them. Off shows the manual form, on shows the bulk
+ * uploader for the picked role; the row itself never changes. There is no
+ * Individual button.
  *
  * Static markup, the house pattern (rosterToolbar.test.jsx is the model for
  * seeding React state without a click: `react`'s `useState` is wrapped so
- * the first two calls initialised with `''` -- AddUserSection's own `mode`
- * and `role` -- return a seeded value instead of the real default. Nothing
- * else in the tree calls `useState('')` before those two, since the gated
- * children (CreateUserForm, BulkUpload) are not mounted at all until both
- * are set, so the interception is safe by construction, not by luck).
+ * AddUserSection's own two states -- bulk (false) and role ('teacher') -- take
+ * a seeded value once per render, tracked with a bitmask in `seed.calls`).
  */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,11 +19,10 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...real,
     useState: (init) => {
-      if (init === '') {
-        seed.calls += 1
-        if (seed.calls === 1) return real.useState(seed.mode)
-        if (seed.calls === 2) return real.useState(seed.role)
-      }
+      // AddUserSection's own two states: bulk (false) then role ('teacher').
+        // seed.calls is a bitmask so each is taken once per render.
+        if (init === false && !(seed.calls & 1)) { seed.calls |= 1; return real.useState(seed.mode === 'bulk') }
+        if (init === 'teacher' && !(seed.calls & 2)) { seed.calls |= 2; return real.useState(seed.role || 'teacher') }
       return real.useState(init)
     },
   }
@@ -61,38 +55,42 @@ function render({ mode = '', role = '' } = {}) {
 
 beforeEach(() => { seed.mode = ''; seed.role = ''; seed.calls = 0 })
 
-describe('Add User (T-113) -- nothing renders until both controls are set', () => {
-  it('shows only the Bulk | Individual control when neither is picked', () => {
+describe('Add User -- one row: Teacher | Student, then a Bulk toggle', () => {
+  it('opens on Teacher with the manual form, and no Individual button', () => {
     const html = render()
     expect(html).toContain('Add User')
-    expect(html).toMatch(/>bulk</i)
-    expect(html).toMatch(/>individual</i)
-    // The second control (Teacher | Student) must not even be on the page yet.
-    expect(html).not.toMatch(/>teacher</i)
-    expect(html).not.toMatch(/>student</i)
-    // Neither form's own content is reachable.
-    expect(html).not.toContain('First name')
-    expect(html).not.toMatch(/Choose [Ff]ile/)
-    expect(html).toContain('Pick Bulk or Individual first')
-  })
-
-  it('shows the Teacher | Student control once a mode is picked, but still no form', () => {
-    const html = render({ mode: 'individual' })
     expect(html).toMatch(/>teacher</i)
     expect(html).toMatch(/>student</i)
-    expect(html).not.toContain('First name')
+    expect(html).toMatch(/>Bulk</)
+    expect(html).not.toMatch(/>individual</i)
+    // The manual Teacher form is already on screen.
+    expect(html).toContain('First Name')
+    expect(html).toContain('Employee Number')
     expect(html).not.toMatch(/Choose [Ff]ile/)
-    expect(html).toContain('Pick a role and the rest appears')
+    // No hint line that appears and disappears under the controls.
+    expect(html).not.toContain('Pick a role and the rest appears')
+    expect(html).not.toContain('Pick Bulk or Individual first')
   })
 
-  it('renders the individual form once Individual + Teacher are both set', () => {
+  it('Bulk is an on/off toggle that reads as off by default', () => {
+    expect(render()).toMatch(/aria-pressed="false"[^>]*>Bulk</)
+    expect(render({ mode: 'bulk' })).toMatch(/aria-pressed="true"[^>]*>Bulk</)
+  })
+
+  it('the controls are the same row in both states', () => {
+    const rowOf = (html) => html.slice(html.indexOf('role="radiogroup"'), html.indexOf('>Bulk<') + 6)
+    expect(rowOf(render({ mode: 'bulk' }))).toContain('>teacher<')
+    expect(rowOf(render())).toContain('>teacher<')
+  })
+
+  it('renders the manual form for Teacher', () => {
     const html = render({ mode: 'individual', role: 'teacher' })
     expect(html).toContain('First Name')
     expect(html).toContain('Employee Number')
     expect(html).not.toMatch(/Choose [Ff]ile/)
   })
 
-  it('renders the bulk uploader once Bulk + Student are both set', () => {
+  it('renders the bulk uploader when Bulk is on for Student', () => {
     const html = render({ mode: 'bulk', role: 'student' })
     expect(html).toMatch(/Choose [Ff]ile/)
     expect(html).toContain('What a student row needs')

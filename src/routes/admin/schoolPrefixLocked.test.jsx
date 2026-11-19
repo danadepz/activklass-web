@@ -30,8 +30,9 @@ vi.mock('@/lib/admin', () => ({
 vi.mock('@/lib/csv', () => ({ downloadCsv: vi.fn(), stampedName: (p) => `${p}.csv` }))
 vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true), promptDialog: vi.fn() }))
 vi.mock('./BulkUpload', () => ({ default: () => null }))
+vi.mock('@/components/ChangePassword', () => ({ default: () => null }))
 
-import UsersTab from './UsersTab.jsx'
+import HomeTab from './HomeTab.jsx'
 
 const input = (html, placeholder) => html.match(new RegExp(`<input[^>]*placeholder="${placeholder}"[^>]*>`))?.[0] ?? ''
 const card = (html) => html.slice(html.indexOf('School &amp; Login Prefix'), html.indexOf('School &amp; Login Prefix') + 4000)
@@ -39,7 +40,7 @@ const card = (html) => html.slice(html.indexOf('School &amp; Login Prefix'), htm
 describe('School & Login Prefix card after registration (T-255)', () => {
   it('shows the registered name and abbreviation already filled, view-only, with a way to ask for a change', () => {
     state.school = { name: 'University of San Carlos', login_prefix: 'usc' }
-    const html = renderToStaticMarkup(<UsersTab />)
+    const html = renderToStaticMarkup(<HomeTab />)
     const abbr = input(html, 'e.g. UCB')
     expect(abbr).toContain('value="usc"')
     expect(abbr).toContain('readOnly=""')
@@ -50,7 +51,7 @@ describe('School & Login Prefix card after registration (T-255)', () => {
 
   it('locked fields cannot be clicked or tabbed into, so they never look editable (2026-11-17)', () => {
     state.school = { name: 'University of San Carlos', login_prefix: 'usc' }
-    const html = renderToStaticMarkup(<UsersTab />)
+    const html = renderToStaticMarkup(<HomeTab />)
     for (const placeholder of ['e.g. UCB', 'e.g. University of Cebu-Banilad']) {
       const el = input(html, placeholder)
       expect(el, placeholder).toContain('tabindex="-1"')
@@ -62,7 +63,7 @@ describe('School & Login Prefix card after registration (T-255)', () => {
 
   it('still lets a school with no prefix yet set it once', () => {
     state.school = { name: 'Lorma Colleges, Inc.', login_prefix: '' }
-    const html = renderToStaticMarkup(<UsersTab />)
+    const html = renderToStaticMarkup(<HomeTab />)
     expect(input(html, 'e.g. UCB')).not.toContain('readOnly')
     expect(input(html, 'e.g. UCB')).not.toContain('tabindex="-1"')
     expect(input(html, 'e.g. UCB')).not.toContain('disabled')
