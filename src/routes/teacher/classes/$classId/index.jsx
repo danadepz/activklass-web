@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { setAccountDisabled } from '@/lib/admin'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { listMyGuardians, revokeGuardianLink } from '@/lib/guardianCodes'
-import { emailError, nameError, yearLevelError, birthdateError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
+import { emailError, nameError, yearLevelError, birthdateError, lrnError, BIRTHDATE_HINT, GRADE_LEVELS, YEAR_LEVELS } from '@/lib/validation'
 import { classEducationLevel } from '@/lib/classForm'
 import { ENROLLMENT_STATUS_LABELS, REMARKS_OPTIONS, STATUS_LABELS, ageFromBirthdate, fetchUsersByIds, findStudentByEmail, findStudentsByNumber, isDroppedFromClass, teacherAccountMessage, parseCsv, addToRoster, middleNamesToWrite } from '@/lib/roster'
 import { useAuth } from '@/context/useAuth'
@@ -108,6 +108,16 @@ function identifierError(fields, identifierType) {
   const key = identifierKey(identifierType)
   if (fields[key]?.trim()) return ''
   return key === 'lrn' ? 'LRN is required.' : 'ID Number is required.'
+}
+
+/* Creating a NEW student: the identifier rule above, plus the LRN that will be
+   sent must be exactly 12 digits -- whichever toggle is showing, since the
+   payload carries `lrn` either way. The provision endpoint refuses anything
+   else (roster_utils.py); checking here puts the reason beside the form
+   instead of after the round trip. Create only: the find path re-enrols
+   existing students, whose stored LRN predates this rule and is left alone. */
+export function createIdentifierError(fields, identifierType) {
+  return identifierError(fields, identifierType) || lrnError(fields.lrn, { required: false })
 }
 
 /* T-197 (maykel_64440-302): Add Student -> Individual used to write every
@@ -673,7 +683,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
       emailError(newEmail) ||
       rosterFieldsError(createFields)
     if (problem) { fail(problem); return }
-    const idProblem = identifierError(createFields, createIdentifierType)
+    const idProblem = createIdentifierError(createFields, createIdentifierType)
     if (idProblem) { fail(idProblem); return }
     // The provision endpoint refuses the row without it (roster_utils.py);
     // checking here is so the teacher reads the reason beside the field.
