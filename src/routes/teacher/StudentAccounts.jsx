@@ -66,16 +66,32 @@ function Pill({ fg, bg, children }) {
   )
 }
 
-export function rowProblem(row, prefix) {
+/** 'k12' or 'college', from the class a student is enrolled into: the teacher
+ *  picked Elementary / High School / College when creating it (ClassFormModal).
+ *  Same reading as ManualCreate's isG12. */
+export const levelOfClass = (c) => (c && c.education_level === 'College' ? 'college' : 'k12')
+
+/** The identifier the issued login comes from (owner policy 2026-11-19, the
+ *  same rule as classes.provision_students and api/admin.py): the LRN for
+ *  K-12, the student number for college -- never the LRN. No level is the
+ *  legacy LRN-first reading. */
+const loginSource = (row, level) =>
+  level === 'k12' ? row.lrn : level === 'college' ? row.student_number : (row.lrn || row.student_number)
+
+export function rowProblem(row, prefix, level) {
   if (!row.first_name || !row.last_name) return 'missing name'
   if (!row.student_number) return 'missing student_number'
   if (row.lrn && !/^\d{12}$/.test(row.lrn)) return 'LRN must be 12 digits'
+  if (level === 'k12' && !row.lrn) return 'K–12 students need a 12-digit LRN — their login is issued from it'
   // Required: the endpoint refuses the row without it (T-50), so it fails
   // here in the preview rather than in the upload's result list.
   if (!row.birthdate) return 'missing birthdate — needed for guardian access'
   const birthdateProblem = birthdateError(row.birthdate)
   if (birthdateProblem) return birthdateProblem
-  if (prefix && !issuedLoginId(prefix, row.lrn || row.student_number)) {
+  if (prefix && !issuedLoginId(prefix, loginSource(row, level))) {
+    // With a level the server issues the login from that identifier or not
+    // at all -- no email fallback -- so the preview may not promise one.
+    if (level === 'college') return 'college students need a student number with 6+ digits — the last six become their login'
     return row.email ? '' : 'needs an LRN or student number with 6+ digits, or an email'
   }
   if (!prefix && !row.email) return 'needs an email (no school prefix to issue a login from)'
@@ -83,8 +99,8 @@ export function rowProblem(row, prefix) {
 }
 
 /** What the login will be, as the row stands. */
-function rowLogin(row, prefix) {
-  return (prefix && issuedLoginId(prefix, row.lrn || row.student_number)) || row.email || '—'
+export function rowLogin(row, prefix, level) {
+  return (prefix && issuedLoginId(prefix, loginSource(row, level))) || row.email || '—'
 }
 
 /* ── Shared: one POST for both the file and the manual path ───────────── */
@@ -182,6 +198,9 @@ function ManualCreate({ classes, prefix, onDone }) {
     const row = {
       first_name: form.firstName.trim(),
       last_name: form.lastName.trim(),
+      // Tells the server which identifier the login comes from, so it issues
+      // exactly the login previewed above.
+      student_level: isG12 ? 'k12' : 'college',
       student_number: form.studentNumber.trim(),
       birthdate: form.birthdate,
       ...(form.middleName.trim() ? { middle_name: form.middleName.trim() } : {}),
@@ -359,7 +378,10 @@ export function BulkCreate({ classes, prefix, onDone }) {
     e.target.value = ''
   }
 
-  const problems = rows.map((r) => rowProblem(r, prefix))
+  // Every row goes into one class, so the class decides the level for all of
+  // them -- the same rule the single-student form applies.
+  const level = levelOfClass(classes.find((c) => c.id === classId))
+  const problems = rows.map((r) => rowProblem(r, prefix, level))
   const ready = rows.filter((_, i) => !problems[i])
 
   async function upload() {
@@ -381,7 +403,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
 
     setBusy(true); setResult(null)
     try {
-      const res = await provisionInto(classId, ready)
+      const res = await provisionInto(classId, ready.map((r) => ({ ...r, student_level: level })))
       setResult(res)
       if (res.summary?.created || res.summary?.skipped) onDone()
     } catch (err) {
@@ -456,7 +478,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
         Columns: <span style={mono}>first_name, last_name, student_number, birthdate</span> (as YYYY-MM-DD — needed for guardian access) — optional{' '}
         <span style={mono}>lrn, email, grade_level, section</span>.{' '}
         {prefix
-          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN (or student number); every new account starts on the school’s standard temporary password, shown in the download, and must be changed at first sign-in.</>
+          ? <>Logins are issued as <span style={mono}>{prefix}-</span> plus the last six digits of the LRN for a K–12 class, or of the student number for a college class; every new account starts on the school’s standard temporary password, shown in the download, and must be changed at first sign-in.</>
           : <>No school abbreviation is on your account, so each row needs an <span style={mono}>email</span>, which becomes the login.</>}
       </p>
       {parseError && <p style={{ fontSize: 13, color: red, margin: '10px 0 0' }}>{parseError}</p>}
@@ -474,7 +496,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
                 <tr key={i} style={{ borderTop: `1px solid ${line}` }}>
                   <td style={td}>{r.last_name}, {r.first_name}</td>
                   <td style={{ ...td, ...mono, fontSize: 12.5 }}>{r.lrn || r.student_number}</td>
-                  <td style={{ ...td, ...mono, fontSize: 12.5 }}>{problems[i] ? '—' : rowLogin(r, prefix)}</td>
+                  <td style={{ ...td, ...mono, fontSize: 12.5 }}>{problems[i] ? '—' : rowLogin(r, prefix, level)}</td>
                   <td style={{ ...td, fontSize: 12.5, color: problems[i] ? red : green }}>{problems[i] || 'ready'}</td>
                 </tr>
               ))}
