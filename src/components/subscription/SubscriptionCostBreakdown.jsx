@@ -69,8 +69,8 @@ export default function SubscriptionCostBreakdown({ costing, schedule, dueDate, 
           <h3 style={later}>Included</h3>
           <dl className={listClass} style={list}>
             <Row compact={compact} label="AI credits" value={allow.ai_credits.toLocaleString('en-PH')} />
-            <Row compact={compact} label="Teacher AI generations" value={`${allow.teacher_generations_per_seat_per_day} per teacher / day`} />
-            <Row compact={compact} label="Student AI explanations" value={`${allow.student_explanations_per_student_per_day} per student / day`} />
+            <Row compact={compact} label="Teacher AI generations" value={`${allow.teacher_generations_per_seat_per_day}/day`} />
+            <Row compact={compact} label="Student AI explanations" value={`${allow.student_explanations_per_student_per_day}/day`} />
             <Row compact={compact} label="Storage" value={`${allow.storage_gb.toLocaleString('en-PH')} GB`} />
           </dl>
         </>
