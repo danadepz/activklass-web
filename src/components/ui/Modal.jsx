@@ -121,6 +121,10 @@ export default function Modal({
         <div
           style={{
             padding: `${title ? 18 : 28}px 28px ${footer ? 0 : 28}px`,
+            // Let this flex child shrink inside the viewport-capped panel so its
+            // contents scroll here instead of pushing the footer below the screen.
+            minHeight: 0,
+            flex: '1 1 auto',
             overflowY: 'auto',
             fontFamily: sansFamily,
             fontSize: 14,
