@@ -870,7 +870,7 @@ export async function predictRisk(indicators) {
   const raw = await withAIErrors('scoring student risk', () =>
     api('/api/predict', {
       method: 'POST',
-      body: { indicators: built },
+      body: { indicators: built, accepts_insufficient_data: true },
     }),
   )
   return shapeRiskResult(raw, built)
