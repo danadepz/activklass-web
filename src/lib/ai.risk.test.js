@@ -242,6 +242,15 @@ describe('backend contract compatibility (T-251)', () => {
     expect(result.status).toBe('model_unavailable')
     expect(result.score).toBeNull()
   })
+
+  it('rejects an explicit scored status without a finite 0–1 score', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ status: 'scored', risk_probability: null, risk_score: null }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('insufficient_data')
+    expect(result.score).toBeNull()
+    expect(result.flag).toBeNull()
+    expect(result.atRisk).toBe(false)
+  })
 })
 
 describe('signals become something a reader can act on', () => {
