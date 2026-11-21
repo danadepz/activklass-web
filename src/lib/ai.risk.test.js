@@ -79,6 +79,24 @@ describe('training basis reaches the caller', () => {
     // PredictedRisk reads the basis off the first scored row, so every row
     // carrying it is what makes that safe.
     rows.forEach((r) => expect(r.training).toEqual(TRAINING))
+    expect(vi.mocked(api).mock.calls[0][1].body).not.toHaveProperty('accepts_insufficient_data')
+  })
+
+  it('keeps batch insufficient-data results compatible without a single-call opt-in', async () => {
+    vi.mocked(api).mockResolvedValue({
+      results: [{
+        student_id: 's1', status: 'insufficient_data', risk_flag: null,
+        risk_probability: null, missing_features: ['quiz_trend'],
+      }],
+    })
+    const [result] = await predictRiskBatch([
+      { studentId: 's1', indicators: { attendanceRate: 91 } },
+    ])
+
+    expect(result.status).toBe('insufficient_data')
+    expect(result.flag).toBeNull()
+    expect(result.score).toBeNull()
+    expect(vi.mocked(api).mock.calls[0][1].body).not.toHaveProperty('accepts_insufficient_data')
   })
 
   it('is null, not undefined, when an older backend omits it', async () => {
@@ -108,6 +126,7 @@ describe('the no-data trap stays visible', () => {
     expect(result.coverage).toBe(0)
     expect(result.supplied).toEqual([])
     expect(result.missing).toContain('attendance_rate')
+    expect(vi.mocked(api).mock.calls[0][1].body.accepts_insufficient_data).toBe(true)
   })
 
   it('counts coverage by model weight, not by field count', async () => {
@@ -125,6 +144,9 @@ describe('the no-data trap stays visible', () => {
     expect(result.status).toBe('insufficient_data')
     expect(result.atRisk).toBe(false)
     expect(result.score).toBeNull()
+    // The pre-Option-B backend may ignore this field and return an imputed v1
+    // score. The web shaper still suppresses it because the sent vector is partial.
+    expect(vi.mocked(api).mock.calls[0][1].body.accepts_insufficient_data).toBe(true)
   })
 
   it('treats a levels-only caller as under half covered', async () => {
@@ -241,6 +263,15 @@ describe('backend contract compatibility (T-251)', () => {
     const result = await predictRisk(FULL)
     expect(result.status).toBe('model_unavailable')
     expect(result.score).toBeNull()
+  })
+
+  it('rejects an explicit scored status without a finite 0–1 score', async () => {
+    vi.mocked(api).mockResolvedValue(reply({ status: 'scored', risk_probability: null, risk_score: null }))
+    const result = await predictRisk(FULL)
+    expect(result.status).toBe('insufficient_data')
+    expect(result.score).toBeNull()
+    expect(result.flag).toBeNull()
+    expect(result.atRisk).toBe(false)
   })
 })
 

@@ -821,15 +821,18 @@ function shapeRiskResult(raw, indicators) {
   const supplied = Object.keys(indicators)
   const coverage = supplied.reduce((sum, f) => sum + RISK_FEATURE_WEIGHTS[f], 0)
   const complete = RISK_FEATURES.every((feature) => supplied.includes(feature))
+  const score = raw.risk_score ?? raw.risk_probability ?? null
+  const validScore = Number.isFinite(score) && score >= 0 && score <= 1
+  const validFlag = raw.risk_flag === 'high_risk' || raw.risk_flag === 'on_track'
   const status = raw.status
-    ? (raw.status === 'scored' && complete && raw.risk_flag ? 'scored'
+    ? (raw.status === 'scored' && complete && validFlag && validScore ? 'scored'
       : raw.status === 'model_unavailable' ? 'model_unavailable' : 'insufficient_data')
-    : (complete && raw.risk_flag ? 'scored' : 'insufficient_data')
+    : (complete && validFlag && validScore ? 'scored' : 'insufficient_data')
   return {
     status,
     flag: status === 'scored' ? raw.risk_flag : null,
     atRisk: status === 'scored' && raw.risk_flag === 'high_risk',
-    score: status === 'scored' ? (raw.risk_score ?? raw.risk_probability ?? null) : null,
+    score: status === 'scored' ? score : null,
     // Kept as an explicit null for legacy consumers: this model is not
     // empirically calibrated, so its forest score is not a probability.
     probability: null,
@@ -867,7 +870,7 @@ export async function predictRisk(indicators) {
   const raw = await withAIErrors('scoring student risk', () =>
     api('/api/predict', {
       method: 'POST',
-      body: { indicators: built },
+      body: { indicators: built, accepts_insufficient_data: true },
     }),
   )
   return shapeRiskResult(raw, built)
