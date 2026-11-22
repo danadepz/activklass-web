@@ -866,3 +866,19 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
   (cancel, refused cancel of a recorded day, refused duplicate move, move, recording the
   make-up, term grid). **Not deployed:** the `firestore.rules` change is in the backend
   branch only. Full report: `C:\CAPSTONE\ACTIVKLASS_RISK_EVIDENCE_IMPLEMENTATION_REPORT.md`.
+
+## Final academic policy — 2026-11-22 (same branch, not merged, rules NOT deployed)
+- [~] Class `start_date` (required on new classes, legacy classes unchanged) and optional
+  `end_date`; the school admin's term-date card now holds default *start* dates the class
+  form offers and the teacher confirms. Attendance is teacher-only and every write is an
+  audited transaction (`lib/attendanceAudit.js`, immutable `attendance_audit` events; the
+  day page and the admin's class row show the history; the admin cannot write). Official
+  quiz excusals (`lib/quizExcusals.js`) from the quiz results table, teacher-only, with
+  history; excused quizzes leave missing work. Quiz trend orders quizzes by due date and
+  has no trend without dates; the period grade reaches the model only with valid graded
+  work behind it, and students without a full input set are listed as Insufficient Data
+  with their record described. Thresholds, model and the six-input contract unchanged.
+- Verified locally only: `npm run test` 2661 passed / 3 skipped, build clean, lint 190,
+  `npm run test:rules` 292/292 (17 new cases fail against the 88c6bca rules). No browser
+  walk of these screens yet. Full report:
+  `C:\CAPSTONE\ACTIVKLASS_FINAL_ACADEMIC_POLICY_IMPLEMENTATION_REPORT.md`.
