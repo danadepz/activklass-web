@@ -66,7 +66,7 @@ describe('/pay-to-activate — the admin who owes the payment', () => {
       subscription: { status: 'approved_unpaid', limits: { teacher_seats: 20, student_seats: 2400 } },
     })
     expect(html).toContain('Proceed to Payment')
-    expect(html).toContain('Review your subscription')
+    expect(html).toContain('Review Your Subscription')
     expect(html).toContain('Subscription price breakdown')
   })
 

@@ -46,7 +46,7 @@ export async function confirmPayment(start, { setPaying, setPayError }) {
 }
 
 export const PLAN_LABEL = { individual: 'Individual Teacher', institution: 'Institution' }
-export const OPTION_LABEL = { full: 'Full payment (100%)', half: '50% down payment' }
+export const OPTION_LABEL = { full: 'Full Payment (100%)', half: '50% Down Payment' }
 
 /**
  * The live (legacy, per-seat) checkout quote in the shape the shared

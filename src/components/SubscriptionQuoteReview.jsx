@@ -56,8 +56,8 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   const noteBox = { margin: '24px 0 0', padding: '14px 16px', fontSize: 13.5, color: muted, lineHeight: 1.6, background: 'rgba(14,42,92,0.04)', border: `1px solid ${line}`, borderRadius: 12 }
 
   return (
-    <section aria-label="Subscription price breakdown" style={{ border: `1px solid ${line}`, borderRadius: 16, padding: 'clamp(18px, 3.5vw, 32px)', marginTop: 24, background: '#FFFFFF', color: ink }}>
-      <h3 style={{ margin: '0 0 24px', fontSize: 19, fontWeight: 700, color: ink }}>Review your subscription</h3>
+    <section aria-label="Subscription price breakdown" style={{ borderTop: `1px solid ${line}`, paddingTop: 22, marginTop: 20, color: ink }}>
+      <h3 style={{ margin: '0 0 18px', fontSize: 19, fontWeight: 700, color: ink }}>Review Your Subscription</h3>
 
       {isLoading ? <p role="status" style={{ fontSize: 13.5, color: muted, margin: 0 }}>Loading your price…</p> : null}
 
@@ -66,7 +66,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
           {error?.message || 'We could not load your price. Try again.'}
           <div style={{ marginTop: 8 }}>
             <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? 'Loading…' : 'Try again'}
+              {isFetching ? 'Loading…' : 'Try Again'}
             </Button>
           </div>
         </div>
@@ -75,8 +75,8 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
       {quote ? (
         <>
           {optionB ? (
-            <div style={{ margin: '0 0 28px' }}>
-              <PaymentOptionPicker value={option} onChange={setOption} disabled={disabled || balanceOwed} />
+            <div style={{ margin: '0 0 20px' }}>
+              <PaymentOptionPicker value={option} onChange={setOption} disabled={disabled || balanceOwed} paymentOptions={quote.payment_options} />
             </div>
           ) : null}
 
@@ -84,7 +84,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
 
           {quote.test_mode ? (
             <p style={{ margin: '16px 0 0', fontSize: 12.5, color: muted, lineHeight: 1.5 }}>
-              Test mode: payment runs on PayMongo's test environment. No real money is charged.
+              Test payment only. No real money will be charged.
             </p>
           ) : null}
 
@@ -113,10 +113,10 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
         </>
       ) : null}
 
-      <div style={{ marginTop: 28, paddingTop: 24, borderTop: `1px solid ${line}` }}>
+      <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${line}` }}>
         <Button
           block
-          style={{ padding: '16px 24px', fontSize: 16 }}
+          style={{ padding: '13px 20px', fontSize: 14 }}
           onClick={() => { setOpenCount((n) => n + 1); setPayError(''); setConfirming(true) }}
           disabled={!quote || paymentClosed || disabled || isFetching}
         >

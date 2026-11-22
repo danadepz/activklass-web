@@ -41,9 +41,9 @@ const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
 describe('SubscriptionQuoteReview', () => {
   it('shows the server quote as one breakdown with a Proceed to Payment action', () => {
     const t = text(render())
-    expect(t).toContain('Total subscription cost ₱3,600')
-    expect(t).toContain('Validity 300 days')
-    expect(t).toContain('Amount due now ₱3,600')
+    expect(t).toContain('Total Subscription Cost ₱3,600')
+    expect(t).toContain('Subscription Period 300 days')
+    expect(t).toContain('Amount Due Now ₱3,600')
     expect(t).toContain('Proceed to Payment')
   })
 
@@ -89,8 +89,8 @@ describe('SubscriptionQuoteReview', () => {
     } }
     const t = text(render())
     expect(t).toContain('Plan Institution')
-    expect(t).toContain('Teacher seats 10 × ₱1,200 ₱12,000')
-    expect(t).toContain('Total subscription cost ₱36,000')
+    expect(t).toContain('Teacher Seats 10 × ₱1,200 ₱12,000')
+    expect(t).toContain('Total Subscription Cost ₱36,000')
     queryMock.data = { quote: orig }
   })
 })

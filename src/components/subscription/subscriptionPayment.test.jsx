@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import SubscriptionCostBreakdown from './SubscriptionCostBreakdown'
 import PaymentConfirmModal from './PaymentConfirmModal'
+import PaymentOptionPicker from './PaymentOptionPicker'
 import SubscriptionStatusPanel from './SubscriptionStatusPanel'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import InstallmentStatus from './InstallmentStatus'
@@ -31,17 +32,25 @@ describe('formatCentavos', () => {
 })
 
 describe('SubscriptionCostBreakdown', () => {
+  it('shows the payment summary before seat costs and included features', () => {
+    const t = text(renderToStaticMarkup(<SubscriptionCostBreakdown costing={institution} schedule={half} />))
+    expect(t.indexOf('Amount Due Now')).toBeLessThan(t.indexOf('Teacher Seats'))
+    expect(t.indexOf('Remaining Balance')).toBeLessThan(t.indexOf('Included Features'))
+    expect(t.match(/Total Subscription Cost/g)).toHaveLength(1)
+    expect(t.match(/Amount Due Now/g)).toHaveLength(1)
+  })
+
   it('itemises the institution reference example', () => {
     const t = text(renderToStaticMarkup(<SubscriptionCostBreakdown costing={institution} />))
     expect(t).toContain('Plan Institution')
-    expect(t).toContain('Teacher seats 10 × ₱1,500 ₱15,000')
-    expect(t).toContain('Unique student capacity 400 students · 10 blocks of 40 × ₱1,200 ₱12,000')
-    expect(t).toContain('AI credits 1,000,000')
-    expect(t).toContain('Teacher AI generations 15/day')
-    expect(t).toContain('Student AI explanations 10/day')
+    expect(t).toContain('Teacher Seats 10 × ₱1,500 ₱15,000')
+    expect(t).toContain('Student Capacity 400 unique students · 10 blocks of 40 × ₱1,200 ₱12,000')
+    expect(t).toContain('AI Credits 1,000,000')
+    expect(t).toContain('Teacher AI Generations Per teacher 15/day')
+    expect(t).toContain('Student AI Explanations Per student 10/day')
     expect(t).toContain('Storage 50 GB')
-    expect(t).toContain('Total subscription cost ₱27,000')
-    expect(t).toContain('Validity 300 days')
+    expect(t).toContain('Total Subscription Cost ₱27,000')
+    expect(t).toContain('Subscription Period 300 days')
   })
 
   it('shows the included teacher and the 50% schedule with an estimated due date', () => {
@@ -52,11 +61,11 @@ describe('SubscriptionCostBreakdown', () => {
         dueDate={{ seconds: 1800000000, estimate: true }}
       />,
     ))
-    expect(t).toContain('Teacher seats 1 teacher Included')
-    expect(t).toContain('Total subscription cost ₱2,400')
-    expect(t).toContain('Payment option 50% down payment')
-    expect(t).toContain('Amount due now ₱1,200')
-    expect(t).toContain('Remaining balance')
+    expect(t).toContain('Teacher Seats 1 teacher Included')
+    expect(t).toContain('Total Subscription Cost ₱2,400')
+    expect(t).toContain('Payment Option 50% Down Payment')
+    expect(t).toContain('Amount Due Now ₱1,200')
+    expect(t).toContain('Remaining Balance')
     expect(t).toContain('(estimated')
   })
 
@@ -64,8 +73,8 @@ describe('SubscriptionCostBreakdown', () => {
     const t = text(renderToStaticMarkup(
       <SubscriptionCostBreakdown costing={institution} schedule={{ option: 'full', due_now_centavos: 2700000, remaining_centavos: 0 }} />,
     ))
-    expect(t).toContain('Amount due now ₱27,000')
-    expect(t).not.toContain('Remaining balance')
+    expect(t).toContain('Amount Due Now ₱27,000')
+    expect(t).not.toContain('Remaining Balance')
   })
 
   it('renders the live per-seat quote without inventing blocks', () => {
@@ -78,10 +87,35 @@ describe('SubscriptionCostBreakdown', () => {
       ],
     })
     const t = text(renderToStaticMarkup(<SubscriptionCostBreakdown costing={costing} />))
-    expect(t).toContain('Unique student capacity 40 students × ₱60 ₱2,400')
-    expect(t).not.toContain('AI credits')
-    expect(t).toContain('Total subscription cost ₱3,600')
+    expect(t).toContain('Student Capacity 40 unique students × ₱60 ₱2,400')
+    expect(t).not.toContain('AI Credits')
+    expect(t).toContain('Total Subscription Cost ₱3,600')
     expect(t).not.toContain('student blocks')
+  })
+})
+
+describe('PaymentOptionPicker', () => {
+  it('displays the exact quoted amounts for each option', () => {
+    const html = renderToStaticMarkup(
+      <PaymentOptionPicker value="half" onChange={() => {}} paymentOptions={{
+        full: { due_now_centavos: 2700000 },
+        half: { due_now_centavos: 1349950 },
+      }} />,
+    )
+    const t = text(html)
+    expect(t).toContain('Full Payment ₱27,000 now')
+    expect(t).toContain('50% Down Payment ₱13,499.50 now')
+    expect(t).toContain('within 30 days of your confirmed first payment')
+    const selected = html.match(/<input[^>]*value="half"[^>]*>/)?.[0]
+    expect(selected).toContain('checked=""')
+  })
+
+  it('keeps the picker usable for callers without a quote', () => {
+    const t = text(renderToStaticMarkup(<PaymentOptionPicker value="full" onChange={() => {}} />))
+    expect(t).toContain('Full Payment')
+    expect(t).toContain('50% Down Payment')
+    expect(t).not.toContain('₱')
+    expect(t).not.toContain('NaN')
   })
 })
 
@@ -96,8 +130,8 @@ describe('PaymentConfirmModal', () => {
     expect(t).not.toContain('Demonstration Terms')
     expect(html).toMatch(/<button type="button"[^>]*>Terms and Conditions<\/button>/)
     expect(t).toContain('Go Back')
-    expect(t).toContain('Total subscription cost ₱27,000')
-    expect(t).toContain('Amount due now ₱13,500')
+    expect(t).toContain('Total Subscription Cost ₱27,000')
+    expect(t).toContain('Amount Due Now ₱13,500')
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Pay Now/)
   })
 
