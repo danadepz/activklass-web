@@ -36,6 +36,7 @@ vi.mock('firebase/firestore', () => ({
 }))
 
 const { api } = await import('@/lib/api')
+const { evidenceText } = await import('@/lib/riskSignals')
 const { useClassRisk } = await import('./useClassRisk')
 
 const S = 's1'
@@ -99,6 +100,8 @@ describe('teacher risk panel · request body', () => {
     expect(body).not.toHaveProperty('missing_work_rate')
     expect(Object.keys(body)).toHaveLength(5)
     expect(out.evidence.work.excusals_unknown).toBe(true)
+    // The teacher's disclosure says so instead of presenting the count as settled.
+    expect(evidenceText(out.evidence)).toMatch(/1 of 4 due items missing .*\(quiz excusals could not be checked\)/)
   })
 
   it('a failed excusal read changes nothing when no closed quiz was expected', async () => {

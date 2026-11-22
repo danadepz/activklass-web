@@ -434,7 +434,9 @@ export function evidenceText(evidence) {
   const due = (w.missing ?? 0) + (w.submitted ?? 0) + (w.attempted ?? 0) + (w.ungraded ?? 0)
   const work = due
     ? `${w.missing ?? 0} of ${due} due items missing` +
-      (w.attempted ? ` (${plural(w.attempted, 'quiz')} attempted; may be ungraded)` : '')
+      (w.attempted ? ` (${plural(w.attempted, 'quiz')} attempted; may be ungraded)` : '') +
+      // The excusal list did not load: an excused quiz may be among the missing.
+      (w.excusals_unknown ? ' (quiz excusals could not be checked)' : '')
     : 'no work due yet'
   return [
     `${plural(a.marks ?? 0, 'attendance mark')} of ${plural(a.held_sessions ?? 0, 'held session')}` +
