@@ -17,4 +17,4 @@ These files document intended/configured targets only. They do not establish cur
 5. Publish through the approved Vercel workflow; verify SPA deep links, Firebase sign-in, Firestore access, Storage workflows, and API health from the deployed origin.
 6. Coordinate backend and Firebase rules releases separately. See [backend deployment](https://github.com/danadepz/activklass-backend/blob/main/DEPLOYMENT.md).
 
-Do not deploy or alter production configuration as part of a documentation change. Never commit Firebase service account files, private API keys, or production exports.\n
+Do not deploy or alter production configuration as part of a documentation change. Never commit Firebase service account files, private API keys, or production exports.

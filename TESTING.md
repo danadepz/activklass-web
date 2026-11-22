@@ -20,4 +20,4 @@ Run the checks affected by the change and report the exact command and result. F
 
 ## Cross-repository tests
 
-`src/lib/portParity.test.js` requires the sibling `activklass-mobile` checkout at the path expected by the test. Coordinate shared logic changes with that repository and include the parity result where available.\n
+`src/lib/portParity.test.js` requires the sibling `activklass-mobile` checkout at the path expected by the test. Coordinate shared logic changes with that repository and include the parity result where available.

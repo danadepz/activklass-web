@@ -35,4 +35,4 @@ Do not add an API proxy for ordinary Firestore CRUD without a concrete security 
 4. For Firestore changes, update indexes/rules and emulator tests in the same coordinated change.
 5. For mirrored web/mobile domain logic, run the parity test from a checkout containing both sibling repositories.
 
-See [backend API guide](https://github.com/danadepz/activklass-backend/blob/main/docs/ai-endpoints-guide.md), [backend integration guide](https://github.com/danadepz/activklass-backend/blob/main/INTEGRATION.md), and [mobile integration guide](https://github.com/danadepz/activklass-mobile/blob/main/INTEGRATION.md).\n
+See [backend API guide](https://github.com/danadepz/activklass-backend/blob/main/docs/ai-endpoints-guide.md), [backend integration guide](https://github.com/danadepz/activklass-backend/blob/main/INTEGRATION.md), and [mobile integration guide](https://github.com/danadepz/activklass-mobile/blob/main/INTEGRATION.md).

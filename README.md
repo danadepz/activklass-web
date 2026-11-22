@@ -46,4 +46,4 @@ See [TESTING.md](TESTING.md) for emulator prerequisites and scope. Do not interp
 
 ## Collaboration
 
-Use short feature branches from current `main`, make focused pull requests to `main`, and include verification evidence. Never force-push or stage unrelated work. Stage explicit paths, inspect the full index and working tree before committing, and do not commit secrets, generated credentials, local data, or APKs. Review [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before work.\n
+Use short feature branches from current `main`, make focused pull requests to `main`, and include verification evidence. Never force-push or stage unrelated work. Stage explicit paths, inspect the full index and working tree before committing, and do not commit secrets, generated credentials, local data, or APKs. Review [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before work.

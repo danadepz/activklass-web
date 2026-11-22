@@ -40,4 +40,4 @@ Super administrator access uses a Firebase custom claim verified by trusted serv
 
 - [Data model](https://github.com/danadepz/activklass-web/blob/main/docs/DATA-MODEL.md)
 - [Backend architecture](https://github.com/danadepz/activklass-backend/blob/main/docs/01-architecture.md)
-- [Mobile architecture](https://github.com/danadepz/activklass-mobile/blob/main/ARCHITECTURE.md)\n
+- [Mobile architecture](https://github.com/danadepz/activklass-mobile/blob/main/ARCHITECTURE.md)

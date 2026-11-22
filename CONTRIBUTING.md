@@ -18,4 +18,4 @@
 
 ## Before requesting review
 
-Run the relevant checks in [TESTING.md](TESTING.md), inspect `git diff --check`, and list commands that were not run. For user-visible behavior, provide browser/device verification when practical. Include screenshots only when they contain no personal or production data.\n
+Run the relevant checks in [TESTING.md](TESTING.md), inspect `git diff --check`, and list commands that were not run. For user-visible behavior, provide browser/device verification when practical. Include screenshots only when they contain no personal or production data.

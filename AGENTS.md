@@ -17,4 +17,4 @@ Read `CLAUDE.md` and `OWNERSHIP.md` before editing application files. `OWNERSHIP
 - `INTEGRATION.md`: cross-repository contracts.
 - `TESTING.md`: executable checks and prerequisites.
 - `DEPLOYMENT.md`: configured topology and release guidance.
-- `CONTRIBUTING.md`: branch, review, and contribution process.\n
+- `CONTRIBUTING.md`: branch, review, and contribution process.
