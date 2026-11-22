@@ -13,6 +13,7 @@ import { attemptsAllowedFor, attemptsLabel, finishedAttempts, openAttempt } from
 import { BUCKETS, RESOURCE_META, assignedToStudent, isRemediationQuiz, quizzesForTopic, resourceState, topicAnchorId, topicMastery } from '../../scaffolding'
 import { formatGrade, gradeColor, isPointScale, passNote } from '../../gradeDisplay'
 import ClassStandingForecast from '@/components/ClassStandingForecast'
+import { quizAverageFromAttempts } from '@/lib/riskSignals'
 import AttachmentField from '@/components/AttachmentField'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { MetricCard } from '@/components/ui/Card'
@@ -59,6 +60,7 @@ export async function loadClassDetail(classId, profile) {
 
   let announcementsError = null
   let quizzesError = null
+  let attemptsError = null
 
   const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, dismissalsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
@@ -103,6 +105,7 @@ export async function loadClassDetail(classId, profile) {
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', studentUid)))
         .catch((err) => {
           console.error('Quiz attempts load error:', err.code ?? '', err.message ?? err)
+          attemptsError = err
           return { docs: [] }
         }),
       // Same query the Remediation page runs, filtered to this class below. It
@@ -182,6 +185,7 @@ export async function loadClassDetail(classId, profile) {
     queryErrors: {
       announcements: announcementsError,
       quizzes: quizzesError,
+      attempts: attemptsError,
     },
     // T-70: a per-class Disable, not an account one -- the student stays
     // enrolled (student_ids untouched) and keeps reading grades and
@@ -1786,30 +1790,20 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, announcementsTotal = 0, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, announcementsTotal = 0, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false, queryErrors = {} } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['student-class-detail', classId, profile.id] })
 
-  // Best percentage per quiz, averaged — one input to the standing forecast.
-  // Best rather than latest, matching how the teacher's mastery figures read
-  // attempts, so the two never disagree about the same student.
-  const quizBests = Object.values(attemptsByQuiz)
-    .map((attempts) => {
-      const scored = attempts.filter((a) => a.total_score != null && a.total_possible)
-      if (!scored.length) return null
-      return Math.max(...scored.map((a) => (a.total_score / a.total_possible) * 100))
-    })
-    .filter((v) => v != null)
-  const quizAverage = quizBests.length
-    ? Math.round(quizBests.reduce((s, v) => s + v, 0) / quizBests.length)
-    : null
-
-  // Flat and chronological, unlike quizBests: the forecast needs to see which
-  // way scores are moving, and a per-quiz maximum hides a decline behind one
-  // good early attempt.
+  // Every attempt this student has in this class (attemptsByQuiz is already
+  // filtered to this class). The forecast orders quizzes by due date itself.
   const allAttempts = Object.values(attemptsByQuiz).flat()
+
+  // Best scored attempt per distinct quiz, averaged UNROUNDED -- the teacher
+  // panel's own helper, so both screens send the model the same figure (owner
+  // decision 2026-11-23). Display text rounds on its own.
+  const quizAverage = quizAverageFromAttempts(allAttempts) ?? null
 
   // Which quizzes this student actually sat. An attempt document only exists
   // once submitted, so the quizzes NOT in here are the ones they never opened —
@@ -1912,10 +1906,13 @@ export default function StudentClassDetail() {
           entry={entry}
           attendance={attendance}
           studentId={profile.id}
-          quizAverage={quizAverage}
-          attempts={allAttempts}
-          quizzes={quizzes}
-          attemptedQuizIds={attemptedQuizIds}
+          // A failed read is unknown evidence, not an empty list: the forecast
+          // withholds what depends on it instead of scoring "no quizzes" or
+          // "every closed quiz missed". The tabs above still show what loaded.
+          quizAverage={queryErrors.attempts ? null : quizAverage}
+          attempts={queryErrors.attempts ? undefined : allAttempts}
+          quizzes={queryErrors.quizzes ? undefined : quizzes}
+          attemptedQuizIds={queryErrors.attempts ? undefined : attemptedQuizIds}
         />
       )}
       {tab === 'attendance' && (

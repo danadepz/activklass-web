@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { predictRisk, riskReasons } from '@/lib/ai'
 import { db } from '@/lib/firebase'
 import { fetchMyExcusals } from '@/lib/quizExcusals'
+import { sessionStatus } from '@/lib/attendanceSessions'
 import {
   attendanceRateFromLog,
   attendanceTrendFromLog,
-  missedQuizCounts,
+  missedQuizCountsIfKnown,
   missingRate,
   missingWorkCountsFromEntry,
   quizDueDates,
@@ -45,21 +46,30 @@ export default function ClassStandingForecast({
   attemptedQuizIds,
 }) {
   // The student's own official excusals (A4): the same quizzes leave their
-  // missing-work count as leave it on the teacher's screen. A failed read
-  // counts none rather than hiding the forecast.
-  const { data: excused } = useQuery({
+  // missing-work count as leave it on the teacher's screen. Only a SUCCESSFUL
+  // read is evidence: while it is pending or after it fails the excusals are
+  // unknown (undefined), never "none" -- counting none would turn an excused
+  // quiz into missed work. missedQuizCountsIfKnown then withholds the rate.
+  const excusalQuery = useQuery({
     queryKey: ['my-quiz-excusals', classId, studentId],
     enabled: !!classId && !!studentId,
     retry: false,
-    queryFn: () => fetchMyExcusals(db, classId, studentId).catch(() => new Set()),
+    queryFn: () => fetchMyExcusals(db, classId, studentId),
   })
-  const indicators = useMemo(
-    () => ({
-      // From the log when present, through the teacher panel's own weights
-      // (late 0.5, excused left out). The summary's `rate` is present/all
-      // marks -- a display figure that would score the same student
-      // differently here than on their teacher's screen.
-      attendanceRate: (attendanceLog?.length ? attendanceRateFromLog(attendanceLog) : attendanceRate) ?? undefined,
+  const excused = excusalQuery.isSuccess ? excusalQuery.data : undefined
+  const indicators = useMemo(() => {
+    // undefined while the quiz half is unknown (pending or failed reads): the
+    // missing-work rate is then withheld, never guessed.
+    const quizWork = missedQuizCountsIfKnown(quizzes, attemptedQuizIds, studentId, excused)
+    return {
+      // From the log, through the teacher panel's own weights (present 1,
+      // late 0.5, absent 0; excused and unrecorded left out), over HELD
+      // sessions only -- a cancelled or moved-away date never counts, as on
+      // the teacher's screen. The summary's `rate` (present/all marks) is a
+      // display figure and is used only when no log was passed at all.
+      attendanceRate: (attendanceLog
+        ? attendanceRateFromLog(attendanceLog.filter((r) => sessionStatus(r) === 'held'))
+        : attendanceRate) ?? undefined,
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
       attendanceTrend: attendanceTrendFromLog(attendanceLog),
@@ -69,11 +79,9 @@ export default function ClassStandingForecast({
       // without an attempt. The second half is the one a student is least
       // likely to have noticed themselves -- a quiz never opened leaves nothing
       // on screen to remind them it existed.
-      missingWorkRate: missingRate(
-        missingWorkCountsFromEntry(assessments),
-        missedQuizCounts(quizzes, attemptedQuizIds, studentId, undefined, excused),
-      ),
-    }),
+      missingWorkRate: quizWork ? missingRate(missingWorkCountsFromEntry(assessments), quizWork) : undefined,
+    }
+  },
     [
       attendanceRate, grade, quizAverage, attendanceLog, attempts, assessments,
       quizzes, attemptedQuizIds, studentId, excused,
@@ -82,7 +90,9 @@ export default function ClassStandingForecast({
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['standing', studentId, indicators],
-    enabled: !!studentId,
+    // Not before the excusal read settles, so a pending read neither sends a
+    // premature request nor flashes "insufficient data" before the real answer.
+    enabled: !!studentId && !excusalQuery.isLoading,
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: () => predictRisk(indicators),
@@ -92,7 +102,7 @@ export default function ClassStandingForecast({
     background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px',
   }
 
-  if (isLoading) {
+  if (isLoading || excusalQuery.isLoading) {
     return (
       <div style={shell}>
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Projected Standing</h3>
