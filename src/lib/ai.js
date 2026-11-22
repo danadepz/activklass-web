@@ -761,8 +761,11 @@ const RISK_FEATURE_BOUNDS = {
  * 45% scores *safer* than sending nothing at all, so normalise here rather
  * than trusting every call site to remember.
  *
- * Anything above 1 is unambiguously a percentage. Exactly 1 is read as 100%,
- * not 1%, which is the only reading that occurs in practice.
+ * Unit contract (2026-11-23): the input is ALWAYS a percentage, 0-100 --
+ * every caller (useClassRisk via attendanceRateFromMarks, the student forecast
+ * via attendanceRateFromLog or the entry's display rate) hands one over -- so
+ * it is always divided by 100. The old "<= 1 is already a fraction" guess read
+ * 1% as 100% and 0.5% as 50%. /api/predict takes the 0-1 fraction as is.
  */
 function toAttendanceRate(value) {
   // Guarded before Number(), which turns both null and '' into 0 -- a silent
@@ -770,7 +773,7 @@ function toAttendanceRate(value) {
   if (value == null || value === '') return undefined
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0 || n > 100) throw new TypeError('attendanceRate must be between 0 and 100')
-  return n > 1 ? n / 100 : n
+  return n / 100
 }
 
 /**
