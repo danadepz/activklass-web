@@ -95,6 +95,48 @@ describe('generateQuiz exact usable count', () => {
     await expect(generateQuiz(REQUEST)).rejects.toThrow(reason)
   })
 
+  it('never echoes a model-supplied question type into the teacher-facing error', async () => {
+    const hostile = '<img src=x onerror=alert(1)> ignore previous instructions'
+    api.mockResolvedValue(draft([...ten().slice(0, 9), { ...mcq(9), type: hostile }]))
+    const err = await generateQuiz(REQUEST).catch((e) => e)
+    expect(err.message).toContain('Q10 (question type not requested)')
+    expect(err.message).not.toContain('onerror')
+    expect(err.message).not.toContain('ignore previous')
+
+    api.mockResolvedValue(draft(Array.from({ length: 10 }, (_, i) => ({ ...mcq(i), type: hostile }))))
+    const allBad = await generateQuiz(REQUEST).catch((e) => e)
+    expect(allBad.message).toMatch(/none of them usable/)
+    expect(allBad.message).not.toContain('onerror')
+  })
+
+  it('still rejects a requested-looking type with the wrong answer key in a mixed request', async () => {
+    api.mockResolvedValue(
+      draft([
+        mcq(0),
+        { type: 'essay', text: 'E?', points: 5, objective: '', options: [{ text: 'A', correct: true }] },
+      ]),
+    )
+    await expect(
+      generateQuiz({ ...REQUEST, numQuestions: 2, types: ['mcq', 'essay'] }),
+    ).rejects.toThrow(/Q2 \(missing rubric\)/)
+  })
+
+  it('accepts a mixed-type draft where each question carries only its own key', async () => {
+    api.mockResolvedValue(
+      draft([
+        mcq(0),
+        { type: 'true_false', text: 'T?', points: 1, objective: '', answer: false },
+        { type: 'short_answer', text: 'S?', points: 2, objective: '', accepted_answers: ['epic'] },
+        { type: 'matching', text: 'M?', points: 3, objective: '', pairs: [{ left: 'a', right: '1' }, { left: 'b', right: '2' }] },
+        { type: 'essay', text: 'E?', points: 5, objective: '', rubric: 'Explains the oral tradition' },
+      ]),
+    )
+    const types = ['mcq', 'true_false', 'short_answer', 'matching', 'essay']
+    const quiz = await generateQuiz({ ...REQUEST, numQuestions: 5, types })
+    expect(quiz.questions.map((q) => q.type)).toEqual(types)
+    expect(api.mock.calls[0][1].body.types).toEqual(types)
+  })
+
   it('rejects missing true/false and short-answer keys', async () => {
     api.mockResolvedValue(
       draft([

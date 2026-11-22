@@ -154,7 +154,8 @@ function buildQuizNotes({ instructions, bloomsLevel, subject, subjectCode, targe
  */
 function questionProblem(q, allowedTypes) {
   if (!(q?.text ?? '').trim()) return 'empty question text'
-  if (!allowedTypes.includes(q.type)) return `unrequested type "${q.type}"`
+  // Fixed wording: q.type is model output and these reasons reach the teacher's banner.
+  if (!allowedTypes.includes(q.type)) return 'question type not requested'
 
   switch (q.type) {
     case 'mcq': {
@@ -186,7 +187,7 @@ function questionProblem(q, allowedTypes) {
     case 'essay':
       return (q.rubric ?? '').trim() ? null : 'missing rubric'
     default:
-      return `unknown type "${q.type}"`
+      return 'question type not requested'
   }
 }
 
