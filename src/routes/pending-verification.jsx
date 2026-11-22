@@ -7,8 +7,9 @@ import { linkError, verificationIdError } from '@/lib/validation'
 import AuthLayout, { SubmitButton, AuthError, AuthNotice } from '@/components/AuthLayout'
 import { authInputStyle, authLabelStyle } from '@/components/authStyles'
 import SignOutButton from '@/components/SignOutButton'
+import { LogOut } from '@/components/icons'
 import { SUPPORT_EMAIL } from '@/routes/admin/SubscriptionTab'
-import { ink, muted, navy, line } from '@/theme'
+import { ink, muted, navy, navyDeep, cream, line, sansFamily } from '@/theme'
 
 export const ID_TYPES = [
   { value: 'school_id', label: 'School / Employee ID' },
@@ -129,8 +130,20 @@ export default function PendingVerification() {
         )}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 20 }}>
-        <SignOutButton className="transition hover:opacity-70" style={{ fontSize: 14, fontWeight: 700, color: navy, background: 'none', border: 'none', cursor: 'pointer' }} />
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20 }}>
+        <SignOutButton
+          className="group transition duration-150 hover:-translate-y-px hover:brightness-110 active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]/40 focus-visible:ring-offset-4"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            minWidth: 146, minHeight: 44, padding: '11px 24px', borderRadius: 12,
+            background: navy, border: 'none',
+            boxShadow: `0 3px 0 ${navyDeep}, 0 8px 18px -8px rgba(14,42,92,0.35)`,
+            fontFamily: sansFamily, fontSize: 13.5, fontWeight: 700, color: cream, cursor: 'pointer',
+          }}
+        >
+          <LogOut className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-px" />
+          Sign Out
+        </SignOutButton>
       </div>
     </AuthLayout>
   )
