@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '@/context/useAuth'
-import { ink, muted, sansFamily, serifFamily, navy } from '@/theme'
+import { ink, muted, sansFamily, serifFamily } from '@/theme'
 import Button from '@/components/ui/Button'
 
 /**
@@ -18,7 +18,7 @@ import Button from '@/components/ui/Button'
  *
  * Owned by the UI/UX lane (see OWNERSHIP.md).
  */
-export default function SignOutButton({ children = 'Sign Out', className, style }) {
+export default function SignOutButton({ children = 'Sign Out', className, style, role }) {
   const { logout } = useAuth()
   const [asking, setAsking] = useState(false)
 
@@ -32,7 +32,7 @@ export default function SignOutButton({ children = 'Sign Out', className, style 
 
   return (
     <>
-      <button type="button" onClick={() => setAsking(true)} className={className} style={style}>
+      <button type="button" role={role} onClick={() => setAsking(true)} className={className} style={style}>
         {children}
       </button>
 

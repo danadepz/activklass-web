@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { navy, gold, cream, faint, sansFamily as sans, serif } from '@/theme'
 import AccountMenu from './AccountMenu'
@@ -26,6 +26,7 @@ const TABS = [
 ]
 
 export default function AdminPage() {
+  const navigate = useNavigate()
   const { profile } = useAuth()
   // A PayMongo seat-increase checkout returns to /admin?tab=subscription --
   // read once on mount so that lands on the Subscription tab instead of the
@@ -38,6 +39,10 @@ export default function AdminPage() {
     return TABS.some((t) => t.key === requested) ? requested : 'home'
   })
   const active = TABS.find((t) => t.key === tab) ?? TABS[0]
+  function openChangePassword() {
+    setTab('home')
+    navigate('/admin#change-password')
+  }
   // Keep the scrollbar track present on every tab. Tabs differ in height, so
   // without this the scrollbar appears and disappears as you switch and the
   // whole bar (title, account menu, tabs) jumps sideways by its width.
@@ -63,10 +68,9 @@ export default function AdminPage() {
           <div style={{ ...serif, fontSize: 32, lineHeight: 1.1 }}>
             ActivKlass <span style={{ color: gold }}>School Admin</span>
           </div>
-          {/* Who is signed in, and Sign Out inside its menu. Change Password
-              opens the Subscription tab, where that form lives. */}
+          {/* Change Password opens the form on Home. */}
           <div style={{ marginRight: -16 }}>
-            <AccountMenu profile={profile} />
+            <AccountMenu profile={profile} onChangePassword={openChangePassword} />
           </div>
         </div>
       </header>

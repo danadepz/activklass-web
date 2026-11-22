@@ -39,6 +39,11 @@ export const MAX_BYTES = 120 * 1024
 
 export const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic'
 
+export function initialsOf(profile) {
+  const initials = `${profile?.first_name?.[0] ?? ''}${profile?.last_name?.[0] ?? ''}`.toUpperCase()
+  return initials || 'A'
+}
+
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

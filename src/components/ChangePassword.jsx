@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { api } from '@/lib/api'
@@ -40,11 +41,23 @@ import { navyDeep, ink, muted, green, red, line, serif, sansFamily as sans, navy
  * Firebase Auth holds it hashed, and a profile document is readable by staff.
  */
 export default function ChangePassword({ compact = false }) {
+  const { hash, key } = useLocation()
+  const formRef = useRef(null)
   const { markPasswordChanged } = useAuth()
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (hash !== '#change-password') return
+    const frame = requestAnimationFrame(() => {
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      formRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' })
+      formRef.current?.querySelector('input')?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [hash, key])
 
   const card = {
     background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16,
@@ -121,7 +134,7 @@ export default function ChangePassword({ compact = false }) {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   return (
-    <form onSubmit={submit} style={card}>
+    <form ref={formRef} id="change-password" onSubmit={submit} style={{ ...card, scrollMarginTop: 128 }}>
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ ...serif, fontSize: compact ? 18 : 20, color: ink, margin: 0 }}>
           Change Password

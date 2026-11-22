@@ -107,9 +107,9 @@ describe('T-176 — Account page (account.jsx, 256)', () => {
     expect(accountSrc).not.toContain('>Your profile</h2>')
   })
 
-  it('Sign Out was already Title Case on the heading (T-157, ticket 231) -- checked, not re-fixed', () => {
-    expect(accountSrc).toContain('>Sign Out</h2>')
-    expect(accountSrc).not.toContain('>Sign out</h2>')
+  it('omits the Sign Out card from the account page', () => {
+    expect(accountSrc).not.toContain('>Sign Out</h2>')
+    expect(accountSrc).not.toContain('<SignOutCard')
   })
 })
 

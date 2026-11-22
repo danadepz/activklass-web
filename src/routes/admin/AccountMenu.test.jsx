@@ -10,6 +10,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
 const seed = vi.hoisted(() => ({ open: false }))
@@ -69,10 +70,28 @@ describe('open: the menu holds the account actions', () => {
   it('omits Change Password when no handler is given', () => {
     expect(render({ open: true, onChangePassword: undefined })).not.toContain('Change Password')
   })
+
+  it.each(['/teacher/account', '/student/profile'])('offers profile and password links before Sign Out for %s', (profileTo) => {
+    seed.open = true
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <AccountMenu profile={PROFILE} profileTo={profileTo}>
+          <span>school-123456</span>
+        </AccountMenu>
+      </MemoryRouter>,
+    )
+    expect(html).toContain(`href="${profileTo}"`)
+    expect(html).toContain('school-123456')
+    expect(html.match(/role="menuitem"/g)).toHaveLength(3)
+    expect(html).toContain('>Profile</a>')
+    expect(html).toContain(`href="${profileTo}#change-password"`)
+    expect(html.indexOf('>Profile</a>')).toBeLessThan(html.indexOf('Change Password'))
+    expect(html.indexOf('Change Password')).toBeLessThan(html.indexOf('Sign Out'))
+  })
 })
 
 describe('wiring', () => {
-  const menuSrc = readFileSync(fileURLToPath(new URL('./AccountMenu.jsx', import.meta.url)), 'utf8')
+  const menuSrc = readFileSync(fileURLToPath(new URL('../../components/AccountMenu.jsx', import.meta.url)), 'utf8')
   const pageSrc = readFileSync(fileURLToPath(new URL('./index.jsx', import.meta.url)), 'utf8')
 
   it('signs out through SignOutButton, so the confirmation dialog is kept', () => {
@@ -89,9 +108,10 @@ describe('wiring', () => {
     expect(pageSrc).not.toContain('Signed in as')
   })
 
-  it('the account menu no longer offers Change Password; it lives on the Home tab', () => {
-    expect(pageSrc).toContain('<AccountMenu profile={profile} />')
-    expect(pageSrc).not.toContain('onChangePassword')
+  it('opens the Home tab at Change Password from the account menu', () => {
+    expect(pageSrc).toContain('<AccountMenu profile={profile} onChangePassword={openChangePassword} />')
+    expect(pageSrc).toContain("setTab('home')")
+    expect(pageSrc).toContain("navigate('/admin#change-password')")
     expect(pageSrc).toContain("{tab === 'home' && <HomeTab />}")
     expect(pageSrc).not.toContain("key: 'password'")
   })

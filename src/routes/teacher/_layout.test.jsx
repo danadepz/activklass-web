@@ -29,7 +29,7 @@ function navItemLabels() {
 
 /** The header's own profile card, not the mobile dropdown's separate Account row. */
 function headerCardSlice() {
-  const start = src.indexOf('to="/teacher/account"')
+  const start = src.indexOf('profileTo="/teacher/account"')
   const end = src.indexOf('Hamburger — mobile only', start)
   return src.slice(start, end)
 }
@@ -64,8 +64,9 @@ describe('T-110 — the header profile card shows initials and account id, not t
     expect(card).toMatch(/profile\.login_id \?\? profile\.email/)
   })
 
-  it('still links to /teacher/account', () => {
-    expect(headerCardSlice()).toMatch(/^to="\/teacher\/account"/)
+  it('offers /teacher/account through the shared account menu', () => {
+    expect(src).toContain('<AccountMenu')
+    expect(headerCardSlice()).toMatch(/^profileTo="\/teacher\/account"/)
   })
 
   it('the avatar ring reads its colour only from lib/subscription.js\'s kind map', () => {

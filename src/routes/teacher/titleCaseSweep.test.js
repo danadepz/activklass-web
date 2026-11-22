@@ -102,8 +102,8 @@ describe('T-157 — Attendance & Record toolbar (229)', () => {
 })
 
 describe('T-157 — Profile / Account (account.jsx)', () => {
-  it('title-cases Sign Out card heading (231)', () => {
-    expect(accountSrc).toContain('>Sign Out</h2>')
-    expect(accountSrc).not.toContain('>Sign out</h2>')
+  it('keeps sign-out actions in the header menu', () => {
+    expect(accountSrc).not.toContain('SignOutCard')
+    expect(accountSrc).not.toContain('SignOutButton')
   })
 })
