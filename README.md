@@ -1,132 +1,49 @@
-<div align="center">
-  <img src="public/logo.png" alt="ActivKlass Logo" width="120" />
-  <h2>ActivKlass Web</h2>
-  <p>AI-Powered Class Record & Scaffolded Learning Management Portal</p>
+# ActivKlass Web
 
-  <p>
-    <a href="https://activklass.vercel.app/"><img src="https://img.shields.io/badge/Live_Demo-activklass.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" /></a>
-    <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19" /></a>
-    <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-6-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" /></a>
-    <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
-    <a href="https://firebase.google.com/"><img src="https://img.shields.io/badge/Firebase-Auth_%26_Firestore-FFCA28?style=for-the-badge&logo=firebase&logoColor=black" alt="Firebase" /></a>
-  </p>
-</div>
+The React single page application for ActivKlass teachers, students, school administrators, and super administrators. The mobile application serves students and guardians. This repository contains the web client; the Flask API and Firebase rules are maintained in [activklass-backend](https://github.com/danadepz/activklass-backend), and the companion app is [activklass-mobile](https://github.com/danadepz/activklass-mobile).
 
----
+## Stack and data
 
-## 📖 Overview
+- React 19, Vite 8, React Router 7, and Tailwind CSS 4.
+- Firebase Authentication, Cloud Firestore, and Cloud Storage through the Firebase Web SDK.
+- Firestore is the application system of record. The client accesses it directly under the rules in the backend repository.
+- Authenticated Flask API calls use Firebase ID tokens. The API URL is configured by `VITE_API_URL`; development uses Vite's `/api` proxy.
+- See [ARCHITECTURE.md](ARCHITECTURE.md), [INTEGRATION.md](INTEGRATION.md), and [the shared API guide](https://github.com/danadepz/activklass-backend/blob/main/docs/ai-endpoints-guide.md).
 
-**ActivKlass Web** is the full-featured web portal for the ActivKlass Learning Platform, designed specifically for Philippine K-12 and tertiary educators, students, and institutional administrators.
+## Local setup
 
-- 🌐 **Live Web Application:** [https://activklass.vercel.app/](https://activklass.vercel.app/)
-- ⚙️ **Cloud Run API:** [https://activklass-backend-59267706068.asia-southeast1.run.app](https://activklass-backend-59267706068.asia-southeast1.run.app/api/health)
+Requirements: Node.js (current LTS), npm, and Java only when running Firebase emulator rule tests. Clone this repository and its sibling repositories under one directory if you need cross-repository tests.
 
-Built with **React 19**, **Vite**, **Tailwind CSS v4**, **TanStack Query**, and **React Router v7**. Connects directly to **Firebase** (Authentication, Cloud Firestore, Cloud Storage) for real-time operations, and communicates with the **Flask AI microservice** on Cloud Run for generative AI, predictive remediation analytics, and payment checkout.
-
----
-
-## 🔗 Related Repositories
-
-| Repository | Description |
-|---|---|
-| [activklass-backend](https://github.com/danadepz/activklass-backend) | Flask API, Google Gemini AI services, Random Forest risk model, Firebase rules/indexes, shared architecture docs |
-| [activklass-web](https://github.com/danadepz/activklass-web) | **This repo** — React teacher, student, school admin, and superadmin web portal |
-| [activklass-mobile](https://github.com/danadepz/activklass-mobile) | Expo React Native app for students and guardians |
-
----
-
-## ✨ Features
-
-- **🏫 Multi-Role Portal:** Dedicated interfaces for Teachers, Students, School Administrators, and Superadmins.
-- **📊 DepEd & CHED Gradebooks:** Flexible calculation supporting DepEd K-12 transmutation, CHED percentage, and CHED point grades (1.00–5.00) with weight rebalancing and score auditing.
-- **📅 Daily Attendance Tracking:** At-a-glance attendance marking with bulk updates and audit trails.
-- **📚 Syllabus & Course Builder:** Module and topic manager with rich study materials, external links, and PDF attachments.
-- **📝 Quiz Bank & Assessment Engine:** Interactive quiz builder supporting Multiple Choice, True/False, Short Answer, Matching, and Essays with automated objective scoring.
-- **🤖 AI Integrations (Google Gemini & scikit-learn):**
-  - AI Syllabus Draft Generator aligned with Philippine curriculum standards.
-  - Bloom's Taxonomy-mapped AI Quiz Generator.
-  - Predictive Early-Warning Remediation Risk Classifier.
-  - Automated Essay Grading with rubrics.
-- **💳 Subscription & PayMongo Gateway:** Support for Solo Teacher and School Institution subscriptions with PayMongo checkout (test mode for demonstrations).
-
----
-
-## 🚀 Getting Started Locally
-
-### Prerequisites
-- Node.js 18+
-- npm 9+
-- Running backend instance (or pointing to Cloud Run)
-
-### Installation
-
-```bash
-# 1. Clone the repository
+```sh
 git clone https://github.com/danadepz/activklass-web.git
 cd activklass-web
-
-# 2. Install dependencies
-npm install
-
-# 3. Configure environment variables
+npm ci
 cp .env.example .env.local
-# Edit .env.local and fill in your Firebase project credentials
-
-# 4. Start the development server
 npm run dev
 ```
 
-The app will run locally at **http://localhost:5173**.
+On Windows PowerShell, replace `cp` with `Copy-Item .env.example .env.local`. Fill the Firebase values from the Firebase Console. Leave `VITE_API_URL` unset for local use with the Vite proxy. Start the backend separately for features that call Flask; see [backend setup](https://github.com/danadepz/activklass-backend/blob/main/README.md#local-setup). Vite serves the app at `http://localhost:5173` by default.
 
----
+Never commit `.env.local` or credentials. Browser Firebase configuration is public configuration; Firebase Security Rules and provider restrictions must enforce access.
 
-## ⚙️ Environment Variables
+## Commands
 
-Copy `.env.example` to `.env.local`:
-
-| Variable | Description |
-|---|---|
-| `VITE_FIREBASE_API_KEY` | Firebase Web API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Authentication domain (e.g. `activklass1.firebaseapp.com`) |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID (e.g. `activklass1`) |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Storage bucket (e.g. `activklass1.firebasestorage.app`) |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Cloud Messaging sender ID |
-| `VITE_FIREBASE_APP_ID` | Firebase Web App ID |
-| `VITE_FIREBASE_MEASUREMENT_ID` | Firebase Analytics measurement ID |
-| `VITE_API_URL` | Flask API URL (leave blank in local dev to use Vite's `/api` proxy; set to Cloud Run URL in production) |
-
----
-
-## 🧪 Testing & Scripts
-
-| Command | Action |
-|---|---|
-| `npm run dev` | Starts the local Vite development server with HMR |
-| `npm run build` | Compiles the production build to `dist/` |
-| `npm run preview` | Previews the production build locally |
-| `npm test` | Runs the Vitest test suite — current count tracked in [`CLAUDE.md`](CLAUDE.md#development-commands), not restated here, since a hardcoded number here had already drifted out of sync with it |
-| `npm run test:watch` | Runs Vitest in interactive watch mode |
-| `npm run test:rules` | Runs `firestore.rules` validation against the local Firebase emulator |
-| `npm run lint` | Runs ESLint |
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── routes/         # Page routes (teacher, student, admin, superadmin, auth)
-├── components/     # Reusable UI controls, cards, dialogs, and navigation
-├── context/        # Global state and authentication context (useAuth)
-├── hooks/          # React Query hooks for Firestore subscriptions and caching
-├── lib/            # Domain logic (grading calculations, validation, API client, Firebase init)
-├── features/       # Scoped feature packages
-└── theme.js        # Centralized theme tokens, colors, and typography
+```sh
+npm run dev
+npm run test
+npm run test:rules
+npm run test:rules:storage
+npm run lint
+npm run build
+npm run preview
 ```
 
----
+See [TESTING.md](TESTING.md) for emulator prerequisites and scope. Do not interpret test specification counts or file counts as executed passing tests.
 
-## ☁️ Deployment
+## Deployment
 
-- **Frontend:** Hosted on [Vercel](https://vercel.com) with automatic continuous deployment on push to `main`. SPA deep-links are managed via [`vercel.json`](vercel.json).
-- **Backend:** Containerized via Docker and deployed to **Google Cloud Run** in `asia-southeast1`.
+`vercel.json` defines `/api/*` forwarding to the configured Cloud Run URL and SPA fallback rewrites. This is configuration evidence, not a live-deployment status report. Verify the active Vercel project, domain, API target, Firebase project, and release state with the owner before announcing a deployment. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## Collaboration
+
+Use short feature branches from current `main`, make focused pull requests to `main`, and include verification evidence. Never force-push or stage unrelated work. Stage explicit paths, inspect the full index and working tree before committing, and do not commit secrets, generated credentials, local data, or APKs. Review [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before work.
