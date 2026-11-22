@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
@@ -10,7 +10,8 @@ import { scheduleMeetings } from '@/lib/schedule'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
-import { promptDialog } from '@/components/ui/dialogs'
+import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
+import { cancelBlocker, isIsoDate, rescheduleBlocker, sessionStatus } from '@/lib/attendanceSessions'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 
@@ -187,12 +188,15 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
           records[s.student_id] = { status: entry.status, remarks: entry.remarks || '' }
         }
       }
+      // mergeFields, not a plain set: `records` is still replaced whole (a
+      // cleared student drops out), but a make-up session's rescheduled_from
+      // and any cancel metadata survive the save.
       await setDoc(doc(db, 'classes', classId, 'attendance', day), {
         date: day,
         records,
         recorded_by: profile.id,
         updated_at: serverTimestamp(),
-      })
+      }, { mergeFields: ['date', 'records', 'recorded_by', 'updated_at'] })
       /* Rebuild the per-student projection guardians read. Best-effort: the
          class sheet above is the source of truth and has already committed, so
          a failure here must not make the teacher think their save was lost. It
@@ -341,6 +345,130 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   )
 }
 
+/**
+ * Whether this date's meeting happened. A teacher can cancel a meeting or move
+ * it to another date; neither is allowed while marks are recorded (clear them
+ * first), so no attendance is ever dropped by a status change. The rules hold
+ * the same line -- see the attendance block in firestore.rules.
+ */
+function SessionControls({ classId, day, sheet, refetch }) {
+  const { profile } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const status = sessionStatus(sheet.session)
+  const ref = doc(db, 'classes', classId, 'attendance', day)
+
+  async function run(fn) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+      refetch()
+    } catch (err) {
+      console.error('attendance session change failed:', err)
+      setError('That change could not be saved. Check the date and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function cancel() {
+    const blocked = cancelBlocker(sheet.session)
+    if (blocked) return setError(blocked)
+    const reason = await promptDialog({
+      title: 'Cancel This Meeting',
+      message: `${day} will not count toward anyone's attendance. You can restore it later.`,
+      label: 'Reason (optional)',
+      placeholder: 'e.g. Class suspended for a typhoon.',
+      confirmLabel: 'Cancel Meeting',
+    })
+    if (reason == null) return
+    // No `records` key: a merge of `records: {}` would REPLACE the map. The
+    // rules refuse a cancel over stored marks anyway; this never tries.
+    await run(() => setDoc(ref, {
+      date: day,
+      session_status: 'cancelled',
+      cancel_reason: reason.trim(),
+      status_changed_by: profile.id,
+      updated_at: serverTimestamp(),
+    }, { merge: true }))
+  }
+
+  async function restore() {
+    const ok = await confirmDialog({
+      title: 'Restore This Meeting',
+      message: `${day} will count as a class meeting again, with no attendance recorded yet.`,
+      confirmLabel: 'Restore',
+    })
+    if (!ok) return
+    await run(() => updateDoc(ref, { session_status: 'held', status_changed_by: profile.id, updated_at: serverTimestamp() }))
+  }
+
+  async function reschedule() {
+    const blockedNow = cancelBlocker(sheet.session)
+    if (blockedNow) return setError(blockedNow)
+    const to = await promptDialog({
+      title: 'Move This Meeting',
+      message: `The meeting on ${day} moves to the date you pick. ${day} stops counting; the new date counts once you record it.`,
+      label: 'New date',
+      type: 'date',
+      confirmLabel: 'Move Meeting',
+      validate: (v) => rescheduleBlocker({ fromDate: day, toDate: v, days: sheet.days, schedule: sheet.schedule }),
+    })
+    if (to == null || !isIsoDate(to)) return
+    await run(async () => {
+      // One batch: the rules check each side names the other, so a half-move
+      // (an orphaned make-up date, or a moved date pointing nowhere) cannot land.
+      const batch = writeBatch(db)
+      batch.set(ref, {
+        date: day,
+        session_status: 'rescheduled',
+        rescheduled_to: to,
+        status_changed_by: profile.id,
+        updated_at: serverTimestamp(),
+      }, { merge: true })
+      batch.set(doc(db, 'classes', classId, 'attendance', to), {
+        date: to,
+        records: {},
+        session_status: 'held',
+        rescheduled_from: day,
+        status_changed_by: profile.id,
+        updated_at: serverTimestamp(),
+      })
+      await batch.commit()
+    })
+  }
+
+  const chip = { ...mono, fontSize: 12, padding: '6px 10px', borderRadius: 999, border: `1px solid ${line}` }
+  const btn = { padding: '7px 14px', fontSize: 13, fontWeight: 600, fontFamily: sans, borderRadius: 999, cursor: 'pointer', color: navy, background: 'transparent', border: '1.5px solid rgba(14,42,92,0.18)' }
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2.5" aria-label="Meeting status">
+      {status === 'cancelled' && (
+        <span style={{ ...chip, color: red }}>
+          Cancelled{sheet.session?.cancel_reason ? ` — ${sheet.session.cancel_reason}` : ''}
+        </span>
+      )}
+      {status === 'rescheduled' && (
+        <span style={{ ...chip, color: goldDeep }}>Moved to {sheet.session?.rescheduled_to}</span>
+      )}
+      {status === 'held' && sheet.session?.rescheduled_from && (
+        <span style={{ ...chip, color: blueText }}>Make-up for {sheet.session.rescheduled_from}</span>
+      )}
+      {status === 'held' && !sheet.session?.rescheduled_from && (
+        <>
+          <button type="button" disabled={busy} onClick={cancel} style={btn}>Cancel meeting</button>
+          <button type="button" disabled={busy} onClick={reschedule} style={btn}>Move meeting…</button>
+        </>
+      )}
+      {status === 'cancelled' && (
+        <button type="button" disabled={busy} onClick={restore} style={btn}>Restore meeting</button>
+      )}
+      {error && <span role="alert" style={{ fontSize: 13, color: red }}>{error}</span>}
+    </div>
+  )
+}
+
 /* The whole term on one sheet: students down the side, the days the class met
    across the top -- the spreadsheet a teacher keeps beside the daily register,
    and what they show a student at grading time. Read-only on purpose; marking
@@ -348,6 +476,12 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
    reads every recorded day to build the P/L/A/E totals, so nothing new is
    fetched to render this. */
 function TermSheet({ sheet, columns, onPickDay }) {
+  // Cancelled / moved-away dates are labelled, so they never read as a
+  // forgotten roll call.
+  const offDays = Object.fromEntries((sheet.days ?? [])
+    .filter((d) => sessionStatus(d) !== 'held')
+    .map((d) => [d.date, sessionStatus(d) === 'cancelled' ? 'cancelled' : 'moved']))
+  const heldCount = columns.filter((date) => !offDays[date]).length
   const cellOf = (sid, date) => sheet.byDate[date]?.[sid] ?? null
 
   function exportCsv() {
@@ -377,7 +511,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: ink }}>Whole Term</div>
           <div style={{ fontSize: 12, color: faint, marginTop: 2 }}>
-            {columns.length} class {columns.length === 1 ? 'day' : 'days'} · pick a date at the top of a column to mark it
+            {heldCount} class {heldCount === 1 ? 'day' : 'days'}{columns.length > heldCount ? ` (+${columns.length - heldCount} cancelled or moved)` : ''} · pick a date at the top of a column to mark it
           </div>
         </div>
         <button
@@ -408,11 +542,12 @@ function TermSheet({ sheet, columns, onPickDay }) {
                   <th key={date} style={{ ...thHead, padding: '10px 6px', textAlign: 'center' }}>
                     <button
                       onClick={() => onPickDay(date)}
-                      title={`Open ${date} on the By Day tab`}
+                      title={`Open ${date} on the By Day tab${offDays[date] ? ` (${offDays[date]})` : ''}`}
                       className="transition hover:brightness-110"
                       style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       {shortDate(date)}
+                      {offDays[date] && <span style={{ display: 'block', fontSize: 9.5, color: muted, fontWeight: 600 }}>{offDays[date]}</span>}
                     </button>
                   </th>
                 ))}
@@ -434,7 +569,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
                       const status = cellOf(sid, date)
                       const m = status ? STATUS_META[status] : null
                       return (
-                        <td key={date} style={{ padding: '11px 6px', textAlign: 'center' }} title={m ? `${date} · ${m.label}` : `${date} · not recorded`}>
+                        <td key={date} style={{ padding: '11px 6px', textAlign: 'center' }} title={m ? `${date} · ${m.label}` : `${date} · ${offDays[date] ?? 'not recorded'}`}>
                           {m ? (
                             <span style={{ ...mono, fontSize: 12, fontWeight: 700, color: m.fg }}>{m.short}</span>
                           ) : (
@@ -694,6 +829,7 @@ export default function AttendancePage() {
       const allSnap = await getDocs(collection(db, 'classes', classId, 'attendance'))
       const summary = {}
       const byDate = {}
+      const days = allSnap.docs.map((d) => ({ id: d.id, ...d.data(), date: d.data().date ?? d.id }))
       allSnap.forEach((d) => {
         const recs = d.data().records ?? {}
         for (const [sid, rec] of Object.entries(recs)) {
@@ -706,6 +842,8 @@ export default function AttendancePage() {
       return {
         students,
         records: dayData.records ?? {},
+        session: daySnap.exists() ? dayData : null,
+        days,
         summary,
         byDate,
         schedule,
@@ -776,13 +914,22 @@ export default function AttendancePage() {
           }}
         />
       ) : (
-        <AttendanceSheet
-          key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
-          classId={classId}
-          day={day}
-          sheet={sheet}
-          refetch={refetch}
-        />
+        <>
+          <SessionControls classId={classId} day={day} sheet={sheet} refetch={refetch} />
+          {sessionStatus(sheet.session) === 'held' ? (
+            <AttendanceSheet
+              key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
+              classId={classId}
+              day={day}
+              sheet={sheet}
+              refetch={refetch}
+            />
+          ) : (
+            <p style={{ fontSize: 13, color: muted, margin: 0 }}>
+              No attendance is taken for this date. It does not count toward any student's attendance.
+            </p>
+          )}
+        </>
       )}
     </div>
   )

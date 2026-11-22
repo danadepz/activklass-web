@@ -2942,3 +2942,105 @@ describe('a purged school adds no records (T-256)', () => {
     await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { school_id: 'purged-school' }))
   })
 })
+
+describe('attendance sessions · cancel, move, and never drop marks (2026-11-22)', () => {
+  const FOREIGN_TEACHER = 'teacher-foreign'
+  const day = (uid, date) => doc(ctx(uid), 'classes', 'class-1', 'attendance', date)
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', school_id: 'school-2' })
+      // A day with marks, and a legacy day written before `date` was stored.
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-02'), {
+        date: '2026-11-02', records: { [STUDENT]: { status: 'present', remarks: '' } },
+      })
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-03'), {
+        records: { [STUDENT]: { status: 'late', remarks: '' } },
+      })
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-04'), { date: '2026-11-04', records: {} })
+    })
+  })
+
+  it('still lets the owner record a day, and approve a contest into one mark', async () => {
+    await assertSucceeds(setDoc(day(TEACHER, '2026-11-05'), { date: '2026-11-05', records: { [STUDENT]: { status: 'absent', remarks: '' } } }))
+    await assertSucceeds(updateDoc(day(TEACHER, '2026-11-02'), { [`records.${STUDENT}`]: { status: 'excused', remarks: 'note' } }))
+    await assertSucceeds(updateDoc(day(TEACHER, '2026-11-03'), { [`records.${OTHER_STUDENT}`]: { status: 'present', remarks: '' } }))
+  })
+
+  it('refuses a foreign teacher, a student and another school\'s admin; allows a same-school admin', async () => {
+    const write = (uid) => setDoc(day(uid, '2026-11-06'), { date: '2026-11-06', records: {} })
+    await assertFails(write(FOREIGN_TEACHER))
+    await assertFails(write(STUDENT))
+    await assertFails(write(OTHER_ADMIN))
+    await assertSucceeds(write(ADMIN))
+  })
+
+  it('refuses a malformed day: wrong date field, non-date id, unknown status', async () => {
+    await assertFails(setDoc(day(TEACHER, '2026-11-07'), { date: '2026-11-08', records: {} }))
+    await assertFails(setDoc(day(TEACHER, 'monday'), { records: {} }))
+    await assertFails(setDoc(day(TEACHER, '2026-11-07'), { date: '2026-11-07', records: {}, session_status: 'skipped' }))
+  })
+
+  it('cancels a meeting with no marks, and refuses to cancel one that has marks', async () => {
+    await assertSucceeds(setDoc(day(TEACHER, '2026-11-04'), { session_status: 'cancelled', records: {} }, { merge: true }))
+    await assertSucceeds(setDoc(day(TEACHER, '2026-11-09'), { date: '2026-11-09', session_status: 'cancelled', records: {} }))
+    await assertFails(setDoc(day(TEACHER, '2026-11-02'), { session_status: 'cancelled' }, { merge: true }))
+    // A merge of an empty map replaces it -- the stored marks must still block.
+    await assertFails(setDoc(day(TEACHER, '2026-11-02'), { session_status: 'cancelled', records: {} }, { merge: true }))
+  })
+
+  it('refuses marks on a cancelled meeting until it is restored', async () => {
+    await assertSucceeds(setDoc(day(TEACHER, '2026-11-04'), { session_status: 'cancelled', records: {} }, { merge: true }))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-04'), { [`records.${STUDENT}`]: { status: 'present', remarks: '' } }))
+    await assertSucceeds(updateDoc(day(TEACHER, '2026-11-04'), { session_status: 'held' }))
+    await assertSucceeds(updateDoc(day(TEACHER, '2026-11-04'), { [`records.${STUDENT}`]: { status: 'present', remarks: '' } }))
+  })
+
+  function move(uid, from, to) {
+    const db = ctx(uid)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'classes', 'class-1', 'attendance', from), { date: from, records: {}, session_status: 'rescheduled', rescheduled_to: to }, { merge: true })
+    batch.set(doc(db, 'classes', 'class-1', 'attendance', to), { date: to, records: {}, session_status: 'held', rescheduled_from: from })
+    return batch.commit()
+  }
+
+  it('moves a meeting when both sides are written together and name each other', async () => {
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
+    // Recording the make-up day later keeps its link.
+    await assertSucceeds(setDoc(day(TEACHER, '2026-11-14'), { date: '2026-11-14', records: { [STUDENT]: { status: 'present', remarks: '' } } }, { mergeFields: ['date', 'records'] }))
+  })
+
+  it('refuses a half-move from either side', async () => {
+    await assertFails(setDoc(day(TEACHER, '2026-11-04'), { session_status: 'rescheduled', rescheduled_to: '2026-11-14', records: {} }, { merge: true }))
+    await assertFails(setDoc(day(TEACHER, '2026-11-14'), { date: '2026-11-14', records: {}, rescheduled_from: '2026-11-04' }))
+  })
+
+  it('refuses to move a meeting that has marks, or onto a date that already has a session', async () => {
+    await assertFails(move(TEACHER, '2026-11-02', '2026-11-14')) // marks on the origin
+  })
+
+  it('refuses to move onto a date that already has a session', async () => {
+    await assertFails(move(TEACHER, '2026-11-04', '2026-11-03'))
+  })
+
+  it('keeps a move final for the teacher and the make-up link immutable', async () => {
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-04'), { session_status: 'held' }))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-04'), { rescheduled_to: '2026-11-15' }))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-14'), { rescheduled_from: null }))
+  })
+
+  it('lets a foreign teacher move nothing', async () => {
+    await assertFails(move(FOREIGN_TEACHER, '2026-11-04', '2026-11-14'))
+  })
+
+  it('lets only a same-school admin delete a day', async () => {
+    await assertFails(deleteDoc(day(TEACHER, '2026-11-02')))
+    await assertFails(deleteDoc(day(OTHER_ADMIN, '2026-11-02')))
+    await assertSucceeds(deleteDoc(day(ADMIN, '2026-11-02')))
+  })
+})
