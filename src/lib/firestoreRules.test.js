@@ -3049,7 +3049,7 @@ describe('attendance sessions · cancel, move, and never drop marks (2026-11-22)
 
   it('prevents even a same-school admin from deleting either end of a move', async () => {
     await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
-    await assertFails(deleteDoc(day(ADMIN, '2026-11-06')))
+    await assertFails(deleteDoc(day(ADMIN, '2026-11-04')))
     await assertFails(deleteDoc(day(ADMIN, '2026-11-14')))
   })
 
