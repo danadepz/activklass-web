@@ -145,6 +145,21 @@ export function updateSubscriber(ownerId, { plan, status, limits } = {}) {
 }
 
 /**
+ * Change a school's name, login prefix or its admin's sign-in email.
+ *
+ * Send only what changes. A new prefix applies to logins issued after the
+ * change; existing logins keep theirs. Needs the backend's
+ * PATCH /api/superadmin/schools/{id}/details.
+ */
+export function updateSchoolDetails(schoolId, { name, loginPrefix, adminEmail } = {}) {
+  const body = {}
+  if (name !== undefined) body.name = name
+  if (loginPrefix !== undefined) body.login_prefix = loginPrefix
+  if (adminEmail !== undefined) body.admin_email = adminEmail
+  return api(`/api/superadmin/schools/${schoolId}/details`, { method: 'PATCH', body })
+}
+
+/**
  * Permanently purge a school request and its unverified/test data.
  * Guarded server-side: refuses if the school has paid or shares records outside
  * itself; otherwise everything the school owns goes with it (T-256 Option B).
