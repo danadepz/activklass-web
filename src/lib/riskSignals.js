@@ -13,6 +13,7 @@
  * `now` as an argument instead of reading the clock, so "was this missed?" is
  * testable at all.
  */
+import { formatAcademicDate } from './academicDate'
 
 /** present = 1, late = 0.5, absent = 0. Excused days are left out entirely
  *  rather than counted as present -- an excused absence is not attendance. */
@@ -366,15 +367,22 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : word === 'quiz' ? 'zes
 export function sessionCoverageText(sessions) {
   if (!sessions) return null
   const since = sessions.start_source === 'class'
-    ? ` since the class start date (${sessions.start})`
+    ? ` since the class start date (${formatAcademicDate(sessions.start)})`
     : sessions.start_source === 'first_record'
-      ? ` since the first recorded day (${sessions.start}; no class start date set)`
+      ? ` since the first recorded day (${formatAcademicDate(sessions.start)}; no class start date set)`
       : ''
-  const parts = [`${sessions.recorded} of ${sessions.recorded + sessions.unconfirmed} planned meetings${since} have at least one attendance mark`]
-  if (sessions.unconfirmed) parts.push(`${sessions.unconfirmed} not yet confirmed`)
+  // Make-ups are reported apart from ordinary planned meetings; `recorded`
+  // itself still includes them, because the attendance rate reads their marks.
+  const recorded = sessions.recorded - (sessions.makeup_recorded ?? 0)
+  const unconfirmed = sessions.unconfirmed - (sessions.makeup_unconfirmed ?? 0)
+  const parts = [`${recorded} of ${recorded + unconfirmed} planned meetings${since} have at least one attendance mark`]
+  if (unconfirmed) parts.push(`${unconfirmed} not yet confirmed`)
   if (sessions.cancelled) parts.push(`${sessions.cancelled} cancelled`)
   if (sessions.rescheduled) parts.push(`${sessions.rescheduled} moved`)
-  if (sessions.ended) parts.push(`class ended ${sessions.ended}; no meetings planned after it`)
+  if (sessions.makeup) {
+    parts.push(`${sessions.makeup} make-up session${sessions.makeup === 1 ? '' : 's'} (${sessions.makeup_recorded ?? 0} recorded)`)
+  }
+  if (sessions.ended) parts.push(`class ended ${formatAcademicDate(sessions.ended)}; no regular meetings planned after it`)
   return parts.join(' · ')
 }
 

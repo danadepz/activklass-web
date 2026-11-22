@@ -20,9 +20,9 @@ describe('PredictedRisk evidence wording', () => {
 
   it('says which start the meeting count runs from (A1), never implying a full term for a legacy class', () => {
     expect(sessionCoverageText({ recorded: 3, unconfirmed: 1, start: '2026-08-10', start_source: 'class' }))
-      .toBe('3 of 4 planned meetings since the class start date (2026-08-10) have at least one attendance mark · 1 not yet confirmed')
+      .toBe('3 of 4 planned meetings since the class start date (08-10-2026) have at least one attendance mark · 1 not yet confirmed')
     expect(sessionCoverageText({ recorded: 3, unconfirmed: 0, start: '2026-09-01', start_source: 'first_record' }))
-      .toContain('since the first recorded day (2026-09-01; no class start date set)')
+      .toContain('since the first recorded day (09-01-2026; no class start date set)')
   })
 
   it('discloses quizzes left out of the trend for want of a due date', () => {
@@ -42,6 +42,19 @@ describe('PredictedRisk evidence wording', () => {
 describe('coverage line after the class end date', () => {
   it('says the class ended and nothing is planned after it', () => {
     expect(sessionCoverageText({ recorded: 2, unconfirmed: 1, start: '2026-11-02', start_source: 'class', ended: '2026-11-06' }))
-      .toBe('2 of 3 planned meetings since the class start date (2026-11-02) have at least one attendance mark · 1 not yet confirmed · class ended 2026-11-06; no meetings planned after it')
+      .toBe('2 of 3 planned meetings since the class start date (11-02-2026) have at least one attendance mark · 1 not yet confirmed · class ended 11-06-2026; no regular meetings planned after it')
+  })
+})
+
+describe('coverage line separates make-ups from planned meetings (owner decision 2026-11-22)', () => {
+  it('reports make-ups apart and keeps them out of the planned-meeting numbers', () => {
+    expect(sessionCoverageText({
+      recorded: 3, unconfirmed: 1, rescheduled: 1, makeup: 1, makeup_recorded: 1, makeup_unconfirmed: 0,
+      start: '2026-11-02', start_source: 'class', ended: '2026-11-06',
+    })).toBe('2 of 3 planned meetings since the class start date (11-02-2026) have at least one attendance mark · 1 not yet confirmed · 1 moved · 1 make-up session (1 recorded) · class ended 11-06-2026; no regular meetings planned after it')
+  })
+  it('an unrecorded make-up is not counted as a planned meeting left unconfirmed', () => {
+    expect(sessionCoverageText({ recorded: 2, unconfirmed: 1, makeup: 1, makeup_recorded: 0, makeup_unconfirmed: 1, start_source: null }))
+      .toBe('2 of 2 planned meetings have at least one attendance mark · 1 make-up session (0 recorded)')
   })
 })

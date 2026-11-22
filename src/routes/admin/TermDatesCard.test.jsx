@@ -79,7 +79,10 @@ describe('default start dates (2026-11-22, C1/C2)', () => {
     const html = renderToStaticMarkup(
       <TermDatesCard settings={{ school: { term_dates: { first_sem_start: '2026-08-10' } } }} onSaved={() => {}} />,
     )
-    expect(html).toContain('value="2026-08-10"')
+    // Shown MM-DD-YYYY (owner decision 2026-11-22); stored and sent as 2026-08-10.
+    expect(html).toContain('value="08-10-2026"')
+    expect(html).toContain('placeholder="MM-DD-YYYY"')
+    expect(html).not.toContain('type="date"')
     for (const label of ['School Year Start (K-12)', '1st Semester Start', '2nd Semester Start', 'Midyear / Summer Start']) {
       expect(html).toContain(label)
     }

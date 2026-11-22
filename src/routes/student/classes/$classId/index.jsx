@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, collection, getDocs, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { formatAcademicDate } from '@/lib/academicDate'
 import { useAuth } from '@/context/useAuth'
 import { fetchUsersByIds, isDroppedFromClass } from '@/lib/roster'
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus, loadStudentContests, loadStudentGradeContests } from '@/lib/studentData'
@@ -1043,7 +1044,7 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
         </div>
         <div style={{ padding: '20px 24px' }}>
           <div className="flex items-center gap-3" style={{ marginBottom: 16, fontSize: 13.5, color: muted }}>
-            <span style={{ ...mono, color: ink, fontWeight: 700 }}>{day.date}</span>
+            <span style={{ ...mono, color: ink, fontWeight: 700 }}>{formatAcademicDate(day.date)}</span>
             <span>marked as</span>
             <Pill meta={meta} />
           </div>
@@ -1121,7 +1122,7 @@ function AttendanceTab({ attendance, contestsByDate, classId, studentId, student
                   const tone = contest ? CONTEST_TONE[contest.status] : null
                   return (
                     <tr key={d.date} style={{ borderBottom: '1px solid rgba(14,42,92,0.05)' }}>
-                      <td style={{ ...tdStyle, ...mono, color: ink }}>{d.date}</td>
+                      <td style={{ ...tdStyle, ...mono, color: ink }}>{formatAcademicDate(d.date)}</td>
                       <td style={tdStyle}><Pill meta={meta} /></td>
                       <td style={{ ...tdStyle, color: muted }}>{d.remarks || '—'}</td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>

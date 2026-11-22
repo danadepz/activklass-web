@@ -7,6 +7,8 @@ import {
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { emptyClassForm, isCalendarDate, schoolDefaultStart } from '@/lib/classForm'
+import { formatAcademicDate } from '@/lib/academicDate'
+import AcademicDateInput from '@/components/AcademicDateInput'
 import { parseSchedule, scheduleOverlap } from '@/lib/schedule'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useAuth } from '@/context/useAuth'
@@ -230,12 +232,12 @@ export function validate(form, selectedDays, originalMaxStudents = null, enrolle
   const end = String(form.end_date ?? '').trim()
   const isDay = isCalendarDate
   if (!start) {
-    if (requireStart) errors.start_date = 'Pick the date this class starts.'
+    if (requireStart) errors.start_date = 'Enter the date this class starts (MM-DD-YYYY).'
     else if (end) errors.start_date = 'Pick a start date before setting an end date.'
   } else if (!isDay(start)) {
-    errors.start_date = 'Pick a valid start date.'
+    errors.start_date = 'Enter a real start date as MM-DD-YYYY, for example 08-10-2026.'
   }
-  if (end && !isDay(end)) errors.end_date = 'Pick a valid end date.'
+  if (end && !isDay(end)) errors.end_date = 'Enter a real end date as MM-DD-YYYY, for example 12-18-2026.'
   else if (end && start && isDay(start) && end < start) errors.end_date = 'The end date cannot be before the start date.'
 
   return errors
@@ -312,7 +314,7 @@ export function dialogSummaryFor(form) {
     row('Grade / Year', form.grade_level),
     row('Max students', form.max_students),
     row('School year', form.academic_year),
-    row('Starts', form.start_date),
+    row('Starts', formatAcademicDate(form.start_date)),
   ].join('\n')
 }
 
@@ -897,11 +899,10 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">Start Date{requireStart && <Req />}</span>
-              <input
+              <AcademicDateInput
                 required={requireStart}
-                type="date"
                 value={form.start_date ?? ''}
-                onChange={set('start_date')}
+                onChange={(v) => set('start_date')({ target: { value: v } })}
                 data-field="start_date"
                 aria-invalid={!!errors.start_date}
                 aria-describedby={errors.start_date ? 'err-start_date' : 'hint-start_date hint-start_date-optional'}
@@ -910,7 +911,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
               <FieldError id="err-start_date" message={errors.start_date} />
               {!errors.start_date && suggestedStart && form.start_date !== suggestedStart && (
                 <p id="hint-start_date" className="mt-1 text-xs text-slate-500">
-                  Your school's default is {suggestedStart}.{' '}
+                  Your school's default is {formatAcademicDate(suggestedStart)}.{' '}
                   <button
                     type="button"
                     className="underline"
@@ -929,11 +930,9 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">End Date</span>
-              <input
-                type="date"
+              <AcademicDateInput
                 value={form.end_date ?? ''}
-                min={form.start_date || undefined}
-                onChange={set('end_date')}
+                onChange={(v) => set('end_date')({ target: { value: v } })}
                 data-field="end_date"
                 aria-invalid={!!errors.end_date}
                 aria-describedby={errors.end_date ? 'err-end_date' : undefined}

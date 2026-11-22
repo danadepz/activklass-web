@@ -12,6 +12,9 @@ import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { cancelBlocker, isIsoDate, rescheduleBlocker, sessionStatus } from '@/lib/attendanceSessions'
+import { ACADEMIC_DATE_HINT, ACADEMIC_DATE_PLACEHOLDER, formatAcademicDate, parseAcademicDate } from '@/lib/academicDate'
+import { isCalendarDate } from '@/lib/classForm'
+import AcademicDateInput from '@/components/AcademicDateInput'
 import { describeAuditEvent, fetchAttendanceAudit, writeAttendanceDays } from '@/lib/attendanceAudit'
 
 /* A refusal the teacher should read as-is (a guard that failed against the
@@ -57,19 +60,17 @@ function remarksStyle(disabled) {
   }
 }
 
+// The LOCAL calendar day. toISOString() is UTC, which in the Philippines
+// (UTC+8) reads as yesterday until 8 a.m.
 function todayIso() {
-  return new Date().toISOString().slice(0, 10)
+  return isoOf(new Date())
 }
 
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const WEEKDAY_INDEX = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
 
-/* '2026-09-06' -> 'Sep 6'. Split rather than parsed: a Date built from the
-   string and read back through toISOString shifts the day either side of UTC. */
-function shortDate(iso) {
-  const [, m, d] = iso.split('-')
-  return `${MONTH_SHORT[Number(m) - 1] ?? ''} ${Number(d)}`
-}
+/* '2026-09-06' -> '09-06-2026' (owner decision: MM-DD-YYYY). Split rather than
+   parsed: a Date built from the string and read back shifts the day across UTC. */
+const shortDate = formatAcademicDate
 
 /* Local calendar date of a Date, for the same reason. */
 function isoOf(date) {
@@ -362,7 +363,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
 
       {sheet.students.length > 0 && (
         <div style={{ ...mono, marginTop: 12, fontSize: 12, color: faint }}>
-          {sheet.students.length} students · {day}
+          {sheet.students.length} students · {shortDate(day)}
         </div>
       )}
     </>
@@ -400,7 +401,7 @@ function SessionControls({ classId, day, sheet, refetch }) {
     if (blocked) return setError(blocked)
     const reason = await promptDialog({
       title: 'Cancel This Meeting',
-      message: `${day} will not count toward anyone's attendance. You can restore it later.`,
+      message: `${formatAcademicDate(day)} will not count toward anyone's attendance. You can restore it later.`,
       label: 'Reason (optional)',
       placeholder: 'e.g. Class suspended for a typhoon.',
       confirmLabel: 'Cancel Meeting',
@@ -430,7 +431,7 @@ function SessionControls({ classId, day, sheet, refetch }) {
   async function restore() {
     const ok = await confirmDialog({
       title: 'Restore This Meeting',
-      message: `${day} will count as a class meeting again, with no attendance recorded yet.`,
+      message: `${formatAcademicDate(day)} will count as a class meeting again, with no attendance recorded yet.`,
       confirmLabel: 'Restore',
     })
     if (!ok) return
@@ -449,13 +450,23 @@ function SessionControls({ classId, day, sheet, refetch }) {
     if (blockedNow) return setError(blockedNow)
     const to = await promptDialog({
       title: 'Move This Meeting',
-      message: `The meeting on ${day} moves to the date you pick. ${day} stops counting; the new date counts once you record it.`,
-      label: 'New date',
-      type: 'date',
+      message: `The meeting on ${formatAcademicDate(day)} moves to the date you pick. ${formatAcademicDate(day)} stops counting; the new date counts once you record it.`,
+      label: 'New date (MM-DD-YYYY)',
+      placeholder: ACADEMIC_DATE_PLACEHOLDER,
       confirmLabel: 'Move Meeting',
-      validate: (v) => rescheduleBlocker({ fromDate: day, toDate: v, days: sheet.days, schedule: sheet.schedule }),
+      validate: (v) => {
+        const iso = parseAcademicDate(v)
+        if (!iso) return `Enter a real date. ${ACADEMIC_DATE_HINT}`
+        return rescheduleBlocker({ fromDate: day, toDate: iso, days: sheet.days, schedule: sheet.schedule, endDate: sheet.endDate })
+      },
     })
-    if (to == null || !isIsoDate(to)) return
+    const typed = to == null ? null : parseAcademicDate(to)
+    if (typed) return moveTo(typed)
+  }
+
+  // The canonical YYYY-MM-DD the dialog's MM-DD-YYYY answer was turned into.
+  async function moveTo(to) {
+    if (!isIsoDate(to)) return
     // One transaction, both dates, an audit event each: the rules check each
     // side names the other, so a half-move cannot land.
     await run(() => writeAttendanceDays(db, classId, profile.id, [
@@ -497,10 +508,10 @@ function SessionControls({ classId, day, sheet, refetch }) {
         </span>
       )}
       {status === 'rescheduled' && (
-        <span style={{ ...chip, color: goldDeep }}>Moved to {sheet.session?.rescheduled_to}</span>
+        <span style={{ ...chip, color: goldDeep }}>Moved to {formatAcademicDate(sheet.session?.rescheduled_to)}</span>
       )}
       {status === 'held' && sheet.session?.rescheduled_from && (
-        <span style={{ ...chip, color: blueText }}>Make-up for {sheet.session.rescheduled_from}</span>
+        <span style={{ ...chip, color: blueText }}>Make-up for {formatAcademicDate(sheet.session.rescheduled_from)}</span>
       )}
       {status === 'held' && !sheet.session?.rescheduled_from && (
         <>
@@ -622,7 +633,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
                   <th key={date} style={{ ...thHead, padding: '10px 6px', textAlign: 'center' }}>
                     <button
                       onClick={() => onPickDay(date)}
-                      title={`Open ${date} on the By Day tab${offDays[date] ? ` (${offDays[date]})` : ''}`}
+                      title={`Open ${shortDate(date)} on the By Day tab${offDays[date] ? ` (${offDays[date]})` : ''}`}
                       className="transition hover:brightness-110"
                       style={{ ...mono, fontSize: 11, fontWeight: 700, color: navy, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
@@ -649,7 +660,7 @@ function TermSheet({ sheet, columns, onPickDay }) {
                       const status = cellOf(sid, date)
                       const m = status ? STATUS_META[status] : null
                       return (
-                        <td key={date} style={{ padding: '11px 6px', textAlign: 'center' }} title={m ? `${date} · ${m.label}` : `${date} · ${offDays[date] ?? 'not recorded'}`}>
+                        <td key={date} style={{ padding: '11px 6px', textAlign: 'center' }} title={m ? `${shortDate(date)} · ${m.label}` : `${shortDate(date)} · ${offDays[date] ?? 'not recorded'}`}>
                           {m ? (
                             <span style={{ ...mono, fontSize: 12, fontWeight: 700, color: m.fg }}>{m.short}</span>
                           ) : (
@@ -775,7 +786,7 @@ function ContestsPanel({ classId }) {
         classId,
         createdBy: profile.id,
         type: 'attendance_contest',
-        message: `Your attendance contest for ${c.date} was approved — it's now marked ${label}.`,
+        message: `Your attendance contest for ${formatAcademicDate(c.date)} was approved — it's now marked ${label}.`,
         link: `/student/classes/${classId}`,
       }).catch(() => {})
       refetchOthers()
@@ -814,7 +825,7 @@ function ContestsPanel({ classId }) {
         classId,
         createdBy: profile.id,
         type: 'attendance_contest',
-        message: `Your attendance contest for ${c.date} was declined.`,
+        message: `Your attendance contest for ${formatAcademicDate(c.date)} was declined.`,
         link: `/student/classes/${classId}`,
       }).catch(() => {})
       refetchOthers()
@@ -857,7 +868,7 @@ function ContestsPanel({ classId }) {
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>{c.student_name}</span>
-                  <span style={{ ...mono, fontSize: 12, color: muted }}>· {c.date}</span>
+                  <span style={{ ...mono, fontSize: 12, color: muted }}>· {formatAcademicDate(c.date)}</span>
                   <span style={{ fontSize: 11, color: faint }}>(marked {c.current_status})</span>
                 </div>
                 <div style={{ fontSize: 13, color: muted, lineHeight: 1.5 }}>{c.reason}</div>
@@ -893,6 +904,10 @@ export default function AttendancePage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
   const [day, setDay] = useState(todayIso())
+  const [dayError, setDayError] = useState('')
+  // What the teacher is typing; `day` moves only on a real past date, so the
+  // field keeps its own value or it would snap back on every keystroke.
+  const [dayField, setDayField] = useState(day)
   const [view, setView] = useState('day')
 
   const { data: sheet, isLoading, isError } = useQuery({
@@ -980,14 +995,23 @@ export default function AttendancePage() {
             ))}
           </div>
           {view === 'day' && (
-            <input
-              type="date"
-              value={day}
-              max={todayIso()}
-              onChange={(e) => e.target.value && setDay(e.target.value)}
-              className="ak-input"
-              style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-            />
+            <div>
+              <AcademicDateInput
+                aria-label="Attendance date (MM-DD-YYYY)"
+                aria-invalid={dayError ? true : undefined}
+                value={dayField}
+                onChange={(v) => {
+                  setDayField(v)
+                  // Only a real day, today or earlier, opens a sheet; anything
+                  // else stays in the field with the reason below it.
+                  if (isCalendarDate(v) && v <= todayIso()) { setDay(v); setDayError('') }
+                  else setDayError(!v ? '' : isCalendarDate(v) ? 'Pick today or an earlier date.' : `Enter a real date. ${ACADEMIC_DATE_HINT}`)
+                }}
+                className="ak-input"
+                style={{ ...fieldStyle, padding: '11px 14px', fontSize: 14, fontWeight: 600, width: 150 }}
+              />
+              {dayError && <p role="alert" style={{ margin: '4px 0 0', fontSize: 12, color: red }}>{dayError}</p>}
+            </div>
           )}
         </div>
       </div>
@@ -1001,9 +1025,11 @@ export default function AttendancePage() {
       ) : view === 'term' ? (
         <TermSheet
           sheet={sheet}
-          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso(), sheet.startDate, sheet.endDate)}
+          columns={termColumns(sheet.days.map((d) => d.date), sheet.schedule, todayIso(), sheet.startDate, sheet.endDate)}
           onPickDay={(date) => {
             setDay(date)
+            setDayField(date)
+            setDayError('')
             setView('day')
           }}
         />

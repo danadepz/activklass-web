@@ -249,12 +249,15 @@ describe('A1 / C1 / C2 (2026-11-22) · a class has its own start date', () => {
   }
 
   it('requires a start date on a new class and accepts an optional end on or after it', () => {
-    expect(dateErrs({ ...ok, start_date: '' }).start_date).toBe('Pick the date this class starts.')
+    expect(dateErrs({ ...ok, start_date: '' }).start_date).toBe('Enter the date this class starts (MM-DD-YYYY).')
     expect(dateErrs({ ...ok, start_date: '2026-08-10' })).toEqual({ start_date: undefined, end_date: undefined })
     expect(dateErrs({ ...ok, start_date: '2026-08-10', end_date: '2026-08-10' }).end_date).toBeUndefined()
     expect(dateErrs({ ...ok, start_date: '2026-08-10', end_date: '2026-08-09' }).end_date)
       .toBe('The end date cannot be before the start date.')
-    expect(dateErrs({ ...ok, start_date: '2026-13-45' }).start_date).toBe('Pick a valid start date.')
+    expect(dateErrs({ ...ok, start_date: '2026-13-45' }).start_date).toMatch(/real start date as MM-DD-YYYY/)
+    // What the MM-DD-YYYY field passes on when the typed text is not a real day: the raw text, refused.
+    expect(dateErrs({ ...ok, start_date: '02-30-2026' }).start_date).toMatch(/real start date as MM-DD-YYYY/)
+    expect(dateErrs({ ...ok, start_date: '2026-08-10', end_date: '02-29-2026' }).end_date).toMatch(/real end date as MM-DD-YYYY/)
   })
 
   it('lets a legacy class (no start date) save without one, but not with only an end date', () => {

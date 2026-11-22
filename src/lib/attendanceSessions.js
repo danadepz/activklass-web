@@ -19,6 +19,7 @@
  * marks is "unconfirmed" -- the teacher has not said whether it happened.
  */
 import { scheduleMeetings } from './schedule'
+import { isCalendarDate } from './classForm'
 
 export const SESSION_STATUSES = ['held', 'cancelled', 'rescheduled']
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -75,6 +76,11 @@ export function plannedMeetingDates(schedule, startIso, endIso) {
  * meeting is planned. No planned meeting is generated after it, even when
  * today is later. Stored days after it -- a make-up moved past the end, marks
  * already recorded -- are kept exactly as before. No end date: plan to today.
+ *
+ * Make-ups (a day with `rescheduled_from`) are never ordinary planned meetings.
+ * They keep their state in the counts above (so `recorded` still matches what
+ * the attendance rate reads) and are ALSO tallied in makeup / makeup_recorded /
+ * makeup_unconfirmed / makeup_upcoming, so coverage can tell the two apart.
  */
 export function sessionLedger(days, schedule, todayIso, startIso, endIso) {
   const byDate = new Map()
@@ -108,8 +114,17 @@ export function sessionLedger(days, schedule, todayIso, startIso, endIso) {
     }
   })
 
-  const counts = { planned: planned.size, recorded: 0, unconfirmed: 0, upcoming: 0, cancelled: 0, rescheduled: 0 }
-  for (const s of sessions) counts[s.state] += 1
+  const counts = {
+    planned: planned.size, recorded: 0, unconfirmed: 0, upcoming: 0, cancelled: 0, rescheduled: 0,
+    makeup: 0, makeup_recorded: 0, makeup_unconfirmed: 0, makeup_upcoming: 0,
+  }
+  for (const s of sessions) {
+    counts[s.state] += 1
+    if (s.rescheduledFrom && s.state !== 'cancelled' && s.state !== 'rescheduled') {
+      counts.makeup += 1
+      counts[`makeup_${s.state}`] += 1
+    }
+  }
   return {
     sessions,
     counts,
@@ -158,16 +173,23 @@ export function cancelBlocker(day) {
  * `days` is the class's stored day documents. A target that already has a
  * document, or that is itself a regular meeting day, would merge two sessions
  * into one date -- refused rather than silently doubled up.
+ *
+ * `endDate` (the class's end_date, owner decision 2026-11-22: ALLOWED): a
+ * make-up may land after the class ends. No regular meeting is planned after
+ * the end, so a scheduled weekday past it is free; nothing past it can be the
+ * ORIGINAL of a move unless it is already a stored day.
  */
-export function rescheduleBlocker({ fromDate, toDate, days, schedule }) {
+export function rescheduleBlocker({ fromDate, toDate, days, schedule, endDate }) {
   if (!isIsoDate(toDate)) return 'Pick the new date.'
+  if (!isCalendarDate(toDate) || !isCalendarDate(fromDate)) return 'Pick a real calendar date.'
   if (toDate === fromDate) return 'Pick a different date from the original.'
   const byDate = new Map((days ?? []).map((d) => [d.date ?? d.id, d]))
   const from = byDate.get(fromDate)
   const blocked = cancelBlocker(from)
   if (blocked) return blocked
   const weekdays = scheduledWeekdays(schedule)
-  const isMeetingDay = (iso) => weekdays.has(new Date(`${iso}T00:00:00`).getDay())
+  const classEnd = isCalendarDate(endDate) ? endDate : null
+  const isMeetingDay = (iso) => (!classEnd || iso <= classEnd) && weekdays.has(new Date(`${iso}T00:00:00`).getDay())
   if (!from && !isMeetingDay(fromDate)) return 'No meeting is planned on this date.'
   if (byDate.has(toDate)) return 'That date already has an attendance session.'
   if (isMeetingDay(toDate)) {

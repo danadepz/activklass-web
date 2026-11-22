@@ -26,7 +26,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
 import { collection, deleteDoc, deleteField, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
-import { writeAttendanceDays } from './attendanceAudit'
+import { buildAuditEvent, writeAttendanceDays } from './attendanceAudit'
 import { fetchExcusalEvents, fetchMyExcusals, setQuizExcusal } from './quizExcusals'
 
 // ACTIVKLASS_RULES_PATH lets a reviewer point this suite at a modified copy of
@@ -3054,7 +3054,8 @@ describe('academic policy 2026-11-22 · attendance is teacher-only and always au
 
   it('refuses a malformed day: wrong date field, non-date id, unknown status', async () => {
     await assertFails(write(TEACHER, [{ date: '2026-11-07', next: () => ({ records: {}, session_status: 'skipped' }) }]))
-    await assertFails(write(TEACHER, [{ date: 'monday', next: () => ({ records: {} }) }]))
+    // The writer now refuses a non-date before sending; the rules' own refusal is proven by rawWrite below.
+    await expect(write(TEACHER, [{ date: 'monday', next: () => ({ records: {} }) }])).rejects.toMatchObject({ userMessage: expect.stringMatching(/real calendar date/) })
   })
 
   it('cancels and restores an unmarked meeting, audited; refuses to cancel a marked one', async () => {
@@ -3093,6 +3094,83 @@ describe('academic policy 2026-11-22 · attendance is teacher-only and always au
     await assertFails(write(TEACHER, [{ date: '2026-11-04', next: keep({ rescheduled_to: '2026-11-15' }) }]))
     await assertFails(write(TEACHER, [{ date: '2026-11-14', next: (c) => Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'rescheduled_from')) }]))
     await assertFails(write(TEACHER, [{ date: '2026-11-14', kind: 'cancel', next: keep({ session_status: 'cancelled' }) }]))
+  })
+
+  // What a modified client could send: the same audited batch as
+  // writeAttendanceDays, WITHOUT its calendar check, so only the rules decide.
+  const rawWrite = async (uid, changes) => {
+    const db = ctx(uid)
+    const batch = writeBatch(db)
+    for (const c of changes) {
+      const ref = doc(db, 'classes', 'class-1', 'attendance', c.date)
+      const snap = await getDoc(ref)
+      const current = snap.exists() ? snap.data() : null
+      const aRef = doc(collection(db, 'classes', 'class-1', 'attendance_audit'))
+      const next = { ...c.next(current), date: c.date, last_audit_id: aRef.id }
+      batch.set(ref, next)
+      batch.set(aRef, buildAuditEvent({ date: c.date, actorUid: uid, before: current, after: next, kind: c.kind }))
+    }
+    return batch.commit()
+  }
+  const rawMove = (uid, from, to, inDate = to) => rawWrite(uid, [
+    { date: from, kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: to }) },
+    { date: inDate, kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'held', rescheduled_from: from }) },
+  ])
+
+  it('owner decision 2026-11-22: refuses impossible attendance day ids from a client that skips the app check', async () => {
+    const record = (date) => rawWrite(TEACHER, [{ date, next: () => ({ records: { [STUDENT]: P } }) }])
+    await assertSucceeds(record('2026-11-05')) // the honest raw write passes, so each refusal is the date
+    for (const bad of ['monday', '2026-02-30', '2026-04-31', '2026-06-31', '2026-02-29', '1900-02-29', '2026-13-01', '2026-00-10', '2026-11-00', '2026-01-32']) {
+      await assertFails(record(bad))
+    }
+    await assertSucceeds(record('2024-02-29'))
+    await assertSucceeds(record('2000-02-29'))
+    // The app's own writer refuses before any request is sent.
+    await expect(write(TEACHER, [{ date: '2026-02-30', next: () => ({ records: {} }) }])).rejects.toMatchObject({ userMessage: expect.stringMatching(/real calendar date/) })
+  })
+
+  it('owner decision 2026-11-22: checks both ends of a move -- an impossible make-up date lands neither half', async () => {
+    await assertFails(rawMove(TEACHER, '2026-11-04', '2026-11-31'))
+    await assertFails(rawMove(TEACHER, '2026-11-04', '2027-02-29'))
+    // Each half names a real date, but the link on the origin is impossible.
+    await assertFails(rawWrite(TEACHER, [
+      { date: '2026-11-04', kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: '2026-02-30' }) },
+      { date: '2026-11-14', kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'held', rescheduled_from: '2026-11-04' }) },
+    ]))
+    let origin
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      origin = (await getDoc(doc(admin.firestore(), 'classes', 'class-1', 'attendance', '2026-11-04'))).data()
+    })
+    expect(origin.session_status ?? 'held').toBe('held') // nothing landed
+    await assertSucceeds(rawMove(TEACHER, '2026-11-04', '2028-02-29')) // a real leap day is fine
+  })
+
+  it('owner decision 2026-11-22: a day stored under an impossible id stays readable and is never written again', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'classes', 'class-1', 'attendance', '2026-02-30'), { date: '2026-02-30', records: { [STUDENT]: P } })
+    })
+    await assertSucceeds(getDoc(day(TEACHER, '2026-02-30')))
+    await assertSucceeds(getDoc(day(ADMIN, '2026-02-30')))
+    await assertFails(rawWrite(TEACHER, [{ date: '2026-02-30', next: (c) => ({ ...c, records: { [STUDENT]: { status: 'absent', remarks: '' } } }) }]))
+    await assertFails(deleteDoc(day(TEACHER, '2026-02-30')))
+  })
+
+  it('owner decision 2026-11-22: a make-up may land after the class end date, paired and audited, class teacher only', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'classes', 'class-1'), { start_date: '2026-11-02', end_date: '2026-11-06' }, { merge: true })
+    })
+    await assertFails(move(FOREIGN_TEACHER, '2026-11-04', '2026-11-16'))
+    await assertFails(move(ADMIN, '2026-11-04', '2026-11-16'))
+    await assertFails(move(TEACHER, '2026-11-02', '2026-11-16')) // a marked meeting never moves
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-16')) // a Monday after the end
+    await assertFails(move(TEACHER, '2026-11-09', '2026-11-16')) // unmarked origin, but the make-up date is taken now
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-16', next: (c) => ({ ...c, records: { [STUDENT]: P } }) }]))
+    let events = []
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      events = (await getDocs(collection(admin.firestore(), 'classes', 'class-1', 'attendance_audit'))).docs.map((d) => d.data())
+    })
+    expect(events.filter((e) => e.kind.startsWith('reschedule')).map((e) => [e.kind, e.date, e.related_date]).sort())
+      .toEqual([['reschedule_in', '2026-11-16', '2026-11-04'], ['reschedule_out', '2026-11-04', '2026-11-16']])
   })
 })
 

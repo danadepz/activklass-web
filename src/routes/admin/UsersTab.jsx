@@ -20,6 +20,8 @@ import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
 import RolePicker from './RolePicker'
 import CardHead from './CardHead'
+import AcademicDateInput from '@/components/AcademicDateInput'
+import { isCalendarDate } from '@/lib/classForm'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
@@ -242,6 +244,10 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
     e.preventDefault()
     setDone('')
     setError('')
+    // Typed as MM-DD-YYYY; the field passes canonical YYYY-MM-DD on, or the raw
+    // text when it is not a real day -- refused here before anything is sent.
+    const bad = TERM_DATE_FIELDS.find(([key]) => currentDates[key] && !isCalendarDate(currentDates[key]))
+    if (bad) return setError(`${bad[1]}: enter a real date as MM-DD-YYYY, for example 06-15-2026.`)
     mut.mutate(currentDates)
   }
 
@@ -271,11 +277,10 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
           {TERM_DATE_FIELDS.map(([key, label]) => (
             <label key={key} style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {label}
-              <input
-                type="date"
+              <AcademicDateInput
                 style={{ ...field, padding: '9px 12px' }}
                 value={currentDates[key] ?? ''}
-                onChange={(e) => updateField(key, e.target.value)}
+                onChange={(v) => updateField(key, v)}
               />
             </label>
           ))}

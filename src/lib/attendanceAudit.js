@@ -14,8 +14,16 @@
  * earlier changes -- its first audited write records the state it found.
  */
 import { collection, doc, getDocs, query, runTransaction, serverTimestamp, where } from 'firebase/firestore'
+import { isCalendarDate } from './classForm'
+import { formatAcademicDate } from './academicDate'
 
 const REASON_MAX = 500
+const NOT_A_DATE = 'That is not a real calendar date. Pick another date.'
+
+/** A refusal the page shows as-is, thrown before anything is written. */
+function notADate() {
+  return Object.assign(new Error(NOT_A_DATE), { userMessage: NOT_A_DATE })
+}
 
 /** Field-order-independent equality for one student's {status, remarks} entry. */
 function sameEntry(a, b) {
@@ -65,6 +73,9 @@ export function buildAuditEvent({ date, actorUid, before, after, kind, reason })
  * to refuse -- the transaction then writes nothing. Returns the events written.
  */
 export async function writeAttendanceDays(db, classId, actorUid, changes) {
+  // Real calendar days only (owner decision 2026-11-22); firestore.rules
+  // refuses the same ids and links, this just says so before the round trip.
+  if (changes.some((c) => !isCalendarDate(c.date))) throw notADate()
   return runTransaction(db, async (tx) => {
     const refs = changes.map((c) => doc(db, 'classes', classId, 'attendance', c.date))
     const snaps = []
@@ -74,6 +85,9 @@ export async function writeAttendanceDays(db, classId, actorUid, changes) {
       const current = snaps[i].exists() ? snaps[i].data() : null
       const auditRef = doc(collection(db, 'classes', classId, 'attendance_audit'))
       const next = { ...change.next(current), date: change.date, last_audit_id: auditRef.id }
+      for (const link of [next.rescheduled_to, next.rescheduled_from]) {
+        if (link != null && !isCalendarDate(link)) throw notADate()
+      }
       const event = buildAuditEvent({
         date: change.date, actorUid, before: current, after: next, kind: change.kind, reason: change.reason,
       })
@@ -106,6 +120,6 @@ export function describeAuditEvent(event, nameOf = (id) => id) {
     const to = event.after_records?.[id]?.status ?? 'none'
     return `${nameOf(id)}: ${from} → ${to}`
   })
-  return [label, changes.join('; '), event.related_date ? `(${event.related_date})` : '', event.reason ? `— ${event.reason}` : '']
+  return [label, changes.join('; '), event.related_date ? `(${formatAcademicDate(event.related_date)})` : '', event.reason ? `— ${event.reason}` : '']
     .filter(Boolean).join(' ')
 }

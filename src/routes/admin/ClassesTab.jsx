@@ -4,6 +4,7 @@ import { useAuth } from '@/context/useAuth'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { describeAuditEvent, fetchAttendanceAudit } from '@/lib/attendanceAudit'
+import { formatAcademicDate } from '@/lib/academicDate'
 import { useAdminOverview } from '@/hooks/useAdminOverview'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, blueText, orangeDeep, line, serif, mono } from '@/theme'
@@ -45,7 +46,7 @@ export function AttendanceAuditPanel({ classId }) {
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
           {data.events.map((e) => (
             <li key={e.id} style={{ ...mono, fontSize: 11.5, lineHeight: 1.6 }}>
-              {e.date} · {when(e.at)} · {describeAuditEvent(e, (id) => data.names[id] ?? 'a former student')}
+              {formatAcademicDate(e.date)} · {when(e.at)} · {describeAuditEvent(e, (id) => data.names[id] ?? 'a former student')}
               {' · by '}{data.names[e.actor_uid] ?? 'the class teacher'}
             </li>
           ))}

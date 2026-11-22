@@ -48,7 +48,10 @@ describe('sessionLedger · planned vs confirmed', () => {
       '2026-11-09': 'unconfirmed',
       '2026-11-11': 'unconfirmed',
     })
-    expect(counts).toEqual({ planned: 5, recorded: 2, unconfirmed: 2, upcoming: 0, cancelled: 1, rescheduled: 1 })
+    expect(counts).toEqual({
+      planned: 5, recorded: 2, unconfirmed: 2, upcoming: 0, cancelled: 1, rescheduled: 1,
+      makeup: 1, makeup_recorded: 1, makeup_unconfirmed: 0, makeup_upcoming: 0, // the 11-07 make-up, also in recorded
+    })
   })
 
   it('keeps a future make-up date upcoming, not unconfirmed', () => {
@@ -174,5 +177,55 @@ describe('class end date bounds planned meetings (blocker fix, 2026-11-22)', () 
   it('ignores a malformed end date rather than trusting it', () => {
     expect(sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02', 'June').counts)
       .toEqual(sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02').counts)
+  })
+})
+
+describe('make-ups after the class end date are allowed (owner decision 2026-11-22)', () => {
+  // MWF from Mon 2 Nov; the class ends Fri 6 Nov. Wed 4 is unmarked.
+  const days = [
+    { date: '2026-11-02', records: { s1: mark('present') } },
+    { date: '2026-11-04', records: {} },
+    { date: '2026-11-11', rescheduled_from: '2026-11-03', records: {} }, // an existing make-up
+  ]
+  const move = (fromDate, toDate, endDate = '2026-11-06') =>
+    rescheduleBlocker({ fromDate, toDate, days, schedule: MWF, endDate })
+
+  it('allows an unmarked meeting to move past the end, even onto a scheduled weekday', () => {
+    expect(move('2026-11-04', '2026-11-09')).toBeNull() // Monday after the end: no regular meeting there
+    expect(move('2026-11-04', '2026-11-14')).toBeNull() // Saturday after the end
+    // Without an end date that Monday is still a regular meeting and is refused.
+    expect(move('2026-11-04', '2026-11-09', null)).toMatch(/regular meeting day/)
+  })
+
+  it('still refuses a marked meeting, a duplicate, a regular day before the end, and a non-meeting original', () => {
+    expect(move('2026-11-02', '2026-11-14')).toMatch(/marks are preserved/)
+    expect(move('2026-11-04', '2026-11-11')).toMatch(/already has/)
+    expect(move('2026-11-04', '2026-11-06')).toMatch(/regular meeting day/)
+    expect(move('2026-11-09', '2026-11-14')).toMatch(/No meeting is planned/) // past the end, nothing stored
+  })
+
+  it('refuses impossible calendar dates on either end', () => {
+    expect(move('2026-11-04', '2026-02-30')).toMatch(/real calendar date/)
+    expect(move('2026-11-04', '2027-02-29')).toMatch(/real calendar date/)
+    expect(move('2026-04-31', '2026-11-14')).toMatch(/real calendar date/)
+    expect(move('2026-11-04', '2028-02-29')).toBeNull() // a real leap day, after the end
+  })
+
+  it('counts a post-end make-up apart from planned meetings; no extra planned meeting appears', () => {
+    const stored = [
+      { date: '2026-11-02', records: { s1: mark('present') } },
+      { date: '2026-11-04', session_status: 'rescheduled', rescheduled_to: '2026-11-09', records: {} },
+      { date: '2026-11-09', rescheduled_from: '2026-11-04', records: { s1: mark('absent') } },
+      { date: '2026-11-14', rescheduled_from: '2026-11-06', records: {} },
+      { date: '2026-11-06', session_status: 'rescheduled', rescheduled_to: '2026-11-14', records: {} },
+    ]
+    const l = sessionLedger(stored, MWF, '2026-11-20', '2026-11-02', '2026-11-06')
+    expect(l.sessions.filter((s) => s.planned).map((s) => s.date)).toEqual(['2026-11-02', '2026-11-04', '2026-11-06'])
+    expect(l.counts).toMatchObject({
+      planned: 3, recorded: 2, unconfirmed: 1, rescheduled: 2,
+      makeup: 2, makeup_recorded: 1, makeup_unconfirmed: 1, makeup_upcoming: 0,
+    })
+    // The attendance rate still reads every held, marked day -- the make-up included.
+    expect(studentAttendanceEvidence(stored, 's1')).toMatchObject({ heldSessions: 2, statuses: ['present', 'absent'] })
   })
 })
