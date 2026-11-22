@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
@@ -35,7 +36,7 @@ export default function PendingVerification() {
   const [idType, setIdType] = useState(profile?.verification_id_type ?? ID_TYPES[0].value)
   const [idNumber, setIdNumber] = useState(profile?.verification_id_number ?? '')
   const [idLink, setIdLink] = useState(profile?.verification_id_link ?? '')
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [busy, setBusy] = useState(false)
 
   // Nothing to wait for: an approved account, or one that never went through

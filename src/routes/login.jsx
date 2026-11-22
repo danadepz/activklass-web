@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 // TEMPORARY dev helper — remove this import and the <DevQuickLogin /> below
 // when the seeded test accounts are no longer needed.
@@ -92,7 +93,7 @@ export default function Login() {
   const [showNew, setShowNew] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [remember, setRemember] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [notice, setNotice] = useState(null)
   const [submitting, setSubmitting] = useState(false)
 

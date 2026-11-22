@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -138,7 +139,7 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   const { profile } = useAuth()
   // dirty: {studentId: {status, remarks}} — status 'none' clears the record
   const [dirty, setDirty] = useState({})
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
 
   const current = (sid) => {
@@ -477,7 +478,7 @@ function ContestsPanel({ classId }) {
   // Resolved contests animating out. They stay 'pending' in the query cache
   // until the slide finishes, so the row survives long enough to animate.
   const [leavingIds, setLeavingIds] = useState([])
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   const { data: contests } = useQuery({
     queryKey: ['fs-contests', classId],

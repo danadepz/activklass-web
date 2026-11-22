@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
@@ -447,7 +448,7 @@ function ApproveDialog({ request, onClose, onDone }) {
     // the box empty after sign-in.
     login_prefix: String(request.school_abbr ?? '').toLowerCase(),
   })
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
   const requester = `${request.first_name ?? ''} ${request.last_name ?? ''}`.trim() || request.email
   // T-82: this school already paid for the seats on the request -- changing

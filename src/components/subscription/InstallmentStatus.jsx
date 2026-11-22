@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useMutation } from '@tanstack/react-query'
 import SubscriptionStatusPanel from '@/components/subscription/SubscriptionStatusPanel'
 import { startBalanceCheckout } from '@/lib/subscription'
@@ -10,7 +10,7 @@ import { red } from '@/theme'
  * button that pays it. Renders nothing for a term with no installment plan.
  */
 export default function InstallmentStatus({ ownerId, subscription, installment, canPay = true }) {
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
   const pay = useMutation({
     mutationFn: () => startBalanceCheckout(ownerId),
     onSuccess: (res) => { window.location.href = res.checkout_url },

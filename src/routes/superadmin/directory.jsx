@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -67,7 +68,7 @@ export default function SuperAdminDirectoryPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [selectedEntry, setSelectedEntry] = useState(null)
-  const [actionError, setActionError] = useState(null)
+  const [actionError, setActionError] = useTransientMessage(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['superadmin-directory'],

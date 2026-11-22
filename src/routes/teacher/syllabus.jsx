@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -145,7 +146,7 @@ export function TopicResourceEditor({ syllabusId, topic, onChange }) {
   const [url, setUrl] = useState('')
   const [contentMarkdown, setContentMarkdown] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   const resources = topic.resources ?? []
 
@@ -470,7 +471,7 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
   const [program, setProgram] = useState('')
   const [durationWeeks, setDurationWeeks] = useState(10)
   const [notes, setNotes] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [generating, setGenerating] = useState(false)
 
   const clazz = classes.find((c) => c.id === classId) ?? null
@@ -799,7 +800,7 @@ function linkedQuizNote(n) {
 export function SyllabusEditor({ syllabusId, initial, isAiDraft, isNewDraft, classes, onSaved, onCancel }) {
   const [tree, setTree] = useState(initial)
   const [genModule, setGenModule] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
   const [assignedClassIds, setAssignedClassIds] = useState(initial.class_ids ?? [])
 

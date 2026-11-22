@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
@@ -63,7 +64,7 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [submitting, setSubmitting] = useState(false)
 
   const hasMinRequirements = !passwordError(password)

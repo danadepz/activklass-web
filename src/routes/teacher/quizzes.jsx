@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -175,7 +176,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   }
   const [selectedClassId, setSelectedClassId] = useState(openedWithClassId)
   const [form, setForm] = useState(openedWithForm)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [generating, setGenerating] = useState(false)
   // Clear puts the dialog back to how it opened -- including a class or topic
   // Scaffold Topics pre-picked, which the teacher did not enter. Same control
@@ -602,7 +603,7 @@ export function CreateQuizModal({ classes, onClose }) {
   const { profile } = useAuth()
   const [title, setTitle] = useState('')
   const [selectedClassIds, setSelectedClassIds] = useState([])
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
 
   const toggleClass = (id) => {
@@ -886,7 +887,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
      the form to dismiss news about a field they can no longer see; this keeps
      the message in the footer, beside the Save button they just pressed, and
      clears the moment they change the question type. */
-  const [formError, setFormError] = useState('')
+  const [formError, setFormError] = useTransientMessage('')
   const [runSave, saving] = useAsyncAction(onSave)
 
   const selectedSyllabus = syllabi.find(s => s.id === syllabusId)

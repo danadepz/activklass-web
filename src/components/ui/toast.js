@@ -10,8 +10,7 @@
  *
  * Split by weight, deliberately:
  *   toast.success  — it worked; do not interrupt
- *   toast.error    — it did not work; stays until dismissed, because an error
- *                    that fades before it is read is worse than none
+ *   toast.error    — temporary failure feedback
  *   toast.info     — neutral progress
  *   toast.warning  — a temporary caution, or a persistent one with an action
  *   alertDialog()  — must be read before continuing (see dialogs.js)
@@ -26,8 +25,7 @@
  * Store and API only; Toaster.jsx renders it and main.jsx mounts that once.
  * ------------------------------------------------------------------ */
 
-/** 0 means "until dismissed" — the deliberate default for actionable errors. */
-const DEFAULT_MS = { success: 3000, info: 3000, warning: 3000, error: 0 }
+import { NOTICE_DURATION_MS } from '@/lib/noticeDuration'
 
 let seq = 0
 let items = []
@@ -56,12 +54,13 @@ export function dismissToast(id) {
 function show(type, message, options = {}) {
   seq += 1
   const id = seq
-  const duration = type === 'warning' && options.action
+  const isWarning = type === 'warning' || type === 'error'
+  const duration = isWarning && options.action
     ? 0
-    : options.duration ?? DEFAULT_MS[type] ?? 4000
-  if (type === 'warning' && duration > 0) {
+    : options.duration ?? NOTICE_DURATION_MS
+  if (isWarning && duration > 0) {
     // A repeated validation attempt restarts the timeout on a single notice.
-    items = items.filter((item) => !(item.type === 'warning' && item.duration > 0 && item.message === message))
+    items = items.filter((item) => !(item.type === type && item.duration > 0 && item.message === message))
   }
   items = [...items, { id, type, message, action: options.action, duration }]
   emit()

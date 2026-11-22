@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -136,7 +137,7 @@ export default function SuperAdminSubscribersPage() {
   const [editing, setEditing] = useState(null)
   const [absorbing, setAbsorbing] = useState(null) // the institution row being absorbed into
   const [absorbNotice, setAbsorbNotice] = useState(null) // the copy-ready notice after a successful absorb
-  const [banner, setBanner] = useState(null)
+  const [banner, setBanner] = useTransientMessage(null)
   const [purgingSubscriber, setPurgingSubscriber] = useState(null) // { id, name, type }
   const [searchQuery, setSearchQuery] = useState('')
   const [segment, setSegment] = useState('all')
@@ -711,7 +712,7 @@ function ProvisionDialog({ plans, onClose, onDone }) {
     lastName: '',
     schoolYear: '',
   })
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const available = Object.keys(plans[form.type] ?? {})

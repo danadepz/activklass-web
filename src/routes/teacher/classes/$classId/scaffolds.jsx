@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -411,7 +412,7 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
   // A teacher who types a ceiling overrides it for this dialog only.
   const [capOverride, setCapOverride] = useState(null)
   const [applying, setApplying] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   const { data: recovery, isLoading: loadingTargets } = useQuery({
     queryKey: ['fs-recovery-targets', classId],
@@ -746,7 +747,7 @@ export default function ScaffoldTopicsPage() {
   const queryClient = useQueryClient()
   const [busy, setBusy] = useState(null)
   const [recoveringPlan, setRecoveringPlan] = useState(null)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [editingPlan, setEditingPlan] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
 

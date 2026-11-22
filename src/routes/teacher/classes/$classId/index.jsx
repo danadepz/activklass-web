@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -551,7 +552,7 @@ function AddStudentModal({ classId, clazz, programs, enrolledIds, maxStudents, o
   const schoolIssued = accountKind(profile) === 'school'
   const [entryMode, setEntryMode] = useState('individual') // 'bulk' | 'individual' -- T-119
   const [tab, setTab] = useState('find') // 'find' | 'create' -- 'create' is solo-only
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
   const isFull = maxStudents > 0 && enrolledIds.length >= maxStudents
@@ -1139,7 +1140,7 @@ function EditStudentModal({ student, classId, clazz, programs, mode: initialMode
      after Disable/Enable Sign-In in this same modal wrote the stale value
      back. Save now leaves status alone; Disable/Enable Sign-In is the one
      control that changes it. */
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
 
@@ -1296,7 +1297,7 @@ export function CsvUploadModal({ classId, classTitle, enrolledIds, maxStudents, 
   const schoolIssued = accountKind(profile) === 'school'
   const fileRef = useRef(null)
   const [preview, setPreview] = useState(null) // { matched: [], already: [], unmatched: [] }
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const fail = failWith(setError)
   const [busy, setBusy] = useState(false)
   // T-89: how far the match loop below has gotten, so "Matching students…"
@@ -1735,14 +1736,14 @@ export default function ClassDetailPage() {
   const { classId } = useParams()
   const queryClient = useQueryClient()
   const [modal, setModal] = useState(null) // 'add' | 'csv' | student object
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const fail = failWith(setError)
   const [rosterSearch, setRosterSearch] = useState('')
   const [rosterFilter, setRosterFilter] = useState('all')
   const [rosterSort, setRosterSort] = useState('az')
   const [accountBusy, setAccountBusy] = useState(null)
   const [dropBusy, setDropBusy] = useState(null)
-  const [notice, setNotice] = useState(null)
+  const [notice, setNotice] = useTransientMessage()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['class-detail', classId],

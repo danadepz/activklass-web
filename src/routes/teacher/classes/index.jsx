@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 // FILE: web/src/pages/teacher/ClassesPage.jsx
 // 2026-06-20 — Added per-class kebab menu (⋮) to both list and card views with:
 //   • Badge colour picker (8 preset colours, stored as badge_color in Firestore)
@@ -368,7 +369,7 @@ export function DeleteConfirmModal({ cls, onClose, onDeleted, onArchiveInstead }
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Delete class', closeOnBackdrop: false })
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const code = (cls.subject_code || cls.section || '').trim()
   const match = typed.trim().toLowerCase() === code.toLowerCase()
 
@@ -469,7 +470,7 @@ export function DeleteConfirmModal({ cls, onClose, onDeleted, onArchiveInstead }
 export default function ClassesPage() {
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
-  const [warning, setWarning] = useState(null)
+  const [warning, setWarning] = useTransientMessage(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('default')
   const [view, setView] = useState('list')

@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import Button from '@/components/ui/Button'
@@ -25,7 +26,7 @@ export default function SubscriptionQuoteReview({ ownerId, disabled = false, onC
   // refusal is shown beside the button, not rendered off-screen behind a
   // popup that already closed (which read as "Pay Now does nothing").
   const [paying, setPaying] = useState(false)
-  const [payError, setPayError] = useState('')
+  const [payError, setPayError] = useTransientMessage('')
   // Read once: the real deadline is set from the verified payment time.
   const [openedAt] = useState(() => Date.now() / 1000)
 

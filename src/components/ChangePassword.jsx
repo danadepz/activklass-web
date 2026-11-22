@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
@@ -43,7 +44,7 @@ export default function ChangePassword({ compact = false }) {
   const { markPasswordChanged } = useAuth()
   const [form, setForm] = useState({ current: '', next: '', confirm: '' })
   const [msg, setMsg] = useState('')
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
   const [busy, setBusy] = useState(false)
 
   const card = {

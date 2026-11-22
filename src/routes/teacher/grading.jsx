@@ -738,7 +738,6 @@ export function TemplatesCard({
     queryKey: ['fs-grading-templates'],
     queryFn: listTemplates,
   })
-  const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const templates = data?.templates ?? []
 
@@ -746,13 +745,11 @@ export function TemplatesCard({
 
   const run = async (fn) => {
     setSaving(true)
-    setError(null)
     try {
       await fn()
       refresh()
       return true
     } catch (err) {
-      setError(err.message)
       toast.error(err.message)
       return false
     } finally {
@@ -864,7 +861,6 @@ export function TemplatesCard({
         </Button>
       </div>
 
-      {error && <Banner tone="err">{error}</Banner>}
 
       {loadedTemplate && (
         <div
@@ -1178,11 +1174,8 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   // applied the setup to none of the selected classes.
   const [saved, setSaved] = useState('')
 
-  /* Banner and Save button are both near the top here, so the banner is
-     usually in view -- but a partial sync is the one message the teacher has to
-     act on, and the toast holds until dismissed rather than depending on where
-     the page happens to be scrolled. */
-  const reportError = (message) => {
+  // Keep a partial sync visible on the form until the teacher retries.
+  const reportPartialSync = (message) => {
     setError(message)
     toast.error(message)
   }
@@ -1299,19 +1292,19 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     if (!firestoreSynced) {
       // SQLite took the save but the cloud mirror did not — the one state the
       // teacher can fix themselves by saving again.
-      reportError('Saved to the class records, but the cloud copy did not update. Save again to retry.')
+      reportPartialSync('Saved to the class records, but the cloud copy did not update. Save again to retry.')
       setSaved('')
       return
     }
     if (!entriesSynced) {
-      reportError('Grading setup saved, but the grades students see were not refreshed. Save again to retry.')
+      reportPartialSync('Grading setup saved, but the grades students see were not refreshed. Save again to retry.')
       setSaved('')
       return
     }
     if (skipped.length) {
       // Left on screen. A partial sync is something the teacher has to act on,
       // and a banner that clears itself after 2.5s is one they can miss.
-      reportError(
+      reportPartialSync(
         `Preset saved, but ${skipped.length} of ${requested} `
         + `${requested === 1 ? 'class was' : 'classes were'} not updated: `
         + `${describeSkips(skipped, classes)}.`,
@@ -1331,7 +1324,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
     mutationFn: () => persist(periods, components, gradingMode),
     onSuccess: flash,
     onError: (err) => {
-      reportError(err.message)
+      toast.error(err.message)
       setSaved('')
     },
   })
@@ -1358,7 +1351,7 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
       })
     },
     onSuccess: flash,
-    onError: (err) => reportError(err.message),
+    onError: (err) => toast.error(err.message),
   })
 
   // Every button on the form keys off this: a second click mid-save would

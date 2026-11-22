@@ -14,6 +14,7 @@
  * this hook, are what actually stop a guardian granting themselves anything.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@/components/ui/toast'
 import {
   approveGuardianLink,
   canManageOwnLinks,
@@ -74,21 +75,25 @@ export function useGuardianAccess(uid, birthdate) {
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: key })
+  const onError = (err) => toast.error(`Couldn't save that change. ${err?.message ?? ''}`.trim())
 
   const rotate = useMutation({
     mutationFn: () => rotateMyGuardianCode(uid),
+    onError,
     onSuccess: invalidate,
   })
 
   /* Approving grants the student's defaults rather than everything, so the
      toggles they set before any guardian existed are what actually lands. */
   const approve = useMutation({
+    onError,
     mutationFn: (guardian) =>
       approveGuardianLink(guardian.id, permissionsToScopes(scopesToPermissions(query.data?.defaults))),
     onSuccess: invalidate,
   })
 
   const setDefault = useMutation({
+    onError,
     mutationFn: ({ key: permission, next }) =>
       setDefaultScopes(
         query.data?.code,
@@ -98,11 +103,13 @@ export function useGuardianAccess(uid, birthdate) {
   })
 
   const revoke = useMutation({
+    onError,
     mutationFn: (guardian) => revokeGuardianLink(guardian.id),
     onSuccess: invalidate,
   })
 
   const setPermission = useMutation({
+    onError,
     mutationFn: ({ guardian, key: permission, next }) =>
       setGuardianLinkScopes(
         guardian.id,
@@ -118,8 +125,6 @@ export function useGuardianAccess(uid, birthdate) {
     setPermission.isPending ||
     setDefault.isPending
 
-  const failed = [rotate, approve, revoke, setPermission, setDefault].find((m) => m.isError)
-
   return {
     code: query.data?.code ?? null,
     guardians: query.data?.guardians ?? [],
@@ -129,11 +134,7 @@ export function useGuardianAccess(uid, birthdate) {
     canManage: canManageOwnLinks(birthdate),
     loading: query.isLoading,
     busy,
-    error: query.isError
-      ? "Couldn't load your parental access settings."
-      : failed
-        ? `Couldn't save that change. ${failed.error?.message ?? ''}`.trim()
-        : null,
+    error: query.isError ? "Couldn't load your parental access settings." : null,
     rotateCode: () => rotate.mutate(),
     approveGuardian: (guardian) => approve.mutate(guardian),
     revokeGuardian: (guardian) => revoke.mutate(guardian),

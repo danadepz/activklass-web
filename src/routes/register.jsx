@@ -170,12 +170,11 @@ export default function Register() {
     schoolYear: '',
   })
   const [showPassword, setShowPassword] = useState(false)
-  // Actionable registration errors stay visible until dismissed or a new
-  // attempt clears them. A later error replaces the previous one.
+  // Replace the last notice immediately when registration is retried.
   const errorToastId = useRef(null)
-  const setError = (message) => {
+  const setError = (message, options) => {
     if (errorToastId.current != null) toast.dismiss(errorToastId.current)
-    errorToastId.current = message ? toast.error(message) : null
+    errorToastId.current = message ? toast.error(message, options) : null
   }
   const [submitting, setSubmitting] = useState(false)
   // Privacy Notice + Terms and Conditions, agreed on the last step. Front-end
@@ -401,7 +400,7 @@ export default function Register() {
     // click then creates the account for real.
     const otherAccount = signedInAsSomeoneElse(auth.currentUser?.email, form.email)
     if (otherAccount) {
-      setError(<>{otherAccount} <SignOutButton onClick={signOutHere} /></>)
+      setError(<>{otherAccount} <SignOutButton onClick={signOutHere} /></>, { duration: 0 })
       return
     }
     // 1. Firebase identity — skipped when resuming this person's own

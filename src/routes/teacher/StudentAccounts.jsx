@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 /**
  * Student accounts — the solo subscriber's slice of the admin console.
  *
@@ -157,7 +158,7 @@ function ManualCreate({ classes, prefix, onDone }) {
     studentNumber: '', lrn: '', birthdate: '', personalEmail: '',
   }
   const [form, setForm] = useState(blank)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -332,7 +333,7 @@ export function BulkCreate({ classes, prefix, onDone }) {
   const [classId, setClassId] = useState(classes[0]?.id ?? '')
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('')
-  const [parseError, setParseError] = useState('')
+  const [parseError, setParseError] = useTransientMessage('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
   const [preparing, setPreparing] = useState(false)
@@ -674,7 +675,7 @@ export function AccountRow({ user, classes, onChanged }) {
   // Membership is the class's student_ids array (DATA-MODEL: no join table).
   const enrolledIn = (classes ?? []).filter((c) => (c.student_ids ?? []).includes(user.id))
   const [busy, setBusy] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const active = (user.status ?? 'active') === 'active'
 
   async function run(label, fn) {

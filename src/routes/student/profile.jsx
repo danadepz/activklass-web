@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
@@ -91,7 +92,7 @@ export default function StudentProfile() {
      not for the other attachment features. */
   const fileInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
-  const [photoError, setPhotoError] = useState(null)
+  const [photoError, setPhotoError] = useTransientMessage(null)
 
   async function onPhotoPicked(event) {
     const file = event.target.files?.[0]
@@ -129,7 +130,7 @@ export default function StudentProfile() {
   // --- Personal email (password recovery, T-139) ---
   const [personalEmail, setPersonalEmail] = useState(profile.personal_email ?? '')
   const [emailSaving, setEmailSaving] = useState(false)
-  const [emailStatus, setEmailStatus] = useState(null)
+  const [emailStatus, setEmailStatus] = useTransientMessage(null)
 
   async function handleSaveEmail(e) {
     e?.preventDefault()

@@ -20,6 +20,7 @@ describe('toast lifetimes', () => {
     ['success', () => toast.success('Saved')],
     ['info', () => toast.info('Working')],
     ['warning', () => toast.warning('Some records were skipped')],
+    ['error', () => toast.error('Could not save. Try again.')],
   ])('%s notices disappear after three seconds', (_type, show) => {
     show()
     expect(getToasts()).toHaveLength(1)
@@ -32,7 +33,7 @@ describe('toast lifetimes', () => {
   })
 
   it('keeps actionable errors visible until the user dismisses them', () => {
-    const id = toast.error('Could not save. Try again.')
+    const id = toast.error('Download the recovery details.', { duration: 0 })
     vi.advanceTimersByTime(60 * 60 * 1000)
     expect(getToasts()).toHaveLength(1)
     dismissToast(id)

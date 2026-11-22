@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
@@ -75,7 +76,7 @@ export function resetRequestedMessage(email) {
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e) {

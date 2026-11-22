@@ -1,0 +1,1 @@
+export const NOTICE_DURATION_MS = 3000

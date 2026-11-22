@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
@@ -187,7 +188,7 @@ export function ProfileCard() {
     last_name: profile.last_name ?? '',
   })
   const [msg, setMsg] = useState('')
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
 
   const mut = useMutation({
     mutationFn: (fields) => updateDoc(doc(db, 'users', profile.id), {
@@ -328,7 +329,7 @@ function PayButton({ ownerId }) {
 function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
   const floor = currentSeats ?? 0
   const [value, setValue] = useState(String(floor))
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
   const mut = useMutation({
     mutationFn: ({ studentSeats, amount, pricingVersion }) => startSeatIncreaseCheckout(ownerId, { studentSeats, quoteTotalPhp: amount, pricingVersion }),
     onSuccess: (res) => { window.location.href = res.checkout_url },
@@ -448,7 +449,7 @@ function PaymentLocked({ profile }) {
   const [idType, setIdType] = useState(profile.verification_id_type ?? ID_TYPES[0].value)
   const [idNumber, setIdNumber] = useState(profile.verification_id_number ?? '')
   const [idLink, setIdLink] = useState(profile.verification_id_link ?? '')
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [busy, setBusy] = useState(false)
 
   if (profile.school_request_pending) {
@@ -527,7 +528,7 @@ function SubscriptionCard() {
   const { profile, school, isSuperAdmin } = useAuth()
   const verified = profile.verification_status === 'approved'
   const qc = useQueryClient()
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
   const checkout = useCheckoutReturn(profile.id)
 
   const { data: plansRes } = useQuery({ queryKey: ['subscription-plans'], queryFn: fetchPlans })
@@ -809,7 +810,7 @@ function SubscriptionCard() {
  */
 function SchoolInviteCard() {
   const qc = useQueryClient()
-  const [err, setErr] = useState('')
+  const [err, setErr] = useTransientMessage('')
 
   const { data } = useQuery({
     queryKey: ['institution-invites-mine'],

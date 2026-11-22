@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -157,7 +158,7 @@ function AddAssessmentModal({ classId, record, onClose, onSaved }) {
     total_points: '',
     date_given: '',
   })
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
@@ -395,7 +396,7 @@ export function RecordGrid({ classId, record, bundle, refetch, onDirtyChange }) 
   const navigate = useNavigate()
   const [dirty, setDirty] = useState({})
   const [dirtyOverrides, setDirtyOverrides] = useState({})
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const locked = record.period.locked
@@ -1149,7 +1150,7 @@ function GradeContestsPanel({ classId, assessments = [] }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const [busyId, setBusyId] = useState(null)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [reviewing, setReviewing] = useState(null) // the contest open in the review modal
 
   /* Which disputed column came from a quiz, and which quiz. The contest

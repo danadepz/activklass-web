@@ -104,11 +104,11 @@ describe('institution trial disclosure', () => {
 describe('registration error notifications', () => {
   const source = readFileSync(fileURLToPath(new URL('./register.jsx', import.meta.url)), 'utf8')
 
-  it('keeps actionable errors visible until dismissed or a new attempt clears them', () => {
+  it('replaces earlier errors and keeps the sign-out action available', () => {
     expect(source).toMatch(/const errorToastId = useRef\(null\)/)
     expect(source).toMatch(/toast\.dismiss\(errorToastId\.current\)/)
-    expect(source).toMatch(/message \? toast\.error\(message\) : null/)
-    expect(source).not.toMatch(/toast\.error\(message,\s*\{\s*duration:\s*6000\s*\}\)/)
+    expect(source).toContain('message ? toast.error(message, options) : null')
+    expect(source).toContain('setError(<>{otherAccount} <SignOutButton onClick={signOutHere} /></>, { duration: 0 })')
   })
 })
 

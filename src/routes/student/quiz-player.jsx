@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -257,7 +258,7 @@ export async function unlockThenStart({ quiz, classId, password, start }) {
 export function StartCard({ quiz, attempts, classId, onStarted }) {
   const { profile } = useAuth()
   const [starting, setStarting] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [password, setPassword] = useState('')
   // T-259: the password is checked by Flask, never here -- the quiz document
   // carries only the flag. A right entry earns the pass the attempt rule reads.
@@ -531,7 +532,7 @@ export function Runner({ quiz, attempt, isResume }) {
   const { overlayProps: confirmOverlay, panelProps: confirmPanel } =
     useDialogBehavior(() => setConfirm(false), { open: confirm, label: 'Submit assessment' })
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const submittedRef = useRef(false)
 
   const total = questions.length

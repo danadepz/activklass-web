@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import InstallmentStatus from '@/components/subscription/InstallmentStatus'
 import SubscriptionExpiry from '@/components/SubscriptionExpiry'
@@ -346,7 +347,7 @@ function SeatIncreaseCard({ ownerId, sub }) {
   const curStudent = sub.limits?.student_seats ?? 0
   const [teacherSeats, setTeacherSeats] = useState(String(curTeacher))
   const [studentSeats, setStudentSeats] = useState(String(curStudent))
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
 
   const mut = useMutation({
     mutationFn: ({ teacherSeats: t, studentSeats: s, amount, pricingVersion }) => startSeatIncreaseCheckout(ownerId, {
@@ -455,7 +456,7 @@ function StorageMeter({ limitBytes, resourceUsage }) {
 function TeacherSeatsCard({ onChanged }) {
   const qc = useQueryClient()
   const [email, setEmail] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [note, setNote] = useState('')
 
   const { data, isLoading, isError } = useQuery({

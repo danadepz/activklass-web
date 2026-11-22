@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
@@ -48,7 +49,7 @@ export default function HomeTab() {
   } = useQuery({ queryKey: adminSchoolKey, queryFn: fetchSchoolSettings })
   const refreshSchool = () => qc.invalidateQueries({ queryKey: adminSchoolKey })
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
 
   const active = (profile.status ?? 'active') === 'active'

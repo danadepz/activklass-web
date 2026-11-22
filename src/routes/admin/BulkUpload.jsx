@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { Fragment, useMemo, useRef, useState } from 'react'
 import { parseCsv } from '@/lib/roster'
 import { emailError, passwordError } from '@/lib/validation'
@@ -238,7 +239,7 @@ export default function BulkUpload({ role, onDone, settings, users }) {
   const prefix = settings?.school?.login_prefix ?? ''
   const [rows, setRows] = useState([])
   const [fileName, setFileName] = useState('')
-  const [parseError, setParseError] = useState('')
+  const [parseError, setParseError] = useTransientMessage('')
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState(false)

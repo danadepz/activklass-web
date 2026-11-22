@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useRef, useState } from 'react'
 import {
   yearLevelError, semesterError, SEMESTERS, GRADE_LEVELS, YEAR_LEVELS,
@@ -386,7 +387,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
   const [fromYear, setFromYear] = useState(() => normalizeAcademicYear(form.academic_year).from)
   const [toYear, setToYear] = useState(() => normalizeAcademicYear(form.academic_year).to)
 
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const formRef = useRef(null)
@@ -406,8 +407,8 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
      top of the form -- roughly 300 lines above the file picker and the Save
      button, inside a scroll container. A teacher at the bottom of the modal
      sees the button return to its idle label and nothing else, which reads as
-     the button being dead. The toast is viewport-independent and, for errors,
-     stays until dismissed. Field-level problems do not come through here: those
+     the button being dead. The toast also shows the error beside the viewport
+     edge for three seconds. Field-level problems do not come through here: those
      scroll to the offending input instead. */
   const reportError = (message) => {
     setError(message)

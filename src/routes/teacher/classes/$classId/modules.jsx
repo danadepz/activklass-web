@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 /**
  * Modules -- the class as the student sees it on their Modules tab, plus the
  * power to put work under any sub-module.
@@ -321,7 +322,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
   }
   const countsToward = taskCountsTowardRecord(form)
   const [preview, setPreview] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [saving, setSaving] = useState(null) // 'draft' | 'publish' | 'save'
 
   // Attachment sub-form: the same three-button pattern the Syllabus page's
@@ -331,7 +332,7 @@ export function TaskDialog({ classId, clazz, syllabusId, module, topic, task, ki
   const [attTitle, setAttTitle] = useState('')
   const [attUrl, setAttUrl] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [attError, setAttError] = useState('')
+  const [attError, setAttError] = useTransientMessage('')
   const resetAttach = () => { setAdding(null); setAttTitle(''); setAttUrl(''); setAttError('') }
 
   async function onFile(e) {

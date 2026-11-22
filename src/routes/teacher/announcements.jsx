@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from 'firebase/firestore'
@@ -199,7 +200,7 @@ export default function AnnouncementsPage() {
 
   /* form state */
   const [form, setForm] = useState(EMPTY_FORM)
-  const [formErr, setFormErr] = useState('')
+  const [formErr, setFormErr] = useTransientMessage('')
   const [deletingId, setDeletingId] = useState(null)
 
   /* ── fetch classes from Firestore (same source as ClassesPage) ── */

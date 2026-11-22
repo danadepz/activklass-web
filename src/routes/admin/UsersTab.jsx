@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
@@ -83,7 +84,7 @@ export function LoginPrefixCard({ settings, pending, error: loadError, onRetry, 
   // null = untouched, show the saved value
   const [name, setName] = useState(null)
   const [abbr, setAbbr] = useState(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
 
   const mut = useMutation({
@@ -201,7 +202,7 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
   const savedDates = school?.term_dates ?? {}
 
   const [dates, setDates] = useState(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
 
   const mut = useMutation({
@@ -352,7 +353,7 @@ function CreateUserForm({ onCreated, settings, users, role }) {
     birthdate: '', employeeNumber: '', department: '', personalEmail: '',
   }
   const [form, setForm] = useState(blank)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
 
   const prefix = settings?.school?.login_prefix ?? ''
@@ -785,7 +786,7 @@ export function resetPasswordPromptSpec(user) {
 
 export function UserRow({ user, isSelf, onChanged }) {
   const [busy, setBusy] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const active = (user.status ?? 'active') === 'active'
   const isParent = user.role === 'parent'
   const idNumber = idNumberOf(user)

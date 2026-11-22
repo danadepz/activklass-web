@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { generateModule } from '@/lib/ai'
 import { Sparkles } from '@/components/icons'
@@ -16,7 +17,7 @@ export default function GenerateModuleModal({ tree, subject, onAppend, onClose }
   const [brief, setBrief] = useState('')
   const [topicCount, setTopicCount] = useState(4)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   const existingTitles = (tree.modules ?? []).map((m) => m.title).filter(Boolean)
 

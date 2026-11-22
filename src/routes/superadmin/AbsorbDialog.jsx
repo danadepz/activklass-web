@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore'
@@ -28,8 +29,8 @@ export default function AbsorbDialog({ schoolId, schoolName, onClose, onDone }) 
   const [email, setEmail] = useState('')
   const [employeeNumber, setEmployeeNumber] = useState('')
   const [teacher, setTeacher] = useState(null) // { uid, firstName, lastName, email }
-  const [lookupError, setLookupError] = useState(null)
-  const [confirmError, setConfirmError] = useState(null)
+  const [lookupError, setLookupError] = useTransientMessage(null)
+  const [confirmError, setConfirmError] = useTransientMessage(null)
   const [finding, setFinding] = useState(false)
 
   const { data: school } = useQuery({

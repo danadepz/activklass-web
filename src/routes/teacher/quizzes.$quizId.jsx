@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -385,7 +386,7 @@ function LiveSettings({ quiz, refetch }) {
     String(wasUnlimited ? 1 : quiz.attempts_allowed ?? 1),
   )
   const [closesAt, setClosesAt] = useState(quiz.closes_at?.slice(0, 16) ?? '')
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saved, setSaved] = useState(false)
 
   const dirty =
@@ -1106,7 +1107,7 @@ async function saveEssayMarks(attempt, marks) {
  */
 export function AttemptAnswers({ attempt, quiz, onMarked }) {
   const [drafts, setDrafts] = useState({})
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const questions = quiz?.questions ?? []
   const perQById = Object.fromEntries((attempt.per_question ?? []).map((pq) => [pq.id, pq]))
   const answers = attempt.answers ?? {}
@@ -1658,7 +1659,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
   const [savedSnapshot, setSavedSnapshot] = useState(
     () => builderSnapshot(initialSettings, initialClassIds, initialQuestions),
   )
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -2609,7 +2610,7 @@ export function QuizPasswordCard({ quiz, refetch }) {
   const [draft, setDraft] = useState('')
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [names, setNames] = useState({})
   const on = state ? state.required : quiz.password_required === true
   const saved = state?.password ?? ''
@@ -2737,7 +2738,7 @@ export function ChangeScoringModal({ quiz, onClose, refetch }) {
   const [preview, setPreview] = useState(null)
   const [names, setNames] = useState({})
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   const next = applyScoringEdits(questions, edits)
   const problem = quizPublishError({ title: quiz.title, questions: next, classIds: quiz.class_ids ?? [] })
@@ -2846,7 +2847,7 @@ export function ChangeScoringModal({ quiz, onClose, refetch }) {
 function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { open: isOpen, label: 'Edit wording', closeOnBackdrop: false })
   const [edits, setEdits] = useState([])
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -2859,7 +2860,7 @@ function EditWordingModal({ isOpen, onClose, quiz, refetch }) {
         options: (q.options ?? []).map((o) => ({ id: o.id, text: o.text ?? '' })),
       })),
     )
-  }, [isOpen, quiz.questions])
+  }, [isOpen, quiz.questions, setError])
 
   if (!isOpen) return null
 

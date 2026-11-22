@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -65,7 +66,7 @@ function Configurator() {
   const [option, setOption] = useState('half')
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const idempotencyKey = useRef(null)
   const [openCount, setOpenCount] = useState(0) // remounts the popup so each opening starts unticked
 
@@ -196,7 +197,7 @@ function DemoStatus({ demoId, result, onReset }) {
   const queryClient = useQueryClient()
   const [simulateDays, setSimulateDays] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
   const cancelledSent = useRef(false)
 
   useEffect(() => {

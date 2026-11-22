@@ -9,6 +9,7 @@
  * the directory, since without one there is nothing to be grouped by.
  */
 import { useState } from 'react'
+import { toast } from '@/components/ui/toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -54,6 +55,7 @@ function ChooseSchool() {
       await refreshProfile?.()
       qc.invalidateQueries({ queryKey: ['school-colleagues'] })
     },
+    onError: () => toast.error('Could not save your school. Check your connection and try again.'),
   })
   return (
     <form onSubmit={(e) => { e.preventDefault(); save.mutate() }}>
@@ -66,7 +68,6 @@ function ChooseSchool() {
       <p style={{ fontSize: 12.5, color: faint, margin: '8px 0 12px' }}>
         Not listed? A school is added to this list the moment a teacher registers with it.
       </p>
-      {save.isError && <p role="alert" style={{ fontSize: 13, color: red, margin: '0 0 10px' }}>Could not save your school. Check your connection and try again.</p>}
       <Button type="submit" disabled={!schoolId || save.isPending}>{save.isPending ? 'Saving…' : 'Save school'}</Button>
     </form>
   )

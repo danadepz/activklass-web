@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState, useRef, useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -292,7 +293,7 @@ function SubmitBox({ task, classId, studentId, onSubmitted, dropped = false }) {
   const [attachment, setAttachment] = useState(null)
   const [note, setNote] = useState(existing?.note ?? '')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const taskDoc = { due_at: task.dueAt ? toWindowString(task.dueAt) : null }
 
   async function submit() {
@@ -764,7 +765,7 @@ function GradeContestModal({ classId, studentId, studentName, assessment, onClos
   const [reason, setReason] = useState('')
   const [excuseUrl, setExcuseUrl] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   async function submit() {
     if (!reason.trim()) {
@@ -1002,7 +1003,7 @@ function ContestModal({ classId, studentId, studentName, day, onClose, onSubmitt
   const [reason, setReason] = useState('')
   const [excuseUrl, setExcuseUrl] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useTransientMessage(null)
 
   async function submit() {
     if (!reason.trim()) {
@@ -1670,7 +1671,7 @@ export async function dismissAnnouncement(announcementId, studentId) {
 
 function AnnouncementsTab({ announcements, announcementsTotal, studentId, onDismissed }) {
   const [pendingId, setPendingId] = useState(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
 
   if (announcements.length === 0) {
     return announcementsTotal > 0

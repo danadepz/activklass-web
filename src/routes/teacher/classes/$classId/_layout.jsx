@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { NavLink, Link, Outlet, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -64,7 +65,7 @@ export default function ClassLayout() {
   const queryClient = useQueryClient()
   const base = `/teacher/classes/${classId}`
   const [showEdit, setShowEdit] = useState(false)
-  const [warning, setWarning] = useState(null)
+  const [warning, setWarning] = useTransientMessage(null)
   const [removeClass, removingClass] = useAsyncAction(deleteClass)
 
   /* T-119: moved out of the Roster toolbar, beside Edit Class, where a

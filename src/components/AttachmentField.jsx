@@ -1,3 +1,4 @@
+import { useTransientMessage } from '@/hooks/useTransientMessage'
 import { useState } from 'react'
 import { LINK_HINT, isSafeLink, uploadAttachment, uploadsPossible } from '@/lib/attachments'
 import { ink, muted, faint, green, red, line, mono } from '@/theme'
@@ -96,7 +97,7 @@ export default function AttachmentField({
   const canUpload = uploadsPossible()
   const [link, setLink] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useTransientMessage('')
   const [done, setDone] = useState('')
 
   const field = {
