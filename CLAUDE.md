@@ -4,13 +4,11 @@
 React portal for **ActivKlass**, an AI-assisted class record system for Philippine schools
 (DepEd K-12 and CHED tertiary). This repo is the **teacher, student, admin and superadmin
 web client**. The Flask API, Firebase rules and the `docs/` shared by all three repos live
-in `activklass-backend`. Capstone project — **the next milestone is the defense demo**, so
-prefer what the demo shows over what a backlog lists. **Not released yet, but the defense
-requires it (2026-09-14):** it runs on the Vite dev server with a forwarded VS Code port
-until the **release** — the owner's word; a snapshot of the last build, not a mirror of the
-working tree — lands on **Cloud Run + Firebase Hosting in `activklass1`** (decided
-2026-09-14, `docs/OPEN-QUESTIONS.md` DECIDED). `../activklass-backend/docs/09-deployment-readiness.md`
-is the list of what breaks on a real host and the order to do it in.
+in `activklass-backend`. Capstone project — **the next milestone is the defense demo**, so prefer what the demo
+shows over what a backlog lists. Current deployment configuration in `vercel.json` rewrites
+`/api/*` to a configured Cloud Run origin. This repository does not establish the active
+live deployment or Firebase Hosting status. See root `DEPLOYMENT.md` for verified
+configuration and explicit unknowns.
 
 ## Lanes — the one rule that actually breaks things
 Several Claude Code panes work this same checkout at once. **Read `OWNERSHIP.md` before
@@ -32,8 +30,9 @@ function whose new return shape was still uncommitted). Before `--only` on a sha
 `git diff` it and make sure every hunk is yours.
 
 ## Core Principles (Always Follow)
-- **Firestore is the system of record.** Clients read and write it directly;
-  `../activklass-backend/firestore.rules` is the only server-side authorization layer.
+- **Firestore is the system of record for school records.** Direct client calls are governed
+  by `../activklass-backend/firestore.rules`. Flask also enforces authentication and
+  route-specific authorization for server endpoints; UI checks are not authorization.
 - **Two data paths, not interchangeable.** Firestore-direct for all records (classes,
   grades, attendance, quizzes, attempts). Flask (`lib/api.js`) only for what needs the
   Admin SDK or a model: AI generation, risk prediction, account provisioning, admin user
@@ -73,9 +72,8 @@ function whose new return shape was still uncommitted). Before `--only` on a sha
   Invalidation works off the `['fs-classes']` key prefix.
 - **Firebase Web SDK 12** — Auth, Firestore, Storage, initialized in `lib/firebase.js`.
   Init is guarded: missing env keys render setup instructions instead of a white screen.
-- **Vitest 4** — the count is `npm run test`'s own output, quoted once below so this
-  doesn't drift out of sync with it again. **The only automated check** besides the
-  build; there is no typechecker (plain JSX, not TypeScript).
+- **Vitest 4** — see `TESTING.md` for current commands and prerequisites; do not rely on
+  static test counts. The project uses plain JSX, not TypeScript.
 - Rejected and abandoned choices, with reasons: `docs/TECH-STACK.md`.
 
 ## Project Structure
@@ -101,19 +99,18 @@ Never "fix" a parity failure by editing the test.
 ## Development Commands
 ```bash
 npm run dev          # Vite on :5173 — ONE dev server for all panes, not four
-npm run build        # production build to dist/  (645ms, main chunk 654 kB)
-npm run test         # vitest, 1899 tests in 192 files as of 2026-10-29 — must pass before you finish
+npm run build        # production build to dist/
+npm run test         # run the configured Vitest suite
                       # (excludes firestoreRules.test.js / storageRules.test.js — those need
                       # the Firebase emulator + Java, run and counted separately via
                       # npm run test:rules / test:rules:storage, see docs/ROADMAP.md
                       # for that suite's own current count)
 npm run test:rules   # real firestore.rules against the emulator (needs Java)
-npm run lint         # 41 PRE-EXISTING errors, nearly all no-unused-vars — not your bug
+npm run lint         # run configured ESLint check
 ```
 Config lives in `.env.local` (gitignored): the seven `VITE_FIREBASE_*` keys, and
 `VITE_API_URL` left **unset** so `/api` goes through the Vite proxy to Flask on :5000.
-**After code changes: `npm run test` and `npm run build` must both pass.** Lint's non-zero
-exit is baseline noise — compare the count, don't treat it as a gate.
+Follow the verification requirements in `TESTING.md`; report actual command results.
 
 **The backend must be running separately** for anything on the Flask path. A stopped Flask
 looks like six unrelated broken features; that has already happened in a walkthrough.
