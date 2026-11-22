@@ -43,7 +43,7 @@ import {
   MIN_ATTENDANCE_DAYS,
   attendanceRateFromMarks,
   DAY_WEIGHT,
-  missedQuizCounts,
+  missedQuizCountsIfKnown,
   missingRate,
   missingWorkCounts,
   quizAverageFromAttempts,
@@ -128,10 +128,17 @@ function quizFigures(list, quizDates) {
 /** Every quiz pointed at this class, drafts included -- missedQuizCounts
  *  decides which of them were actually expected of a given student. */
 async function classQuizzes(classId) {
-  const snap = await getDocs(
-    query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId)),
-  )
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+  // Two shapes, the same two the student class page reads: `class_ids` today,
+  // a single `class_id` on quizzes written before multi-class assignment. A
+  // quiz carrying both is one quiz (deduplicated by id). Either read failing
+  // fails the whole load -- a partial list would read as "nothing was due".
+  const [modern, legacy] = await Promise.all([
+    getDocs(query(collection(db, 'quizzes'), where('class_ids', 'array-contains', classId))),
+    getDocs(query(collection(db, 'quizzes'), where('class_id', '==', classId))),
+  ])
+  const byId = new Map()
+  for (const d of [...modern.docs, ...legacy.docs]) byId.set(d.id, { id: d.id, ...d.data() })
+  return [...byId.values()]
 }
 
 /** Every graded assessment in this class, for the missing-work counts. */
@@ -167,10 +174,10 @@ export function useClassRisk(classId, students, options = {}) {
         classAssessments(classId),
         classQuizzes(classId),
         getDoc(doc(db, 'classes', classId)),
-        // Official quiz excusals (A4). Readable only by the class's teacher,
-        // which is who runs this; a refused read means none can be shown here,
-        // and missing work is then computed as before rather than not at all.
-        fetchClassExcusals(db, classId).catch(() => ({})),
+        // Official quiz excusals (A4). A failed read is UNKNOWN (undefined),
+        // never "none excused": an excused quiz would count as missed work.
+        // Only a successful read -- empty or not -- is evidence.
+        fetchClassExcusals(db, classId).catch(() => undefined),
       ])
       const quizDates = quizDueDates(quizBank, assessments)
       const quizBy = Object.fromEntries(students.map((s) => [s.student_id, quizFigures(quizzes.byStudent[s.student_id] ?? [], quizDates)]))
@@ -189,11 +196,21 @@ export function useClassRisk(classId, students, options = {}) {
       const sessions = { ...ledger.counts, start: ledger.start, start_source: ledger.startSource, ended: ledger.endedBy }
 
       const att = Object.fromEntries(students.map((s) => [s.student_id, attendance.forStudent(s.student_id)]))
+      // Per student: a Set when the excusal read succeeded (empty = none), undefined when it failed.
+      const excusedOf = (id) => (excused === undefined ? undefined : excused[id] ?? new Set())
+      // The attempts read succeeded (a failure fails the whole query), so no attempt means none.
+      const attemptedOf = (id) => quizzes.attempted[id] ?? new Set()
+      // Unknown excusals while a closed quiz was expected -> undefined: the
+      // rate is withheld and the model answers Insufficient Data.
+      const quizWorkOf = (id) => missedQuizCountsIfKnown(quizBank, attemptedOf(id), id, excusedOf(id), now)
       const evidence = Object.fromEntries(students.map((s) => [s.student_id, {
         sessions,
         attendance: att[s.student_id].evidence,
         quizzes: quizBy[s.student_id].evidence,
-        work: workEvidence(assessments, quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
+        work: {
+          ...workEvidence(assessments, quizBank, quizzes.attempted[s.student_id], s.student_id, now, excusedOf(s.student_id)),
+          ...(excused === undefined ? { excusals_unknown: true } : {}),
+        },
       }]))
 
       const payload = students.map((s) => ({
@@ -207,10 +224,9 @@ export function useClassRisk(classId, students, options = {}) {
           // Pooled: assessments the teacher marked missing, plus quizzes whose
           // window closed with no attempt. The second half is invisible in
           // quiz_attempts by construction -- there is no document to find.
-          missingWorkRate: missingRate(
-            missingWorkCounts(assessments, s.student_id),
-            missedQuizCounts(quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
-          ),
+          missingWorkRate: quizWorkOf(s.student_id)
+            ? missingRate(missingWorkCounts(assessments, s.student_id), quizWorkOf(s.student_id))
+            : undefined,
         },
       }))
 
