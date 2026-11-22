@@ -1487,7 +1487,7 @@ function PerfChart({ points, active, onActive }) {
    let table rows scroll visibly through it. */
 const stickyTh = { position: 'sticky', top: 0, background: '#F8F9FA', zIndex: 1 }
 
-function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attempts, quizzes, attemptedQuizIds }) {
+function SubjectAnalyticsTab({ classId, entry, attendance, studentId, quizAverage, attempts, quizzes, attemptedQuizIds }) {
   // Held here, not in PerfChart: the table and the chart share it.
   // Must sit above the early return below -- hooks run unconditionally.
   const [active, setActive] = useState(null)
@@ -1500,6 +1500,7 @@ function SubjectAnalyticsTab({ entry, attendance, studentId, quizAverage, attemp
 
   const forecast = (
     <ClassStandingForecast
+      classId={classId}
       studentId={studentId}
       // The forecast's prior-grade input is a percent. A 1.0–5.0 point grade
       // fed in as one reads as a certain fail, so on that scale it is withheld
@@ -1906,6 +1907,7 @@ export default function StudentClassDetail() {
       )}
       {tab === 'analytics' && (
         <SubjectAnalyticsTab
+          classId={classId}
           entry={entry}
           attendance={attendance}
           studentId={profile.id}

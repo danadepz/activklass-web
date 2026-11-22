@@ -47,12 +47,14 @@ import {
   missingRate,
   missingWorkCounts,
   quizAverageFromAttempts,
+  quizDueDates,
   quizEvidence,
   quizTrendFromAttempts,
   splitTrend,
   workEvidence,
 } from '@/lib/riskSignals'
 import { sessionLedger, studentAttendanceEvidence } from '@/lib/attendanceSessions'
+import { fetchClassExcusals } from '@/lib/quizExcusals'
 
 /**
  * Attendance per student from the date-keyed subcollection, through the
@@ -107,18 +109,19 @@ async function quizSignals(classId) {
     ;(byStudent[a.student_id] ??= []).push(a)
   })
 
+  return { attempted, byStudent }
+}
+
+/**
+ * Level, trend and evidence for one student's attempts. The trend orders
+ * quizzes by their authoritative due dates (policy A3), which needs the quiz
+ * list and the record columns -- so it runs once everything is loaded.
+ */
+function quizFigures(list, quizDates) {
   return {
-    attempted,
-    byStudent: Object.fromEntries(
-      Object.entries(byStudent).map(([id, list]) => [
-        id,
-        {
-          average: quizAverageFromAttempts(list),
-          trend: quizTrendFromAttempts(list),
-          evidence: quizEvidence(list),
-        },
-      ]),
-    ),
+    average: quizAverageFromAttempts(list),
+    trend: quizTrendFromAttempts(list, quizDates),
+    evidence: quizEvidence(list, quizDates),
   }
 }
 
@@ -144,7 +147,10 @@ async function classAssessments(classId) {
  */
 export function useClassRisk(classId, students, options = {}) {
   const ids = (students ?? []).map((s) => s.student_id).sort().join(',')
-  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, s.riskGrade ?? s.grade ?? null]))
+  // `riskGrade` when the caller supplies one -- null there means "no valid
+  // graded work" (A2) and must NOT fall back to the displayed grade.
+  const gradeOf = (s) => ('riskGrade' in s ? s.riskGrade : s.grade) ?? undefined
+  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, gradeOf(s) ?? null]))
   const { profile } = useAuth()
 
   return useQuery({
@@ -155,13 +161,19 @@ export function useClassRisk(classId, students, options = {}) {
     // from refetching on every focus.
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const [attendance, quizzes, assessments, quizBank, classSnap] = await Promise.all([
+      const [attendance, quizzes, assessments, quizBank, classSnap, excused] = await Promise.all([
         attendanceSignals(classId),
         quizSignals(classId),
         classAssessments(classId),
         classQuizzes(classId),
         getDoc(doc(db, 'classes', classId)),
+        // Official quiz excusals (A4). Readable only by the class's teacher,
+        // which is who runs this; a refused read means none can be shown here,
+        // and missing work is then computed as before rather than not at all.
+        fetchClassExcusals(db, classId).catch(() => ({})),
       ])
+      const quizDates = quizDueDates(quizBank, assessments)
+      const quizBy = Object.fromEntries(students.map((s) => [s.student_id, quizFigures(quizzes.byStudent[s.student_id] ?? [], quizDates)]))
 
       // One clock for the whole class, so two students are never judged
       // against a quiz deadline that fell between their two evaluations.
@@ -170,14 +182,18 @@ export function useClassRisk(classId, students, options = {}) {
       const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       // Class-level: planned vs confirmed meetings. Disclosed, never used to
       // invent absences -- see attendanceSessions.js.
-      const sessions = sessionLedger(attendance.days, classSnap.data()?.schedule ?? null, todayIso).counts
+      // From the class's own start date (A1) when it has one; a legacy class
+      // counts from its first recorded day and the coverage line says so.
+      const cls = classSnap.data() ?? {}
+      const ledger = sessionLedger(attendance.days, cls.schedule ?? null, todayIso, cls.start_date)
+      const sessions = { ...ledger.counts, start: ledger.start, start_source: ledger.startSource }
 
       const att = Object.fromEntries(students.map((s) => [s.student_id, attendance.forStudent(s.student_id)]))
       const evidence = Object.fromEntries(students.map((s) => [s.student_id, {
         sessions,
         attendance: att[s.student_id].evidence,
-        quizzes: quizzes.byStudent[s.student_id]?.evidence ?? { gradedQuizzes: 0, awaitingGrading: 0, retakesFolded: 0 },
-        work: workEvidence(assessments, quizBank, quizzes.attempted[s.student_id], s.student_id, now),
+        quizzes: quizBy[s.student_id].evidence,
+        work: workEvidence(assessments, quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
       }]))
 
       const payload = students.map((s) => ({
@@ -185,15 +201,15 @@ export function useClassRisk(classId, students, options = {}) {
         indicators: {
           attendanceRate: att[s.student_id].rate,
           attendanceTrend: att[s.student_id].trend,
-          priorAverageGrade: s.riskGrade ?? s.grade ?? undefined,
-          quizAverage: quizzes.byStudent[s.student_id]?.average,
-          quizTrend: quizzes.byStudent[s.student_id]?.trend,
+          priorAverageGrade: gradeOf(s),
+          quizAverage: quizBy[s.student_id].average,
+          quizTrend: quizBy[s.student_id].trend,
           // Pooled: assessments the teacher marked missing, plus quizzes whose
           // window closed with no attempt. The second half is invisible in
           // quiz_attempts by construction -- there is no document to find.
           missingWorkRate: missingRate(
             missingWorkCounts(assessments, s.student_id),
-            missedQuizCounts(quizBank, quizzes.attempted[s.student_id], s.student_id, now),
+            missedQuizCounts(quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
           ),
         },
       }))

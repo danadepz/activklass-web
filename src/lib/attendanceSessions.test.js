@@ -62,6 +62,21 @@ describe('sessionLedger · planned vs confirmed', () => {
   it('reports nothing planned when no day is stored yet (no invented term start)', () => {
     expect(sessionLedger([], MWF, '2026-11-30').counts.planned).toBe(0)
   })
+
+  it('counts from the class start date when there is one, as unconfirmed -- never as absent', () => {
+    const recorded = [{ date: '2026-11-09', records: { s1: mark('present') } }]
+    const withStart = sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02')
+    expect(withStart.counts).toMatchObject({ planned: 5, recorded: 1, unconfirmed: 4 })
+    expect(withStart).toMatchObject({ start: '2026-11-02', startSource: 'class' })
+    const legacy = sessionLedger(recorded, MWF, '2026-11-11')
+    expect(legacy.counts).toMatchObject({ planned: 2, recorded: 1, unconfirmed: 1 })
+    expect(legacy).toMatchObject({ start: '2026-11-09', startSource: 'first_record' })
+    expect(sessionLedger([], MWF, '2026-11-11')).toMatchObject({ start: null, startSource: null })
+    // A malformed start is ignored rather than trusted.
+    expect(sessionLedger(recorded, MWF, '2026-11-11', 'soon').startSource).toBe('first_record')
+    // Unrecorded is never a mark: the student's evidence is unchanged by the start date.
+    expect(studentAttendanceEvidence(recorded, 's1')).toEqual({ heldSessions: 1, statuses: ['present'], excused: 0, notRecorded: 0 })
+  })
 })
 
 describe('studentAttendanceEvidence · missing records are not marks', () => {

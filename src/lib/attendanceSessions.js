@@ -65,8 +65,11 @@ export function plannedMeetingDates(schedule, startIso, endIso) {
  *   rescheduled  moved away to `rescheduled_to`        -> excluded (the new date counts)
  *
  * `days` is `[{ date, ...docData }]`. The term start is the earliest stored
- * day unless `startIso` is given -- no class start date exists in the schema,
- * and inventing one would invent missed meetings.
+ * day unless `startIso` is given. Since 2026-11-22 a class
+ * carries `start_date` (policy A1) and callers pass it; a legacy class without
+ * one falls back to the earliest stored day, so meetings before that are not
+ * counted -- never invented as missed. `start` / `startSource` ('class' |
+ * 'first_record' | null) say which applied.
  */
 export function sessionLedger(days, schedule, todayIso, startIso) {
   const byDate = new Map()
@@ -74,7 +77,8 @@ export function sessionLedger(days, schedule, todayIso, startIso) {
     const date = d?.date ?? d?.id
     if (isIsoDate(date)) byDate.set(date, d)
   }
-  const start = startIso ?? [...byDate.keys()].sort()[0]
+  const classStart = typeof startIso === 'string' && isIsoDate(startIso) ? startIso : null
+  const start = classStart ?? [...byDate.keys()].sort()[0]
   const planned = new Set(start ? plannedMeetingDates(schedule, start, todayIso) : [])
   const dates = [...new Set([...planned, ...byDate.keys()])].sort()
 
@@ -99,7 +103,7 @@ export function sessionLedger(days, schedule, todayIso, startIso) {
 
   const counts = { planned: planned.size, recorded: 0, unconfirmed: 0, upcoming: 0, cancelled: 0, rescheduled: 0 }
   for (const s of sessions) counts[s.state] += 1
-  return { sessions, counts }
+  return { sessions, counts, start: start ?? null, startSource: classStart ? 'class' : start ? 'first_record' : null }
 }
 
 /**

@@ -39,7 +39,8 @@ export default function PredictedRisk({ classId, rows }) {
     .map((r) => ({ row: r, risk: data?.[r.student_id] }))
     .filter((x) => x.risk)
   const scored = results.filter((x) => x.risk.status === 'scored')
-  const insufficient = results.filter((x) => x.risk.status === 'insufficient_data').length
+  const insufficientRows = results.filter((x) => x.risk.status === 'insufficient_data')
+  const insufficient = insufficientRows.length
   const flagged = scored
     .filter((x) => x.risk.atRisk)
     .sort((a, b) => (b.risk.score ?? 0) - (a.risk.score ?? 0))
@@ -145,6 +146,37 @@ export default function PredictedRisk({ classId, rows }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* A7 (2026-11-22): a student missing any required input gets no score.
+          What is shown instead is their record, described -- not predicted. */}
+      {insufficientRows.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h4 style={{ fontSize: 13.5, fontWeight: 700, color: ink, margin: '0 0 4px' }}>
+            Insufficient Data — not scored ({insufficientRows.length})
+          </h4>
+          <p style={{ fontSize: 12, color: muted, margin: '0 0 8px', maxWidth: '70ch' }}>
+            These students are missing at least one of the six required inputs, so the model gives
+            them no score. The lines below describe their record; they are not a prediction.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {insufficientRows.map(({ row, risk }) => (
+              <div key={row.student_id} style={{ padding: '8px 12px', border: `1px solid ${line}`, borderRadius: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: ink }}>{row.last_name}, {row.first_name}</div>
+                {risk.missing?.length > 0 && (
+                  <div style={{ ...mono, fontSize: 11, color: goldDeep, marginTop: 2 }}>
+                    Not yet available: {risk.missing.map((f) => f.replace(/_/g, ' ')).join(', ')}
+                  </div>
+                )}
+                {evidenceText(risk.evidence) && (
+                  <div style={{ ...mono, fontSize: 11, color: faint, marginTop: 2, lineHeight: 1.5 }}>
+                    Record: {evidenceText(risk.evidence)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

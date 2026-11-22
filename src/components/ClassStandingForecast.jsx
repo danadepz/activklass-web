@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { predictRisk, riskReasons } from '@/lib/ai'
+import { db } from '@/lib/firebase'
+import { fetchMyExcusals } from '@/lib/quizExcusals'
 import {
   attendanceRateFromLog,
   attendanceTrendFromLog,
   missedQuizCounts,
   missingRate,
   missingWorkCountsFromEntry,
+  quizDueDates,
   quizTrendFromAttempts,
 } from '@/lib/riskSignals'
 import { ink, muted, faint, green, goldDeep, line, serif, mono } from '@/theme'
@@ -30,6 +33,7 @@ import { ink, muted, faint, green, goldDeep, line, serif, mono } from '@/theme'
  * the two cannot tell a student and their teacher different stories.
  */
 export default function ClassStandingForecast({
+  classId,
   studentId,
   grade,
   attendanceRate,
@@ -40,6 +44,15 @@ export default function ClassStandingForecast({
   quizzes,
   attemptedQuizIds,
 }) {
+  // The student's own official excusals (A4): the same quizzes leave their
+  // missing-work count as leave it on the teacher's screen. A failed read
+  // counts none rather than hiding the forecast.
+  const { data: excused } = useQuery({
+    queryKey: ['my-quiz-excusals', classId, studentId],
+    enabled: !!classId && !!studentId,
+    retry: false,
+    queryFn: () => fetchMyExcusals(db, classId, studentId).catch(() => new Set()),
+  })
   const indicators = useMemo(
     () => ({
       // From the log when present, through the teacher panel's own weights
@@ -50,19 +63,20 @@ export default function ClassStandingForecast({
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
       attendanceTrend: attendanceTrendFromLog(attendanceLog),
-      quizTrend: quizTrendFromAttempts(attempts),
+      // Ordered by each quiz's due date (A3), the teacher panel's rule.
+      quizTrend: quizTrendFromAttempts(attempts, quizDueDates(quizzes, assessments)),
       // Assessments the teacher marked missing, pooled with quizzes that closed
       // without an attempt. The second half is the one a student is least
       // likely to have noticed themselves -- a quiz never opened leaves nothing
       // on screen to remind them it existed.
       missingWorkRate: missingRate(
         missingWorkCountsFromEntry(assessments),
-        missedQuizCounts(quizzes, attemptedQuizIds, studentId),
+        missedQuizCounts(quizzes, attemptedQuizIds, studentId, undefined, excused),
       ),
     }),
     [
       attendanceRate, grade, quizAverage, attendanceLog, attempts, assessments,
-      quizzes, attemptedQuizIds, studentId,
+      quizzes, attemptedQuizIds, studentId, excused,
     ],
   )
 

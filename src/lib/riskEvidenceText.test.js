@@ -14,8 +14,20 @@ describe('PredictedRisk evidence wording', () => {
 
   it('reports planned vs recorded meetings without guessing attendance', () => {
     expect(sessionCoverageText({ recorded: 8, unconfirmed: 2, cancelled: 1, rescheduled: 0 }))
-      .toBe('8 of 10 meetings to date have at least one attendance mark · 2 not yet confirmed · 1 cancelled')
+      .toBe('8 of 10 planned meetings have at least one attendance mark · 2 not yet confirmed · 1 cancelled')
     expect(sessionCoverageText(null)).toBeNull()
+  })
+
+  it('says which start the meeting count runs from (A1), never implying a full term for a legacy class', () => {
+    expect(sessionCoverageText({ recorded: 3, unconfirmed: 1, start: '2026-08-10', start_source: 'class' }))
+      .toBe('3 of 4 planned meetings since the class start date (2026-08-10) have at least one attendance mark · 1 not yet confirmed')
+    expect(sessionCoverageText({ recorded: 3, unconfirmed: 0, start: '2026-09-01', start_source: 'first_record' }))
+      .toContain('since the first recorded day (2026-09-01; no class start date set)')
+  })
+
+  it('discloses quizzes left out of the trend for want of a due date', () => {
+    expect(evidenceText({ attendance: {}, quizzes: { gradedQuizzes: 3, undatedQuizzes: 1 }, work: {} }))
+      .toContain('3 graded quizzes (1 without a due date, left out of the trend)')
   })
 
   it('does not describe an in-progress quiz attempt as submitted work', () => {

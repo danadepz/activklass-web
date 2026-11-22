@@ -8,6 +8,7 @@ import { useQuizzes } from '@/hooks/useQuizzes'
 import { useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { quizzesToAutoPost } from '@/lib/quizToRecord'
 import { computeFinalGrade, gradePolicy, isPassingGrade, pointScaleBands } from '@/lib/grading'
+import { riskGradeInput } from '@/lib/riskSignals'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { ArrowRight, BarChart, Check, AlertCircle, TrendingUp } from '@/components/icons'
 import { GoldArrowDot } from '@/components/ui/Button'
@@ -218,7 +219,18 @@ export default function PerformancePage() {
   // The model schema uses a 0–100 grade. CHED point grades are converted using
   // the configured point-scale band; passing 1.25 as a percentage would be a
   // unit error. Keep the displayed grade untouched.
-  const riskRows = graded.map((r) => ({ ...r, riskGrade: performancePercent(r.grade) }))
+  // A2/A7 (2026-11-22): every student goes to the model, but a grade only
+  // when the selected period has valid graded work behind it (or a teacher
+  // override). A student without one comes back as insufficient data rather
+  // than silently dropping out of the risk panel.
+  const periodAssessments = bundle.assessments.filter((a) => a.period_id === period.id)
+  const riskRows = rows.map((r) => ({
+    ...r,
+    riskGrade: riskGradeInput({
+      grade: r.grade, periodAssessments, studentId: r.student_id,
+      override: bundle.overrides?.[period.id]?.[r.student_id], toPercent: performancePercent,
+    }),
+  }))
 
   const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
   // The gradebook's own pass mark and point-scale direction, not a fixed 75:
