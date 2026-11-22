@@ -3177,6 +3177,39 @@ describe('academic policy 2026-11-22 · class dates and grading periods', () => 
     await assertFails(updateDoc(ref, { start_date: deleteField() }))
   })
 
+  it('refuses impossible calendar days and reversed ranges, accepts real leap days (blocker fix)', async () => {
+    const t = ctx(TEACHER)
+    let n = 0
+    const create = (dates) => setDoc(doc(t, 'classes', `cal-${n++}`), { ...base, ...dates })
+    for (const bad of ['2026-02-30', '2026-02-29', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31',
+      '1900-02-29', '2026-00-10', '2026-13-01', '2026-01-00', '2026-01-32']) {
+      await assertFails(create({ start_date: bad }))
+      await assertFails(create({ start_date: '2026-01-05', end_date: bad }))
+    }
+    for (const good of ['2024-02-29', '2000-02-29', '2026-02-28', '2026-04-30', '2026-12-31', '2026-01-31']) {
+      await assertSucceeds(create({ start_date: good }))
+    }
+    await assertSucceeds(create({ start_date: '2024-02-29', end_date: '2024-02-29' }))
+    await assertFails(create({ start_date: '2026-03-01', end_date: '2026-02-28' }))
+    // The same check on edit: a legacy class cannot be given an impossible day.
+    const legacy = doc(t, 'classes', 'legacy')
+    await assertFails(updateDoc(legacy, { start_date: '2026-02-30' }))
+    await assertFails(updateDoc(legacy, { start_date: '2026-08-10', end_date: '2026-09-31' }))
+    await assertSucceeds(updateDoc(legacy, { subject: 'Still dateless' }))
+  })
+
+  it('refuses class-date writes from anyone but the class teacher, valid dates or not', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', FOREIGN_TEACHER), { role: 'teacher', school_id: 'school-2' })
+      await setDoc(doc(admin.firestore(), 'users', STUDENT), { role: 'student' })
+    })
+    for (const who of [ADMIN, FOREIGN_TEACHER, STUDENT]) {
+      await assertFails(updateDoc(doc(ctx(who), 'classes', 'legacy'), { start_date: '2024-02-29' }))
+    }
+    await assertFails(setDoc(doc(ctx(FOREIGN_TEACHER), 'classes', 'x1'), { ...base, start_date: '2024-02-29' }))
+    await assertFails(setDoc(doc(testEnv.unauthenticatedContext().firestore(), 'classes', 'x2'), { ...base, start_date: '2024-02-29' }))
+  })
+
   it('C1/C2: a school admin cannot create a class or set class dates', async () => {
     await assertFails(setDoc(doc(ctx(ADMIN), 'classes', 'a1'), { ...base, start_date: '2026-08-10' }))
     await assertFails(updateDoc(doc(ctx(ADMIN), 'classes', 'legacy'), { start_date: '2026-08-10' }))
