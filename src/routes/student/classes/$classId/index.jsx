@@ -66,7 +66,15 @@ export async function loadClassDetail(classId, profile) {
       loadStudentContests(classId, studentUid),
       loadStudentGradeContests(classId, studentUid),
       loadSyllabus(classId),
-      getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId)))
+      // Both filters are what the student branch of the announcements rule
+      // reads (the teacher must be one of this student's own teacher_ids): a
+      // class_id-only query cannot be proven and the whole read is refused,
+      // which used to show up as an empty tab.
+      getDocs(query(
+        collection(db, 'announcements'),
+        where('class_id', '==', classId),
+        where('teacher_id', '==', clazz.teacher_id ?? ''),
+      ))
         .catch((err) => {
           console.error('Announcement load error:', err.code ?? '', err.message ?? err)
           announcementsError = err
@@ -1668,9 +1676,21 @@ export async function dismissAnnouncement(announcementId, studentId) {
   })
 }
 
-function AnnouncementsTab({ announcements, announcementsTotal, studentId, onDismissed }) {
+function AnnouncementsTab({ announcements, announcementsTotal, loadFailed = false, studentId, onDismissed }) {
   const [pendingId, setPendingId] = useState(null)
   const [error, setError] = useState('')
+
+  // A refused or failed read is not "no announcements" -- say so, or a teacher's
+  // post looks like it never arrived.
+  if (loadFailed && announcements.length === 0) {
+    return (
+      <Empty
+        icon={<Megaphone className="h-6 w-6" />}
+        title="Announcements Could Not Load"
+        text="We couldn't load your class announcements. Refresh the page, or try again in a moment."
+      />
+    )
+  }
 
   if (announcements.length === 0) {
     return announcementsTotal > 0
@@ -1930,6 +1950,7 @@ export default function StudentClassDetail() {
         <AnnouncementsTab
           announcements={announcements}
           announcementsTotal={announcementsTotal}
+          loadFailed={Boolean(data.queryErrors?.announcements)}
           studentId={profile.id}
           onDismissed={invalidate}
         />
