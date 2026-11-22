@@ -72,7 +72,10 @@ export default function ClassStandingForecast({
         : attendanceRate) ?? undefined,
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
-      attendanceTrend: attendanceTrendFromLog(attendanceLog),
+      // Held sessions only, as the rate above and the teacher panel: a mark on a
+      // cancelled or moved-away day is history, not attendance. A day with no
+      // session_status is a legacy held day (sessionStatus defaults to 'held').
+      attendanceTrend: attendanceTrendFromLog(attendanceLog?.filter((r) => sessionStatus(r) === 'held')),
       // Ordered by each quiz's due date (A3), the teacher panel's rule.
       quizTrend: quizTrendFromAttempts(attempts, quizDueDates(quizzes, assessments)),
       // Assessments the teacher marked missing, pooled with quizzes that closed

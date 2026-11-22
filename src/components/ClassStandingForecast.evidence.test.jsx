@@ -127,4 +127,22 @@ describe('attendance reaching /api/predict (owner-approved weighting, 2026-11-23
     const { body } = await render(LOADED([]), { attendanceLog: [day('2026-03-01', 'excused'), day('2026-03-02', 'present', 'cancelled')] })
     expect(body.indicators).not.toHaveProperty('attendance_rate')
   })
+  it('the attendance TREND counts held sessions only, like the rate and the teacher panel', async () => {
+    const sixHeld = ['01', '02', '03', '04', '05', '06'].map((d) => day(`2026-03-${d}`, 'present'))
+    let { body } = await render(LOADED([]), { attendanceLog: [...sixHeld, day('2026-03-07', 'absent', 'cancelled')] })
+    expect(body.indicators.attendance_trend).toBe(0) // not -0.5: the cancelled day's absent is history
+    ;({ body } = await render(LOADED([]), { attendanceLog: [...sixHeld, day('2026-03-07', 'absent', 'rescheduled')] }))
+    expect(body.indicators.attendance_trend).toBe(0)
+    // A day with no session_status is a legacy HELD day and still counts.
+    ;({ body } = await render(LOADED([]), { attendanceLog: [...sixHeld, { date: '2026-03-07', status: 'absent' }] }))
+    expect(body.indicators.attendance_trend).toBe(-0.5)
+    // The shared fixture: the two legacy marks on non-held days are out -> -0.65 (teacher figure).
+    ;({ body } = await render(LOADED([])))
+    expect(body.indicators.attendance_trend).toBeCloseTo(-0.65, 12)
+  })
+
+  it('a 1% fallback rate (no log) is sent as 0.01, not as 100% attendance', async () => {
+    const { body } = await render(LOADED([]), { attendanceLog: undefined, attendanceRate: 1 })
+    expect(body.indicators.attendance_rate).toBeCloseTo(0.01, 12)
+  })
 })
