@@ -58,7 +58,9 @@ function aiErrorMessage(err, action) {
   if (known) return known
 
   // Quota and validation already carry teacher-facing text from the backend.
-  if (err.code === 'ai_quota' || err.code === 'validation' || err.code === 'bad_request') {
+  // ai_incomplete is a 502, but its message is written for teachers: how many
+  // usable questions, what was wrong with the rest, and that nothing was saved.
+  if (['ai_quota', 'validation', 'bad_request', 'ai_incomplete'].includes(err.code)) {
     return err.message
   }
 
@@ -214,20 +216,23 @@ function validateQuizDraft(draft, allowedTypes, requestedCount, objectives = [])
 
   if (!kept.length) {
     throw new Error(
-      `The AI returned ${draft.questions.length} question(s), none of them usable. ` +
-        'Try generating again, or rephrase the topic.',
+      `The AI returned ${draft.questions.length} question(s), none of them usable ` +
+        `(${dropped.join(', ')}). Nothing was saved. Try generating again, or rephrase the topic.`,
+    )
+  }
+  // Exact-count contract: the caller writes whatever comes back as a quiz, so a
+  // trimmed draft would silently become a 7-question quiz the teacher asked 10 of.
+  if (requestedCount && kept.length !== requestedCount) {
+    throw new Error(
+      `Asked for ${requestedCount} questions but only ${kept.length} were usable` +
+        (dropped.length ? ` (${dropped.join(', ')})` : '') +
+        '. Nothing was saved. Try generating again, or ask for fewer questions.',
     )
   }
 
   const tagged = tagObjectives(kept, objectives)
 
   const warnings = []
-  if (dropped.length) {
-    warnings.push(`Dropped ${dropped.length} malformed question(s): ${dropped.join(', ')}`)
-  }
-  if (requestedCount && kept.length < requestedCount) {
-    warnings.push(`Asked for ${requestedCount} questions, kept ${kept.length}.`)
-  }
   const off = tagged.map((q, i) => (q.off_objective ? `Q${i + 1}` : null)).filter(Boolean)
   if (off.length) {
     warnings.push(`${off.length} question(s) not tied to a listed objective: ${off.join(', ')}.`)
