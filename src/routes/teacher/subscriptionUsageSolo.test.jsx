@@ -75,13 +75,13 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
 
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
     expect(html).toContain('Your Subscription')
-    expect(html).toContain('Paid through')
+    expect(html).toContain('Paid Through')
     expect(html).toMatch(/\d+ days? left/)
     expect(html.toLowerCase()).toContain('early renewal preserves remaining days')
     expect(html).toContain('40')
     expect(html).toContain('of 150 used')
     expect(html).toContain('110 available')
-    expect(html).toContain('Resource allowances &amp; policy')
+    expect(html).toContain('Resource Allowances &amp; Policy')
     expect(html).toContain('Teacher Daily Generations')
     expect(html).toContain('Student Daily Explanations')
     expect(html).toContain('Storage')
@@ -95,7 +95,7 @@ describe('Subscription Usage Dashboard & Warning States (Solo Teachers)', () => 
       limits: { teacher_seats: 1, student_seats: 150, storage_gb: 5 },
     }
     const html = renderToStaticMarkup(<MemoryRouter><TeacherAccount /></MemoryRouter>)
-    expect(html).toContain('Trial ends')
+    expect(html).toContain('Trial Ends')
     expect(html).toMatch(/\d+ days? left/)
   })
 

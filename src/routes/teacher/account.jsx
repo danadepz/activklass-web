@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -70,7 +70,7 @@ function Meter({ label, used, total, over, resourceType = 'seats' }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: ink }}>{label}</span>
         <span style={{ fontSize: 12.5, color: isOver || isExhausted ? amberTone : isCritical ? '#EA580C' : muted, fontVariantNumeric: 'tabular-nums' }}>
           <strong>{used}</strong> of {total == null ? 'unlimited' : total} used
@@ -326,6 +326,7 @@ function PayButton({ ownerId }) {
  * full plan change.
  */
 function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
+  const inputId = useId()
   const floor = currentSeats ?? 0
   const [value, setValue] = useState(String(floor))
   const [err, setErr] = useState('')
@@ -349,24 +350,27 @@ function AddStudentSeatsControl({ ownerId, currentSeats, paidThroughMs }) {
 
   return (
     <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line}` }}>
-      <label style={{ fontSize: 12.5, fontWeight: 600, color: ink, display: 'block', marginBottom: 5 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: ink, margin: '0 0 10px' }}>
         Add Student Seats
+      </h3>
+      <label htmlFor={inputId} style={{ fontSize: 12, fontWeight: 600, color: muted, display: 'block', marginBottom: 6 }}>
+        New Student Seat Total
       </label>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
+          id={inputId}
           type="number" min={floor + 1} step={1} value={value}
           onChange={(e) => setValue(e.target.value)}
-          aria-label="New student seat total"
-          style={{ ...field, width: 110 }}
+          style={{ ...field, width: 140, fontVariantNumeric: 'tabular-nums' }}
         />
         <Button disabled={mut.isPending} onClick={submit}>
-          {mut.isPending ? 'Starting payment…' : 'Add seats'}
+          {mut.isPending ? 'Starting payment…' : 'Add Seats'}
         </Button>
       </div>
       <p style={{ fontSize: 12, color: faint, margin: '8px 0 0', lineHeight: 1.5 }}>
-        Billed only for the months left until your plan renews, and the new seats renew on that
-        same date. They're available as soon as payment is confirmed. To reduce seats, contact
-        ActivKlass support.
+        Enter your new total capacity. Additional seats are billed for the months remaining in
+        your subscription and renew on the same date. They become available after payment is
+        confirmed. To reduce seats, contact ActivKlass support.
       </p>
       <Notice>{err}</Notice>
     </div>
@@ -645,13 +649,13 @@ function SubscriptionCard() {
           <PlanType label={typeLabel(sub.type === 'institution')}
                     detail={sub.type === 'institution' ? schoolName : null} />
           {sub.status === 'trial' && (
-            <SubscriptionExpiry label="Trial ends" expiresAt={sub.trial_ends_at} />
+            <SubscriptionExpiry label="Trial Ends" expiresAt={sub.trial_ends_at} style={{ color: ink, fontWeight: 600 }} />
           )}
           {sub.status === 'active' && (
             <SubscriptionExpiry
-              label="Paid through"
+              label="Paid Through"
               expiresAt={sub.paid_through}
-              style={{ marginTop: 4 }}
+              style={{ marginTop: 8, color: ink, fontWeight: 600 }}
             />
           )}
           {sub.status === 'active' && sub.paid_through && (
@@ -669,10 +673,10 @@ function SubscriptionCard() {
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{
-            fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+            fontSize: 12, fontWeight: 700, textTransform: 'capitalize',
             color: sub.status === 'active' ? green : red,
             background: sub.status === 'active' ? 'rgba(31,138,91,0.10)' : 'rgba(192,57,43,0.08)',
-            borderRadius: 20, padding: '3px 10px',
+            borderRadius: 20, padding: '4px 10px',
           }}>
             {sub.status}
           </span>
@@ -722,35 +726,35 @@ function SubscriptionCard() {
         />
       )}
 
-      <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))',
-                    marginTop: 20 }}>
-        <Meter label="Student seats" used={usage.students.used} total={usage.students.seats}
+      <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))',
+                    marginTop: 18, paddingTop: 16, borderTop: `1px solid ${line}` }}>
+        <Meter label="Student Seats" used={usage.students.used} total={usage.students.seats}
                over={usage.students.over} resourceType="seats" />
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 4 }}>Storage</div>
-          <div style={{ fontSize: 13, color: ink, fontWeight: 600, marginBottom: 2 }}>
+          <div style={{ fontSize: 16, color: navy, fontWeight: 700, marginBottom: 4 }}>
             {sub.limits?.storage_gb ? `${sub.limits.storage_gb} GB capacity` : 'Standard storage'}
           </div>
           <div style={{ fontSize: 12, color: muted, lineHeight: 1.45 }}>
-            Upload limit: 5–25 MB per file · Usage not tracked individually
+            Upload limit: 5–25 MB per file. Individual storage usage is not tracked.
           </div>
         </div>
       </div>
 
       <div style={{
         marginTop: 18,
-        padding: 14,
+        padding: '16px 18px',
         background: 'rgba(14,42,92,0.03)',
         border: `1px solid ${line}`,
         borderRadius: 10,
       }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: navy, marginBottom: 10 }}>
-          Resource allowances &amp; policy
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10, fontSize: 12, color: ink }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: ink, margin: '0 0 14px' }}>
+          Resource Allowances &amp; Policy
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,180px),1fr))', gap: '14px 20px', fontSize: 13, lineHeight: 1.5, color: ink }}>
           <div>
-            <div style={{ color: muted, fontSize: 11, marginBottom: 2 }}>AI Credits</div>
-            <span>
+            <div style={{ color: muted, fontSize: 12, marginBottom: 5 }}>AI Credits</div>
+            <span style={{ fontWeight: 700, color: navy }}>
               {resourceUsage?.ai_credits?.status === 'available_estimated' && (resourceUsage?.ai_credits?.remaining ?? 0) <= 0
                 ? '0 credits remaining (Exhausted)'
                 : resourceUsage?.ai_credits?.granted
@@ -759,12 +763,12 @@ function SubscriptionCard() {
             </span>
           </div>
           <div>
-            <div style={{ color: muted, fontSize: 11, marginBottom: 2 }}>Teacher Daily Generations</div>
-            <span>200 AI generations per day</span>
+            <div style={{ color: muted, fontSize: 12, marginBottom: 5 }}>Teacher Daily Generations</div>
+            <span style={{ fontWeight: 700, color: navy }}>200 AI generations per day</span>
           </div>
           <div>
-            <div style={{ color: muted, fontSize: 11, marginBottom: 2 }}>Student Daily Explanations</div>
-            <span>Standard Daily Limit per Student</span>
+            <div style={{ color: muted, fontSize: 12, marginBottom: 5 }}>Student Daily Explanations</div>
+            <span style={{ fontWeight: 700, color: navy }}>Standard daily limit per student</span>
           </div>
         </div>
 
