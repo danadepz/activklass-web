@@ -6,7 +6,7 @@ The React single page application for ActivKlass teachers, students, school admi
 
 - React 19, Vite 8, React Router 7, and Tailwind CSS 4.
 - Firebase Authentication, Cloud Firestore, and Cloud Storage through the Firebase Web SDK.
-- Firestore is the application system of record. The client accesses it directly under the rules in the backend repository.
+- Firebase Cloud Firestore is the primary application database. Firebase Authentication provides identity, and the client accesses Firestore directly under backend-owned rules. Trusted backend Firebase operations use Firebase Admin SDK.
 - Authenticated Flask API calls use Firebase ID tokens. The API URL is configured by `VITE_API_URL`; development uses Vite's `/api` proxy.
 - See [ARCHITECTURE.md](ARCHITECTURE.md), [INTEGRATION.md](INTEGRATION.md), and [the shared API guide](https://github.com/danadepz/activklass-backend/blob/main/docs/ai-endpoints-guide.md).
 

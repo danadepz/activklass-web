@@ -4,6 +4,8 @@ This file summarizes how the web client connects to shared services. The impleme
 
 ## Identity and authorization
 
+Firebase Cloud Firestore is the primary application database. Firebase Authentication handles identity, and the backend uses Firebase Admin SDK for trusted server-side Firebase operations. Some existing Flask routes still use auxiliary SQLAlchemy/SQLite persistence; PostgreSQL and Neon are not used by the project.
+
 1. Firebase Authentication provides the user session.
 2. Direct Firestore and Storage access is governed by `firestore.rules` and `storage.rules` in [activklass-backend](https://github.com/danadepz/activklass-backend).
 3. Flask requests use `Authorization: Bearer <Firebase ID token>` and JSON when the endpoint accepts JSON. `src/lib/api.js` owns URL normalization, token attachment, and user-facing error translation.
@@ -13,9 +15,9 @@ This file summarizes how the web client connects to shared services. The impleme
 
 | Data/work | Primary path | Contract owner |
 |---|---|---|
-| Classes, enrollment views, records, attendance, quizzes, attempts, syllabus data, remediation, notices | Firebase SDK direct to Firestore | Web/mobile data modules and backend Firestore rules |
+| Firestore-owned client records | Firebase SDK direct to Firestore | Web/mobile data modules and backend Firestore rules |
 | Uploaded learning materials and task files | Firebase Storage | Storage rules and client upload modules |
-| AI generation, prediction, privileged provisioning/admin, subscriptions and other server-authoritative operations | Flask `/api/*` | Backend `app/api/` blueprints |
+| AI generation, prediction, privileged provisioning/admin, subscriptions, and existing server-backed workflows | Flask `/api/*` | Backend `app/api/`; some legacy routes/models also use auxiliary SQLAlchemy/SQLite persistence |
 
 Do not add an API proxy for ordinary Firestore CRUD without a concrete security or platform requirement. Never bypass the rules with a client-side claim.
 
