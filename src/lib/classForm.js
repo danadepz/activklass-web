@@ -1,6 +1,16 @@
 import { formatSchedule } from '@/lib/schedule'
 import { semesterLabel, yearLevelError } from '@/lib/validation'
 
+/** Strict YYYY-MM-DD calendar validation (Date.parse normalizes impossible days). */
+export function isCalendarDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day
+}
+
 /** Blank class form state (strings, for controlled inputs). */
 export function emptyClassForm() {
   return {
@@ -14,7 +24,21 @@ export function emptyClassForm() {
     academic_year: '2025-2026',
     units: '',
     semester: '',
+    start_date: '',
+    end_date: '',
   }
+}
+
+/* Which school-wide default start a class takes (C1/C2, 2026-11-22): the
+   semester's own start for a college class with one picked, else the school
+   year's. A suggestion only -- the teacher confirms it on the form, and it is
+   copied onto the class when saved, never read live, so a later change to the
+   school's dates never moves a class's own. Null when the admin set none. */
+const SEMESTER_START_KEY = { '1st': 'first_sem_start', '2nd': 'second_sem_start', summer: 'summer_start' }
+export function schoolDefaultStart(termDates, form) {
+  const iso = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
+  const semKey = form?.education_level === 'College' ? SEMESTER_START_KEY[form?.semester] : null
+  return iso(semKey && termDates?.[semKey]) ?? iso(termDates?.school_year_start)
 }
 
 /**
@@ -48,6 +72,8 @@ export function classToForm(c) {
     academic_year: c.academic_year ?? '2025-2026',
     units: c.units != null ? String(c.units) : '',
     semester: c.semester ?? '',
+    start_date: c.start_date ?? '',
+    end_date: c.end_date ?? '',
   }
 }
 

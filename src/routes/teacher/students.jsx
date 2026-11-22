@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatRiskScore } from '@/lib/riskScoreDisplay'
 import { Link } from 'react-router-dom'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
@@ -72,26 +73,36 @@ function riskLevel(score, status = 'scored') {
   return 'low'
 }
 
+/* The 0.35 / 0.50 cut points are unchanged. What changed is the claim: these
+   are display bands of an uncalibrated score from a model fitted on synthetic
+   data, not validated probabilities of failing, so the label says so. */
+export const PROVISIONAL_BAND_NOTE =
+  'Provisional score band from an uncalibrated model trained on sample data. ' +
+  'It is not a validated chance of failing; review the student’s record.'
+
 const RISK_LEVEL_STYLE = {
-  high: { label: 'High risk', color: red, bg: 'rgba(192,57,43,0.1)', border: 'rgba(192,57,43,0.28)' },
-  medium: { label: 'Medium risk', color: goldDeep, bg: 'rgba(245,197,24,0.12)', border: 'rgba(245,197,24,0.35)' },
-  low: { label: 'Low risk', color: greenDeep, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
+  high: { label: 'High (provisional)', color: red, bg: 'rgba(192,57,43,0.1)', border: 'rgba(192,57,43,0.28)' },
+  medium: { label: 'Moderate (provisional)', color: goldDeep, bg: 'rgba(245,197,24,0.12)', border: 'rgba(245,197,24,0.35)' },
+  low: { label: 'Low (provisional)', color: greenDeep, bg: 'rgba(31,138,91,0.08)', border: 'rgba(31,138,91,0.25)' },
 }
 
 export function RiskBadge({ score, status }) {
   const level = riskLevel(score, status)
   if (level == null) {
     return <span style={{ fontSize: 12.5, color: faint }}>
-      {status === 'insufficient_data' ? 'Not enough data' : '—'}
+      {status === 'insufficient_data' ? 'Insufficient data' : '—'}
     </span>
   }
   const { label, color, bg, border } = RISK_LEVEL_STYLE[level]
   // No per-badge mark: RISK_CAVEAT above the roster shows under the same
   // condition (synthetic training) and says it in words (T-251).
   return (
-    <span className="inline-flex items-center gap-1.5" style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
+    <span
+      className="inline-flex items-center gap-1.5"
+      title={PROVISIONAL_BAND_NOTE}
+      style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
       {label}
-      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {Math.round(score * 100)}</span>
+      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {formatRiskScore(score)}</span>
     </span>
   )
 }
@@ -264,8 +275,8 @@ export default function StudentsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: muted, marginRight: 4 }}>Risk</span>
-        {[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']].map(([id, label]) => {
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: muted, marginRight: 4 }}>Model score band (provisional)</span>
+        {[['all', 'All'], ['high', 'High'], ['medium', 'Moderate'], ['low', 'Low']].map(([id, label]) => {
           const on = riskFilter === id
           const tone = RISK_LEVEL_STYLE[id]
           return (

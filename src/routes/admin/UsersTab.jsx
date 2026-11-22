@@ -20,6 +20,8 @@ import { accountsNamed, accountWithEmail, describeAccount } from './duplicates'
 import Notice from './Notice'
 import RolePicker from './RolePicker'
 import CardHead from './CardHead'
+import AcademicDateInput from '@/components/AcademicDateInput'
+import { isCalendarDate } from '@/lib/classForm'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { PASSWORD_REQUIREMENTS } from '@/routes/login'
 import BulkUpload from './BulkUpload'
@@ -196,6 +198,16 @@ export function LoginPrefixCard({ settings, pending, error: loadError, onRetry, 
  * active classes uncluttered. A school with no dates set simply continues
  * manual archiving without warnings.
  */
+/* Start then end for each term. The starts (2026-11-22, policy C1/C2) are the
+   school's DEFAULTS: the class form offers the matching one and the teacher
+   confirms or changes each class's own date; saving here never moves a class. */
+const TERM_DATE_FIELDS = [
+  ['school_year_start', 'School Year Start (K-12)'], ['school_year_end', 'School Year End (K-12)'],
+  ['first_sem_start', '1st Semester Start'], ['first_sem_end', '1st Semester End'],
+  ['second_sem_start', '2nd Semester Start'], ['second_sem_end', '2nd Semester End'],
+  ['summer_start', 'Midyear / Summer Start'], ['summer_end', 'Midyear / Summer End'],
+]
+
 export function TermDatesCard({ settings, pending, error: loadError, onRetry, onSaved }) {
   const school = settings?.school
   const savedDates = school?.term_dates ?? {}
@@ -232,6 +244,10 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
     e.preventDefault()
     setDone('')
     setError('')
+    // Typed as MM-DD-YYYY; the field passes canonical YYYY-MM-DD on, or the raw
+    // text when it is not a real day -- refused here before anything is sent.
+    const bad = TERM_DATE_FIELDS.find(([key]) => currentDates[key] && !isCalendarDate(currentDates[key]))
+    if (bad) return setError(`${bad[1]}: enter a real date as MM-DD-YYYY, for example 06-15-2026.`)
     mut.mutate(currentDates)
   }
 
@@ -244,7 +260,7 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
         sub={
           loadError ? 'Your school’s details could not be loaded, so term dates cannot be shown yet.'
             : pending ? 'Checking term dates…'
-            : school ? 'Set when each term ends so completed classes archive automatically. Classes still in use with recent activity are kept active. If left blank, classes remain active until manually archived.'
+            : school ? 'Start dates are the default a teacher sees when creating a class; each teacher confirms or changes their own class’s date. Set when each term ends so completed classes archive automatically. Classes still in use with recent activity are kept active. If left blank, classes remain active until manually archived.'
             : 'This admin account is not linked to a school yet, so term dates cannot be set.'
         }
         style={{ marginBottom: school || loadError ? 16 : 0 }}
@@ -258,42 +274,16 @@ export function TermDatesCard({ settings, pending, error: loadError, onRetry, on
       )}
       {school && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, alignItems: 'end' }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            School Year End (K-12)
-            <input
-              type="date"
-              style={{ ...field, padding: '9px 12px' }}
-              value={currentDates.school_year_end ?? ''}
-              onChange={(e) => updateField('school_year_end', e.target.value)}
-            />
-          </label>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            1st Semester End
-            <input
-              type="date"
-              style={{ ...field, padding: '9px 12px' }}
-              value={currentDates.first_sem_end ?? ''}
-              onChange={(e) => updateField('first_sem_end', e.target.value)}
-            />
-          </label>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            2nd Semester End
-            <input
-              type="date"
-              style={{ ...field, padding: '9px 12px' }}
-              value={currentDates.second_sem_end ?? ''}
-              onChange={(e) => updateField('second_sem_end', e.target.value)}
-            />
-          </label>
-          <label style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            Midyear / Summer End
-            <input
-              type="date"
-              style={{ ...field, padding: '9px 12px' }}
-              value={currentDates.summer_end ?? ''}
-              onChange={(e) => updateField('summer_end', e.target.value)}
-            />
-          </label>
+          {TERM_DATE_FIELDS.map(([key, label]) => (
+            <label key={key} style={{ fontSize: 13, fontWeight: 600, color: ink, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {label}
+              <AcademicDateInput
+                style={{ ...field, padding: '9px 12px' }}
+                value={currentDates[key] ?? ''}
+                onChange={(v) => updateField(key, v)}
+              />
+            </label>
+          ))}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, gridColumn: '1 / -1', marginTop: 4 }}>
             <button type="submit" style={btnPrimary} disabled={mut.isPending}>
               {mut.isPending ? 'Saving…' : 'Save Term Dates'}

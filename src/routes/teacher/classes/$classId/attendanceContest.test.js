@@ -83,6 +83,6 @@ describe("the teacher's own attendance row is gone (T-43)", () => {
   it('the student rows are still marked the same way', () => {
     // The removal must not have taken the students' own controls with it.
     expect(src).toContain('STATUS_KEYS')
-    expect(src).toMatch(/records\./)
+    expect(src).toMatch(/records\[sid\]/)
   })
 })

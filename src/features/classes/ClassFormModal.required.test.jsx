@@ -46,16 +46,18 @@ const K12_REQUIRED = [
   'Grade / Year Level', 'Max Students', 'School Year',
 ]
 const COLLEGE_ONLY = ['Course Units', 'Semester']
+// A1 (2026-11-22): rendered below the College block, required on every new class.
+const DATES = ['Start Date']
 
 describe('New Class required markers (T-25)', () => {
   it('marks exactly the validator\'s required fields on a K-12 class', () => {
     const html = render(emptyClassForm())
-    expect(starredLabels(html)).toEqual(K12_REQUIRED)
+    expect(starredLabels(html)).toEqual([...K12_REQUIRED, ...DATES])
   })
 
   it('adds Units and Semester -- and only those -- when College is selected', () => {
     const html = render({ ...emptyClassForm(), education_level: 'College' })
-    expect(starredLabels(html)).toEqual([...K12_REQUIRED, ...COLLEGE_ONLY])
+    expect(starredLabels(html)).toEqual([...K12_REQUIRED, ...COLLEGE_ONLY, ...DATES])
   })
 
   it('does not mark the College-only fields on a K-12 class', () => {
@@ -71,6 +73,6 @@ describe('New Class required markers (T-25)', () => {
   it('hides the marker from screen readers -- the inputs already say required', () => {
     const html = render(emptyClassForm())
     const stars = html.match(/<span class="text-red-500" aria-hidden="true"> \*<\/span>/g) ?? []
-    expect(stars.length).toBe(K12_REQUIRED.length)
+    expect(stars.length).toBe(K12_REQUIRED.length + DATES.length)
   })
 })

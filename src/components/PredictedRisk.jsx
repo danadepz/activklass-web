@@ -1,27 +1,9 @@
 import { RISK_CAVEAT, useClassRisk } from '@/hooks/useClassRisk'
+import { formatRiskScore } from '@/lib/riskScoreDisplay'
 import { riskReasons } from '@/lib/ai'
+import { evidenceText, sessionCoverageText } from '@/lib/riskSignals'
 import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/theme'
 
-/**
- * Identify At-Risk Students — the model's view, kept deliberately apart from
- * the grade-threshold list on the same page.
- *
- * The two disagree by design, and the disagreement is the point: the list above
- * reports work already marked, this one projects where a student is heading
- * from the direction their attendance, submissions and quiz scores are moving.
- * A student who appears in neither list today but appears here first is exactly
- * who this panel exists for. Presenting them as one number would invite a
- * teacher to read a projection as a result.
- *
- * Each flagged student is shown WITH the indicators that put them there. A
- * percentage on its own tells a teacher to worry; "attendance down ~26 pts,
- * 35% of work not submitted" tells them what to open the conversation about.
- *
- * Coverage is shown, not hidden, and unlike the levels it now varies per
- * student: a trend needs enough recorded days or attempts to difference, so
- * early in a term the model is working from less than it looks. A teacher
- * needs to know that before acting on a green flag.
- */
 export default function PredictedRisk({ classId, rows }) {
   const { data, isLoading, isError, error } = useClassRisk(classId, rows)
 
@@ -58,7 +40,8 @@ export default function PredictedRisk({ classId, rows }) {
     .map((r) => ({ row: r, risk: data?.[r.student_id] }))
     .filter((x) => x.risk)
   const scored = results.filter((x) => x.risk.status === 'scored')
-  const insufficient = results.filter((x) => x.risk.status === 'insufficient_data').length
+  const insufficientRows = results.filter((x) => x.risk.status === 'insufficient_data')
+  const insufficient = insufficientRows.length
   const flagged = scored
     .filter((x) => x.risk.atRisk)
     .sort((a, b) => (b.risk.score ?? 0) - (a.risk.score ?? 0))
@@ -87,8 +70,14 @@ export default function PredictedRisk({ classId, rows }) {
         </span>
       </div>
       <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 10px', maxWidth: '70ch' }}>
-        {RISK_CAVEAT}
+        {RISK_CAVEAT} Having all six inputs means the model can run; it does not mean the
+        result has been validated for this class.
       </p>
+      {sessionCoverageText(results[0]?.risk.evidence?.sessions) && (
+        <p style={{ ...mono, fontSize: 11.5, color: muted, margin: '0 0 12px' }}>
+          Attendance: {sessionCoverageText(results[0].risk.evidence.sessions)}
+        </p>
+      )}
 
       {/* Only shown while the model is fitted on generated data. The backend
           flips training.real_data when real exports replace it, and this
@@ -139,6 +128,11 @@ export default function PredictedRisk({ classId, rows }) {
                 </div>
                 {/* The actionable half. Without this a teacher gets a ranked
                     list of names and no idea what to raise with any of them. */}
+                {evidenceText(risk.evidence) && (
+                  <div style={{ ...mono, fontSize: 11, color: faint, marginTop: 4, lineHeight: 1.5 }}>
+                    Based on {evidenceText(risk.evidence)}
+                  </div>
+                )}
                 {riskReasons(risk.signals, 'teacher').length > 0 && (
                   <div style={{ ...mono, fontSize: 11, color: red, marginTop: 5, lineHeight: 1.5 }}>
                     {riskReasons(risk.signals, 'teacher').join(' · ')}
@@ -147,12 +141,43 @@ export default function PredictedRisk({ classId, rows }) {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ ...serif, fontSize: 22, lineHeight: 1, color: red }}>
-                  {risk.score == null ? '—' : Math.round(risk.score * 100)}
+                  {formatRiskScore(risk.score) ?? '—'}
                 </div>
                 <div style={{ ...mono, fontSize: 10.5, color: faint }}>uncalibrated score</div>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* A7 (2026-11-22): a student missing any required input gets no score.
+          What is shown instead is their record, described -- not predicted. */}
+      {insufficientRows.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h4 style={{ fontSize: 13.5, fontWeight: 700, color: ink, margin: '0 0 4px' }}>
+            Insufficient Data — not scored ({insufficientRows.length})
+          </h4>
+          <p style={{ fontSize: 12, color: muted, margin: '0 0 8px', maxWidth: '70ch' }}>
+            These students are missing at least one of the six required inputs, so the model gives
+            them no score. The lines below describe their record; they are not a prediction.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {insufficientRows.map(({ row, risk }) => (
+              <div key={row.student_id} style={{ padding: '8px 12px', border: `1px solid ${line}`, borderRadius: 10 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: ink }}>{row.last_name}, {row.first_name}</div>
+                {risk.missing?.length > 0 && (
+                  <div style={{ ...mono, fontSize: 11, color: goldDeep, marginTop: 2 }}>
+                    Not yet available: {risk.missing.map((f) => f.replace(/_/g, ' ')).join(', ')}
+                  </div>
+                )}
+                {evidenceText(risk.evidence) && (
+                  <div style={{ ...mono, fontSize: 11, color: faint, marginTop: 2, lineHeight: 1.5 }}>
+                    Record: {evidenceText(risk.evidence)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

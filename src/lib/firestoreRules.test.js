@@ -25,7 +25,9 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { collection, deleteDoc, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { buildAuditEvent, writeAttendanceDays } from './attendanceAudit'
+import { fetchExcusalEvents, fetchMyExcusals, setQuizExcusal } from './quizExcusals'
 
 // ACTIVKLASS_RULES_PATH lets a reviewer point this suite at a modified copy of
 // the rules to prove a test actually discriminates — run it against the rules
@@ -1633,9 +1635,9 @@ describe('a teacher reads only the students they handle', () => {
     // the edits a teacher still makes on their own class go through
     await assertSucceeds(updateDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-1'), { section: 'Rizal' }))
     // creating a class: own, and empty
-    await assertSucceeds(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-new'), { teacher_id: OWN_TEACHER, student_ids: [] }))
-    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-x'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT] }))
-    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-y'), { teacher_id: FOREIGN_TEACHER, student_ids: [] }))
+    await assertSucceeds(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-new'), { teacher_id: OWN_TEACHER, student_ids: [], start_date: '2026-08-10' }))
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-x'), { teacher_id: OWN_TEACHER, student_ids: [STUDENT], start_date: '2026-08-10' }))
+    await assertFails(setDoc(doc(ctx(OWN_TEACHER), 'classes', 'class-y'), { teacher_id: FOREIGN_TEACHER, student_ids: [], start_date: '2026-08-10' }))
   })
 
   it('a student still reads their own records', async () => {
@@ -2909,24 +2911,26 @@ describe('a purged school adds no records (T-256)', () => {
       await deleteDoc(doc(admin.firestore(), 'users', uid))
     })
   }
-  const newClass = { teacher_id: TEACHER, student_ids: [], subject: 'X' }
-  const attendance = { records: { [STUDENT]: 'P' } }
+  const newClass = { teacher_id: TEACHER, student_ids: [], subject: 'X', start_date: '2026-08-10' }
+  // Attendance goes through the audited writer -- a plain write is refused for
+  // a live teacher too (2026-11-22), which would make the purge cases vacuous.
+  const recordDay = (c) => writeAttendanceDays(c, 'class-1', TEACHER, [{ date: '2026-11-15', next: () => ({ records: { [STUDENT]: { status: 'present', remarks: '' } } }) }])
   const announcement = { teacher_id: TEACHER, title: 'Hi', class_id: 'class-1' }
 
   it('a live teacher still creates a class and records attendance (control)', async () => {
     await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
-    await assertSucceeds(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+    await assertSucceeds(recordDay(ctx(TEACHER)))
   })
   it("a teacher's pre-purge token cannot create a class, record attendance or announce", async () => {
     await endSessions(TEACHER)
     await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
-    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+    await assertFails(recordDay(ctx(TEACHER)))
     await assertFails(setDoc(doc(ctx(TEACHER), 'announcements', 'an-new'), announcement))
   })
   it('a teacher whose profile was purged cannot create a class or record attendance', async () => {
     await purgeProfile(TEACHER)
     await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'c-new'), newClass))
-    await assertFails(setDoc(doc(ctx(TEACHER), 'classes/class-1/attendance', '2026-11-15'), attendance))
+    await assertFails(recordDay(ctx(TEACHER)))
   })
   it("a student's pre-purge token cannot open a quiz attempt", async () => {
     await endSessions(STUDENT)
@@ -2940,5 +2944,360 @@ describe('a purged school adds no records (T-256)', () => {
   })
   it('no client may set school_id on a profile (affiliation is server-only)', async () => {
     await assertFails(updateDoc(doc(ctx(TEACHER), 'users', TEACHER), { school_id: 'purged-school' }))
+  })
+})
+
+describe('academic policy 2026-11-22 · attendance is teacher-only and always audited', () => {
+  const FOREIGN_TEACHER = 'teacher-foreign'
+  const SOLO_TEACHER = 'teacher-solo'
+  const day = (uid, date) => doc(ctx(uid), 'classes', 'class-1', 'attendance', date)
+  const P = { status: 'present', remarks: '' }
+  // The real client writer, against the real rules.
+  const write = (uid, changes, classId = 'class-1') => writeAttendanceDays(ctx(uid), classId, uid, changes)
+  const keep = (patch) => (cur) => ({ ...(cur ?? {}), ...patch })
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', SOLO_TEACHER), { role: 'teacher', first_name: 'S', last_name: 'T' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', OTHER_ADMIN), { role: 'admin', school_id: 'school-2' })
+      await setDoc(doc(db, 'classes', 'class-solo'), { teacher_id: SOLO_TEACHER, student_ids: [STUDENT] })
+      // A day with marks, a legacy day written before `date` was stored, an empty day.
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-02'), { date: '2026-11-02', records: { [STUDENT]: P } })
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-03'), { records: { [STUDENT]: { status: 'late', remarks: '' } } })
+      await setDoc(doc(db, 'classes', 'class-1', 'attendance', '2026-11-04'), { date: '2026-11-04', records: {} })
+    })
+  })
+
+  it('records, corrects and extends a legacy day through the audited writer, for an institution and a solo teacher', async () => {
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-05', next: () => ({ records: { [STUDENT]: { status: 'absent', remarks: '' } } }) }]))
+    const [ev] = await write(TEACHER, [{ date: '2026-11-02', reason: 'Arrived after roll call', next: (c) => ({ ...c, records: { ...c.records, [STUDENT]: { status: 'late', remarks: '' } } }) }])
+    expect(ev.kind).toBe('correction')
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-03', next: (c) => ({ ...c, records: { ...c.records, [OTHER_STUDENT]: P } }) }]))
+    await assertSucceeds(write(SOLO_TEACHER, [{ date: '2026-11-05', next: () => ({ records: { [STUDENT]: P } }) }], 'class-solo'))
+  })
+
+  it('keeps before/after marks, actor, time and the session reference in the event', async () => {
+    await write(TEACHER, [{ date: '2026-11-02', reason: 'typo', next: (c) => ({ ...c, records: { [STUDENT]: { status: 'absent', remarks: '' } } }) }])
+    let events = []
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      events = (await getDocs(collection(admin.firestore(), 'classes', 'class-1', 'attendance_audit'))).docs.map((d) => d.data())
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      date: '2026-11-02', actor_uid: TEACHER, kind: 'correction', reason: 'typo', student_ids: [STUDENT],
+      before_records: { [STUDENT]: P }, after_records: { [STUDENT]: { status: 'absent', remarks: '' } },
+      before_status: 'held', after_status: 'held', before_exists: true,
+    })
+    expect(events[0].at).toBeTruthy()
+  })
+
+  it('refuses any unaudited write, including the old plain save and the contest one-mark update', async () => {
+    await assertFails(setDoc(day(TEACHER, '2026-11-05'), { date: '2026-11-05', records: { [STUDENT]: P } }))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-02'), { [`records.${STUDENT}`]: { status: 'excused', remarks: '' } }))
+    await assertFails(setDoc(day(TEACHER, '2026-11-02'), { records: {} }, { mergeFields: ['records'] }))
+  })
+
+  it('refuses a forged event: wrong before, hidden student, other actor, back-dated, wrong kind', async () => {
+    const forge = (patch) => {
+      const db = ctx(TEACHER)
+      const batch = writeBatch(db)
+      const aRef = doc(collection(db, 'classes', 'class-1', 'attendance_audit'))
+      const after = { date: '2026-11-02', records: { [STUDENT]: { status: 'absent', remarks: '' }, [OTHER_STUDENT]: P }, last_audit_id: aRef.id }
+      batch.set(doc(db, 'classes', 'class-1', 'attendance', '2026-11-02'), after)
+      batch.set(aRef, {
+        date: '2026-11-02', actor_uid: TEACHER, at: serverTimestamp(), kind: 'correction',
+        before_exists: true, before_records: { [STUDENT]: P }, after_records: after.records,
+        before_status: 'held', after_status: 'held', student_ids: [OTHER_STUDENT, STUDENT], ...patch,
+      })
+      return batch.commit()
+    }
+    await assertSucceeds(forge({})) // the honest version passes, so each refusal below is the patch
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'classes', 'class-1', 'attendance', '2026-11-02'), { date: '2026-11-02', records: { [STUDENT]: P } })
+    })
+    await assertFails(forge({ before_records: {} }))
+    await assertFails(forge({ student_ids: [STUDENT] }))
+    await assertFails(forge({ actor_uid: OTHER_ADMIN }))
+    await assertFails(forge({ at: new Date('2026-01-01T00:00:00Z') }))
+    await assertFails(forge({ kind: 'record' }))
+    await assertFails(forge({ note: 'extra field' }))
+  })
+
+  it('makes audit events immutable and readable only by the class teacher and a same-school admin', async () => {
+    const [ev] = await write(TEACHER, [{ date: '2026-11-05', next: () => ({ records: { [STUDENT]: P } }) }])
+    const ref = (uid) => doc(ctx(uid), 'classes', 'class-1', 'attendance_audit', ev.id)
+    await assertSucceeds(getDoc(ref(TEACHER)))
+    await assertSucceeds(getDoc(ref(ADMIN)))
+    await assertSucceeds(getDocs(collection(ctx(ADMIN), 'classes', 'class-1', 'attendance_audit')))
+    await assertFails(getDoc(ref(OTHER_ADMIN)))
+    await assertFails(getDoc(ref(FOREIGN_TEACHER)))
+    await assertFails(getDoc(ref(STUDENT)))
+    await assertFails(updateDoc(ref(TEACHER), { reason: 'rewritten' }))
+    await assertFails(deleteDoc(ref(TEACHER)))
+    await assertFails(updateDoc(ref(ADMIN), { reason: 'rewritten' }))
+    await assertFails(deleteDoc(ref(ADMIN)))
+  })
+
+  it('C3/C5: a same-school admin cannot record, correct, cancel, move or delete; foreign users neither', async () => {
+    for (const uid of [ADMIN, OTHER_ADMIN, FOREIGN_TEACHER, STUDENT]) {
+      await assertFails(write(uid, [{ date: '2026-11-05', next: () => ({ records: { [STUDENT]: P } }) }]))
+      await assertFails(write(uid, [{ date: '2026-11-02', next: (c) => ({ ...c, records: {} }) }]))
+      await assertFails(write(uid, [{ date: '2026-11-04', kind: 'cancel', next: keep({ session_status: 'cancelled' }) }]))
+      await assertFails(deleteDoc(day(uid, '2026-11-02')))
+    }
+    await assertFails(deleteDoc(day(TEACHER, '2026-11-02')))
+  })
+
+  it('refuses a malformed day: wrong date field, non-date id, unknown status', async () => {
+    await assertFails(write(TEACHER, [{ date: '2026-11-07', next: () => ({ records: {}, session_status: 'skipped' }) }]))
+    // The writer now refuses a non-date before sending; the rules' own refusal is proven by rawWrite below.
+    await expect(write(TEACHER, [{ date: 'monday', next: () => ({ records: {} }) }])).rejects.toMatchObject({ userMessage: expect.stringMatching(/real calendar date/) })
+  })
+
+  it('cancels and restores an unmarked meeting, audited; refuses to cancel a marked one', async () => {
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-04', kind: 'cancel', reason: 'Typhoon', next: keep({ session_status: 'cancelled', cancel_reason: 'Typhoon' }) }]))
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-09', kind: 'cancel', next: () => ({ records: {}, session_status: 'cancelled' }) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-04', next: (c) => ({ ...c, records: { [STUDENT]: P } }) }]))
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-04', kind: 'restore', next: keep({ session_status: 'held' }) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-02', kind: 'cancel', next: keep({ session_status: 'cancelled' }) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-02', kind: 'cancel', next: keep({ session_status: 'cancelled', records: {} }) }]))
+  })
+
+  const move = (uid, from, to) => write(uid, [
+    { date: from, kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: to }) },
+    { date: to, kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'held', rescheduled_from: from }) },
+  ])
+
+  it('moves an unmarked meeting with both ends and both events, and records the make-up later', async () => {
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-14', next: (c) => ({ ...c, records: { [STUDENT]: P } }) }]))
+  })
+
+  it('refuses a half-move, a marked origin, a target that exists, and a non-held make-up', async () => {
+    await assertFails(write(TEACHER, [{ date: '2026-11-04', kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: '2026-11-14' }) }]))
+    await assertFails(move(TEACHER, '2026-11-02', '2026-11-14'))
+    await assertFails(move(TEACHER, '2026-11-04', '2026-11-03'))
+    await assertFails(write(TEACHER, [
+      { date: '2026-11-04', kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: '2026-11-14' }) },
+      { date: '2026-11-14', kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'cancelled', rescheduled_from: '2026-11-04' }) },
+    ]))
+    await assertFails(move(FOREIGN_TEACHER, '2026-11-04', '2026-11-14'))
+  })
+
+  it('keeps a move final and the make-up link immutable', async () => {
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
+    await assertFails(write(TEACHER, [{ date: '2026-11-04', kind: 'restore', next: keep({ session_status: 'held' }) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-04', next: keep({ rescheduled_to: '2026-11-15' }) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-14', next: (c) => Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'rescheduled_from')) }]))
+    await assertFails(write(TEACHER, [{ date: '2026-11-14', kind: 'cancel', next: keep({ session_status: 'cancelled' }) }]))
+  })
+
+  // What a modified client could send: the same audited batch as
+  // writeAttendanceDays, WITHOUT its calendar check, so only the rules decide.
+  const rawWrite = async (uid, changes) => {
+    const db = ctx(uid)
+    const batch = writeBatch(db)
+    for (const c of changes) {
+      const ref = doc(db, 'classes', 'class-1', 'attendance', c.date)
+      const snap = await getDoc(ref)
+      const current = snap.exists() ? snap.data() : null
+      const aRef = doc(collection(db, 'classes', 'class-1', 'attendance_audit'))
+      const next = { ...c.next(current), date: c.date, last_audit_id: aRef.id }
+      batch.set(ref, next)
+      batch.set(aRef, buildAuditEvent({ date: c.date, actorUid: uid, before: current, after: next, kind: c.kind }))
+    }
+    return batch.commit()
+  }
+  const rawMove = (uid, from, to, inDate = to) => rawWrite(uid, [
+    { date: from, kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: to }) },
+    { date: inDate, kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'held', rescheduled_from: from }) },
+  ])
+
+  it('owner decision 2026-11-22: refuses impossible attendance day ids from a client that skips the app check', async () => {
+    const record = (date) => rawWrite(TEACHER, [{ date, next: () => ({ records: { [STUDENT]: P } }) }])
+    await assertSucceeds(record('2026-11-05')) // the honest raw write passes, so each refusal is the date
+    for (const bad of ['monday', '2026-02-30', '2026-04-31', '2026-06-31', '2026-02-29', '1900-02-29', '2026-13-01', '2026-00-10', '2026-11-00', '2026-01-32']) {
+      await assertFails(record(bad))
+    }
+    await assertSucceeds(record('2024-02-29'))
+    await assertSucceeds(record('2000-02-29'))
+    // The app's own writer refuses before any request is sent.
+    await expect(write(TEACHER, [{ date: '2026-02-30', next: () => ({ records: {} }) }])).rejects.toMatchObject({ userMessage: expect.stringMatching(/real calendar date/) })
+  })
+
+  it('owner decision 2026-11-22: checks both ends of a move -- an impossible make-up date lands neither half', async () => {
+    await assertFails(rawMove(TEACHER, '2026-11-04', '2026-11-31'))
+    await assertFails(rawMove(TEACHER, '2026-11-04', '2027-02-29'))
+    // Each half names a real date, but the link on the origin is impossible.
+    await assertFails(rawWrite(TEACHER, [
+      { date: '2026-11-04', kind: 'reschedule_out', next: keep({ session_status: 'rescheduled', rescheduled_to: '2026-02-30' }) },
+      { date: '2026-11-14', kind: 'reschedule_in', next: () => ({ records: {}, session_status: 'held', rescheduled_from: '2026-11-04' }) },
+    ]))
+    let origin
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      origin = (await getDoc(doc(admin.firestore(), 'classes', 'class-1', 'attendance', '2026-11-04'))).data()
+    })
+    expect(origin.session_status ?? 'held').toBe('held') // nothing landed
+    await assertSucceeds(rawMove(TEACHER, '2026-11-04', '2028-02-29')) // a real leap day is fine
+  })
+
+  it('owner decision 2026-11-22: a day stored under an impossible id stays readable and is never written again', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'classes', 'class-1', 'attendance', '2026-02-30'), { date: '2026-02-30', records: { [STUDENT]: P } })
+    })
+    await assertSucceeds(getDoc(day(TEACHER, '2026-02-30')))
+    await assertSucceeds(getDoc(day(ADMIN, '2026-02-30')))
+    await assertFails(rawWrite(TEACHER, [{ date: '2026-02-30', next: (c) => ({ ...c, records: { [STUDENT]: { status: 'absent', remarks: '' } } }) }]))
+    await assertFails(deleteDoc(day(TEACHER, '2026-02-30')))
+  })
+
+  it('owner decision 2026-11-22: a make-up may land after the class end date, paired and audited, class teacher only', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'classes', 'class-1'), { start_date: '2026-11-02', end_date: '2026-11-06' }, { merge: true })
+    })
+    await assertFails(move(FOREIGN_TEACHER, '2026-11-04', '2026-11-16'))
+    await assertFails(move(ADMIN, '2026-11-04', '2026-11-16'))
+    await assertFails(move(TEACHER, '2026-11-02', '2026-11-16')) // a marked meeting never moves
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-16')) // a Monday after the end
+    await assertFails(move(TEACHER, '2026-11-09', '2026-11-16')) // unmarked origin, but the make-up date is taken now
+    await assertSucceeds(write(TEACHER, [{ date: '2026-11-16', next: (c) => ({ ...c, records: { [STUDENT]: P } }) }]))
+    let events = []
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      events = (await getDocs(collection(admin.firestore(), 'classes', 'class-1', 'attendance_audit'))).docs.map((d) => d.data())
+    })
+    expect(events.filter((e) => e.kind.startsWith('reschedule')).map((e) => [e.kind, e.date, e.related_date]).sort())
+      .toEqual([['reschedule_in', '2026-11-16', '2026-11-04'], ['reschedule_out', '2026-11-04', '2026-11-16']])
+  })
+})
+
+describe('academic policy 2026-11-22 · quiz excusals are the class teacher\'s alone', () => {
+  const FOREIGN_TEACHER = 'teacher-foreign'
+  const ex = (uid, patch) => setQuizExcusal(ctx(uid), 'class-1', uid, { quizId: 'quiz-1', studentId: STUDENT, excused: true, ...patch })
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', first_name: 'T', last_name: 'R', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', FOREIGN_TEACHER), { role: 'teacher', school_id: 'school-2' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      await setDoc(doc(db, 'quizzes', 'quiz-1'), { teacher_id: TEACHER, class_ids: ['class-1'], status: 'published' })
+      await setDoc(doc(db, 'quizzes', 'quiz-other'), { teacher_id: TEACHER, class_ids: ['class-9'], status: 'published' })
+    })
+  })
+
+  it('grants and revokes with an event each, never deleting anything', async () => {
+    await assertSucceeds(ex(TEACHER, { reason: 'Medical certificate' }))
+    await assertSucceeds(ex(TEACHER, { excused: false, reason: 'Certificate withdrawn' }))
+    await assertSucceeds(ex(TEACHER, {}))
+    const events = await fetchExcusalEvents(ctx(TEACHER), 'class-1')
+    expect(events.map((e) => e.action).sort()).toEqual(['grant', 'grant', 'revoke'])
+    await assertFails(deleteDoc(doc(ctx(TEACHER), 'classes', 'class-1', 'quiz_excusals', `quiz-1_${STUDENT}`)))
+    await assertFails(deleteDoc(doc(ctx(TEACHER), 'classes', 'class-1', 'quiz_excusal_events', events[0].id)))
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'classes', 'class-1', 'quiz_excusal_events', events[0].id), { reason: 'x' }))
+  })
+
+  it('refuses a quiz not assigned to the class, a student not on its roster, and an unaudited write', async () => {
+    await assertFails(ex(TEACHER, { quizId: 'quiz-other' }))
+    await assertFails(ex(TEACHER, { studentId: 'stranger' }))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'classes', 'class-1', 'quiz_excusals', `quiz-1_${STUDENT}`), {
+      quiz_id: 'quiz-1', student_id: STUDENT, excused: true, updated_by: TEACHER, updated_at: serverTimestamp(), last_event_id: 'nope',
+    }))
+  })
+
+  it('C6: a same-school admin cannot grant, read excusals, or read their audit; a foreign teacher neither', async () => {
+    await ex(TEACHER, { reason: 'note' })
+    for (const uid of [ADMIN, FOREIGN_TEACHER, OTHER_STUDENT]) {
+      await assertFails(ex(uid, { studentId: OTHER_STUDENT }))
+      await assertFails(getDocs(collection(ctx(uid), 'classes', 'class-1', 'quiz_excusal_events')))
+      await assertFails(getDoc(doc(ctx(uid), 'classes', 'class-1', 'quiz_excusals', `quiz-1_${STUDENT}`)))
+    }
+  })
+
+  it('lets a student read only their own excusal state, never the events', async () => {
+    await ex(TEACHER, {})
+    expect([...(await fetchMyExcusals(ctx(STUDENT), 'class-1', STUDENT))]).toEqual(['quiz-1'])
+    await assertFails(getDocs(collection(ctx(STUDENT), 'classes', 'class-1', 'quiz_excusals')))
+    await assertFails(getDocs(collection(ctx(STUDENT), 'classes', 'class-1', 'quiz_excusal_events')))
+  })
+})
+
+describe('academic policy 2026-11-22 · class dates and grading periods', () => {
+  const base = { teacher_id: TEACHER, student_ids: [] }
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'users', TEACHER), { role: 'teacher', school_id: 'school-1' })
+      await setDoc(doc(db, 'users', ADMIN), { role: 'admin', school_id: 'school-1' })
+      await setDoc(doc(db, 'classes', 'legacy'), { teacher_id: TEACHER, student_ids: [], subject: 'Old' })
+      await setDoc(doc(db, 'gradebooks', 'class-1'), { teacher_id: TEACHER, periods: [{ id: 'q1', name: 'Quarter 1' }], configured: true })
+    })
+  })
+
+  it('requires a start date on a new class; end date optional and not before it', async () => {
+    const t = ctx(TEACHER)
+    await assertFails(setDoc(doc(t, 'classes', 'n1'), base))
+    await assertFails(setDoc(doc(t, 'classes', 'n2'), { ...base, start_date: 'soon' }))
+    await assertFails(setDoc(doc(t, 'classes', 'n3'), { ...base, start_date: '2026-08-10', end_date: '2026-08-01' }))
+    await assertSucceeds(setDoc(doc(t, 'classes', 'n4'), { ...base, start_date: '2026-08-10' }))
+    await assertSucceeds(setDoc(doc(t, 'classes', 'n5'), { ...base, start_date: '2026-08-10', end_date: '2026-12-18', semester: '1st' }))
+  })
+
+  it('keeps legacy classes editable without a date, lets the teacher add one, never remove it', async () => {
+    const ref = doc(ctx(TEACHER), 'classes', 'legacy')
+    await assertSucceeds(updateDoc(ref, { subject: 'Still old' }))
+    await assertSucceeds(updateDoc(ref, { start_date: '2026-08-10' }))
+    await assertSucceeds(updateDoc(ref, { start_date: '2026-08-17', end_date: null }))
+    await assertFails(updateDoc(ref, { start_date: deleteField() }))
+  })
+
+  it('refuses impossible calendar days and reversed ranges, accepts real leap days (blocker fix)', async () => {
+    const t = ctx(TEACHER)
+    let n = 0
+    const create = (dates) => setDoc(doc(t, 'classes', `cal-${n++}`), { ...base, ...dates })
+    for (const bad of ['2026-02-30', '2026-02-29', '2026-04-31', '2026-06-31', '2026-09-31', '2026-11-31',
+      '1900-02-29', '2026-00-10', '2026-13-01', '2026-01-00', '2026-01-32']) {
+      await assertFails(create({ start_date: bad }))
+      await assertFails(create({ start_date: '2026-01-05', end_date: bad }))
+    }
+    for (const good of ['2024-02-29', '2000-02-29', '2026-02-28', '2026-04-30', '2026-12-31', '2026-01-31']) {
+      await assertSucceeds(create({ start_date: good }))
+    }
+    await assertSucceeds(create({ start_date: '2024-02-29', end_date: '2024-02-29' }))
+    await assertFails(create({ start_date: '2026-03-01', end_date: '2026-02-28' }))
+    // The same check on edit: a legacy class cannot be given an impossible day.
+    const legacy = doc(t, 'classes', 'legacy')
+    await assertFails(updateDoc(legacy, { start_date: '2026-02-30' }))
+    await assertFails(updateDoc(legacy, { start_date: '2026-08-10', end_date: '2026-09-31' }))
+    await assertSucceeds(updateDoc(legacy, { subject: 'Still dateless' }))
+  })
+
+  it('refuses class-date writes from anyone but the class teacher, valid dates or not', async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      await setDoc(doc(admin.firestore(), 'users', FOREIGN_TEACHER), { role: 'teacher', school_id: 'school-2' })
+      await setDoc(doc(admin.firestore(), 'users', STUDENT), { role: 'student' })
+    })
+    for (const who of [ADMIN, FOREIGN_TEACHER, STUDENT]) {
+      await assertFails(updateDoc(doc(ctx(who), 'classes', 'legacy'), { start_date: '2024-02-29' }))
+    }
+    await assertFails(setDoc(doc(ctx(FOREIGN_TEACHER), 'classes', 'x1'), { ...base, start_date: '2024-02-29' }))
+    await assertFails(setDoc(doc(testEnv.unauthenticatedContext().firestore(), 'classes', 'x2'), { ...base, start_date: '2024-02-29' }))
+  })
+
+  it('C1/C2: a school admin cannot create a class or set class dates', async () => {
+    await assertFails(setDoc(doc(ctx(ADMIN), 'classes', 'a1'), { ...base, start_date: '2026-08-10' }))
+    await assertFails(updateDoc(doc(ctx(ADMIN), 'classes', 'legacy'), { start_date: '2026-08-10' }))
+    await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'classes', 'legacy'), { subject: 'Admin rename' }))
+  })
+
+  it('C4: the teacher defines grading periods; a same-school admin cannot touch them', async () => {
+    await assertSucceeds(updateDoc(doc(ctx(TEACHER), 'gradebooks', 'class-1'), { periods: [{ id: 'p1', name: 'Prelim' }] }))
+    await assertFails(updateDoc(doc(ctx(ADMIN), 'gradebooks', 'class-1'), { periods: [] }))
+    await assertFails(setDoc(doc(ctx(ADMIN), 'gradebooks', 'class-2'), { teacher_id: TEACHER, periods: [] }))
+    await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'gradebooks', 'class-1'), { configured: true }))
   })
 })

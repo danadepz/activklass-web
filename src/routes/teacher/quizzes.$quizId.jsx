@@ -46,7 +46,8 @@ import { discardAttempt, grantExtraAttempt, setStudentQuizAccess, unlockAttempt 
 import { removeQuizFromAllRecords, syncQuizToAllRecords, syncQuizToClassRecord, useAutoPostScores } from '@/hooks/useQuizRecordSync'
 import { applyScoringEdits, applyWordingEdits, backToDraftRefusal, describeRegrade, wordingEditError } from './quizWording'
 import { api } from '@/lib/api'
-import { confirmDialog } from '@/components/ui/dialogs'
+import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
+import { fetchClassExcusals, fetchExcusalEvents, setQuizExcusal } from '@/lib/quizExcusals'
 import { toast } from '@/components/ui/toast'
 import { useAsyncAction } from '@/components/ui/useAsyncAction'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -777,6 +778,72 @@ function GrantAttemptButton({ quizId, studentId, refetch }) {
   )
 }
 
+/* Official excusal from this quiz (2026-11-22, policy A4 / B5 / C6). Leaves
+   the student's attempts, scores and assignment exactly as they are; only the
+   missing-work count stops counting this quiz for them. Each grant and revoke
+   is kept, with its reason, in the history below the table. */
+export function ExcuseButton({ classId, quizId, studentId, studentName, excused, onChanged }) {
+  const { profile } = useAuth()
+  const [run, busy] = useAsyncAction(async () => {
+    const reason = await promptDialog({
+      title: excused ? 'Revoke Excusal' : 'Excuse From This Quiz',
+      message: excused
+        ? `${studentName} will count as missing this quiz again if they have not taken it.`
+        : `${studentName}'s missing-work count will leave this quiz out. Their attempts and scores are not changed.`,
+      label: 'Reason (optional)',
+      placeholder: excused ? 'e.g. Excused in error.' : 'e.g. Medical certificate on file.',
+      confirmLabel: excused ? 'Revoke' : 'Excuse',
+    })
+    if (reason == null) return
+    try {
+      await setQuizExcusal(db, classId, profile.id, { quizId, studentId, excused: !excused, reason })
+      toast.success(excused ? `Excusal revoked for ${studentName}.` : `${studentName} is excused from this quiz.`)
+      onChanged?.()
+    } catch (err) {
+      console.error('quiz excusal failed:', err)
+      toast.error('That change could not be saved. Reload the page and try again.')
+    }
+  })
+  return (
+    <button
+      type="button"
+      onClick={run}
+      disabled={busy}
+      title={excused ? `Revoke ${studentName}'s excusal` : `Excuse ${studentName} from this quiz`}
+      className="transition hover:brightness-105 disabled:opacity-40"
+      style={{ ...mono, fontSize: 11, fontWeight: 700, color: excused ? goldDeep : navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.2)`, borderRadius: 8, padding: '5px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+    >
+      {busy ? '…' : excused ? 'Revoke Excusal' : 'Excuse'}
+    </button>
+  )
+}
+
+/* Grant/revoke history for this quiz in this class, newest first. Teacher-only:
+   the rules refuse it to an admin and a student (C6). */
+function ExcusalHistory({ classId, quizId, names }) {
+  const { data, isError } = useQuery({
+    queryKey: ['fs-quiz-excusals', classId, quizId, 'events'],
+    queryFn: () => fetchExcusalEvents(db, classId, quizId),
+  })
+  const events = Array.isArray(data) ? data : []
+  const when = (t) => (t?.toDate ? t.toDate().toLocaleString() : '')
+  return (
+    <details style={{ marginTop: 12, fontSize: 12.5, color: muted }}>
+      <summary style={{ cursor: 'pointer' }}>Excusal history ({events.length})</summary>
+      {isError && <p style={{ margin: '6px 0 0', color: red }}>The history could not be loaded. Try again in a moment.</p>}
+      {!isError && events.length === 0 && <p style={{ margin: '6px 0 0' }}>No student has been excused from this quiz.</p>}
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        {events.map((e) => (
+          <li key={e.id} style={{ ...mono, fontSize: 11.5, lineHeight: 1.6 }}>
+            {when(e.at)} · {e.action === 'grant' ? 'Excused' : 'Excusal revoked'} · {names[e.student_id] ?? 'a former student'}
+            {e.reason ? ` — ${e.reason}` : ''}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 /**
  * The Attempt Notes cell's lines, in the order the column has always shown
  * them: lock, then the attempt's own state, then time away from the page.
@@ -796,6 +863,11 @@ export function attemptNotes({ lockedAttempt, notable }) {
 export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, refetch }) {
   const [detailsFor, setDetailsFor] = useState(null)
   const queryClient = useQueryClient()
+  const { data: excusals } = useQuery({
+    queryKey: ['fs-quiz-excusals', classId],
+    queryFn: () => fetchClassExcusals(db, classId),
+  })
+  const refetchExcusals = () => queryClient.invalidateQueries({ queryKey: ['fs-quiz-excusals', classId] })
   const { data, isLoading, refetch: refetchResults } = useQuery({
     queryKey: ['fs-quiz-results', classId, quizId, Array.isArray(assignedTo) ? assignedTo.join(',') : 'all'],
     queryFn: async () => {
@@ -1041,6 +1113,14 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
                       refetchResults={refetchResults}
                     />
                     <GrantAttemptButton quizId={quizId} studentId={s.student_id} refetch={refetch} />
+                    <ExcuseButton
+                      classId={classId}
+                      quizId={quizId}
+                      studentId={s.student_id}
+                      studentName={`${s.first_name} ${s.last_name}`}
+                      excused={!!excusals?.[s.student_id]?.has?.(quizId)}
+                      onChanged={refetchExcusals}
+                    />
                   </div>
                 </td>
               </tr>
@@ -1048,6 +1128,11 @@ export function ResultsView({ classId, quizId, quiz, totalPoints, assignedTo, re
           })}
         </tbody>
       </table>
+      <ExcusalHistory
+        classId={classId}
+        quizId={quizId}
+        names={Object.fromEntries((data?.students ?? []).map((s) => [s.student_id, `${s.last_name}, ${s.first_name}`]))}
+      />
       {detailsFor && (
         <StudentDetailsModal
           detailsFor={detailsFor}

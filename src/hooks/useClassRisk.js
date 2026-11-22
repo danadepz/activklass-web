@@ -34,59 +34,60 @@
  *  the backend requires all six features and does not impute neutral defaults.
  */
 import { useQuery } from '@tanstack/react-query'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import { predictRiskBatch } from '@/lib/ai'
 import { saveClassPerformance } from '@/lib/performance'
 import {
-  DAY_WEIGHT,
   MIN_ATTENDANCE_DAYS,
+  attendanceRateFromMarks,
+  DAY_WEIGHT,
   missedQuizCounts,
   missingRate,
   missingWorkCounts,
+  quizAverageFromAttempts,
+  quizDueDates,
+  quizEvidence,
   quizTrendFromAttempts,
-  sortKey,
   splitTrend,
+  workEvidence,
 } from '@/lib/riskSignals'
+import { sessionLedger, studentAttendanceEvidence } from '@/lib/attendanceSessions'
+import { fetchClassExcusals } from '@/lib/quizExcusals'
 
 /**
- * Whole-term attendance rate (0-100) and the recent-vs-earlier trend (-1..1)
- * per student, from the date-keyed attendance subcollection.
+ * Attendance per student from the date-keyed subcollection, through the
+ * session ledger: cancelled and moved-away dates never count, and a held
+ * session with no mark for a student is "not recorded", never absent.
+ * Returns the raw day documents too, for the class-level coverage figures.
  */
 async function attendanceSignals(classId) {
   const snap = await getDocs(collection(db, 'classes', classId, 'attendance'))
-  const days = snap.docs
-    .map((d) => ({ date: d.data().date ?? d.id, records: d.data().records ?? {} }))
-    .sort((a, b) => sortKey(a.date).localeCompare(sortKey(b.date)))
-
-  const series = {}
-  days.forEach(({ records }) => {
-    Object.entries(records).forEach(([studentId, rec]) => {
-      const weight = DAY_WEIGHT[rec?.status]
-      if (weight == null) return
-      ;(series[studentId] ??= []).push(weight)
-    })
-  })
-
-  return Object.fromEntries(
-    Object.entries(series).map(([id, marks]) => [
-      id,
-      {
-        rate: marks.length ? (marks.reduce((a, b) => a + b, 0) / marks.length) * 100 : undefined,
-        trend: splitTrend(marks, MIN_ATTENDANCE_DAYS),
+  const days = snap.docs.map((d) => ({ id: d.id, ...d.data(), date: d.data().date ?? d.id }))
+  const forStudent = (studentId) => {
+    const ev = studentAttendanceEvidence(days, studentId)
+    return {
+      rate: attendanceRateFromMarks(ev.statuses),
+      trend: splitTrend(ev.statuses.map((s) => DAY_WEIGHT[s]), MIN_ATTENDANCE_DAYS),
+      evidence: {
+        held_sessions: ev.heldSessions,
+        marks: ev.statuses.length,
+        excused: ev.excused,
+        not_recorded: ev.notRecorded,
       },
-    ]),
-  )
+    }
+  }
+  return { days, forStudent }
 }
 
 /**
- * Best score (0-100), chronological trend, and which quizzes were attempted.
+ * Quiz level and trend per student, over DISTINCT graded quizzes (best scored
+ * attempt each), plus which quizzes were attempted at all.
  *
- * The level stays best-per-student, which is what every other teacher view
- * reports. The trend deliberately does not: it walks attempts in submission
- * order, because a student whose scores are falling still has their one good
- * early attempt sitting in the maximum.
+ * The level used to be the single best attempt across every quiz -- one good
+ * quiz hid four poor ones -- while the student's own forecast averaged per
+ * quiz. Both now use quizAverageFromAttempts.
  *
  * `attempted` collects EVERY attempt, including ones still awaiting manual
  * grading. Scoring and submission are different questions: an ungraded attempt
@@ -97,28 +98,30 @@ async function quizSignals(classId) {
   const snap = await getDocs(
     query(collection(db, 'quiz_attempts'), where('class_id', '==', classId)),
   )
-  const scored = {}
+  const byStudent = {}
   const attempted = {}
   snap.docs.forEach((d) => {
     const a = d.data()
+    // shortcut: an in_progress attempt still counts as "attempted" (unchanged
+    // behaviour; it carries no score). Whether an abandoned attempt on a closed
+    // quiz is missing work is an open policy question -- see the report.
     ;(attempted[a.student_id] ??= new Set()).add(a.quiz_id)
-    // total_score is the field every teacher view reads; an attempt without it
-    // is awaiting manual grading, not a zero.
-    if (a.total_score == null || !a.total_possible) return
-    ;(scored[a.student_id] ??= []).push(a)
+    ;(byStudent[a.student_id] ??= []).push(a)
   })
 
+  return { attempted, byStudent }
+}
+
+/**
+ * Level, trend and evidence for one student's attempts. The trend orders
+ * quizzes by their authoritative due dates (policy A3), which needs the quiz
+ * list and the record columns -- so it runs once everything is loaded.
+ */
+function quizFigures(list, quizDates) {
   return {
-    attempted,
-    byStudent: Object.fromEntries(
-      Object.entries(scored).map(([id, list]) => [
-        id,
-        {
-          best: Math.max(...list.map((a) => (a.total_score / a.total_possible) * 100)),
-          trend: quizTrendFromAttempts(list),
-        },
-      ]),
-    ),
+    average: quizAverageFromAttempts(list),
+    trend: quizTrendFromAttempts(list, quizDates),
+    evidence: quizEvidence(list, quizDates),
   }
 }
 
@@ -144,7 +147,10 @@ async function classAssessments(classId) {
  */
 export function useClassRisk(classId, students, options = {}) {
   const ids = (students ?? []).map((s) => s.student_id).sort().join(',')
-  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, s.riskGrade ?? s.grade ?? null]))
+  // `riskGrade` when the caller supplies one -- null there means "no valid
+  // graded work" (A2) and must NOT fall back to the displayed grade.
+  const gradeOf = (s) => ('riskGrade' in s ? s.riskGrade : s.grade) ?? undefined
+  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, gradeOf(s) ?? null]))
   const { profile } = useAuth()
 
   return useQuery({
@@ -155,37 +161,66 @@ export function useClassRisk(classId, students, options = {}) {
     // from refetching on every focus.
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const [attendance, quizzes, assessments, quizBank] = await Promise.all([
+      const [attendance, quizzes, assessments, quizBank, classSnap, excused] = await Promise.all([
         attendanceSignals(classId),
         quizSignals(classId),
         classAssessments(classId),
         classQuizzes(classId),
+        getDoc(doc(db, 'classes', classId)),
+        // Official quiz excusals (A4). Readable only by the class's teacher,
+        // which is who runs this; a refused read means none can be shown here,
+        // and missing work is then computed as before rather than not at all.
+        fetchClassExcusals(db, classId).catch(() => ({})),
       ])
+      const quizDates = quizDueDates(quizBank, assessments)
+      const quizBy = Object.fromEntries(students.map((s) => [s.student_id, quizFigures(quizzes.byStudent[s.student_id] ?? [], quizDates)]))
 
       // One clock for the whole class, so two students are never judged
       // against a quiz deadline that fell between their two evaluations.
       const now = Date.now()
+      const today = new Date(now)
+      const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      // Class-level: planned vs confirmed meetings. Disclosed, never used to
+      // invent absences -- see attendanceSessions.js.
+      // From the class's own start date (A1) when it has one; a legacy class
+      // counts from its first recorded day and the coverage line says so.
+      const cls = classSnap.data() ?? {}
+      const ledger = sessionLedger(attendance.days, cls.schedule ?? null, todayIso, cls.start_date, cls.end_date)
+      const sessions = { ...ledger.counts, start: ledger.start, start_source: ledger.startSource, ended: ledger.endedBy }
+
+      const att = Object.fromEntries(students.map((s) => [s.student_id, attendance.forStudent(s.student_id)]))
+      const evidence = Object.fromEntries(students.map((s) => [s.student_id, {
+        sessions,
+        attendance: att[s.student_id].evidence,
+        quizzes: quizBy[s.student_id].evidence,
+        work: workEvidence(assessments, quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
+      }]))
 
       const payload = students.map((s) => ({
         studentId: s.student_id,
         indicators: {
-          attendanceRate: attendance[s.student_id]?.rate,
-          attendanceTrend: attendance[s.student_id]?.trend,
-          priorAverageGrade: s.riskGrade ?? s.grade ?? undefined,
-          quizAverage: quizzes.byStudent[s.student_id]?.best,
-          quizTrend: quizzes.byStudent[s.student_id]?.trend,
+          attendanceRate: att[s.student_id].rate,
+          attendanceTrend: att[s.student_id].trend,
+          priorAverageGrade: gradeOf(s),
+          quizAverage: quizBy[s.student_id].average,
+          quizTrend: quizBy[s.student_id].trend,
           // Pooled: assessments the teacher marked missing, plus quizzes whose
           // window closed with no attempt. The second half is invisible in
           // quiz_attempts by construction -- there is no document to find.
           missingWorkRate: missingRate(
             missingWorkCounts(assessments, s.student_id),
-            missedQuizCounts(quizBank, quizzes.attempted[s.student_id], s.student_id, now),
+            missedQuizCounts(quizBank, quizzes.attempted[s.student_id], s.student_id, now, excused[s.student_id]),
           ),
         },
       }))
 
       const results = await predictRiskBatch(payload)
-      const byStudent = Object.fromEntries(results.map((r) => [r.studentId, r]))
+      // Evidence rides beside the model's answer; it never changes it. Six
+      // present features are what the model needs -- the counts are what a
+      // teacher needs to judge how much that answer rests on.
+      const byStudent = Object.fromEntries(
+        results.map((r) => [r.studentId, { ...r, evidence: evidence[r.studentId] ?? null }]),
+      )
 
       /* Write the run down. Derived data, so a failure here is not the caller's
          problem -- the panel renders from `byStudent` either way and the next

@@ -34,6 +34,22 @@ describe('teacher predicted-risk status handling', () => {
     expect(html).not.toContain('Only 0%')
   })
 
+  it('A7: names an insufficient-data student with their record, described and unscored', () => {
+    riskState.data = {
+      s1: {
+        status: 'insufficient_data', atRisk: false, score: null, coverage: 0.8, missing: ['quiz_trend', 'prior_average_grade'],
+        evidence: { attendance: { marks: 4, held_sessions: 5, not_recorded: 1 }, quizzes: { gradedQuizzes: 1 }, work: { missing: 2, submitted: 1 } },
+      },
+    }
+    const html = renderToStaticMarkup(<PredictedRisk classId="c1" rows={[row]} />)
+    expect(html).toContain('Insufficient Data — not scored (1)')
+    expect(html).toContain('Student, A')
+    expect(html).toContain('Not yet available: quiz trend, prior average grade')
+    expect(html).toContain('Record: 4 attendance marks of 5 held sessions (1 not recorded)')
+    expect(html).toContain('they are not a prediction')
+    expect(html).not.toContain('uncalibrated score')
+  })
+
   it('labels a valid result as an uncalibrated score, not a likelihood', () => {
     riskState.data = {
       s1: {

@@ -849,3 +849,36 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
 - [ ] Independent teacher-session verification against actual stored templates and
   deployment remain pending. The tester's original data-corruption report is not
   yet resolved by live evidence.
+
+## Risk evidence and attendance sessions — 2026-11-22 (branch `codex/risk-evidence-20261122`, not merged)
+- [~] A teacher can cancel a planned meeting, or move it to a make-up date, from the
+  attendance page; cancelled and moved-away dates hold no marks and stop counting, a move
+  writes both dates in one batch that name each other, and the Whole Term grid labels them.
+  Unrecorded meetings are shown as unconfirmed, never read as present or absent.
+- [~] The risk inputs the web sends are computed from evidence, not presence: attendance rate
+  from recorded marks on held sessions only; quiz average and trend over distinct quizzes
+  (best attempt each, zeros kept); and each flagged student shows what the score is based on.
+  Directory bands are labelled provisional; the 0.35/0.50 cutoffs and the backend's
+  six-input insufficient-data contract (SHA 27bb796) are unchanged.
+- Verified locally only: `npm run test` 2641 passed / 3 skipped, `npm run build` clean,
+  `npm run test:rules` 285/285 (12 new attendance cases; 8 fail against origin/main rules),
+  lint unchanged at 190; browser walk against the local emulators with synthetic data
+  (cancel, refused cancel of a recorded day, refused duplicate move, move, recording the
+  make-up, term grid). **Not deployed:** the `firestore.rules` change is in the backend
+  branch only. Full report: `C:\CAPSTONE\ACTIVKLASS_RISK_EVIDENCE_IMPLEMENTATION_REPORT.md`.
+
+## Final academic policy — 2026-11-22 (same branch, not merged, rules NOT deployed)
+- [~] Class `start_date` (required on new classes, legacy classes unchanged) and optional
+  `end_date`; the school admin's term-date card now holds default *start* dates the class
+  form offers and the teacher confirms. Attendance is teacher-only and every write is an
+  audited transaction (`lib/attendanceAudit.js`, immutable `attendance_audit` events; the
+  day page and the admin's class row show the history; the admin cannot write). Official
+  quiz excusals (`lib/quizExcusals.js`) from the quiz results table, teacher-only, with
+  history; excused quizzes leave missing work. Quiz trend orders quizzes by due date and
+  has no trend without dates; the period grade reaches the model only with valid graded
+  work behind it, and students without a full input set are listed as Insufficient Data
+  with their record described. Thresholds, model and the six-input contract unchanged.
+- Verified locally only: `npm run test` 2661 passed / 3 skipped, build clean, lint 190,
+  `npm run test:rules` 292/292 (17 new cases fail against the 88c6bca rules). No browser
+  walk of these screens yet. Full report:
+  `C:\CAPSTONE\ACTIVKLASS_FINAL_ACADEMIC_POLICY_IMPLEMENTATION_REPORT.md`.

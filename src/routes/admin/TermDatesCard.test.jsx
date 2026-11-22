@@ -52,6 +52,7 @@ vi.mock('./BulkUpload', () => ({ default: () => null }))
 vi.mock('@/components/ChangePassword', () => ({ default: () => null }))
 
 import HomeTab from './HomeTab.jsx'
+import { TermDatesCard } from './UsersTab.jsx'
 
 renderToStaticMarkup(<HomeTab />)
 
@@ -70,5 +71,22 @@ describe('Term dates card mutation (T-163)', () => {
     expect(saveSchoolSettings).toHaveBeenCalledTimes(1)
     expect(saveSchoolSettings).toHaveBeenCalledWith({ term_dates: { school_year_end: '2027-04-15' } })
     expect(Object.keys(saveSchoolSettings.mock.calls[0][0])).toEqual(['term_dates'])
+  })
+})
+
+describe('default start dates (2026-11-22, C1/C2)', () => {
+  it('shows a start field beside every end field, labelled as the school default', () => {
+    const html = renderToStaticMarkup(
+      <TermDatesCard settings={{ school: { term_dates: { first_sem_start: '2026-08-10' } } }} onSaved={() => {}} />,
+    )
+    // Shown MM-DD-YYYY (owner decision 2026-11-22); stored and sent as 2026-08-10.
+    expect(html).toContain('value="08-10-2026"')
+    expect(html).toContain('placeholder="MM-DD-YYYY"')
+    expect(html).not.toContain('type="date"')
+    for (const label of ['School Year Start (K-12)', '1st Semester Start', '2nd Semester Start', 'Midyear / Summer Start']) {
+      expect(html).toContain(label)
+    }
+    expect(html).toContain('School Year End (K-12)')
+    expect(html).toContain('each teacher confirms or changes their own class')
   })
 })
