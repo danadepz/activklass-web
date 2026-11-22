@@ -384,7 +384,7 @@ export const CHECKOUT_BANNER = {
   balancePaid: { bg: 'rgba(31,138,91,0.10)', border: 'rgba(31,138,91,0.3)', color: green, text: 'Payment received — your remaining balance is paid. Nothing more is due this term.' },
   unconfirmed: {
     bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00',
-    text: 'Payment is still unconfirmed by the server. If you completed it, refresh in a moment; do not assume it succeeded.',
+    text: 'The payment provider has not confirmed this payment, so your plan or seats have not been activated. Check its payment status before starting another checkout.',
   },
   attempt_failed: { bg: 'rgba(245,197,24,0.14)', border: 'rgba(245,197,24,0.4)', color: '#8A6D00', text: 'The provider reported a failed attempt. The checkout may still be retryable; payment has not been confirmed.' },
   expired: { bg: 'rgba(14,42,92,0.05)', border: line, color: muted, text: 'The payment provider reports that this checkout session expired. Start a new checkout if you still want to subscribe.' },

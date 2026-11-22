@@ -93,6 +93,12 @@ describe('T-68 — the checkout banners never name the gateway', () => {
       expect(text).not.toMatch(/paymongo/i)
     }
   })
+
+  it('says unconfirmed is not activated and advises checking before retrying', () => {
+    expect(CHECKOUT_BANNER.unconfirmed.text).toMatch(/not been activated/)
+    expect(CHECKOUT_BANNER.unconfirmed.text).toMatch(/Check its payment status before starting another checkout/)
+    expect(CHECKOUT_BANNER.unconfirmed.text).not.toMatch(/nothing was charged/i)
+  })
 })
 
 describe('self-service seat increase — the Account page offers "Add Student Seats" only once there is a plan to add to', () => {
