@@ -70,8 +70,13 @@ export function plannedMeetingDates(schedule, startIso, endIso) {
  * one falls back to the earliest stored day, so meetings before that are not
  * counted -- never invented as missed. `start` / `startSource` ('class' |
  * 'first_record' | null) say which applied.
+ *
+ * `endIso` (the class's `end_date`, 2026-11-22 blocker fix): the LAST date a
+ * meeting is planned. No planned meeting is generated after it, even when
+ * today is later. Stored days after it -- a make-up moved past the end, marks
+ * already recorded -- are kept exactly as before. No end date: plan to today.
  */
-export function sessionLedger(days, schedule, todayIso, startIso) {
+export function sessionLedger(days, schedule, todayIso, startIso, endIso) {
   const byDate = new Map()
   for (const d of days ?? []) {
     const date = d?.date ?? d?.id
@@ -79,7 +84,9 @@ export function sessionLedger(days, schedule, todayIso, startIso) {
   }
   const classStart = typeof startIso === 'string' && isIsoDate(startIso) ? startIso : null
   const start = classStart ?? [...byDate.keys()].sort()[0]
-  const planned = new Set(start ? plannedMeetingDates(schedule, start, todayIso) : [])
+  const classEnd = typeof endIso === 'string' && isIsoDate(endIso) ? endIso : null
+  const planUntil = classEnd && classEnd < todayIso ? classEnd : todayIso
+  const planned = new Set(start ? plannedMeetingDates(schedule, start, planUntil) : [])
   const dates = [...new Set([...planned, ...byDate.keys()])].sort()
 
   const sessions = dates.map((date) => {
@@ -103,7 +110,14 @@ export function sessionLedger(days, schedule, todayIso, startIso) {
 
   const counts = { planned: planned.size, recorded: 0, unconfirmed: 0, upcoming: 0, cancelled: 0, rescheduled: 0 }
   for (const s of sessions) counts[s.state] += 1
-  return { sessions, counts, start: start ?? null, startSource: classStart ? 'class' : start ? 'first_record' : null }
+  return {
+    sessions,
+    counts,
+    start: start ?? null,
+    startSource: classStart ? 'class' : start ? 'first_record' : null,
+    end: classEnd,
+    endedBy: classEnd && classEnd < todayIso ? classEnd : null,
+  }
 }
 
 /**

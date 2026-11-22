@@ -185,8 +185,8 @@ export function useClassRisk(classId, students, options = {}) {
       // From the class's own start date (A1) when it has one; a legacy class
       // counts from its first recorded day and the coverage line says so.
       const cls = classSnap.data() ?? {}
-      const ledger = sessionLedger(attendance.days, cls.schedule ?? null, todayIso, cls.start_date)
-      const sessions = { ...ledger.counts, start: ledger.start, start_source: ledger.startSource }
+      const ledger = sessionLedger(attendance.days, cls.schedule ?? null, todayIso, cls.start_date, cls.end_date)
+      const sessions = { ...ledger.counts, start: ledger.start, start_source: ledger.startSource, ended: ledger.endedBy }
 
       const att = Object.fromEntries(students.map((s) => [s.student_id, attendance.forStudent(s.student_id)]))
       const evidence = Object.fromEntries(students.map((s) => [s.student_id, {

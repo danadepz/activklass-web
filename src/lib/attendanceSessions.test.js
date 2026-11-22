@@ -129,3 +129,50 @@ describe('cancel and reschedule guards', () => {
     expect(ok('2026-11-11', '2026-11-08')).toBeNull() // planned meeting with no doc yet
   })
 })
+
+describe('class end date bounds planned meetings (blocker fix, 2026-11-22)', () => {
+  // MWF from Mon 2 Nov 2026. Recorded Mon 2 and Wed 4.
+  const recorded = [
+    { date: '2026-11-02', records: { s1: mark('present') } },
+    { date: '2026-11-04', records: { s1: mark('absent') } },
+  ]
+
+  it('past end: no planned meeting after the end date, even though today is later', () => {
+    const l = sessionLedger(recorded, MWF, '2026-11-20', '2026-11-02', '2026-11-06')
+    expect(l.sessions.filter((s) => s.planned).map((s) => s.date)).toEqual(['2026-11-02', '2026-11-04', '2026-11-06'])
+    expect(l.counts).toMatchObject({ planned: 3, recorded: 2, unconfirmed: 1 })
+    expect(l).toMatchObject({ end: '2026-11-06', endedBy: '2026-11-06' })
+  })
+
+  it('future end: plans to today, exactly as with no end date', () => {
+    const withEnd = sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02', '2026-12-18')
+    const without = sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02')
+    expect(withEnd.counts).toEqual(without.counts)
+    expect(withEnd.endedBy).toBeNull()
+  })
+
+  it('legacy class (no dates): behaviour unchanged', () => {
+    const l = sessionLedger(recorded, MWF, '2026-11-11')
+    expect(l.counts).toMatchObject({ planned: 5, recorded: 2, unconfirmed: 3 }) // 2,4,6,9,11 Nov
+    expect(l).toMatchObject({ end: null, endedBy: null })
+  })
+
+  it('keeps stored days after the end: a moved make-up and its marks still count', () => {
+    const days = [
+      ...recorded,
+      { date: '2026-11-06', session_status: 'rescheduled', rescheduled_to: '2026-11-10', records: {} },
+      { date: '2026-11-10', rescheduled_from: '2026-11-06', records: { s1: mark('late') } },
+    ]
+    const l = sessionLedger(days, MWF, '2026-11-20', '2026-11-02', '2026-11-06')
+    const madeUp = l.sessions.find((s) => s.date === '2026-11-10')
+    expect(madeUp).toMatchObject({ state: 'recorded', planned: false, rescheduledFrom: '2026-11-06' })
+    expect(l.counts).toMatchObject({ recorded: 3, rescheduled: 1, unconfirmed: 0 })
+    // Marks are never touched by the end date: every recorded status is still evidence.
+    expect(studentAttendanceEvidence(days, 's1').statuses).toEqual(['present', 'absent', 'late'])
+  })
+
+  it('ignores a malformed end date rather than trusting it', () => {
+    expect(sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02', 'June').counts)
+      .toEqual(sessionLedger(recorded, MWF, '2026-11-11', '2026-11-02').counts)
+  })
+})

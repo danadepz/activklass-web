@@ -68,6 +68,16 @@ describe('useClassRisk · payload and evidence', () => {
     expect(predictRiskBatch.mock.calls[0][0][0].indicators.attendanceRate).toBe(50)
   })
 
+  it('stops planned meetings at a past class end date; the attendance indicator is unchanged', async () => {
+    await useClassRisk('c1', [{ student_id: 's1', grade: 80 }]).queryFn()
+    const rateBefore = predictRiskBatch.mock.calls.at(-1)[0][0].indicators.attendanceRate
+    store['classes/c1'] = { ...store['classes/c1'], start_date: '2026-10-26', end_date: '2026-10-28' }
+    const out = await useClassRisk('c1', [{ student_id: 's1', grade: 80 }]).queryFn()
+    expect(out.s1.evidence.sessions.ended).toBe('2026-10-28')
+    expect(out.s1.evidence.sessions.planned).toBe(1) // Monday-only schedule: 26 Oct, then the class ended
+    expect(predictRiskBatch.mock.calls.at(-1)[0][0].indicators.attendanceRate).toBe(rateBefore)
+  })
+
   it('orders the quiz trend by due date and leaves an excused quiz out of missing work (A3, A4)', async () => {
     store.quiz_attempts = [att('q3', 4, '01'), att('q1', 9, '20'), att('q2', 8, '05')]
     store.quizzes = [

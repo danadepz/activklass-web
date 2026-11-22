@@ -38,3 +38,10 @@ describe('PredictedRisk evidence wording', () => {
     })).toBe('0 attendance marks of 0 held sessions · 0 graded quizzes · 0 of 1 due items missing (1 quiz attempted; may be ungraded)')
   })
 })
+
+describe('coverage line after the class end date', () => {
+  it('says the class ended and nothing is planned after it', () => {
+    expect(sessionCoverageText({ recorded: 2, unconfirmed: 1, start: '2026-11-02', start_source: 'class', ended: '2026-11-06' }))
+      .toBe('2 of 3 planned meetings since the class start date (2026-11-02) have at least one attendance mark · 1 not yet confirmed · class ended 2026-11-06; no meetings planned after it')
+  })
+})

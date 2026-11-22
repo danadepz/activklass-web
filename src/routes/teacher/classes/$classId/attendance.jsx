@@ -86,8 +86,9 @@ function isoOf(date) {
  * grid degrades to the recorded days alone. The first recorded day is the only
  * term start we have; no start is invented, and nothing past today is shown.
  */
-// From the class's start date (A1) when it has one, else the first recorded day.
-function termColumns(recordedDates, schedule, today, startDate) {
+// From the class's start date (A1) when it has one, else the first recorded day;
+// planned columns stop at the class's end date when it is before today.
+function termColumns(recordedDates, schedule, today, startDate, endDate) {
   const dates = new Set(recordedDates)
   const weekdays = new Set(scheduleMeetings(schedule).map((m) => WEEKDAY_INDEX[m.day]))
   const first = (isIsoDate(startDate) && startDate) || [...dates].sort()[0]
@@ -95,7 +96,8 @@ function termColumns(recordedDates, schedule, today, startDate) {
     // An unparseable `first` gives an Invalid Date, whose comparison is false,
     // so the loop simply does not run.
     const cursor = new Date(`${first}T00:00:00`)
-    const end = new Date(`${today}T00:00:00`)
+    const last = isIsoDate(endDate) && endDate < today ? endDate : today
+    const end = new Date(`${last}T00:00:00`)
     while (cursor <= end) {
       if (weekdays.has(cursor.getDay())) dates.add(isoOf(cursor))
       cursor.setDate(cursor.getDate() + 1)
@@ -900,6 +902,7 @@ export default function AttendancePage() {
       if (!cls.exists()) throw new Error('Class not found')
       const schedule = cls.data().schedule ?? null
       const startDate = cls.data().start_date ?? null
+      const endDate = cls.data().end_date ?? null
       const ids = cls.data().student_ids ?? []
       const users = ids.length ? await fetchUsersByIds(ids) : []
       const students = users
@@ -937,6 +940,7 @@ export default function AttendancePage() {
         byDate,
         schedule,
         startDate,
+        endDate,
       }
     },
   })
@@ -997,7 +1001,7 @@ export default function AttendancePage() {
       ) : view === 'term' ? (
         <TermSheet
           sheet={sheet}
-          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso(), sheet.startDate)}
+          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso(), sheet.startDate, sheet.endDate)}
           onPickDay={(date) => {
             setDay(date)
             setView('day')

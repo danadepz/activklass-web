@@ -374,6 +374,7 @@ export function sessionCoverageText(sessions) {
   if (sessions.unconfirmed) parts.push(`${sessions.unconfirmed} not yet confirmed`)
   if (sessions.cancelled) parts.push(`${sessions.cancelled} cancelled`)
   if (sessions.rescheduled) parts.push(`${sessions.rescheduled} moved`)
+  if (sessions.ended) parts.push(`class ended ${sessions.ended}; no meetings planned after it`)
   return parts.join(' · ')
 }
 
