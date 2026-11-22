@@ -60,6 +60,7 @@ export async function loadClassDetail(classId, profile) {
 
   let announcementsError = null
   let quizzesError = null
+  let attemptsError = null
 
   const [entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcementsSnap, dismissalsSnap, teachers, quizzesSnap, attemptsSnap, remSnap, tasksSnap, submissionsSnap] =
     await Promise.all([
@@ -104,6 +105,7 @@ export async function loadClassDetail(classId, profile) {
       getDocs(query(collection(db, 'quiz_attempts'), where('student_id', '==', studentUid)))
         .catch((err) => {
           console.error('Quiz attempts load error:', err.code ?? '', err.message ?? err)
+          attemptsError = err
           return { docs: [] }
         }),
       // Same query the Remediation page runs, filtered to this class below. It
@@ -183,6 +185,7 @@ export async function loadClassDetail(classId, profile) {
     queryErrors: {
       announcements: announcementsError,
       quizzes: quizzesError,
+      attempts: attemptsError,
     },
     // T-70: a per-class Disable, not an account one -- the student stays
     // enrolled (student_ids untouched) and keeps reading grades and
@@ -1787,7 +1790,7 @@ export default function StudentClassDetail() {
     )
   }
 
-  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, announcementsTotal = 0, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false } = data
+  const { clazz, teacher, entry, attendance, contestsByDate, gradeContestsByAssessment, syllabus, announcements, announcementsTotal = 0, quizzes, attemptsByQuiz, scaffoldedTopicIds, tasks = [], submissionByTask = {}, dropped = false, queryErrors = {} } = data
   const finalGrade = entry?.final_grade ?? null
   const schedule = formatSchedule(clazz.schedule) || null
   const studentName = `${profile.last_name ?? ''}, ${profile.first_name ?? ''}`.trim().replace(/^,\s*/, '')
@@ -1903,10 +1906,13 @@ export default function StudentClassDetail() {
           entry={entry}
           attendance={attendance}
           studentId={profile.id}
-          quizAverage={quizAverage}
-          attempts={allAttempts}
-          quizzes={quizzes}
-          attemptedQuizIds={attemptedQuizIds}
+          // A failed read is unknown evidence, not an empty list: the forecast
+          // withholds what depends on it instead of scoring "no quizzes" or
+          // "every closed quiz missed". The tabs above still show what loaded.
+          quizAverage={queryErrors.attempts ? null : quizAverage}
+          attempts={queryErrors.attempts ? undefined : allAttempts}
+          quizzes={queryErrors.quizzes ? undefined : quizzes}
+          attemptedQuizIds={queryErrors.attempts ? undefined : attemptedQuizIds}
         />
       )}
       {tab === 'attendance' && (

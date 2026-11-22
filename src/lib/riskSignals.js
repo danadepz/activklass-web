@@ -113,6 +113,22 @@ export function distinctQuizScores(attempts, quizDates = {}) {
   return [...byQuiz.values()].sort((x, y) => rank(x).localeCompare(rank(y)))
 }
 
+/** A quiz id that identifies a quiz: a non-blank string. Anything else is unidentifiable. */
+export const isQuizId = (v) => typeof v === 'string' && v.trim() !== ''
+
+/**
+ * The quiz a class-record column belongs to: its `source_quiz_id` (teacher's
+ * assessment documents), else the quiz id inside the deterministic column id
+ * `quiz-{quizId}` (quizToRecord.assessmentIdForQuiz). The student's own entry
+ * copies the id but not source_quiz_id, so this is the only link a student
+ * can read. Task (`task-…`) and hand-entered (random id) columns give null.
+ */
+export function quizIdOfColumn(a) {
+  if (isQuizId(a?.source_quiz_id)) return a.source_quiz_id
+  const m = typeof a?.id === 'string' ? /^quiz-(.+)$/.exec(a.id) : null
+  return m && isQuizId(m[1]) ? m[1] : null
+}
+
 /**
  * Each quiz's authoritative date, 'YYYY-MM-DD': the due date (`closes_at`)
  * when the quiz has one, else the `date_given` of its class-record column
@@ -122,7 +138,8 @@ export function quizDueDates(quizzes, assessments) {
   const out = {}
   const recordDate = {}
   for (const a of assessments ?? []) {
-    if (a?.source_quiz_id && /^\d{4}-\d{2}-\d{2}/.test(a?.date_given ?? '')) recordDate[a.source_quiz_id] = a.date_given.slice(0, 10)
+    const quizId = quizIdOfColumn(a)
+    if (quizId && /^\d{4}-\d{2}-\d{2}/.test(a?.date_given ?? '')) recordDate[quizId] = a.date_given.slice(0, 10)
   }
   for (const q of quizzes ?? []) {
     const due = /^\d{4}-\d{2}-\d{2}/.test(q?.closes_at ?? '') ? q.closes_at.slice(0, 10) : null
@@ -132,9 +149,15 @@ export function quizDueDates(quizzes, assessments) {
   return out
 }
 
-/** Mean of each distinct quiz's best percentage (0-100), or undefined. */
+/**
+ * Mean of each distinct quiz's best percentage (0-100), unrounded, or
+ * undefined. Only IDENTIFIED quizzes take part (owner decision 2026-11-23): a
+ * scored attempt with no quiz_id cannot be told apart from a retake, so it is
+ * left out rather than counted as a quiz of its own. The attempt itself is
+ * untouched, and distinctQuizScores / quizEvidence still list it.
+ */
 export function quizAverageFromAttempts(attempts) {
-  const quizzes = distinctQuizScores(attempts)
+  const quizzes = distinctQuizScores(attempts).filter((q) => isQuizId(q.quizId))
   return quizzes.length ? quizzes.reduce((s, q) => s + q.best, 0) / quizzes.length : undefined
 }
 
@@ -272,6 +295,22 @@ export function missedQuizCounts(quizzes, attemptedQuizIds, studentId, now = Dat
     if (!attempted.has(quiz.id)) notDone += 1
   }
   return { notDone, expected }
+}
+
+/**
+ * missedQuizCounts, but only when every input behind it is KNOWN; undefined
+ * otherwise, so the missing-work rate is withheld (Insufficient Data) instead
+ * of being built on a guess. `undefined` means unknown (a read that is pending
+ * or failed); an empty Set means known none. Unknown quizzes would read as
+ * "nothing was due", unknown attempts as "every closed quiz missed", unknown
+ * excusals as "none excused". Unknown excusals are harmless only when no quiz
+ * was expected, since an excusal can only take an expected quiz away.
+ * Mirrors activklass-mobile src/lib/riskSignals.ts.
+ */
+export function missedQuizCountsIfKnown(quizzes, attemptedQuizIds, studentId, excusedQuizIds, now = Date.now()) {
+  if (!quizzes || !attemptedQuizIds) return undefined
+  const counts = missedQuizCounts(quizzes, attemptedQuizIds, studentId, now, excusedQuizIds ?? null)
+  return excusedQuizIds === undefined && counts.expected > 0 ? undefined : counts
 }
 
 /**

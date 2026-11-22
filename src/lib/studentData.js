@@ -51,6 +51,10 @@ export async function loadStudentAttendance(classId, studentId) {
         status: rec.status,
         remarks: rec.remarks ?? null,
         excuse_url: rec.excuse_url ?? null,
+        // 'held' unless the teacher cancelled or moved the meeting. The risk
+        // model counts held sessions only (the teacher panel's rule); the log
+        // and tally below still show every recorded mark, as before.
+        session_status: data.session_status ?? 'held',
       })
     })
     // Sort through a string key: a Firestore Timestamp in `date` has no
