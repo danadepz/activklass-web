@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { formatRiskScore } from '@/lib/riskScoreDisplay'
 import { Link } from 'react-router-dom'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useTeacherStudents } from '@/hooks/useTeacherStudents'
@@ -101,7 +102,7 @@ export function RiskBadge({ score, status }) {
       title={PROVISIONAL_BAND_NOTE}
       style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: bg, color, border: `1px solid ${border}` }}>
       {label}
-      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {Math.round(score * 100)}</span>
+      <span style={{ ...mono, fontWeight: 700, opacity: 0.75 }}>score {formatRiskScore(score)}</span>
     </span>
   )
 }

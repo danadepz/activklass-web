@@ -1,4 +1,5 @@
 import { RISK_CAVEAT, useClassRisk } from '@/hooks/useClassRisk'
+import { formatRiskScore } from '@/lib/riskScoreDisplay'
 import { riskReasons } from '@/lib/ai'
 import { evidenceText, sessionCoverageText } from '@/lib/riskSignals'
 import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/theme'
@@ -140,7 +141,7 @@ export default function PredictedRisk({ classId, rows }) {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ ...serif, fontSize: 22, lineHeight: 1, color: red }}>
-                  {risk.score == null ? '—' : Math.round(risk.score * 100)}
+                  {formatRiskScore(risk.score) ?? '—'}
                 </div>
                 <div style={{ ...mono, fontSize: 10.5, color: faint }}>uncalibrated score</div>
               </div>
