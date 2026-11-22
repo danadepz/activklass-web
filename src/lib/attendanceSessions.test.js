@@ -93,7 +93,8 @@ describe('cancel and reschedule guards', () => {
   ]
 
   it('refuses to cancel a recorded, already-cancelled, moved or make-up session', () => {
-    expect(cancelBlocker(days[0])).toMatch(/Clear every mark/)
+    expect(cancelBlocker(days[0])).toMatch(/marks are preserved/)
+    expect(cancelBlocker(days[0])).not.toMatch(/clear every mark/i)
     expect(cancelBlocker({ session_status: 'cancelled' })).toMatch(/already cancelled/)
     expect(cancelBlocker({ session_status: 'rescheduled' })).toMatch(/moved/)
     expect(cancelBlocker(days[2])).toMatch(/make-up/)
@@ -107,7 +108,7 @@ describe('cancel and reschedule guards', () => {
     expect(ok('2026-11-04', '2026-11-09')).toMatch(/regular meeting day/)
     expect(ok('2026-11-04', '2026-11-04')).toMatch(/different date/)
     expect(ok('2026-11-04', '')).toMatch(/Pick the new date/)
-    expect(ok('2026-11-02', '2026-11-08')).toMatch(/Clear every mark/)
+    expect(ok('2026-11-02', '2026-11-08')).toMatch(/marks are preserved/)
     expect(ok('2026-11-03', '2026-11-08')).toMatch(/No meeting is planned/)
     expect(ok('2026-11-04', '2026-11-08')).toBeNull() // Sunday make-up
     expect(ok('2026-11-11', '2026-11-08')).toBeNull() // planned meeting with no doc yet

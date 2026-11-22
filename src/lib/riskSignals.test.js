@@ -330,7 +330,7 @@ describe('workEvidence · missing, submitted, ungraded, excused, unknown, not du
 
   it('sorts every item into one bucket', () => {
     expect(workEvidence(assessments, quizzes, new Set(['qa']), 's1', NOW)).toEqual({
-      missing: 2, submitted: 2, ungraded: 1, excused: 1, unknown: 1, notDue: 2,
+      missing: 2, submitted: 1, attempted: 1, ungraded: 1, excused: 1, unknown: 1, notDue: 2,
     })
   })
 

@@ -14,7 +14,15 @@ describe('PredictedRisk evidence wording', () => {
 
   it('reports planned vs recorded meetings without guessing attendance', () => {
     expect(sessionCoverageText({ recorded: 8, unconfirmed: 2, cancelled: 1, rescheduled: 0 }))
-      .toBe('8 of 10 meetings to date have attendance recorded · 2 not yet confirmed · 1 cancelled')
+      .toBe('8 of 10 meetings to date have at least one attendance mark · 2 not yet confirmed · 1 cancelled')
     expect(sessionCoverageText(null)).toBeNull()
+  })
+
+  it('does not describe an in-progress quiz attempt as submitted work', () => {
+    expect(evidenceText({
+      attendance: {},
+      quizzes: {},
+      work: { missing: 0, submitted: 0, attempted: 1, ungraded: 0 },
+    })).toBe('0 attendance marks of 0 held sessions · 0 graded quizzes · 0 of 1 due items missing (1 quiz attempted; may be ungraded)')
   })
 })

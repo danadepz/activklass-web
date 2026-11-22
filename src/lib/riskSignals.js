@@ -255,14 +255,15 @@ export function missedQuizCounts(quizzes, attemptedQuizIds, studentId, now = Dat
  * says what the rest of the work is, so "0% missing" from one due item reads
  * differently from 0% across twelve, and unknown is never folded into done:
  *   missing    teacher-marked missing, or a closed assigned quiz never attempted
- *   submitted  a graded assessment score, or an attempted closed quiz
+ *   submitted  a graded assessment score
+ *   attempted  a closed quiz with any attempt (may still be in progress)
  *   ungraded   an assessment entry without a graded score yet
  *   excused    teacher-excused assessment (quizzes have no excusal field)
  *   unknown    an assessment with no entry for this student, already given
  *   notDue     an assessment dated in the future, or a quiz still open / draft
  */
 export function workEvidence(assessments, quizzes, attemptedQuizIds, studentId, now = Date.now()) {
-  const out = { missing: 0, submitted: 0, ungraded: 0, excused: 0, unknown: 0, notDue: 0 }
+  const out = { missing: 0, submitted: 0, attempted: 0, ungraded: 0, excused: 0, unknown: 0, notDue: 0 }
   for (const a of assessments ?? []) {
     const score = a?.scores?.[studentId]
     if (!score) {
@@ -279,7 +280,7 @@ export function workEvidence(assessments, quizzes, attemptedQuizIds, studentId, 
     if (!assignedTo(quiz, studentId)) continue
     if (quiz?.status !== 'published' && quiz?.status !== 'closed') continue // drafts are not assigned work
     if (!windowClosed(quiz, now)) out.notDue += 1
-    else if (attempted.has(quiz.id)) out.submitted += 1
+    else if (attempted.has(quiz.id)) out.attempted += 1
     else out.missing += 1
   }
   return out
@@ -307,12 +308,12 @@ export function missingRate(...counts) {
  * Teacher-facing evidence wording (PredictedRisk). Pure text from counts.
  * ------------------------------------------------------------------------- */
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : word === 'quiz' ? 'zes' : 's'}`
 
 /** Class-wide meeting coverage, from the attendance session ledger. */
 export function sessionCoverageText(sessions) {
   if (!sessions) return null
-  const parts = [`${sessions.recorded} of ${sessions.recorded + sessions.unconfirmed} meetings to date have attendance recorded`]
+  const parts = [`${sessions.recorded} of ${sessions.recorded + sessions.unconfirmed} meetings to date have at least one attendance mark`]
   if (sessions.unconfirmed) parts.push(`${sessions.unconfirmed} not yet confirmed`)
   if (sessions.cancelled) parts.push(`${sessions.cancelled} cancelled`)
   if (sessions.rescheduled) parts.push(`${sessions.rescheduled} moved`)
@@ -325,13 +326,17 @@ export function evidenceText(evidence) {
   const a = evidence.attendance ?? {}
   const q = evidence.quizzes ?? {}
   const w = evidence.work ?? {}
-  const due = (w.missing ?? 0) + (w.submitted ?? 0) + (w.ungraded ?? 0)
+  const due = (w.missing ?? 0) + (w.submitted ?? 0) + (w.attempted ?? 0) + (w.ungraded ?? 0)
+  const work = due
+    ? `${w.missing ?? 0} of ${due} due items missing` +
+      (w.attempted ? ` (${plural(w.attempted, 'quiz')} attempted; may be ungraded)` : '')
+    : 'no work due yet'
   return [
     `${plural(a.marks ?? 0, 'attendance mark')} of ${plural(a.held_sessions ?? 0, 'held session')}` +
       (a.not_recorded ? ` (${a.not_recorded} not recorded)` : ''),
     `${q.gradedQuizzes ?? 0} graded ${q.gradedQuizzes === 1 ? 'quiz' : 'quizzes'}` +
       (q.awaitingGrading ? ` (${q.awaitingGrading} awaiting grading)` : ''),
-    due ? `${w.missing ?? 0} of ${due} due items missing` : 'no work due yet',
+    work,
   ].join(' · ')
 }
 

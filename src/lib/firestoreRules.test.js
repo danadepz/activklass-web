@@ -3019,6 +3019,18 @@ describe('attendance sessions · cancel, move, and never drop marks (2026-11-22)
     await assertFails(setDoc(day(TEACHER, '2026-11-14'), { date: '2026-11-14', records: {}, rescheduled_from: '2026-11-04' }))
   })
 
+  it('refuses a paired move whose make-up side is not held', async () => {
+    const db = ctx(TEACHER)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'classes', 'class-1', 'attendance', '2026-11-04'), {
+      date: '2026-11-04', records: {}, session_status: 'rescheduled', rescheduled_to: '2026-11-14',
+    }, { merge: true })
+    batch.set(doc(db, 'classes', 'class-1', 'attendance', '2026-11-14'), {
+      date: '2026-11-14', records: {}, session_status: 'cancelled', rescheduled_from: '2026-11-04',
+    })
+    await assertFails(batch.commit())
+  })
+
   it('refuses to move a meeting that has marks, or onto a date that already has a session', async () => {
     await assertFails(move(TEACHER, '2026-11-02', '2026-11-14')) // marks on the origin
   })
@@ -3032,6 +3044,13 @@ describe('attendance sessions · cancel, move, and never drop marks (2026-11-22)
     await assertFails(updateDoc(day(TEACHER, '2026-11-04'), { session_status: 'held' }))
     await assertFails(updateDoc(day(TEACHER, '2026-11-04'), { rescheduled_to: '2026-11-15' }))
     await assertFails(updateDoc(day(TEACHER, '2026-11-14'), { rescheduled_from: null }))
+    await assertFails(updateDoc(day(TEACHER, '2026-11-14'), { session_status: 'cancelled' }))
+  })
+
+  it('prevents even a same-school admin from deleting either end of a move', async () => {
+    await assertSucceeds(move(TEACHER, '2026-11-04', '2026-11-14'))
+    await assertFails(deleteDoc(day(ADMIN, '2026-11-06')))
+    await assertFails(deleteDoc(day(ADMIN, '2026-11-14')))
   })
 
   it('lets a foreign teacher move nothing', async () => {

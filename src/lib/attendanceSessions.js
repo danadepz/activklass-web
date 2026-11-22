@@ -12,8 +12,8 @@
  *   cancel_reason    optional free text
  *
  * A cancelled or rescheduled-away date must hold no marks (firestore.rules
- * enforces it), so history is never silently dropped: a teacher clears marks
- * explicitly before a session can stop counting.
+ * enforces it). Recorded sessions are blocked from cancellation/move so their
+ * marks cannot be erased through the session controls.
  *
  * Unrecorded is never read as present or absent. A planned meeting with no
  * marks is "unconfirmed" -- the teacher has not said whether it happened.
@@ -131,7 +131,7 @@ export function cancelBlocker(day) {
   if (status === 'cancelled') return 'This session is already cancelled.'
   if (status === 'rescheduled') return 'This session was moved to another date.'
   if (day?.rescheduled_from) return 'This is a make-up session. Record it, or leave it unrecorded.'
-  if (markCount(day) > 0) return 'Attendance is already recorded for this date. Clear every mark and save before cancelling.'
+  if (markCount(day) > 0) return 'Attendance is already recorded for this date. Cancelling is unavailable so the recorded marks are preserved.'
   return null
 }
 
