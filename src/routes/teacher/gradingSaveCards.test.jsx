@@ -7,13 +7,13 @@
  * save cannot succeed), a balanced setup asks for confirmation first, since
  * saving recomputes every grade on every selected class right away.
  *
- * Static markup only (house pattern, no DOM events in this repo), so this
- * locks what renders -- three Save & Sync buttons, in the two new cards and
- * the original spot -- not the click-through confirm/error branching, which
- * is not independently testable here either way.
  */
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import Button from '@/components/ui/Button'
+import { getDialogs, settleDialog } from '@/components/ui/dialogs'
+import { dismissToast, getToasts } from '@/components/ui/toast'
+import { useQuery } from '@tanstack/react-query'
 
 const preset = {
   grading_mode: 'deped_k12',
@@ -28,7 +28,7 @@ const preset = {
 }
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: preset, isLoading: false }),
+  useQuery: vi.fn(({ queryKey }) => ({ data: queryKey[0] === 'fs-grading-preset' ? preset : undefined })),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }))
@@ -39,10 +39,22 @@ vi.mock('@/lib/api', () => ({ api: vi.fn() }))
 vi.mock('@/lib/gradebook', () => ({ syncEntries: vi.fn() }))
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'T1', role: 'teacher' } }) }))
 vi.mock('@/hooks/useTeacherClasses', () => ({ useTeacherClasses: () => ({ data: [], isLoading: false }) }))
-vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => true) }))
-vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import GlobalGradingSetupPage from './grading.jsx'
+
+function renderSaveButton() {
+  const buttons = vi.spyOn(Button, 'render')
+  renderToStaticMarkup(<GlobalGradingSetupPage />)
+  const [save] = buttons.mock.calls.find(([props]) => props.children?.includes?.('Save & Sync'))
+  return save.onClick
+}
+
+afterEach(() => {
+  getToasts().forEach(({ id }) => dismissToast(id))
+  getDialogs().forEach(({ id }) => settleDialog(id, false))
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 describe('Grade Config — Save & Sync lives on each weight card too', () => {
   it('renders three Save & Sync buttons: the page header and both weight cards', () => {
@@ -54,5 +66,31 @@ describe('Grade Config — Save & Sync lives on each weight card too', () => {
     const buttons = html.match(/<button[\s\S]*?<\/button>/g) || []
     const count = buttons.filter((b) => b.includes('Save &amp; Sync')).length
     expect(count).toBe(3)
+  })
+
+  it('shows one three-second warning when invalid weights are saved repeatedly', async () => {
+    vi.useFakeTimers()
+    useQuery.mockReturnValueOnce({ data: { ...preset, periods: [{ name: 'Prelim', weight_percent: 300 }] } })
+    const save = renderSaveButton()
+    await save()
+    await save()
+    expect(getToasts().map((item) => item.message)).toEqual([
+      'Every weight must be above 0%, and each group must total 100%.',
+    ])
+    expect(getDialogs()).toHaveLength(0)
+    vi.advanceTimersByTime(3000)
+    expect(getToasts()).toHaveLength(0)
+  })
+
+  it('keeps a valid save confirmation open until the teacher answers', async () => {
+    vi.useFakeTimers()
+    const answer = renderSaveButton()()
+    vi.advanceTimersByTime(60000)
+    expect(getDialogs()).toHaveLength(1)
+    const [dialog] = getDialogs()
+    expect(dialog.confirmLabel).toBe('Save & Sync')
+    settleDialog(dialog.id, false)
+    await answer
+    expect(getDialogs()).toHaveLength(0)
   })
 })

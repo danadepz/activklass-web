@@ -39,6 +39,25 @@ describe('toast lifetimes', () => {
     expect(getToasts()).toHaveLength(0)
   })
 
+  it('refreshes a repeated warning without stacking it or clearing other warnings', () => {
+    toast.warning('Invalid weights')
+    toast.warning('Invalid pass mark')
+    vi.advanceTimersByTime(2000)
+    toast.warning('Invalid weights')
+    expect(getToasts()).toHaveLength(2)
+    vi.advanceTimersByTime(1000)
+    expect(getToasts().map((item) => item.message)).toEqual(['Invalid weights'])
+    vi.advanceTimersByTime(2000)
+    expect(getToasts()).toHaveLength(0)
+  })
+
+  it('keeps a warning with an action when a matching temporary warning expires', () => {
+    const id = toast.warning('Review skipped records', { action: { label: 'Review', onClick: vi.fn() } })
+    toast.warning('Review skipped records')
+    vi.advanceTimersByTime(60000)
+    expect(getToasts().map((item) => item.id)).toEqual([id])
+  })
+
   it('allows an explicit duration override', () => {
     toast.error('Registration needs attention', { duration: 6000 })
     expect(getToasts()[0].duration).toBe(6000)

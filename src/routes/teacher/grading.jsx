@@ -1396,21 +1396,21 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
      hold a configuration that Save & Sync would reject. */
   const buildTemplateBody = (name) => {
     if (!balanced(periods) || !balanced(components)) {
-      reportError('Every weight must be above 0%, and each group must total 100% before saving a template.')
+      toast.warning('Every weight must be above 0%, and each group must total 100% before saving a template.')
       return null
     }
     if (labOn && !balanced(labComponents)) {
-      reportError('Laboratory component weights must each be above 0% and total 100%.')
+      toast.warning('Laboratory component weights must each be above 0% and total 100%.')
       return null
     }
     const labError = labOn ? labWeightError(labWeight) : null
     if (labError) {
-      reportError(labError)
+      toast.warning(labError)
       return null
     }
     const passError = gradingMode !== 'deped_k12' ? passingPercentError(passingPercent) : null
     if (passError) {
-      reportError(passError)
+      toast.warning(passError)
       return null
     }
     return templateFromSetup({
@@ -1440,21 +1440,21 @@ function GlobalGradingForm({ setup, classes, focusClassId }) {
   async function requestSave() {
     if (busy) return
     if (!balanced(periods) || !balanced(components)) {
-      reportError('Every weight must be above 0%, and each group must total 100%.')
+      toast.warning('Every weight must be above 0%, and each group must total 100%.')
       return
     }
     if (labOn && !balanced(labComponents)) {
-      reportError('Laboratory component weights must each be above 0% and total 100%.')
+      toast.warning('Laboratory component weights must each be above 0% and total 100%.')
       return
     }
     const labError = labOn ? labWeightError(labWeight) : null
     if (labError) {
-      reportError(labError)
+      toast.warning(labError)
       return
     }
     const passError = gradingMode !== 'deped_k12' ? passingPercentError(passingPercent) : null
     if (passError) {
-      reportError(passError)
+      toast.warning(passError)
       return
     }
     /* A structure change is the one edit that can move a grade without any

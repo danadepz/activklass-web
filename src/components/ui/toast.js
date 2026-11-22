@@ -13,7 +13,7 @@
  *   toast.error    — it did not work; stays until dismissed, because an error
  *                    that fades before it is read is worse than none
  *   toast.info     — neutral progress
- *   toast.warning  — a temporary, non-critical caution
+ *   toast.warning  — a temporary caution, or a persistent one with an action
  *   alertDialog()  — must be read before continuing (see dialogs.js)
  *
  * `action` is what makes a destructive flow forgiving without building an
@@ -56,7 +56,13 @@ export function dismissToast(id) {
 function show(type, message, options = {}) {
   seq += 1
   const id = seq
-  const duration = options.duration ?? DEFAULT_MS[type] ?? 4000
+  const duration = type === 'warning' && options.action
+    ? 0
+    : options.duration ?? DEFAULT_MS[type] ?? 4000
+  if (type === 'warning' && duration > 0) {
+    // A repeated validation attempt restarts the timeout on a single notice.
+    items = items.filter((item) => !(item.type === 'warning' && item.duration > 0 && item.message === message))
+  }
   items = [...items, { id, type, message, action: options.action, duration }]
   emit()
   if (duration > 0) setTimeout(() => dismissToast(id), duration)
