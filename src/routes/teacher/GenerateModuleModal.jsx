@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { generateModule } from '@/lib/ai'
+import GenerationProgress from '@/components/ui/GenerationProgress'
 import { Sparkles } from '@/components/icons'
 import { navyDeep, ink, gold, muted, faint, red, serif, sansFamily as sans, navy } from '@/theme'
 
@@ -120,6 +121,12 @@ export default function GenerateModuleModal({ tree, subject, onAppend, onClose }
             {busy ? 'Drafting…' : 'Generate'}
           </button>
         </div>
+        {busy && (
+          <GenerationProgress
+            title="Creating Your Module"
+            description="Preparing topics and learning objectives for your syllabus."
+          />
+        )}
       </form>
     </div>
   )

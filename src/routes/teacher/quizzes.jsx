@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { doc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { draftToQuestions, generateQuiz, QUIZ_TYPES } from '@/lib/ai'
+import GenerationProgress from '@/components/ui/GenerationProgress'
 import { deleteQuizWithKey, writeQuizWithKey } from '@/lib/quizAnswerKey'
 import {
   bankQuestions,
@@ -591,6 +592,12 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             <GoldArrow />
           </button>
         </div>
+        {generating && (
+          <GenerationProgress
+            title="Creating Your Quiz"
+            description="Preparing questions based on your topic and instructions."
+          />
+        )}
       </form>
     </div>
   )
