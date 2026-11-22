@@ -5,7 +5,7 @@ Read `CLAUDE.md` and `OWNERSHIP.md` before editing application files. `OWNERSHIP
 ## Shared project rules
 
 - Keep documentation factual and source-backed. Source/configuration/tests define implemented behavior; deployment configuration does not prove live deployment, and research objectives are not implementation claims.
-- Firestore is the system of record for school records. Direct client access is protected by backend Firestore rules. Flask endpoints also enforce token authentication and route-specific authorization; UI route checks are not authorization.
+- Firebase Cloud Firestore is the primary application database. Firebase Authentication provides identity; Firebase Admin SDK handles trusted backend operations. Direct client access is protected by backend Firestore rules. Flask endpoints also enforce token authentication and route-specific authorization; UI route checks are not authorization.
 - Coordinate API, Firestore schema/rules, and mirrored web/mobile logic changes across all three repositories.
 - Preserve existing and uncommitted work. Do not stage broadly, rewrite history, or commit secrets, generated data, logs, or APKs.
 - Follow ticket-desk instructions when handling a ticket. For ordinary contribution work, use `CONTRIBUTING.md` and report verification in the pull request.

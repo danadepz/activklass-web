@@ -2,7 +2,7 @@
 
 ## System context
 
-ActivKlass has three clients/services and a shared Firebase project. Firestore is the system of record; the clients use Firebase directly for record data and the backend uses Firebase Admin for privileged operations and model-backed work.
+ActivKlass has three clients/services and a shared Firebase project. Firebase Cloud Firestore is the primary application database; Firebase Authentication handles identity. Clients use Firebase directly for records, while backend trusted operations use Firebase Admin SDK.
 
 ```text
 Web (React/Vite) ───── Firebase Auth / Firestore / Storage
@@ -12,7 +12,7 @@ Web (React/Vite) ───── Firebase Auth / Firestore / Storage
 Mobile (Expo) ─── Firebase ── Flask API (Cloud Run configuration)
 ```
 
-The relationship diagram describes code/configuration contracts. It does not assert that a particular project or service is currently deployed.
+The relationship diagram describes code/configuration contracts. It does not assert that a particular project or service is currently deployed. Some existing Flask routes use auxiliary SQLAlchemy/SQLite persistence; this does not change Firestore primary status, and PostgreSQL/Neon are not used.
 
 ## Web layers
 

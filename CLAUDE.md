@@ -30,11 +30,11 @@ function whose new return shape was still uncommitted). Before `--only` on a sha
 `git diff` it and make sure every hunk is yours.
 
 ## Core Principles (Always Follow)
-- **Firestore is the system of record for school records.** Direct client calls are governed
+- **Firebase Cloud Firestore is the primary application database.** Direct client calls are governed
   by `../activklass-backend/firestore.rules`. Flask also enforces authentication and
   route-specific authorization for server endpoints; UI checks are not authorization.
-- **Two data paths, not interchangeable.** Firestore-direct for all records (classes,
-  grades, attendance, quizzes, attempts). Flask (`lib/api.js`) only for what needs the
+- **Two data paths, not interchangeable.** Firestore-direct for Firestore-owned records (classes,
+  grades, attendance, quizzes, attempts). Flask (`lib/api.js`) for selected operations needing the
   Admin SDK or a model: AI generation, risk prediction, account provisioning, admin user
   management, subscriptions, teacher groups, institution invites.
 - **`entries` is derived, and it is the only grade document a student may read.** Anything

@@ -1,5 +1,7 @@
 # Backlog
 
+> **Database clarification:** Firestore is the primary application database. ActivKlass does not use PostgreSQL or Neon. Older entries may use “Postgres” as shorthand for backend SQLAlchemy tables; those records use the configured SQLAlchemy store, locally SQLite by default. Treat dated endpoint counts and migration notes as historical and verify current source.
+
 Known work, roughly in the order worth doing. Items marked **(cross-repo)**
 touch `activklass-backend` or `activklass-mobile` as well.
 
@@ -219,18 +221,18 @@ are the same file -- which is why the UI/UX lane can only own theme tokens
 today, not components. Extract `components/ui/Button.jsx` opportunistically as
 lanes touch pages, rather than in one sweep.
 
-## 11. Three Postgres endpoints left in the web app **(cross-repo)**
+## 11. Historical SQLAlchemy-backed endpoints in the web app **(cross-repo)**
 
-The web app now calls 19 Flask paths, in three groups. Only the first touches
+The web app now calls 19 Flask paths, in three groups. Only the first group touches
 Postgres:
 
 | Group | Count | Backing store |
 |---|---|---|
-| **Postgres** — see table below | 3 | SQLAlchemy |
+| **SQLAlchemy auxiliary store** — see table below | 3 | SQLAlchemy |
 | Flask-over-Firestore — `admin` (5), `subscriptions` (4), `superadmin` (3) | 12 | Firestore only, 0 SQLAlchemy calls |
 | AI — `predict`, `quizzes/generate`, `syllabus/generate`, `syllabus/generate-module` | 4 | no database |
 
-The three on Postgres:
+The three SQLAlchemy-backed endpoints in this historical inventory:
 
 | Endpoint | Blueprint |
 |---|---|
@@ -238,10 +240,10 @@ The three on Postgres:
 | `POST /api/classes/{id}/students/provision` | `classes.py` |
 | `/api/grading-setup` | `grading.py` |
 
-The middle group is new and matters: `admin.py`, `subscriptions.py` and
+The middle group was new in this dated inventory and matters: `admin.py`, `subscriptions.py` and
 `superadmin.py` import `firebase_admin.firestore` and nothing from
 `app.models`. So "Flask endpoint" no longer implies "Postgres" — the count of
-Flask paths growing is not the same as the Postgres surface growing, and it did
+Flask paths growing is not the same as the SQLAlchemy persistence surface growing, and it did
 not grow.
 
 `/api/classes` is the `ClassPicker` on record/attendance -- docs/05 step 7
@@ -278,7 +280,7 @@ argument against porting guardians: there is nothing left to invent, only an
 existing shape to follow.
 
 Until that is decided, `guardians.py` (21 SQLAlchemy calls), `parent.py` (5)
-and migration `b1c4e7d92f08` are net-new Postgres surface added *after* the
+and migration `b1c4e7d92f08` are net-new SQLAlchemy persistence surface added *after* the
 decision to retire it, which is worth resolving deliberately rather than by
 drift.
 

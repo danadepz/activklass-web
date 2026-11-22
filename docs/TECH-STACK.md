@@ -37,13 +37,8 @@ Model and vendor choices are documented there.
   this means a migration mid-capstone, which is why it has not happened. The cost is real:
   there is **no typechecker on this repo**, so the test suite and the build are the only
   automated checks.
-- **Postgres / Neon** — abandoned 2026-06-12, never actually set up. The AI endpoints had
-  been written against a Postgres user table and an `ai_jobs` table, so they returned 500
-  against an unmigrated database until that dependency was replaced with Firebase-token
-  auth and a Firestore ledger.
-- **SQLite/SQLAlchemy as a second store** — dual-writing to SQL and Firestore ended when
-  Firestore became the system of record. The SQL layer survives in the backend for a few
-  legacy endpoints; **new work does not go there**, and nothing in `src/` touches it.
+- **Postgres / Neon** — not used by this project. Historical configuration/dependency compatibility remains in the backend, but PostgreSQL is not the application database.
+- **SQLite/SQLAlchemy auxiliary persistence** — Firestore is the primary application database, but SQLAlchemy/SQLite remains in backend models and some active Flask routes. Web/mobile do not access this SQL layer directly; new application data should follow Firestore ownership unless the project explicitly changes that architecture.
 - **A REST layer in front of Firestore** — deliberately not built. The client reads
   Firestore directly and the rules enforce access. Adding an API hop would move
   authorization into a place that is easier to forget to check.

@@ -46,8 +46,7 @@ API layer in between and there should not be one.
 | Needs the Admin SDK (creating auth accounts, setting claims) | `/api/classes/{id}/students/provision`, `/api/admin/users*` |
 | Needs authority the client must not have | `/api/subscription/*`, `/api/superadmin/*`, `/api/teacher-groups/*`, `/api/institution/*`, `/api/grading-setup` |
 
-Adding a route to Flask for anything else is a step backwards — it was a Postgres-backed
-API once, and moving off it is what Phase 4 was.
+Firestore is the primary application database. Some existing Flask routes still use auxiliary SQLAlchemy-backed records; PostgreSQL/Neon is not used. Keep new data ownership decisions aligned with current backend source and cross-repository integration docs.
 
 **In development `/api` is same-origin.** `vite.config.js` proxies it to `localhost:5000`,
 so `VITE_API_URL` stays unset and a forwarded VS Code port works for remote viewers whose
