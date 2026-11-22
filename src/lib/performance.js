@@ -71,6 +71,9 @@ export async function saveClassPerformance({ classId, teacherId, entries }) {
           // Rule-based observed indicator signals, separate from model-level XAI.
           signals: result.signals ?? [],
           missing_indicators: result.missing ?? [],
+          // Observation counts behind the six values (sessions, graded quizzes,
+          // due work). Disclosure only -- not an eligibility rule.
+          evidence: result.evidence ?? null,
           indicators: defined(indicators),
           computed_grade: grade ?? null,
           // Carried through rather than restated: while the model is fitted on

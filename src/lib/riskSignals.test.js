@@ -232,3 +232,111 @@ describe('missingRate pools both sources', () => {
     expect(missingRate({ notDone: 0, expected: 3 })).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// 2026-11-22 risk-evidence work: distinct quizzes, one attendance rate, and a
+// disclosure breakdown for missing work. Synthetic fixtures only.
+// ---------------------------------------------------------------------------
+import {
+  attendanceRateFromLog,
+  attendanceRateFromMarks,
+  distinctQuizScores,
+  quizAverageFromAttempts,
+  quizEvidence,
+  quizTrendFromAttempts as quizTrendDistinct,
+  workEvidence,
+} from './riskSignals'
+
+const att = (quiz_id, score, possible, day, extra = {}) =>
+  ({ quiz_id, total_score: score, total_possible: possible, submitted_at: `2026-11-${day}T08:00:00Z`, ...extra })
+
+describe('quiz indicators · one value per distinct quiz', () => {
+  const attempts = [
+    att('q1', 4, 10, '02'),
+    att('q1', 9, 10, '03'),            // retake: best of q1 is 90
+    att('q2', 0, 10, '05'),            // a real zero
+    att('q3', null, 10, '06'),         // awaiting grading
+    att('q4', 5, 0, '07'),             // unusable: no possible points
+  ]
+
+  it('averages the best attempt of each graded quiz, zeros included', () => {
+    expect(quizAverageFromAttempts(attempts)).toBe(45)
+    expect(distinctQuizScores(attempts).map((q) => q.quizId)).toEqual(['q1', 'q2'])
+  })
+
+  it('no longer reports the single best attempt across all quizzes', () => {
+    // The old teacher figure here would have been 90.
+    expect(quizAverageFromAttempts(attempts)).not.toBe(90)
+  })
+
+  it('does not let retakes of one quiz manufacture a trend', () => {
+    const retakes = [att('q1', 9, 10, '02'), att('q1', 5, 10, '03'), att('q1', 2, 10, '04')]
+    expect(quizTrendDistinct(retakes)).toBeUndefined()
+  })
+
+  it('trends distinct quizzes in the order they were first taken', () => {
+    const list = [
+      att('q3', 4, 10, '09'),
+      att('q1', 9, 10, '02'),
+      att('q2', 8, 10, '05'),
+      att('q1', 10, 10, '10'), // late retake of q1 stays dated at q1's first try
+    ]
+    // order q1(100) q2(80) q3(40): recent third (40) minus earlier (90)
+    expect(quizTrendDistinct(list)).toBe(-50)
+  })
+
+  it('keeps legacy attempts without quiz_id as separate quizzes', () => {
+    expect(distinctQuizScores([att(undefined, 5, 10, '02'), att(undefined, 7, 10, '03')])).toHaveLength(2)
+  })
+
+  it('counts graded, awaiting and folded retakes', () => {
+    expect(quizEvidence(attempts)).toEqual({ gradedQuizzes: 2, awaitingGrading: 2, retakesFolded: 1 })
+  })
+
+  it('returns undefined, not 0, with no graded quiz', () => {
+    expect(quizAverageFromAttempts([att('q3', null, 10, '06')])).toBeUndefined()
+  })
+})
+
+describe('attendance rate · one formula for teacher and student views', () => {
+  it('weights late at half and leaves excused out', () => {
+    expect(attendanceRateFromMarks(['present', 'late', 'absent', 'excused'])).toBe(50)
+    expect(attendanceRateFromLog([{ status: 'present' }, { status: 'excused' }])).toBe(100)
+  })
+
+  it('is undefined with nothing recorded', () => {
+    expect(attendanceRateFromMarks([])).toBeUndefined()
+    expect(attendanceRateFromLog([{ status: 'excused' }])).toBeUndefined()
+  })
+})
+
+describe('workEvidence · missing, submitted, ungraded, excused, unknown, not due', () => {
+  const NOW = Date.parse('2026-11-20T00:00:00Z')
+  const assessments = [
+    { scores: { s1: { status: 'missing' } } },
+    { scores: { s1: { status: 'graded', raw_score: 0 } } },  // zero is submitted, not missing
+    { scores: { s1: { status: 'graded', raw_score: null } } },
+    { scores: { s1: { status: 'excused' } } },
+    { scores: {}, date_given: '2026-11-01' },
+    { scores: {}, date_given: '2026-12-01' },
+  ]
+  const quizzes = [
+    { id: 'qa', status: 'closed' },
+    { id: 'qb', status: 'closed' },
+    { id: 'qc', status: 'published', closes_at: '2026-12-01T00:00' },
+    { id: 'qd', status: 'draft' },
+    { id: 'qe', status: 'closed', assigned_to: ['someone-else'] },
+  ]
+
+  it('sorts every item into one bucket', () => {
+    expect(workEvidence(assessments, quizzes, new Set(['qa']), 's1', NOW)).toEqual({
+      missing: 2, submitted: 2, ungraded: 1, excused: 1, unknown: 1, notDue: 2,
+    })
+  })
+
+  it('leaves the existing pooled rate unchanged', () => {
+    const rate = missingRate(missingWorkCounts(assessments, 's1'), missedQuizCounts(quizzes, new Set(['qa']), 's1', NOW))
+    // missing / (missing + submitted + ungraded): 2 / 5, what the panel shows as "due"
+    expect(rate).toBeCloseTo(2 / 5)
+  })
+})

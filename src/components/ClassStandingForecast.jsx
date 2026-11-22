@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { predictRisk, riskReasons } from '@/lib/ai'
 import {
+  attendanceRateFromLog,
   attendanceTrendFromLog,
   missedQuizCounts,
   missingRate,
@@ -41,7 +42,11 @@ export default function ClassStandingForecast({
 }) {
   const indicators = useMemo(
     () => ({
-      attendanceRate: attendanceRate ?? undefined,
+      // From the log when present, through the teacher panel's own weights
+      // (late 0.5, excused left out). The summary's `rate` is present/all
+      // marks -- a display figure that would score the same student
+      // differently here than on their teacher's screen.
+      attendanceRate: (attendanceLog?.length ? attendanceRateFromLog(attendanceLog) : attendanceRate) ?? undefined,
       priorAverageGrade: grade ?? undefined,
       quizAverage: quizAverage ?? undefined,
       attendanceTrend: attendanceTrendFromLog(attendanceLog),

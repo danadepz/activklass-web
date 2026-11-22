@@ -52,6 +52,21 @@ export function splitTrend(values, minimum) {
 }
 
 /**
+ * Attendance rate (0-100) from recognised marks: present 1, late 0.5, absent 0.
+ * Excused and unrecorded sessions are outside the denominator. undefined when
+ * nothing is recorded -- never a reassuring 100 or an alarming 0.
+ */
+export function attendanceRateFromMarks(statuses) {
+  const marks = (statuses ?? []).map((s) => DAY_WEIGHT[s]).filter((w) => w != null)
+  return marks.length ? (marks.reduce((a, b) => a + b, 0) / marks.length) * 100 : undefined
+}
+
+/** Same rate from a `{ date, status }` log, the shape the student page holds. */
+export function attendanceRateFromLog(log) {
+  return attendanceRateFromMarks((log ?? []).map((r) => r?.status))
+}
+
+/**
  * Attendance trend (-1..1) from a log of `{ date, status }`, in any order.
  *
  * Sorted here rather than trusted from the caller: studentData
@@ -68,19 +83,65 @@ export function attendanceTrendFromLog(log) {
 }
 
 /**
- * Quiz trend in percentage points from attempts carrying `submitted_at`.
+ * One entry per distinct graded quiz: the best scored attempt's percentage,
+ * dated by the quiz's FIRST scored submission, oldest quiz first.
  *
- * Walks attempts in submission order, unlike the quiz *average*, which stays
- * best-per-student to match every other teacher view. A student whose scores
- * are falling still has their one good early attempt sitting in the maximum,
- * which is exactly the case this is here to catch.
+ * A retake is another try at the same activity, not another activity, so a
+ * class whose teacher allows retakes no longer looks like it ran more quizzes
+ * than one that does not. A scored 0 is kept (a real result); an attempt with
+ * no `total_score` is awaiting grading and a zero `total_possible` is
+ * unusable -- neither is a score. Legacy attempts without `quiz_id` each stay
+ * their own entry rather than being merged by guess.
+ */
+export function distinctQuizScores(attempts) {
+  const byQuiz = new Map()
+  let anon = 0
+  for (const a of attempts ?? []) {
+    if (a?.total_score == null || !a?.total_possible) continue
+    const pct = (a.total_score / a.total_possible) * 100
+    const at = sortKey(a.submitted_at)
+    const key = a.quiz_id ?? `__no_quiz_id_${anon++}`
+    const cur = byQuiz.get(key)
+    if (!cur) byQuiz.set(key, { quizId: a.quiz_id ?? null, best: pct, first: at })
+    else {
+      cur.best = Math.max(cur.best, pct)
+      if (at < cur.first) cur.first = at
+    }
+  }
+  return [...byQuiz.values()].sort((x, y) => x.first.localeCompare(y.first))
+}
+
+/** Mean of each distinct quiz's best percentage (0-100), or undefined. */
+export function quizAverageFromAttempts(attempts) {
+  const quizzes = distinctQuizScores(attempts)
+  return quizzes.length ? quizzes.reduce((s, q) => s + q.best, 0) / quizzes.length : undefined
+}
+
+/**
+ * Quiz trend in percentage points across distinct graded quizzes in the order
+ * they were first taken. MIN_ATTEMPTS (3) now counts distinct quizzes, so
+ * three retakes of one quiz no longer manufacture a trend.
  */
 export function quizTrendFromAttempts(attempts) {
-  const scored = (attempts ?? [])
-    .filter((a) => a?.total_score != null && a?.total_possible)
-    .map((a) => ({ pct: (a.total_score / a.total_possible) * 100, at: sortKey(a.submitted_at) }))
-    .sort((x, y) => x.at.localeCompare(y.at))
-  return splitTrend(scored.map((a) => a.pct), MIN_ATTEMPTS)
+  return splitTrend(distinctQuizScores(attempts).map((q) => q.best), MIN_ATTEMPTS)
+}
+
+/**
+ * Counts behind the quiz indicators, so a teacher sees how much evidence a
+ * value rests on: distinct graded quizzes, quizzes attempted but not yet
+ * graded, and retakes folded away.
+ */
+export function quizEvidence(attempts) {
+  const all = attempts ?? []
+  const graded = distinctQuizScores(all).length
+  const attemptedIds = new Set(all.map((a) => a?.quiz_id).filter(Boolean))
+  const gradedIds = new Set(distinctQuizScores(all).map((q) => q.quizId).filter(Boolean))
+  const scoredAttempts = all.filter((a) => a?.total_score != null && a?.total_possible).length
+  return {
+    gradedQuizzes: graded,
+    awaitingGrading: [...attemptedIds].filter((id) => !gradedIds.has(id)).length,
+    retakesFolded: scoredAttempts - graded,
+  }
 }
 
 /**
@@ -188,6 +249,43 @@ export function missedQuizCounts(quizzes, attemptedQuizIds, studentId, now = Dat
 }
 
 /**
+ * Disclosure-only breakdown of one student's work, beside the rate.
+ *
+ * The rate itself is unchanged (missingWorkCounts + missedQuizCounts); this
+ * says what the rest of the work is, so "0% missing" from one due item reads
+ * differently from 0% across twelve, and unknown is never folded into done:
+ *   missing    teacher-marked missing, or a closed assigned quiz never attempted
+ *   submitted  a graded assessment score, or an attempted closed quiz
+ *   ungraded   an assessment entry without a graded score yet
+ *   excused    teacher-excused assessment (quizzes have no excusal field)
+ *   unknown    an assessment with no entry for this student, already given
+ *   notDue     an assessment dated in the future, or a quiz still open / draft
+ */
+export function workEvidence(assessments, quizzes, attemptedQuizIds, studentId, now = Date.now()) {
+  const out = { missing: 0, submitted: 0, ungraded: 0, excused: 0, unknown: 0, notDue: 0 }
+  for (const a of assessments ?? []) {
+    const score = a?.scores?.[studentId]
+    if (!score) {
+      const given = a?.date_given ? new Date(`${a.date_given}T00:00:00`).getTime() : NaN
+      if (Number.isFinite(given) && given > now) out.notDue += 1
+      else out.unknown += 1
+    } else if (score.status === 'excused') out.excused += 1
+    else if (score.status === 'missing') out.missing += 1
+    else if (score.status === 'graded' && score.raw_score != null) out.submitted += 1
+    else out.ungraded += 1
+  }
+  const attempted = attemptedQuizIds ?? new Set()
+  for (const quiz of quizzes ?? []) {
+    if (!assignedTo(quiz, studentId)) continue
+    if (quiz?.status !== 'published' && quiz?.status !== 'closed') continue // drafts are not assigned work
+    if (!windowClosed(quiz, now)) out.notDue += 1
+    else if (attempted.has(quiz.id)) out.submitted += 1
+    else out.missing += 1
+  }
+  return out
+}
+
+/**
  * Pool any number of {notDone, expected} counts into one 0-1 rate.
  *
  * undefined when nothing was expected of the student yet -- no assessments
@@ -204,3 +302,56 @@ export function missingRate(...counts) {
   }
   return expected ? notDone / expected : undefined
 }
+
+/* ---------------------------------------------------------------------------
+ * Teacher-facing evidence wording (PredictedRisk). Pure text from counts.
+ * ------------------------------------------------------------------------- */
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** Class-wide meeting coverage, from the attendance session ledger. */
+export function sessionCoverageText(sessions) {
+  if (!sessions) return null
+  const parts = [`${sessions.recorded} of ${sessions.recorded + sessions.unconfirmed} meetings to date have attendance recorded`]
+  if (sessions.unconfirmed) parts.push(`${sessions.unconfirmed} not yet confirmed`)
+  if (sessions.cancelled) parts.push(`${sessions.cancelled} cancelled`)
+  if (sessions.rescheduled) parts.push(`${sessions.rescheduled} moved`)
+  return parts.join(' · ')
+}
+
+/** What one student's six values rest on, in counts a teacher can check. */
+export function evidenceText(evidence) {
+  if (!evidence) return null
+  const a = evidence.attendance ?? {}
+  const q = evidence.quizzes ?? {}
+  const w = evidence.work ?? {}
+  const due = (w.missing ?? 0) + (w.submitted ?? 0) + (w.ungraded ?? 0)
+  return [
+    `${plural(a.marks ?? 0, 'attendance mark')} of ${plural(a.held_sessions ?? 0, 'held session')}` +
+      (a.not_recorded ? ` (${a.not_recorded} not recorded)` : ''),
+    `${q.gradedQuizzes ?? 0} graded ${q.gradedQuizzes === 1 ? 'quiz' : 'quizzes'}` +
+      (q.awaitingGrading ? ` (${q.awaitingGrading} awaiting grading)` : ''),
+    due ? `${w.missing ?? 0} of ${due} due items missing` : 'no work due yet',
+  ].join(' · ')
+}
+
+/**
+ * Identify At-Risk Students — the model's view, kept deliberately apart from
+ * the grade-threshold list on the same page.
+ *
+ * The two disagree by design, and the disagreement is the point: the list above
+ * reports work already marked, this one projects where a student is heading
+ * from the direction their attendance, submissions and quiz scores are moving.
+ * A student who appears in neither list today but appears here first is exactly
+ * who this panel exists for. Presenting them as one number would invite a
+ * teacher to read a projection as a result.
+ *
+ * Each flagged student is shown WITH the indicators that put them there. A
+ * percentage on its own tells a teacher to worry; "attendance down ~26 pts,
+ * 35% of work not submitted" tells them what to open the conversation about.
+ *
+ * Coverage is shown, not hidden, and unlike the levels it now varies per
+ * student: a trend needs enough recorded days or attempts to difference, so
+ * early in a term the model is working from less than it looks. A teacher
+ * needs to know that before acting on a green flag.
+ */

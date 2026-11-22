@@ -1,27 +1,8 @@
 import { RISK_CAVEAT, useClassRisk } from '@/hooks/useClassRisk'
 import { riskReasons } from '@/lib/ai'
+import { evidenceText, sessionCoverageText } from '@/lib/riskSignals'
 import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/theme'
 
-/**
- * Identify At-Risk Students — the model's view, kept deliberately apart from
- * the grade-threshold list on the same page.
- *
- * The two disagree by design, and the disagreement is the point: the list above
- * reports work already marked, this one projects where a student is heading
- * from the direction their attendance, submissions and quiz scores are moving.
- * A student who appears in neither list today but appears here first is exactly
- * who this panel exists for. Presenting them as one number would invite a
- * teacher to read a projection as a result.
- *
- * Each flagged student is shown WITH the indicators that put them there. A
- * percentage on its own tells a teacher to worry; "attendance down ~26 pts,
- * 35% of work not submitted" tells them what to open the conversation about.
- *
- * Coverage is shown, not hidden, and unlike the levels it now varies per
- * student: a trend needs enough recorded days or attempts to difference, so
- * early in a term the model is working from less than it looks. A teacher
- * needs to know that before acting on a green flag.
- */
 export default function PredictedRisk({ classId, rows }) {
   const { data, isLoading, isError, error } = useClassRisk(classId, rows)
 
@@ -87,8 +68,14 @@ export default function PredictedRisk({ classId, rows }) {
         </span>
       </div>
       <p style={{ fontSize: 12.5, color: muted, margin: '6px 0 10px', maxWidth: '70ch' }}>
-        {RISK_CAVEAT}
+        {RISK_CAVEAT} Having all six inputs means the model can run; it does not mean the
+        result has been validated for this class.
       </p>
+      {sessionCoverageText(results[0]?.risk.evidence?.sessions) && (
+        <p style={{ ...mono, fontSize: 11.5, color: muted, margin: '0 0 12px' }}>
+          Attendance: {sessionCoverageText(results[0].risk.evidence.sessions)}
+        </p>
+      )}
 
       {/* Only shown while the model is fitted on generated data. The backend
           flips training.real_data when real exports replace it, and this
@@ -139,6 +126,11 @@ export default function PredictedRisk({ classId, rows }) {
                 </div>
                 {/* The actionable half. Without this a teacher gets a ranked
                     list of names and no idea what to raise with any of them. */}
+                {evidenceText(risk.evidence) && (
+                  <div style={{ ...mono, fontSize: 11, color: faint, marginTop: 4, lineHeight: 1.5 }}>
+                    Based on {evidenceText(risk.evidence)}
+                  </div>
+                )}
                 {riskReasons(risk.signals, 'teacher').length > 0 && (
                   <div style={{ ...mono, fontSize: 11, color: red, marginTop: 5, lineHeight: 1.5 }}>
                     {riskReasons(risk.signals, 'teacher').join(' · ')}
