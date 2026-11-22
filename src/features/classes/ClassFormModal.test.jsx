@@ -30,7 +30,7 @@ vi.mock('@/components/ui/dialogs', () => ({ confirmDialog: vi.fn(async () => tru
 vi.mock('@/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import ClassFormModal, { buildMeta, validate } from './ClassFormModal.jsx'
-import { classToForm, emptyClassForm } from '@/lib/classForm'
+import { classToForm, emptyClassForm, schoolDefaultStart } from '@/lib/classForm'
 
 const editing = (clazz) => renderToStaticMarkup(
   <ClassFormModal mode="edit" classId="C1" initial={classToForm(clazz)} onClose={() => {}} onSaved={() => {}} />
@@ -194,6 +194,7 @@ const capacityForm = {
   schedule: 'M 8:00 AM – 9:00 AM',
   grade_level: 'Grade 10',
   academic_year: '2026-2027',
+  start_date: '2026-08-10',
   units: '',
   semester: '',
 }
@@ -237,5 +238,52 @@ describe('T-92 — Max students cannot be lowered under the roster', () => {
     expect(capErr(0, 40, 61)).toBe('Max students must be at least 1.')
     // and the older over-300 exemption is untouched by the new branch
     expect(capErr(1000, 1000, 61)).toBeUndefined()
+  })
+})
+
+describe('A1 / C1 / C2 (2026-11-22) · a class has its own start date', () => {
+  const ok = { ...capacityForm, max_students: '40' }
+  const dateErrs = (form, opts) => {
+    const e = validate(form, capacityDays, null, 0, opts)
+    return { start_date: e.start_date, end_date: e.end_date }
+  }
+
+  it('requires a start date on a new class and accepts an optional end on or after it', () => {
+    expect(dateErrs({ ...ok, start_date: '' }).start_date).toBe('Pick the date this class starts.')
+    expect(dateErrs({ ...ok, start_date: '2026-08-10' })).toEqual({ start_date: undefined, end_date: undefined })
+    expect(dateErrs({ ...ok, start_date: '2026-08-10', end_date: '2026-08-10' }).end_date).toBeUndefined()
+    expect(dateErrs({ ...ok, start_date: '2026-08-10', end_date: '2026-08-09' }).end_date)
+      .toBe('The end date cannot be before the start date.')
+    expect(dateErrs({ ...ok, start_date: '2026-13-45' }).start_date).toBe('Pick a valid start date.')
+  })
+
+  it('lets a legacy class (no start date) save without one, but not with only an end date', () => {
+    expect(dateErrs({ ...ok, start_date: '' }, { requireStart: false }).start_date).toBeUndefined()
+    expect(dateErrs({ ...ok, start_date: '', end_date: '2026-12-01' }, { requireStart: false }).start_date)
+      .toBe('Pick a start date before setting an end date.')
+  })
+
+  it('writes the dates only when a start is set -- a legacy edit stays untouched', () => {
+    expect(buildMeta({ ...ok, start_date: '2026-08-10', end_date: '' })).toMatchObject({ start_date: '2026-08-10', end_date: null })
+    const legacy = buildMeta({ ...ok, start_date: '', end_date: '' })
+    expect('start_date' in legacy).toBe(false)
+    expect('end_date' in legacy).toBe(false)
+    expect(classToForm({ start_date: '2026-08-10' })).toMatchObject({ start_date: '2026-08-10', end_date: '' })
+  })
+
+  it("offers the school's default for the class's own term, never a malformed one", () => {
+    const termDates = { school_year_start: '2026-06-15', first_sem_start: '2026-08-10', second_sem_start: 'soon' }
+    expect(schoolDefaultStart(termDates, { education_level: 'High School' })).toBe('2026-06-15')
+    expect(schoolDefaultStart(termDates, { education_level: 'College', semester: '1st' })).toBe('2026-08-10')
+    expect(schoolDefaultStart(termDates, { education_level: 'College', semester: '2nd' })).toBe('2026-06-15')
+    expect(schoolDefaultStart(undefined, {})).toBeNull()
+  })
+
+  it('shows the suggestion on the form without filling the field (the teacher confirms it)', () => {
+    const html = renderToStaticMarkup(
+      <ClassFormModal mode="create" initial={emptyClassForm()} onClose={() => {}} onSaved={() => {}} />,
+    )
+    expect(html).toContain('data-field="start_date"')
+    expect(html).toMatch(/data-field="start_date"[^>]*required|required[^>]*data-field="start_date"/)
   })
 })

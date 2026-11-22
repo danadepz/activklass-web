@@ -6,7 +6,7 @@ import {
 } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { emptyClassForm } from '@/lib/classForm'
+import { emptyClassForm, schoolDefaultStart } from '@/lib/classForm'
 import { parseSchedule, scheduleOverlap } from '@/lib/schedule'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useAuth } from '@/context/useAuth'
@@ -138,12 +138,13 @@ export function gradeLevelFor(level, currentGrade) {
 const FIELD_ORDER = [
   'subject_code', 'section', 'subject', 'schedule',
   'grade_level', 'max_students', 'academic_year', 'units', 'semester',
+  'start_date', 'end_date',
 ]
 
 /* Returns { field: message } -- one message per input, keyed by the field it
    belongs to. The old single string named five fields at once and left the
    teacher to work out which of them was actually empty. */
-export function validate(form, selectedDays, originalMaxStudents = null, enrolledCount = 0) {
+export function validate(form, selectedDays, originalMaxStudents = null, enrolledCount = 0, { requireStart = true } = {}) {
   const errors = {}
   const isCollege = form.education_level === 'College'
 
@@ -223,6 +224,20 @@ export function validate(form, selectedDays, originalMaxStudents = null, enrolle
     if (semesterProblem) errors.semester = semesterProblem
   }
 
+  // A1 (2026-11-22): a new class needs its start date; a class made before
+  // this may stay without one (requireStart false), but once set it stays set.
+  const start = String(form.start_date ?? '').trim()
+  const end = String(form.end_date ?? '').trim()
+  const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
+  if (!start) {
+    if (requireStart) errors.start_date = 'Pick the date this class starts.'
+    else if (end) errors.start_date = 'Pick a start date before setting an end date.'
+  } else if (!isDay(start)) {
+    errors.start_date = 'Pick a valid start date.'
+  }
+  if (end && !isDay(end)) errors.end_date = 'Pick a valid end date.'
+  else if (end && start && isDay(start) && end < start) errors.end_date = 'The end date cannot be before the start date.'
+
   return errors
 }
 
@@ -297,6 +312,7 @@ export function dialogSummaryFor(form) {
     row('Grade / Year', form.grade_level),
     row('Max students', form.max_students),
     row('School year', form.academic_year),
+    row('Starts', form.start_date),
   ].join('\n')
 }
 
@@ -342,12 +358,18 @@ export function buildMeta(form, { writeCollegeFields = true } = {}) {
     meta.units = isCollege && form.units.trim() ? Number.parseFloat(form.units) : null
     meta.semester = isCollege && form.semester ? form.semester : null
   }
+  // Written only when set: a legacy class edited without one stays without one.
+  const start = String(form.start_date ?? '').trim()
+  if (start) {
+    meta.start_date = start
+    meta.end_date = String(form.end_date ?? '').trim() || null
+  }
   return meta
 }
 
 export default function ClassFormModal({ mode, classId, initial, currentSyllabusFile, enrolledCount = 0, onClose, onSaved }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Class details', closeOnBackdrop: false })
-  const { profile } = useAuth()
+  const { profile, school } = useAuth()
   // The teacher's other classes, for the same-time warning on submit. The
   // list page already holds this query, so it costs nothing on Create; on
   // Edit from a class page it is one read.
@@ -356,6 +378,12 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
     const base = initial ?? emptyClassForm()
     return { ...base, academic_year: normalizeAcademicYear(base.academic_year).value }
   })
+  /* A1: required on a new class, and on one that already has a start date (it
+     cannot be removed); a class made before start dates existed may stay
+     without one. Decided from the class as it opened, not as it is edited. */
+  const [requireStart] = useState(() => mode !== 'edit' || !!initial?.start_date)
+  // C2: the school admin's default, offered -- the teacher confirms or changes it.
+  const suggestedStart = schoolDefaultStart(school?.term_dates, form)
   const [educationLevel, setEducationLevel] = useState(form.education_level ?? 'High School')
 
   /* Was the College block on screen when this form opened? An edit that never
@@ -492,7 +520,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
 
   async function submit(e) {
     e.preventDefault()
-    const nextErrors = validate(form, selectedDays, originalMaxStudents, enrolledCount)
+    const nextErrors = validate(form, selectedDays, originalMaxStudents, enrolledCount, { requireStart })
     setErrors(nextErrors)
     const firstBad = FIELD_ORDER.find((key) => nextErrors[key])
     if (firstBad) {
@@ -864,6 +892,56 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
             </label>
           </div>
           )}
+
+          {/* Row 6: the class's own dates (A1 / C1 / C2). */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Start Date{requireStart && <Req />}</span>
+              <input
+                required={requireStart}
+                type="date"
+                value={form.start_date ?? ''}
+                onChange={set('start_date')}
+                data-field="start_date"
+                aria-invalid={!!errors.start_date}
+                aria-describedby={errors.start_date ? 'err-start_date' : 'hint-start_date'}
+                className={fieldCls(errors.start_date)}
+              />
+              <FieldError id="err-start_date" message={errors.start_date} />
+              {!errors.start_date && suggestedStart && form.start_date !== suggestedStart && (
+                <p id="hint-start_date" className="mt-1 text-xs text-slate-500">
+                  Your school's default is {suggestedStart}.{' '}
+                  <button
+                    type="button"
+                    className="underline"
+                    style={{ color: '#0E2A5C' }}
+                    onClick={() => { setForm((f) => ({ ...f, start_date: suggestedStart })); clearError('start_date') }}
+                  >
+                    Use it
+                  </button>
+                </p>
+              )}
+              {!errors.start_date && !requireStart && !form.start_date && (
+                <p id="hint-start_date" className="mt-1 text-xs text-slate-500">
+                  Optional for this class. Meetings before its first recorded day are not counted.
+                </p>
+              )}
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">End Date</span>
+              <input
+                type="date"
+                value={form.end_date ?? ''}
+                min={form.start_date || undefined}
+                onChange={set('end_date')}
+                data-field="end_date"
+                aria-invalid={!!errors.end_date}
+                aria-describedby={errors.end_date ? 'err-end_date' : undefined}
+                className={fieldCls(errors.end_date)}
+              />
+              <FieldError id="err-end_date" message={errors.end_date} />
+            </label>
+          </div>
 
           {/* Existing class syllabus metadata remains readable for backward
               compatibility. New uploads belong in the Syllabus workflow. */}
