@@ -904,7 +904,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                 onChange={set('start_date')}
                 data-field="start_date"
                 aria-invalid={!!errors.start_date}
-                aria-describedby={errors.start_date ? 'err-start_date' : 'hint-start_date'}
+                aria-describedby={errors.start_date ? 'err-start_date' : 'hint-start_date hint-start_date-optional'}
                 className={fieldCls(errors.start_date)}
               />
               <FieldError id="err-start_date" message={errors.start_date} />
@@ -922,7 +922,7 @@ export default function ClassFormModal({ mode, classId, initial, currentSyllabus
                 </p>
               )}
               {!errors.start_date && !requireStart && !form.start_date && (
-                <p id="hint-start_date" className="mt-1 text-xs text-slate-500">
+                <p id="hint-start_date-optional" className="mt-1 text-xs text-slate-500">
                   Optional for this class. Meetings before its first recorded day are not counted.
                 </p>
               )}
