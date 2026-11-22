@@ -1,5 +1,9 @@
 import { Fragment, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/useAuth'
+import { db } from '@/lib/firebase'
+import { fetchUsersByIds } from '@/lib/roster'
+import { describeAuditEvent, fetchAttendanceAudit } from '@/lib/attendanceAudit'
 import { useAdminOverview } from '@/hooks/useAdminOverview'
 import { downloadCsv, stampedName } from '@/lib/csv'
 import { navy, ink, muted, faint, green, red, blueText, orangeDeep, line, serif, mono } from '@/theme'
@@ -11,6 +15,44 @@ import CardHead from './CardHead'
 
 function pct(value) {
   return value == null ? '—' : `${value}%`
+}
+
+/* C5 (2026-11-22): a school admin READS a class's attendance change history --
+   who changed which marks, when and why. Nothing here writes: the rules give
+   an admin no attendance or audit write at all. Loaded only when opened. */
+export function AttendanceAuditPanel({ classId }) {
+  const [open, setOpen] = useState(false)
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['admin-attendance-audit', classId],
+    enabled: open,
+    queryFn: async () => {
+      const events = await fetchAttendanceAudit(db, classId)
+      const ids = [...new Set(events.flatMap((e) => [...(e.student_ids ?? []), e.actor_uid]).filter(Boolean))]
+      const users = ids.length ? await fetchUsersByIds(ids).catch(() => []) : []
+      return { events, names: Object.fromEntries(users.map((u) => [u.id, `${u.last_name}, ${u.first_name}`])) }
+    },
+  })
+  const when = (t) => (t?.toDate ? t.toDate().toLocaleString() : '')
+  return (
+    <details style={{ marginTop: 12, fontSize: 12.5, color: muted }} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary style={{ cursor: 'pointer' }}>Attendance change history (view only)</summary>
+      {isLoading && <p style={{ margin: '6px 0 0' }}>Loading…</p>}
+      {isError && <p style={{ margin: '6px 0 0', color: red }}>The history could not be loaded. Try again in a moment.</p>}
+      {data && data.events.length === 0 && (
+        <p style={{ margin: '6px 0 0' }}>No audited attendance changes yet. Marks saved before change history was kept have no entries.</p>
+      )}
+      {data && data.events.length > 0 && (
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+          {data.events.map((e) => (
+            <li key={e.id} style={{ ...mono, fontSize: 11.5, lineHeight: 1.6 }}>
+              {e.date} · {when(e.at)} · {describeAuditEvent(e, (id) => data.names[id] ?? 'a former student')}
+              {' · by '}{data.names[e.actor_uid] ?? 'the class teacher'}
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  )
 }
 
 /** Class Oversight: View All Classes, View Class Records, School-Wide Statistics. */
@@ -165,6 +207,7 @@ export default function ClassesTab() {
                               average covers only the {r.gradedCount} already scored.
                             </p>
                           )}
+                          <AttendanceAuditPanel classId={r.id} />
                         </td>
                       </tr>
                     )}

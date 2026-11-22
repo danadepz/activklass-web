@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchUsersByIds } from '@/lib/roster'
 import { notifyStudents } from '@/lib/notifications'
@@ -12,6 +12,12 @@ import { useAuth } from '@/context/useAuth'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, greenDeep, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog, promptDialog } from '@/components/ui/dialogs'
 import { cancelBlocker, isIsoDate, rescheduleBlocker, sessionStatus } from '@/lib/attendanceSessions'
+import { describeAuditEvent, fetchAttendanceAudit, writeAttendanceDays } from '@/lib/attendanceAudit'
+
+/* A refusal the teacher should read as-is (a guard that failed against the
+   day as stored right now), as opposed to a failed save. */
+const refusal = (message) => Object.assign(new Error(message), { userMessage: message })
+const SAVE_FAILED = 'Attendance could not be saved. Reload the page and try again.'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 
@@ -80,10 +86,11 @@ function isoOf(date) {
  * grid degrades to the recorded days alone. The first recorded day is the only
  * term start we have; no start is invented, and nothing past today is shown.
  */
-function termColumns(recordedDates, schedule, today) {
+// From the class's start date (A1) when it has one, else the first recorded day.
+function termColumns(recordedDates, schedule, today, startDate) {
   const dates = new Set(recordedDates)
   const weekdays = new Set(scheduleMeetings(schedule).map((m) => WEEKDAY_INDEX[m.day]))
-  const first = [...dates].sort()[0]
+  const first = (isIsoDate(startDate) && startDate) || [...dates].sort()[0]
   if (weekdays.size && first) {
     // An unparseable `first` gives an Invalid Date, whose comparison is false,
     // so the loop simply does not run.
@@ -176,27 +183,41 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
   const rate = total ? `${Math.round((presentCount / total) * 100)}%` : '—'
 
   async function save() {
+    // Changing or clearing a mark that was already saved is a correction (A6):
+    // it is kept in this day's history either way; the reason is optional
+    // context for whoever reads that history later.
+    const corrects = Object.keys(dirty).some((sid) => sheet.records[sid]?.status)
+    let reason = ''
+    if (corrects) {
+      const answer = await promptDialog({
+        title: 'Correct Saved Attendance',
+        message: 'You are changing marks that were already saved. The earlier marks stay in this day\'s history.',
+        label: 'Reason (optional)',
+        placeholder: 'e.g. Student arrived after roll call.',
+        confirmLabel: 'Save Correction',
+      })
+      if (answer == null) return
+      reason = answer
+    }
     setSaving(true)
     setError(null)
     try {
-      // One doc per day holds the full sheet; status 'none' is simply omitted
-      // from the records map (so re-saving a cleared student removes them).
-      const records = {}
-      for (const s of sheet.students) {
-        const entry = current(s.student_id)
-        if (entry.status && entry.status !== 'none') {
-          records[s.student_id] = { status: entry.status, remarks: entry.remarks || '' }
-        }
-      }
-      // mergeFields, not a plain set: `records` is still replaced whole (a
-      // cleared student drops out), but a make-up session's rescheduled_from
-      // and any cancel metadata survive the save.
-      await setDoc(doc(db, 'classes', classId, 'attendance', day), {
+      // Only the students edited here change, applied onto the day as stored
+      // at this moment (read inside the transaction). A mark saved meanwhile
+      // by another tab, or for a student no longer listed, is never dropped.
+      await writeAttendanceDays(db, classId, profile.id, [{
         date: day,
-        records,
-        recorded_by: profile.id,
-        updated_at: serverTimestamp(),
-      }, { mergeFields: ['date', 'records', 'recorded_by', 'updated_at'] })
+        reason,
+        next: (stored) => {
+          if (sessionStatus(stored) !== 'held') throw refusal('This meeting was cancelled or moved. Reload the page.')
+          const records = { ...(stored?.records ?? {}) }
+          for (const [sid, entry] of Object.entries(dirty)) {
+            if (!entry.status || entry.status === 'none') delete records[sid]
+            else records[sid] = { status: entry.status, remarks: entry.remarks || '' }
+          }
+          return { ...(stored ?? {}), records, recorded_by: profile.id, updated_at: serverTimestamp() }
+        },
+      }])
       /* Rebuild the per-student projection guardians read. Best-effort: the
          class sheet above is the source of truth and has already committed, so
          a failure here must not make the teacher think their save was lost. It
@@ -210,7 +231,8 @@ function AttendanceSheet({ classId, day, sheet, refetch }) {
       setDirty({})
       refetch()
     } catch (err) {
-      setError(err.message)
+      console.error('attendance save failed:', err)
+      setError(err.userMessage ?? SAVE_FAILED)
     } finally {
       setSaving(false)
     }
@@ -356,7 +378,6 @@ function SessionControls({ classId, day, sheet, refetch }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const status = sessionStatus(sheet.session)
-  const ref = doc(db, 'classes', classId, 'attendance', day)
 
   async function run(fn) {
     setBusy(true)
@@ -366,7 +387,7 @@ function SessionControls({ classId, day, sheet, refetch }) {
       refetch()
     } catch (err) {
       console.error('attendance session change failed:', err)
-      setError('That change could not be saved. Check the date and try again.')
+      setError(err.userMessage ?? 'That change could not be saved. Check the date and try again.')
     } finally {
       setBusy(false)
     }
@@ -383,15 +404,25 @@ function SessionControls({ classId, day, sheet, refetch }) {
       confirmLabel: 'Cancel Meeting',
     })
     if (reason == null) return
-    // No `records` key: a merge of `records: {}` would REPLACE the map. The
-    // rules refuse a cancel over stored marks anyway; this never tries.
-    await run(() => setDoc(ref, {
+    // The guard runs again on the day as stored right now: a mark saved since
+    // this page loaded refuses the cancel instead of being dropped.
+    await run(() => writeAttendanceDays(db, classId, profile.id, [{
       date: day,
-      session_status: 'cancelled',
-      cancel_reason: reason.trim(),
-      status_changed_by: profile.id,
-      updated_at: serverTimestamp(),
-    }, { merge: true }))
+      kind: 'cancel',
+      reason,
+      next: (stored) => {
+        const blocked = cancelBlocker(stored)
+        if (blocked) throw refusal(blocked)
+        return {
+          ...(stored ?? {}),
+          records: stored?.records ?? {},
+          session_status: 'cancelled',
+          cancel_reason: reason.trim(),
+          status_changed_by: profile.id,
+          updated_at: serverTimestamp(),
+        }
+      },
+    }]))
   }
 
   async function restore() {
@@ -401,7 +432,14 @@ function SessionControls({ classId, day, sheet, refetch }) {
       confirmLabel: 'Restore',
     })
     if (!ok) return
-    await run(() => updateDoc(ref, { session_status: 'held', status_changed_by: profile.id, updated_at: serverTimestamp() }))
+    await run(() => writeAttendanceDays(db, classId, profile.id, [{
+      date: day,
+      kind: 'restore',
+      next: (stored) => {
+        if (sessionStatus(stored) !== 'cancelled') throw refusal('This meeting is no longer cancelled. Reload the page.')
+        return { ...stored, session_status: 'held', status_changed_by: profile.id, updated_at: serverTimestamp() }
+      },
+    }]))
   }
 
   async function reschedule() {
@@ -416,27 +454,34 @@ function SessionControls({ classId, day, sheet, refetch }) {
       validate: (v) => rescheduleBlocker({ fromDate: day, toDate: v, days: sheet.days, schedule: sheet.schedule }),
     })
     if (to == null || !isIsoDate(to)) return
-    await run(async () => {
-      // One batch: the rules check each side names the other, so a half-move
-      // (an orphaned make-up date, or a moved date pointing nowhere) cannot land.
-      const batch = writeBatch(db)
-      batch.set(ref, {
+    // One transaction, both dates, an audit event each: the rules check each
+    // side names the other, so a half-move cannot land.
+    await run(() => writeAttendanceDays(db, classId, profile.id, [
+      {
         date: day,
-        session_status: 'rescheduled',
-        rescheduled_to: to,
-        status_changed_by: profile.id,
-        updated_at: serverTimestamp(),
-      }, { merge: true })
-      batch.set(doc(db, 'classes', classId, 'attendance', to), {
+        kind: 'reschedule_out',
+        next: (stored) => {
+          const blocked = cancelBlocker(stored)
+          if (blocked) throw refusal(blocked)
+          return {
+            ...(stored ?? {}),
+            records: stored?.records ?? {},
+            session_status: 'rescheduled',
+            rescheduled_to: to,
+            status_changed_by: profile.id,
+            updated_at: serverTimestamp(),
+          }
+        },
+      },
+      {
         date: to,
-        records: {},
-        session_status: 'held',
-        rescheduled_from: day,
-        status_changed_by: profile.id,
-        updated_at: serverTimestamp(),
-      })
-      await batch.commit()
-    })
+        kind: 'reschedule_in',
+        next: (stored) => {
+          if (stored) throw refusal('That date already has an attendance session.')
+          return { records: {}, session_status: 'held', rescheduled_from: day, status_changed_by: profile.id, updated_at: serverTimestamp() }
+        },
+      },
+    ]))
   }
 
   const chip = { ...mono, fontSize: 12, padding: '6px 10px', borderRadius: 999, border: `1px solid ${line}` }
@@ -466,6 +511,39 @@ function SessionControls({ classId, day, sheet, refetch }) {
       )}
       {error && <span role="alert" style={{ fontSize: 13, color: red }}>{error}</span>}
     </div>
+  )
+}
+
+/* This day's audited changes (A6 / B4), newest first: who changed which marks
+   from what to what, when, and why. Read-only; the rules let no client edit or
+   delete an event. Collapsed so the register stays the first thing on screen. */
+function DayHistory({ classId, day, sheet }) {
+  const { profile } = useAuth()
+  const { data, isError } = useQuery({
+    queryKey: ['fs-attendance', classId, day, 'audit'],
+    queryFn: () => fetchAttendanceAudit(db, classId, day),
+  })
+  const events = Array.isArray(data) ? data : null
+  const names = Object.fromEntries((sheet.students ?? []).map((s) => [s.student_id, `${s.last_name}, ${s.first_name}`]))
+  const when = (t) => (t?.toDate ? t.toDate().toLocaleString() : '')
+  return (
+    <details className="mb-4" style={{ fontSize: 12.5, color: muted }}>
+      <summary style={{ cursor: 'pointer' }}>
+        Change history for this day{events ? ` (${events.length})` : ''}
+      </summary>
+      {isError && <p style={{ margin: '6px 0 0', color: red }}>The history could not be loaded. Try again in a moment.</p>}
+      {events?.length === 0 && (
+        <p style={{ margin: '6px 0 0' }}>No audited changes yet. Marks saved before change history was kept have no entries.</p>
+      )}
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        {(events ?? []).map((e) => (
+          <li key={e.id} style={{ ...mono, fontSize: 11.5, lineHeight: 1.6 }}>
+            {when(e.at)} · {describeAuditEvent(e, (id) => names[id] ?? 'a former student')}
+            {e.actor_uid ? ` · by ${e.actor_uid === profile?.id ? 'you' : 'another account'}` : ''}
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
@@ -661,18 +739,28 @@ function ContestsPanel({ classId }) {
     setBusyId(c.id)
     setError(null)
     try {
+      // Accepting the dispute corrects that day to the status the teacher
+      // chose -- an audited correction like any other (A6), written before the
+      // contest is closed so a failed write never leaves it "approved".
+      await writeAttendanceDays(db, classId, profile.id, [{
+        date: c.date,
+        reason: `Attendance contest approved: ${label}`,
+        next: (stored) => {
+          if (sessionStatus(stored) !== 'held') throw refusal('That meeting was cancelled or moved, so its attendance cannot change.')
+          return {
+            ...(stored ?? {}),
+            records: {
+              ...(stored?.records ?? {}),
+              [c.student_id]: { status, remarks: `${label} — contest approved`, excuse_url: c.excuse_url ?? null },
+            },
+            updated_at: serverTimestamp(),
+          }
+        },
+      }])
       await updateDoc(doc(db, 'attendance_contests', c.id), {
         status: 'approved',
         resolved_at: serverTimestamp(),
         resolved_by: profile.id,
-      })
-      // Accepting the dispute rewrites that day to the status the teacher chose.
-      await updateDoc(doc(db, 'classes', classId, 'attendance', c.date), {
-        [`records.${c.student_id}`]: {
-          status,
-          remarks: `${label} — contest approved`,
-          excuse_url: c.excuse_url ?? null,
-        },
       })
       // Approving a contest rewrites that day, so the projection moves too.
       try {
@@ -811,6 +899,7 @@ export default function AttendancePage() {
       const cls = await getDoc(doc(db, 'classes', classId))
       if (!cls.exists()) throw new Error('Class not found')
       const schedule = cls.data().schedule ?? null
+      const startDate = cls.data().start_date ?? null
       const ids = cls.data().student_ids ?? []
       const users = ids.length ? await fetchUsersByIds(ids) : []
       const students = users
@@ -847,6 +936,7 @@ export default function AttendancePage() {
         summary,
         byDate,
         schedule,
+        startDate,
       }
     },
   })
@@ -907,7 +997,7 @@ export default function AttendancePage() {
       ) : view === 'term' ? (
         <TermSheet
           sheet={sheet}
-          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso())}
+          columns={termColumns(Object.keys(sheet.byDate), sheet.schedule, todayIso(), sheet.startDate)}
           onPickDay={(date) => {
             setDay(date)
             setView('day')
@@ -916,6 +1006,7 @@ export default function AttendancePage() {
       ) : (
         <>
           <SessionControls classId={classId} day={day} sheet={sheet} refetch={refetch} />
+          <DayHistory classId={classId} day={day} sheet={sheet} />
           {sessionStatus(sheet.session) === 'held' ? (
             <AttendanceSheet
               key={`${classId}-${day}-${JSON.stringify(sheet.records)}`}
