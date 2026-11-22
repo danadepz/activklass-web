@@ -35,7 +35,7 @@ describe('student directory risk badge', () => {
       <RiskBadge score={0.75} status="insufficient_data" training={{ real_data: false }} />,
     )
 
-    expect(html).toContain('Not enough data')
+    expect(html).toContain('Insufficient data')
     expect(html).not.toContain('75')
     expect(html).not.toContain('%')
   })
@@ -45,7 +45,8 @@ describe('student directory risk badge', () => {
       <RiskBadge score={0.73} status="scored" training={{ real_data: false }} />,
     )
 
-    expect(html).toContain('High risk')
+    expect(html).toContain('High (provisional)')
+    expect(html).toContain('not a validated chance of failing')
     expect(html).toContain('score 73')
     expect(html).not.toContain('%')
     // The footnote it pointed to was removed; RISK_CAVEAT now explains the score.
@@ -55,14 +56,14 @@ describe('student directory risk badge', () => {
   it('never shows a number for insufficient evidence, whatever score arrives', () => {
     for (const score of [0, 0.2, 0.4, 0.99, null]) {
       const html = renderToStaticMarkup(<RiskBadge score={score} status="insufficient_data" />)
-      expect(html).toContain('Not enough data')
+      expect(html).toContain('Insufficient data')
       expect(html.replace(/<[^>]*>/g, '')).not.toMatch(/\d/) // visible text only
     }
   })
 
   it('shows the plain caution beside the roster risk labels', () => {
     const html = renderToStaticMarkup(<MemoryRouter><StudentsPage /></MemoryRouter>)
-    expect(html).toContain('Not enough data')
+    expect(html).toContain('Insufficient data')
     expect(html).toContain('score 75')
     expect(html).not.toContain('†')
     expect(html).toContain('Risk is an early guide only. It uses sample data, not real ActivKlass results yet.')

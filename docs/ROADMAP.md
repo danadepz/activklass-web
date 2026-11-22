@@ -849,3 +849,20 @@ now, and RA 10173 erasure is the reason it will not stay the answer).
 - [ ] Independent teacher-session verification against actual stored templates and
   deployment remain pending. The tester's original data-corruption report is not
   yet resolved by live evidence.
+
+## Risk evidence and attendance sessions — 2026-11-22 (branch `codex/risk-evidence-20261122`, not merged)
+- [~] A teacher can cancel a planned meeting, or move it to a make-up date, from the
+  attendance page; cancelled and moved-away dates hold no marks and stop counting, a move
+  writes both dates in one batch that name each other, and the Whole Term grid labels them.
+  Unrecorded meetings are shown as unconfirmed, never read as present or absent.
+- [~] The risk inputs the web sends are computed from evidence, not presence: attendance rate
+  from recorded marks on held sessions only; quiz average and trend over distinct quizzes
+  (best attempt each, zeros kept); and each flagged student shows what the score is based on.
+  Directory bands are labelled provisional; the 0.35/0.50 cutoffs and the backend's
+  six-input insufficient-data contract (SHA 27bb796) are unchanged.
+- Verified locally only: `npm run test` 2641 passed / 3 skipped, `npm run build` clean,
+  `npm run test:rules` 285/285 (12 new attendance cases; 8 fail against origin/main rules),
+  lint unchanged at 190; browser walk against the local emulators with synthetic data
+  (cancel, refused cancel of a recorded day, refused duplicate move, move, recording the
+  make-up, term grid). **Not deployed:** the `firestore.rules` change is in the backend
+  branch only. Full report: `C:\CAPSTONE\ACTIVKLASS_RISK_EVIDENCE_IMPLEMENTATION_REPORT.md`.
