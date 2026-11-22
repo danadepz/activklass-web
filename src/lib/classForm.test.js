@@ -8,7 +8,21 @@
  * existed carries nothing, so it edited as K-12 and the field was never drawn.
  */
 import { describe, expect, it } from 'vitest'
-import { classEducationLevel, classToForm, academicTerm } from './classForm'
+import { classEducationLevel, classToForm, academicTerm, isCalendarDate } from './classForm'
+
+describe('isCalendarDate', () => {
+  it('accepts real calendar dates, including leap day', () => {
+    expect(isCalendarDate('2024-02-29')).toBe(true)
+    expect(isCalendarDate('2026-11-22')).toBe(true)
+  })
+
+  it('rejects normalized or malformed dates', () => {
+    expect(isCalendarDate('2026-02-31')).toBe(false)
+    expect(isCalendarDate('2025-02-29')).toBe(false)
+    expect(isCalendarDate('2026-13-01')).toBe(false)
+    expect(isCalendarDate('2026-2-01')).toBe(false)
+  })
+})
 
 describe('classEducationLevel', () => {
   it('takes the stored level when the class has one', () => {

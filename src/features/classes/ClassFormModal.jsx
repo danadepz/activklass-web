@@ -6,7 +6,7 @@ import {
 } from '@/lib/validation'
 import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { emptyClassForm, schoolDefaultStart } from '@/lib/classForm'
+import { emptyClassForm, isCalendarDate, schoolDefaultStart } from '@/lib/classForm'
 import { parseSchedule, scheduleOverlap } from '@/lib/schedule'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { useAuth } from '@/context/useAuth'
@@ -228,7 +228,7 @@ export function validate(form, selectedDays, originalMaxStudents = null, enrolle
   // this may stay without one (requireStart false), but once set it stays set.
   const start = String(form.start_date ?? '').trim()
   const end = String(form.end_date ?? '').trim()
-  const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
+  const isDay = isCalendarDate
   if (!start) {
     if (requireStart) errors.start_date = 'Pick the date this class starts.'
     else if (end) errors.start_date = 'Pick a start date before setting an end date.'
