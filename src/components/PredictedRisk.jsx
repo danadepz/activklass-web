@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { RISK_CAVEAT, useClassRisk } from '@/hooks/useClassRisk'
 import { formatRiskScore } from '@/lib/riskScoreDisplay'
 import { riskReasons } from '@/lib/ai'
@@ -6,6 +7,12 @@ import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/th
 
 export default function PredictedRisk({ classId, rows }) {
   const { data, isLoading, isError, error } = useClassRisk(classId, rows)
+
+  // The technical cause (a refused Firestore read, an API status) is for the
+  // developer console only; the teacher gets the plain message below.
+  useEffect(() => {
+    if (isError) console.error('[PredictedRisk] risk evidence or prediction failed:', error?.code ?? error?.status ?? '', error)
+  }, [isError, error])
 
   const shell = {
     background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px',
@@ -27,10 +34,11 @@ export default function PredictedRisk({ classId, rows }) {
       <div style={shell}>
         <h3 style={{ ...serif, fontSize: 18, color: ink, margin: '0 0 6px' }}>Predicted at risk</h3>
         <p style={{ fontSize: 13, color: muted, margin: 0 }}>
-          {/* Naming the API is more useful than "something went wrong": this
-              endpoint needs Flask running, which Firestore-only pages do not. */}
-          Could not reach the prediction service. It runs on the Flask API — check that the backend
-          is running. {error?.message ? <span style={{ color: faint }}>({error.message})</span> : null}
+          {/* Either the class records or the prediction could have failed; the
+              panel cannot tell a teacher which helps, and never shows raw error
+              text. The cause goes to the console (effect above). */}
+          Risk predictions could not be loaded right now, so no student has been scored. Try again
+          in a moment.
         </p>
       </div>
     )

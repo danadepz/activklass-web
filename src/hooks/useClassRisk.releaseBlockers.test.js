@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = {}
 let failExcusals = false
+let failPath = null
 
 vi.mock('@/lib/firebase', () => ({ db: {} }))
 vi.mock('@/context/useAuth', () => ({ useAuth: () => ({ profile: { id: 'T1' } }) }))
@@ -30,6 +31,7 @@ vi.mock('firebase/firestore', () => ({
   query: (path, field) => (field ? `${path}?${field}` : path),
   getDoc: async (path) => ({ data: () => store[path] }),
   getDocs: async (path) => {
+    if (path === failPath) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })
     if (failExcusals && path.endsWith('/quiz_excusals')) throw Object.assign(new Error('denied'), { code: 'permission-denied' })
     return { docs: (store[path] ?? []).map((d) => ({ id: d.id, data: () => d })) }
   },
@@ -53,6 +55,7 @@ const legacyMissed = { id: 'q4', class_id: 'c1', status: 'closed', closes_at: '2
 beforeEach(() => {
   vi.mocked(api).mockClear()
   failExcusals = false
+  failPath = null
   for (const k of Object.keys(store)) delete store[k]
   store['classes/c1'] = {}
   store['classes/c1/attendance'] = [
@@ -128,5 +131,25 @@ describe('teacher risk panel · request body', () => {
     const { body } = await sent(useClassRisk('c1', [{ student_id: S, grade: 80 }]))
     expect(body.attendance_trend).toBe(0) // six held presents: flat, not -0.5
     expect(body.attendance_rate).toBe(1)
+  })
+})
+
+// 2026-11-23: a failure is a failure -- never a partial or zero-filled request.
+describe('teacher risk panel · load failures', () => {
+  it.each(['quizzes?class_id', 'quizzes?class_ids', 'quiz_attempts?class_id', 'classes/c1/attendance', 'gradebooks/c1/assessments'])(
+    'a failed %s read fails the query and never calls the model',
+    async (path) => {
+      failPath = path
+      const risk = useClassRisk('c1', [{ student_id: S, grade: 80 }])
+      await expect(risk.queryFn()).rejects.toMatchObject({ code: 'permission-denied' })
+      expect(api).not.toHaveBeenCalled()
+    },
+  )
+
+  it('a failed prediction call fails the query; no result is invented', async () => {
+    vi.mocked(api).mockRejectedValueOnce(Object.assign(new Error('Request failed with status 502'), { status: 502 }))
+    const risk = useClassRisk('c1', [{ student_id: S, grade: 80 }])
+    await expect(risk.queryFn()).rejects.toMatchObject({ status: 502 })
+    expect(api).toHaveBeenCalledTimes(1)
   })
 })
