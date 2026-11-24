@@ -203,14 +203,14 @@ describe('SubscriptionStatusPanel', () => {
     expect(t).toContain(warning)
     expect(t).toContain('Remaining: ₱13,500')
     expect(t).toContain('Status Active')
-    expect(t).toContain('Pay remaining ₱13,500')
+    expect(t).toContain('Pay Remaining ₱13,500')
   })
 
   it('shows partial payment details and no warning before the deadline', () => {
     const t = text(renderToStaticMarkup(<SubscriptionStatusPanel view={view({ status: 'partially_paid' })} onPayBalance={() => {}} />))
-    expect(t).toContain('Partially paid')
-    expect(t).toContain('Subscription total ₱27,000')
-    expect(t).toContain('Amount paid ₱13,500')
+    expect(t).toContain('Partially Paid')
+    expect(t).toContain('Total Subscription Cost ₱27,000')
+    expect(t).toContain('Amount Paid ₱13,500')
     expect(t).not.toContain('Overdue Balance')
   })
 
@@ -218,9 +218,9 @@ describe('SubscriptionStatusPanel', () => {
     const t = text(renderToStaticMarkup(<SubscriptionStatusPanel view={view({
       status: 'fully_paid', amount_paid_centavos: 2700000, remaining_centavos: 0, balance_checkout_available: false,
     })} onPayBalance={() => {}} />))
-    expect(t).toContain('Fully paid')
+    expect(t).toContain('Fully Paid')
     expect(t).not.toContain('Overdue Balance')
-    expect(t).not.toContain('Pay remaining')
+    expect(t).not.toContain('Pay Remaining')
   })
 })
 
@@ -235,8 +235,8 @@ describe('live installment status (GET /api/subscription installment block)', ()
     expect(view.costing).toMatchObject({ plan: 'individual', total_centavos: 240000, student_capacity: 80 })
     expect(view.payment.balance_checkout_available).toBe(true)
     const t = text(renderToStaticMarkup(withQuery(<InstallmentStatus ownerId="u1" subscription={sub} installment={{ ...plan, status: 'partially_paid' }} />)))
-    expect(t).toContain('Partially paid')
-    expect(t).toContain('Pay remaining ₱1,200')
+    expect(t).toContain('Partially Paid')
+    expect(t).toContain('Pay Remaining ₱1,200')
   })
 
   it('shows the overdue warning with access still active, and nothing to pay once settled', () => {
@@ -245,8 +245,8 @@ describe('live installment status (GET /api/subscription installment block)', ()
     expect(overdue).toContain(warning)
     expect(overdue).toContain('Status Active')
     const settled = text(renderToStaticMarkup(withQuery(<InstallmentStatus ownerId="u1" subscription={sub} installment={{ ...plan, status: 'fully_paid', paid_centavos: 240000, remaining_centavos: 0 }} />)))
-    expect(settled).toContain('Fully paid')
-    expect(settled).not.toContain('Pay remaining')
+    expect(settled).toContain('Fully Paid')
+    expect(settled).not.toContain('Pay Remaining')
   })
 
   it('renders nothing for a term with no installment plan', () => {
