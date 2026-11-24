@@ -516,7 +516,8 @@ function PostScoresButton({ quiz, classId, auto }) {
     }
     try {
       const result = await syncQuizToClassRecord({ quiz, classId, mapping })
-      if (result.skipped) toast.info(result.skipped)
+      // "Quarter 1 is locked — unlock it to post these scores" asks for an action: keep it.
+      if (result.skipped) toast.warning(result.skipped, { duration: 0 })
       else toast.success(describeSyncResult(result))
     } catch (err) {
       toast.error(`Could not post to the class record: ${err.message}`)
@@ -2022,7 +2023,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         quiz: { id: quiz.id, title: settings.title, questions: questions.map(toPayload) },
         classMappings,
       })
-      if (synced.skipped.length) toast.info(`Published. ${synced.skipped.join(' ')}`)
+      if (synced.skipped.length) toast.warning(`Published. ${synced.skipped.join(' ')}`, { duration: 0 })
       else toast.success('Published and added to the class record.')
 
       refetch()
