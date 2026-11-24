@@ -13,7 +13,8 @@
  *   toast.error    — it did not work; stays until dismissed, because an error
  *                    that fades before it is read is worse than none
  *   toast.info     — neutral progress
- *   toast.warning  — a temporary, non-critical caution
+ *   toast.warning  — a temporary, non-critical caution; one that carries an
+ *                    `action` stays until dismissed, because it asks for something
  *   alertDialog()  — must be read before continuing (see dialogs.js)
  *
  * `action` is what makes a destructive flow forgiving without building an
@@ -56,7 +57,10 @@ export function dismissToast(id) {
 function show(type, message, options = {}) {
   seq += 1
   const id = seq
-  const duration = options.duration ?? DEFAULT_MS[type] ?? 4000
+  const duration = options.duration ?? (type === 'warning' && options.action ? 0 : DEFAULT_MS[type] ?? 4000)
+  // The same notice again (a second click on Save) replaces the first instead
+  // of stacking a copy; a timed one gets its full time again.
+  items = items.filter((t) => !(t.type === type && t.message === message))
   items = [...items, { id, type, message, action: options.action, duration }]
   emit()
   if (duration > 0) setTimeout(() => dismissToast(id), duration)
