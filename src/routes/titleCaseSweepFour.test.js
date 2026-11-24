@@ -33,6 +33,7 @@ const quizEditorSrc = read('./teacher/quizzes.$quizId.jsx')
 const studentDashboardSrc = read('./student/index.jsx')
 const studentUpNextSrc = read('./student/deliverables/UpNextPanel.jsx')
 const studentProfileSrc = read('./student/profile.jsx')
+const accountMenuSrc = read('../components/AccountMenu.jsx')
 const parentalAccessPanelSrc = read('../components/ParentalAccessPanel.jsx')
 const parentalAccessDefSrc = read('../components/parentalAccess.js')
 
@@ -165,10 +166,15 @@ describe('T-178 — Lane 5: Student Portal', () => {
     expect(studentUpNextSrc).toContain('Up Next</h2>')
   })
 
-  it('student profile title-cases Student Number, Password Recovery Email, and Sign Out', () => {
+  it('student profile title-cases Student Number and Password Recovery Email', () => {
     expect(studentProfileSrc).toContain('label="Student Number"')
     expect(studentProfileSrc).toContain('Password Recovery Email')
-    expect(studentProfileSrc).toContain('Sign Out</h2>')
+  })
+
+  // Sign Out moved off the profile page into the shared header account menu (#22).
+  it('the account menu title-cases Sign Out', () => {
+    expect(accountMenuSrc).toMatch(/>\s*Sign Out\s*</)
+    expect(accountMenuSrc).not.toMatch(/Sign out\b/)
   })
 
   it('ParentalAccessPanel title-cases code header, show button, and section headings', () => {
