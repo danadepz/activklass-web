@@ -12,6 +12,7 @@ import { classEducationLevel } from '@/lib/classForm'
 import { yearLevelError } from '@/lib/validation'
 import { useSyllabi } from '@/hooks/useSyllabi'
 import GenerateModuleModal from './GenerateModuleModal'
+import GenerationProgress from '@/components/ui/GenerationProgress'
 import { uploadAttachment, isSafeLink } from '@/lib/attachments'
 import AttachmentField from '@/components/AttachmentField'
 import { confirmDialog } from '@/components/ui/dialogs'
@@ -768,6 +769,12 @@ export function GenerateModal({ classes = [], onClose, onDraft }) {
             {generating ? 'Generating draft...' : '✨ Generate'}
           </button>
         </div>
+        {generating && (
+          <GenerationProgress
+            title="Creating Your Syllabus"
+            description="Organizing your subject into modules, topics, and learning objectives."
+          />
+        )}
       </div>
     </div>
   )
