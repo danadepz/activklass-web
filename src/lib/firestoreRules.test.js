@@ -27,6 +27,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import { collection, deleteDoc, deleteField, doc, documentId, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { buildAuditEvent, writeAttendanceDays } from './attendanceAudit'
+import { studentAnnouncementsQuery } from './studentAnnouncements'
 import { fetchExcusalEvents, fetchMyExcusals, setQuizExcusal } from './quizExcusals'
 
 // ACTIVKLASS_RULES_PATH lets a reviewer point this suite at a modified copy of
@@ -2298,6 +2299,53 @@ describe('T-213 — teacher profiles, syllabi and announcements are scoped to wh
 
   it('still lets a parent read an announcement (documented known breadth, not scoped by this card)', async () => {
     await assertSucceeds(getDoc(doc(ctx(PARENT), 'announcements', 'ann-mine')))
+  })
+
+  // List queries -- what the student class screens (web and mobile) actually
+  // run. The single-document reads above can pass while every list query is
+  // refused: the engine allows a query only if the rule holds for every
+  // document it could return, and the student branch reads teacher_id. The
+  // class_id-only shape is what both apps shipped, and why the tab read
+  // "No Announcements" (PR #28). The allowed cases use the web client's own
+  // studentAnnouncementsQuery, so the shape shipped is the shape proven.
+  describe('student announcement list queries', () => {
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        await setDoc(doc(admin.firestore(), 'announcements', 'ann-stranger'), {
+          teacher_id: OTHER_TEACHER, class_id: 'class-9', title: 'Lab report', body: 'Due Monday.',
+        })
+      })
+    })
+
+    it('refuses an enrolled student querying by class_id alone', async () => {
+      await assertFails(getDocs(query(collection(ctx(STUDENT), 'announcements'), where('class_id', '==', 'class-1'))))
+    })
+
+    it('lets an enrolled student query by class_id and their class teacher, and returns the post', async () => {
+      const snap = await assertSucceeds(getDocs(studentAnnouncementsQuery(ctx(STUDENT), 'class-1', TEACHER)))
+      expect(snap.docs.map((d) => d.id)).toEqual(['ann-mine'])
+    })
+
+    it('answers an empty class with an empty result, not a refusal', async () => {
+      const snap = await assertSucceeds(getDocs(studentAnnouncementsQuery(ctx(STUDENT), 'class-empty', TEACHER)))
+      expect(snap.size).toBe(0)
+    })
+
+    it('refuses a student the teacher does not teach, even with both filters', async () => {
+      await assertFails(getDocs(studentAnnouncementsQuery(ctx(UNRELATED_STUDENT), 'class-1', TEACHER)))
+    })
+
+    it('refuses an enrolled student querying announcements from a teacher who does not teach them', async () => {
+      await assertFails(getDocs(studentAnnouncementsQuery(ctx(STUDENT), 'class-9', OTHER_TEACHER)))
+    })
+
+    it('still lets the teacher list their own announcements (teacher page shape)', async () => {
+      await assertSucceeds(getDocs(query(collection(ctx(TEACHER), 'announcements'), where('teacher_id', '==', TEACHER))))
+    })
+
+    it('still lets a parent list a class by class_id (mobile parent shape, documented breadth)', async () => {
+      await assertSucceeds(getDocs(query(collection(ctx(PARENT), 'announcements'), where('class_id', '==', 'class-1'))))
+    })
   })
 })
 

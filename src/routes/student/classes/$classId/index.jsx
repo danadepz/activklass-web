@@ -21,6 +21,7 @@ import { formatSchedule } from '@/lib/schedule'
 import { KIND_LABEL, describeWindow, fromQuiz, fromTask } from '@/lib/deliverables'
 import { describeSubmission, isLate, submissionFilePath, submitWork } from '@/lib/taskSubmissions'
 import { studentDeliverablesKey } from '@/hooks/useStudentDeliverables'
+import { studentAnnouncementsQuery } from '@/lib/studentAnnouncements'
 import { SUBMISSION_NOTE_MAX } from '@/lib/validation'
 import Markdown from '@/components/Markdown'
 import { WindowChip, toneOf } from '../../deliverables/WindowChip'
@@ -58,7 +59,9 @@ export async function loadClassDetail(classId, profile) {
     throw new Error('not_enrolled')
   }
 
-  let announcementsError = null
+  const announcementsQuery = studentAnnouncementsQuery(db, classId, clazz.teacher_id)
+  let announcementsError = announcementsQuery ? null : new Error('class has no usable teacher_id')
+  if (!announcementsQuery) console.error('Announcement load error: class has no usable teacher_id', classId)
   let quizzesError = null
   let attemptsError = null
 
@@ -69,12 +72,16 @@ export async function loadClassDetail(classId, profile) {
       loadStudentContests(classId, studentUid),
       loadStudentGradeContests(classId, studentUid),
       loadSyllabus(classId),
-      getDocs(query(collection(db, 'announcements'), where('class_id', '==', classId)))
-        .catch((err) => {
+      // class_id + teacher_id, the shape the rule can prove (see
+      // lib/studentAnnouncements.js). No usable teacher id means no query and
+      // the "could not load" state, never a silent empty tab.
+      announcementsQuery
+        ? getDocs(announcementsQuery).catch((err) => {
           console.error('Announcement load error:', err.code ?? '', err.message ?? err)
           announcementsError = err
           return { docs: [] }
-        }),
+        })
+        : Promise.resolve({ docs: [] }),
       // T-195: which of this student's own announcements they have already
       // dismissed. Best-effort -- a failed read just means nothing is
       // filtered out yet, not a broken page.
@@ -1674,9 +1681,21 @@ export async function dismissAnnouncement(announcementId, studentId) {
   })
 }
 
-function AnnouncementsTab({ announcements, announcementsTotal, studentId, onDismissed }) {
+function AnnouncementsTab({ announcements, announcementsTotal, loadFailed = false, studentId, onDismissed }) {
   const [pendingId, setPendingId] = useState(null)
   const [error, setError] = useState('')
+
+  // A refused or failed read is not "no announcements" -- say so, or a teacher's
+  // post looks like it never arrived.
+  if (loadFailed && announcements.length === 0) {
+    return (
+      <Empty
+        icon={<Megaphone className="h-6 w-6" />}
+        title="Announcements Could Not Load"
+        text="We couldn't load your class announcements. Refresh the page, or try again in a moment."
+      />
+    )
+  }
 
   if (announcements.length === 0) {
     return announcementsTotal > 0
@@ -1930,6 +1949,7 @@ export default function StudentClassDetail() {
         <AnnouncementsTab
           announcements={announcements}
           announcementsTotal={announcementsTotal}
+          loadFailed={Boolean(data.queryErrors?.announcements)}
           studentId={profile.id}
           onDismissed={invalidate}
         />
