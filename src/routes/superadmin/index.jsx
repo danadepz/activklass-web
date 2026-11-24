@@ -7,6 +7,7 @@ import {
   fetchPlans,
   fetchSubscribers,
   purgeSubscriber,
+  updateSchoolDetails,
   updateSubscriber,
 } from '@/lib/superadmin'
 import { absorbMessage } from '@/lib/approvalMessage'
@@ -553,7 +554,7 @@ export default function SuperAdminSubscribersPage() {
                   <td className="px-4 py-4 text-right">
                     <div className="flex justify-end gap-2">
                       <button
-                        onClick={() => setEditing(sub)}
+                        onClick={() => setEditing({ ...sub, owner })}
                         className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:border-zinc-700"
                       >
                         Manage
@@ -620,6 +621,11 @@ export default function SuperAdminSubscribersPage() {
           busy={patch.isPending}
           onClose={() => setEditing(null)}
           onSave={(changes) => patch.mutate({ ownerId: editing.id, ...changes })}
+          onDetailsSaved={() => {
+            setEditing(null)
+            refresh()
+            toast.success('School details updated.')
+          }}
         />
       )}
 
@@ -834,7 +840,83 @@ function ProvisionDialog({ plans, onClose, onDone }) {
   )
 }
 
-function ManageDialog({ subscription, plans, busy, onClose, onSave }) {
+/**
+ * The three things a school admin sees locked ("Contact ActivKlass support"):
+ * school name, login prefix, and the admin's sign-in email. Saved on its own
+ * so it never rides along with a plan or seat change.
+ */
+function SchoolDetailsSection({ schoolId, owner, subscription, onSaved }) {
+  const current = {
+    name: owner?.name || subscription.name || '',
+    loginPrefix: owner?.login_prefix || '',
+    adminEmail: owner?.contact_email || subscription.contact_email || '',
+  }
+  const [name, setName] = useState(current.name)
+  const [loginPrefix, setLoginPrefix] = useState(current.loginPrefix)
+  const [adminEmail, setAdminEmail] = useState(current.adminEmail)
+  const [error, setError] = useState(null)
+
+  const save = useMutation({
+    mutationFn: (changes) => updateSchoolDetails(schoolId, changes),
+    onSuccess: onSaved,
+    onError: (err) => setError(err.message),
+  })
+
+  const submit = (e) => {
+    e.preventDefault()
+    setError(null)
+    const changes = {}
+    if (name.trim() !== current.name) changes.name = name.trim()
+    if (loginPrefix.trim().toLowerCase() !== current.loginPrefix) changes.loginPrefix = loginPrefix.trim()
+    if (adminEmail.trim().toLowerCase() !== current.adminEmail.toLowerCase()) changes.adminEmail = adminEmail.trim()
+    if (!Object.keys(changes).length) return setError('Nothing to change.')
+    save.mutate(changes)
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-5 space-y-3 border-t border-zinc-800 pt-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">School details</p>
+      <p className="text-[11px] text-zinc-500">
+        Locked for the school itself. Change them here when the school asks ActivKlass support.
+      </p>
+      <Field label="School name">
+        <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          label="Login prefix"
+          hint="Applies to logins issued from now on. Existing logins keep their current prefix."
+        >
+          <input
+            value={loginPrefix}
+            onChange={(e) => setLoginPrefix(e.target.value)}
+            className={inputCls}
+            placeholder="ucb"
+            maxLength={12}
+          />
+        </Field>
+        <Field label="Admin sign-in email" hint="The admin signs in with the new email straight away.">
+          <input
+            type="email"
+            value={adminEmail}
+            onChange={(e) => setAdminEmail(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button
+        type="submit"
+        disabled={save.isPending}
+        className="w-full rounded-lg border border-amber-400/40 py-2.5 text-sm font-semibold text-amber-300 hover:bg-amber-400/10 disabled:opacity-50"
+      >
+        {save.isPending ? 'Saving…' : 'Save school details'}
+      </button>
+    </form>
+  )
+}
+
+function ManageDialog({ subscription, plans, busy, onClose, onSave, onDetailsSaved }) {
   const catalogue = plans[subscription.type] ?? {}
   const [plan, setPlan] = useState(subscription.plan ?? '')
   const [status, setStatus] = useState(subscription.status ?? 'active')
@@ -952,6 +1034,15 @@ function ManageDialog({ subscription, plans, busy, onClose, onSave }) {
           </button>
         </div>
       </form>
+
+      {subscription.type === 'institution' && (
+        <SchoolDetailsSection
+          schoolId={subscription.id}
+          owner={subscription.owner}
+          subscription={subscription}
+          onSaved={onDetailsSaved}
+        />
+      )}
     </Dialog>
   )
 }
