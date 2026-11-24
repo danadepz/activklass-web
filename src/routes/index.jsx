@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, Check } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
@@ -189,6 +189,7 @@ export default function Landing() {
   const featureGridRef = useRevealOnScroll()
   const stepsGridRef = useRevealOnScroll()
   const auditCardRef = useRevealOnScroll()
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   return (
     <div style={{ background: '#FAFAF6', color: ink, fontFamily: sansFamily }}>
       <a
@@ -231,13 +232,100 @@ export default function Landing() {
             </Link>
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-[10px] px-4 py-2.5 text-sm font-semibold transition hover:brightness-110"
+              className="hidden items-center gap-1.5 rounded-[10px] px-4 py-2.5 text-sm font-semibold transition hover:brightness-110 md:inline-flex"
               style={{ background: navy, color: '#FAFAF6', boxShadow: `0 2px 0 ${navyDeep}` }}
             >
               Go to Portal
             </Link>
+            {/* Hamburger — mobile only */}
+            <button
+              type="button"
+              aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileNavOpen}
+              aria-controls="landing-mobile-menu"
+              onClick={() => setMobileNavOpen((o) => !o)}
+              className="grid place-items-center rounded-[10px] transition hover:bg-[rgba(14,42,92,0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C] md:hidden"
+              style={{ width: 38, height: 38, border: '1.5px solid rgba(14,42,92,0.14)', background: 'transparent', cursor: 'pointer', color: navy, flexShrink: 0 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                {mobileNavOpen ? (
+                  <>
+                    <line x1="3" y1="3" x2="15" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="15" y1="3" x2="3" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </>
+                ) : (
+                  <>
+                    <line x1="2" y1="5" x2="16" y2="5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="2" y1="9" x2="16" y2="9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <line x1="2" y1="13" x2="16" y2="13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </>
+                )}
+              </svg>
+            </button>
           </div>
         </div>
+
+        {/* Mobile dropdown — appears below the bar, dismisses on link click */}
+        {mobileNavOpen && (
+          <div
+            id="landing-mobile-menu"
+            className="md:hidden"
+            style={{
+              borderTop: '1px solid rgba(14,42,92,0.08)',
+              background: 'rgba(250,250,246,0.97)',
+              padding: '12px 24px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}
+          >
+            {[
+              { href: '#features', label: 'Features' },
+              { href: '#how', label: 'How It Works' },
+              { href: '#compliance', label: 'Compliance' },
+            ].map(({ href, label }) => (
+              <a
+                key={href}
+                href={href}
+                onClick={() => setMobileNavOpen(false)}
+                className="transition hover:bg-[rgba(14,42,92,0.05)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0E2A5C]"
+                style={{
+                  display: 'block',
+                  padding: '13px 14px',
+                  borderRadius: 10,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: '#3A4A6B',
+                  textDecoration: 'none',
+                }}
+              >
+                {label}
+              </a>
+            ))}
+            <div style={{ height: 1, background: 'rgba(14,42,92,0.08)', margin: '8px 0' }} />
+            <Link
+              to="/login"
+              onClick={() => setMobileNavOpen(false)}
+              className="transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0E2A5C]"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '13px 14px',
+                borderRadius: 10,
+                fontSize: 15,
+                fontWeight: 700,
+                color: '#FAFAF6',
+                background: navy,
+                textDecoration: 'none',
+                boxShadow: `0 2px 0 ${navyDeep}`,
+              }}
+            >
+              Go to Portal <span style={{ color: gold }}>→</span>
+            </Link>
+          </div>
+        )}
       </nav>
 
       <main id="main">

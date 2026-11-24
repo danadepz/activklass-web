@@ -197,13 +197,17 @@ export function QuestionView({ q, answer, setAnswer }) {
     return (
       <div className="flex flex-col gap-2.5">
         {lefts.map((left, i) => (
-          <div key={i} className="flex items-center gap-3" style={{ background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '11px 14px' }}>
-            <span style={{ flex: 1, fontSize: 14.5, color: ink }}>{left}</span>
-            <span style={{ color: faint }}>→</span>
+          /* Stack on small phones, inline on sm+. The arrow rotates from → to ↓
+             on mobile so the visual connection still reads. */
+          <div key={i} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3" style={{ background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 12, padding: '11px 14px' }}>
+            <span className="sm:flex-1" style={{ fontSize: 14.5, color: ink }}>{left}</span>
+            <span className="hidden sm:inline" aria-hidden="true" style={{ color: faint }}>→</span>
+            <span className="sm:hidden" aria-hidden="true" style={{ color: faint, fontSize: 12 }}>↓ Match with:</span>
             <select
               value={answer?.[i] ?? ''}
               onChange={(e) => setAnswer({ ...(answer ?? {}), [i]: e.target.value })}
-              style={{ flex: 1, padding: '9px 11px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, cursor: 'pointer' }}
+              style={{ width: '100%', maxWidth: '100%', padding: '9px 11px', fontSize: 14, color: ink, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, cursor: 'pointer' }}
+              className="sm:flex-1"
             >
               <option value="">— choose —</option>
               {choices.map((c) => (
@@ -731,13 +735,14 @@ export function Runner({ quiz, attempt, isResume }) {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
-      {/* Header: progress + timer */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 14 }}>
-        <div>
-          <div style={{ ...serif, fontSize: 22, color: ink, lineHeight: 1.1 }}>{quiz.title}</div>
+      {/* Header: progress + timer — stacks on mobile */}
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap sm:items-center" style={{ marginBottom: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="truncate" style={{ ...serif, fontSize: 20, color: ink, lineHeight: 1.1 }}>{quiz.title}</div>
           <div style={{ fontSize: 12.5, color: muted, marginTop: 2 }}>Question {idx + 1} of {total}</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Full-screen toggle — hidden on mobile since Fullscreen API is unavailable on iOS */}
           <button
             type="button"
             onClick={() => {
@@ -749,7 +754,9 @@ export function Runner({ quiz, attempt, isResume }) {
                 }
               }
             }}
+            className="hidden sm:flex"
             style={{
+              alignItems: 'center',
               padding: '6px 12px',
               fontSize: 12.5,
               fontWeight: 600,
@@ -789,13 +796,13 @@ export function Runner({ quiz, attempt, isResume }) {
         <p role="alert" style={{ fontSize: 13, color: red, background: 'rgba(192,57,43,0.07)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>{error}</p>
       )}
 
-      {/* Nav controls */}
+      {/* Nav controls — 44px minimum touch target height */}
       <div className="flex items-center justify-between" style={{ marginTop: 20 }}>
         {!quiz.prevent_backtracking ? (
           <button
             onClick={() => setIdx((i) => Math.max(0, i - 1))}
             disabled={idx === 0}
-            style={{ padding: '11px 18px', fontSize: 14, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1 }}
+            style={{ minHeight: 44, padding: '11px 18px', fontSize: 14, fontWeight: 700, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 11, cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1 }}
           >
             ← Previous
           </button>
@@ -806,7 +813,7 @@ export function Runner({ quiz, attempt, isResume }) {
           <button
             onClick={() => setIdx((i) => Math.min(total - 1, i + 1))}
             className="transition hover:brightness-110"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
+            style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 20px', fontSize: 14, fontWeight: 700, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
           >
             Next
             <span style={{ display: 'inline-grid', placeItems: 'center', width: 20, height: 20, borderRadius: '50%', background: gold, color: navy }}>
@@ -817,7 +824,7 @@ export function Runner({ quiz, attempt, isResume }) {
           <button
             onClick={() => setConfirm(true)}
             className="transition hover:brightness-110"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', fontSize: 14, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: '0 3px 0 #B89200' }}
+            style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', fontSize: 14, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 11, cursor: 'pointer', boxShadow: '0 3px 0 #B89200' }}
           >
             <Check className="h-4 w-4" /> Submit
           </button>
