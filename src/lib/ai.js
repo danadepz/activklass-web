@@ -912,3 +912,18 @@ export async function predictRiskBatch(students = []) {
     ...shapeRiskResult(raw, built[i]),
   }))
 }
+
+/** One authenticated inference from backend-derived class academic records. */
+export async function predictClassRisk(classId, periodId) {
+  const response = await withAIErrors('scoring student risk', () =>
+    api('/api/predict-class-risk', { method: 'POST', body: { class_id: classId, period_id: periodId } }),
+  )
+  if (response.notification_failures?.length) {
+    console.error('[predictClassRisk] guardian alert delivery failed:', response.notification_failures)
+  }
+  const { results } = response
+  return (results ?? []).map((raw) => ({
+    studentId: raw.student_id,
+    ...shapeRiskResult(raw, raw.indicators ?? {}),
+  }))
+}

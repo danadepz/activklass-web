@@ -423,7 +423,7 @@ export default function PerformancePage() {
               record of marked work, the other a forecast. Merging them would
               let a teacher read a prediction as a result. */}
           <div className="mt-4">
-            <PredictedRisk classId={classId} rows={riskRows} />
+            <PredictedRisk classId={classId} periodId={period.id} rows={riskRows} />
           </div>
         </>
       )}

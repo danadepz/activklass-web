@@ -2,8 +2,9 @@
  * Early-warning predictions for a class, from the Random Forest behind
  * /api/predict.
  *
- * Owned by the logic lane (see OWNERSHIP.md). Assembling the indicators is the
- * whole job, and half of them are rates of change rather than levels:
+ * Owned by the logic lane (see OWNERSHIP.md). The backend assembles the model
+ * inputs from authoritative records and runs the model; this hook retains the
+ * evidence read used to explain the same records to the teacher:
  *
  *   prior_average_grade  0.26 of the model's basis  -- caller supplies from the gradebook
  *   attendance_trend     0.21                       -- recent attendance minus earlier
@@ -36,21 +37,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { useAuth } from '@/context/useAuth'
-import { predictRiskBatch } from '@/lib/ai'
-import { saveClassPerformance } from '@/lib/performance'
+import { predictClassRisk } from '@/lib/ai'
 import {
-  MIN_ATTENDANCE_DAYS,
-  attendanceRateFromMarks,
-  DAY_WEIGHT,
-  missedQuizCountsIfKnown,
-  missingRate,
-  missingWorkCounts,
-  quizAverageFromAttempts,
   quizDueDates,
   quizEvidence,
-  quizTrendFromAttempts,
-  splitTrend,
   workEvidence,
 } from '@/lib/riskSignals'
 import { sessionLedger, studentAttendanceEvidence } from '@/lib/attendanceSessions'
@@ -68,8 +58,6 @@ async function attendanceSignals(classId) {
   const forStudent = (studentId) => {
     const ev = studentAttendanceEvidence(days, studentId)
     return {
-      rate: attendanceRateFromMarks(ev.statuses),
-      trend: splitTrend(ev.statuses.map((s) => DAY_WEIGHT[s]), MIN_ATTENDANCE_DAYS),
       evidence: {
         held_sessions: ev.heldSessions,
         marks: ev.statuses.length,
@@ -118,11 +106,7 @@ async function quizSignals(classId) {
  * list and the record columns -- so it runs once everything is loaded.
  */
 function quizFigures(list, quizDates) {
-  return {
-    average: quizAverageFromAttempts(list),
-    trend: quizTrendFromAttempts(list, quizDates),
-    evidence: quizEvidence(list, quizDates),
-  }
+  return { evidence: quizEvidence(list, quizDates) }
 }
 
 /** Every quiz pointed at this class, drafts included -- missedQuizCounts
@@ -154,16 +138,17 @@ async function classAssessments(classId) {
  */
 export function useClassRisk(classId, students, options = {}) {
   const ids = (students ?? []).map((s) => s.student_id).sort().join(',')
-  // `riskGrade` when the caller supplies one -- null there means "no valid
-  // graded work" (A2) and must NOT fall back to the displayed grade.
-  const gradeOf = (s) => ('riskGrade' in s ? s.riskGrade : s.grade) ?? undefined
-  const grades = JSON.stringify((students ?? []).map((s) => [s.student_id, gradeOf(s) ?? null]))
-  const { profile } = useAuth()
-
+  // Cache invalidation only: grade values are never sent to the prediction API.
+  const gradeRevision = JSON.stringify((students ?? []).map((s) => [
+    s.student_id, ('riskGrade' in s ? s.riskGrade : s.grade) ?? null,
+  ]))
   return useQuery({
     ...options,
-    queryKey: ['class-risk', classId, ids, grades],
+    queryKey: ['class-risk', classId, options.periodId, ids, gradeRevision],
     enabled: !!classId && (students ?? []).length > 0 && (options.enabled ?? true),
+    // This request also delivers alerts. The backend already retries each
+    // guardian write; automatic query retries would rerun the model needlessly.
+    retry: false,
     // The model is deterministic for a given input, so there is nothing to gain
     // from refetching on every focus.
     staleTime: 5 * 60 * 1000,
@@ -198,11 +183,6 @@ export function useClassRisk(classId, students, options = {}) {
       const att = Object.fromEntries(students.map((s) => [s.student_id, attendance.forStudent(s.student_id)]))
       // Per student: a Set when the excusal read succeeded (empty = none), undefined when it failed.
       const excusedOf = (id) => (excused === undefined ? undefined : excused[id] ?? new Set())
-      // The attempts read succeeded (a failure fails the whole query), so no attempt means none.
-      const attemptedOf = (id) => quizzes.attempted[id] ?? new Set()
-      // Unknown excusals while a closed quiz was expected -> undefined: the
-      // rate is withheld and the model answers Insufficient Data.
-      const quizWorkOf = (id) => missedQuizCountsIfKnown(quizBank, attemptedOf(id), id, excusedOf(id), now)
       const evidence = Object.fromEntries(students.map((s) => [s.student_id, {
         sessions,
         attendance: att[s.student_id].evidence,
@@ -213,45 +193,13 @@ export function useClassRisk(classId, students, options = {}) {
         },
       }]))
 
-      const payload = students.map((s) => ({
-        studentId: s.student_id,
-        indicators: {
-          attendanceRate: att[s.student_id].rate,
-          attendanceTrend: att[s.student_id].trend,
-          priorAverageGrade: gradeOf(s),
-          quizAverage: quizBy[s.student_id].average,
-          quizTrend: quizBy[s.student_id].trend,
-          // Pooled: assessments the teacher marked missing, plus quizzes whose
-          // window closed with no attempt. The second half is invisible in
-          // quiz_attempts by construction -- there is no document to find.
-          missingWorkRate: quizWorkOf(s.student_id)
-            ? missingRate(missingWorkCounts(assessments, s.student_id), quizWorkOf(s.student_id))
-            : undefined,
-        },
-      }))
-
-      const results = await predictRiskBatch(payload)
-      // Evidence rides beside the model's answer; it never changes it. Six
-      // present features are what the model needs -- the counts are what a
-      // teacher needs to judge how much that answer rests on.
+      // The backend derives the six indicators from authorized source records,
+      // runs the existing model once, stores the result and delivers alerts.
+      // No client-computed indicators or result snapshots are sent.
+      const results = await predictClassRisk(classId, options.periodId)
       const byStudent = Object.fromEntries(
         results.map((r) => [r.studentId, { ...r, evidence: evidence[r.studentId] ?? null }]),
       )
-
-      /* Write the run down. Derived data, so a failure here is not the caller's
-         problem -- the panel renders from `byStudent` either way and the next
-         load recomputes. Only a teacher who owns the class may write, which the
-         rules enforce; for anyone else this is a no-op that is swallowed. */
-      saveClassPerformance({
-        classId,
-        teacherId: profile?.id,
-        entries: payload.map((p) => ({
-          studentId: p.studentId,
-          indicators: p.indicators,
-          grade: students.find((s) => s.student_id === p.studentId)?.grade ?? null,
-          result: byStudent[p.studentId],
-        })),
-      }).catch(() => { /* snapshot is best-effort */ })
 
       return byStudent
     },

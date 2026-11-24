@@ -22,8 +22,8 @@ import { ink, muted, faint, green, red, goldDeep, line, serif, mono } from '@/th
  * early in a term the model is working from less than it looks. A teacher
  * needs to know that before acting on a green flag.
  */
-export default function PredictedRisk({ classId, rows }) {
-  const { data, isLoading, isError, error } = useClassRisk(classId, rows)
+export default function PredictedRisk({ classId, periodId, rows }) {
+  const { data, isLoading, isError, error } = useClassRisk(classId, rows, { periodId })
 
   const shell = {
     background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: '20px 22px',

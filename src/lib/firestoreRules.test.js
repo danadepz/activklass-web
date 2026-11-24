@@ -2297,8 +2297,8 @@ describe('T-213 — teacher profiles, syllabi and announcements are scoped to wh
     await assertFails(getDoc(doc(ctx(FOREIGN_SCHOOL_ADMIN), 'announcements', 'ann-mine')))
   })
 
-  it('still lets a parent read an announcement (documented known breadth, not scoped by this card)', async () => {
-    await assertSucceeds(getDoc(doc(ctx(PARENT), 'announcements', 'ann-mine')))
+  it('FINDING-12: refuses a parent reading an announcement directly (must use /api/parent/announcements)', async () => {
+    await assertFails(getDoc(doc(ctx(PARENT), 'announcements', 'ann-mine')))
   })
 
   // List queries -- what the student class screens (web and mobile) actually
@@ -2343,8 +2343,445 @@ describe('T-213 — teacher profiles, syllabi and announcements are scoped to wh
       await assertSucceeds(getDocs(query(collection(ctx(TEACHER), 'announcements'), where('teacher_id', '==', TEACHER))))
     })
 
-    it('still lets a parent list a class by class_id (mobile parent shape, documented breadth)', async () => {
-      await assertSucceeds(getDocs(query(collection(ctx(PARENT), 'announcements'), where('class_id', '==', 'class-1'))))
+    it('FINDING-12: refuses a parent listing announcements by class_id directly (must use /api/parent/announcements)', async () => {
+      await assertFails(getDocs(query(collection(ctx(PARENT), 'announcements'), where('class_id', '==', 'class-1'))))
+    })
+  })
+})
+
+/**
+ * FINDING-12 (audit 2026-11-24, revised owner requirement) — guardian
+ * announcement access was unscoped, and guardians must not access general
+ * announcements at all.
+ *
+ * Before this fix, `isParent()` in the announcement read rule let any
+ * authenticated guardian read any school's free-text announcement bodies.
+ * The fix removes `isParent()` entirely from the announcement rule.
+ * Guardians receive only high-risk notifications about their authorized linked
+ * children, written server-side by POST /api/notify-guardian-risk. The
+ * announcement tab has been removed from the mobile parent class screen.
+ *
+ * Part A: announces collection — all guardian reads are refused.
+ * Part B: notifications collection — guardians can read/mark-read their own
+ *         high_risk_alert notifications (enforced by the existing
+ *         notifications rule: `signedIn() && resource.data.user_id == request.auth.uid`).
+ *
+ * Scenarios 1–6 test announcement denial; scenario 7 tests unauthenticated
+ * access; scenario 8 is a regression suite for teachers/students/admins.
+ * Scenario 9 covers the notifications read rule for high-risk alerts.
+ */
+describe('FINDING-12 — guardian announcement access is now server-enforced, not client-filterable', () => {
+  const F12_TEACHER = 'teacher-f12'
+  const F12_OTHER_TEACHER = 'teacher-f12-other'
+  const F12_STUDENT = 'student-f12'
+  const F12_GUARDIAN = 'guardian-f12'
+  const F12_GUARDIAN_NO_CHILD = 'guardian-f12-nolink'
+  const F12_GUARDIAN_REVOKED = 'guardian-f12-revoked'
+  const F12_GUARDIAN_MULTI = 'guardian-f12-multi'
+  const F12_STUDENT_B = 'student-f12-b'
+  const F12_ADMIN = 'admin-f12'
+
+  const ann1 = 'ann-f12-class1'
+  const ann2 = 'ann-f12-other-class'
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const adb = admin.firestore()
+
+      // Teachers
+      await setDoc(doc(adb, 'users', F12_TEACHER), {
+        role: 'teacher', first_name: 'F', last_name: 'T', school_id: 'school-f12',
+      })
+      await setDoc(doc(adb, 'users', F12_OTHER_TEACHER), {
+        role: 'teacher', first_name: 'O', last_name: 'T', school_id: 'school-f12-other',
+      })
+
+      // Students — teacher_ids drives the student rule, but is irrelevant to guardian tests
+      await setDoc(doc(adb, 'users', F12_STUDENT), {
+        role: 'student', first_name: 'S', last_name: 'F', teacher_ids: [F12_TEACHER],
+      })
+      await setDoc(doc(adb, 'users', F12_STUDENT_B), {
+        role: 'student', first_name: 'S', last_name: 'B', teacher_ids: [F12_TEACHER],
+      })
+
+      // Guardians
+      await setDoc(doc(adb, 'users', F12_GUARDIAN), { role: 'parent', first_name: 'G', last_name: 'F' })
+      await setDoc(doc(adb, 'users', F12_GUARDIAN_NO_CHILD), { role: 'parent', first_name: 'G', last_name: 'N' })
+      await setDoc(doc(adb, 'users', F12_GUARDIAN_REVOKED), { role: 'parent', first_name: 'G', last_name: 'R' })
+      await setDoc(doc(adb, 'users', F12_GUARDIAN_MULTI), { role: 'parent', first_name: 'G', last_name: 'M' })
+
+      // Admin
+      await setDoc(doc(adb, 'users', F12_ADMIN), {
+        role: 'admin', first_name: 'A', last_name: 'D', school_id: 'school-f12',
+      })
+
+      // Guardian links: approved link for F12_GUARDIAN → F12_STUDENT
+      await setDoc(doc(adb, 'guardian_links', `${F12_STUDENT}_${F12_GUARDIAN}`), {
+        student_uid: F12_STUDENT, guardian_uid: F12_GUARDIAN, status: 'approved', is_minor: true,
+        scopes: { can_view_grades: true, can_view_quiz_scores: true, can_view_attendance: true, can_view_analytics: true },
+      })
+
+      // Multi-child guardian: approved links to both students
+      await setDoc(doc(adb, 'guardian_links', `${F12_STUDENT}_${F12_GUARDIAN_MULTI}`), {
+        student_uid: F12_STUDENT, guardian_uid: F12_GUARDIAN_MULTI, status: 'approved', is_minor: true,
+        scopes: { can_view_grades: true, can_view_quiz_scores: true, can_view_attendance: true, can_view_analytics: true },
+      })
+      await setDoc(doc(adb, 'guardian_links', `${F12_STUDENT_B}_${F12_GUARDIAN_MULTI}`), {
+        student_uid: F12_STUDENT_B, guardian_uid: F12_GUARDIAN_MULTI, status: 'approved', is_minor: true,
+        scopes: { can_view_grades: true, can_view_quiz_scores: true, can_view_attendance: true, can_view_analytics: true },
+      })
+
+      // Revoked link — the guardian_links doc was deleted (the rule's delete path)
+      // so there is intentionally NO guardian_links document for this pair.
+      // F12_GUARDIAN_NO_CHILD has no guardian_links doc at all.
+
+      // Announcements
+      await setDoc(doc(adb, 'announcements', ann1), {
+        teacher_id: F12_TEACHER, class_id: 'class-f12', title: 'Quiz Friday', body: 'Bring a calculator.',
+      })
+      await setDoc(doc(adb, 'announcements', ann2), {
+        teacher_id: F12_OTHER_TEACHER, class_id: 'class-f12-other', title: 'Lab report', body: 'Due Monday.',
+      })
+    })
+  })
+
+  // Scenario 1 — FINDING-12: guardian with an approved link cannot access
+  // announcements directly via Firestore (must go through the API).
+  // Before the fix, this passed. After the fix, it must fail.
+  it('Sc1: refuses a guardian with an approved link reading an announcement directly', async () => {
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN), 'announcements', ann1)))
+  })
+
+  it('Sc1: refuses a guardian with an approved link listing announcements by class_id directly', async () => {
+    await assertFails(
+      getDocs(query(collection(ctx(F12_GUARDIAN), 'announcements'), where('class_id', '==', 'class-f12')))
+    )
+  })
+
+  // Scenario 2 — guardian cannot read announcements from an unrelated class
+  // within the same school (also blocked at the Firestore layer now)
+  it('Sc2: refuses a guardian reading an announcement from an unrelated class at the same school', async () => {
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN), 'announcements', ann2)))
+  })
+
+  // Scenario 3 — guardian cannot read announcements from another school
+  it('Sc3: refuses a guardian reading an announcement from a different school', async () => {
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN), 'announcements', ann2)))
+  })
+
+  // Scenario 4 — guardian with multiple linked children: still blocked at the
+  // Firestore layer regardless of the number of children
+  it('Sc4: refuses a multi-child guardian reading announcements directly', async () => {
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN_MULTI), 'announcements', ann1)))
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN_MULTI), 'announcements', ann2)))
+  })
+
+  // Scenario 5 — guardian with no linked children is refused
+  it('Sc5: refuses a guardian with no linked children', async () => {
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN_NO_CHILD), 'announcements', ann1)))
+  })
+
+  // Scenario 6 — guardian whose link was revoked (doc deleted) is refused
+  it('Sc6: refuses a guardian whose link was revoked', async () => {
+    // F12_GUARDIAN_REVOKED has no guardian_links document — same state as after revoke.
+    await assertFails(getDoc(doc(ctx(F12_GUARDIAN_REVOKED), 'announcements', ann1)))
+  })
+
+  // Scenario 7 — unauthenticated access is refused
+  it('Sc7: refuses unauthenticated read of an announcement', async () => {
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'announcements', ann1)))
+  })
+
+  // Scenario 8 — regression: teacher, student, and admin access is preserved
+  it('Sc8 regression: owning teacher can still read their own announcement', async () => {
+    await assertSucceeds(getDoc(doc(ctx(F12_TEACHER), 'announcements', ann1)))
+  })
+
+  it('Sc8 regression: same-school admin can still read an announcement', async () => {
+    await assertSucceeds(getDoc(doc(ctx(F12_ADMIN), 'announcements', ann1)))
+  })
+
+  it('Sc8 regression: an enrolled student (teacher_ids match) can still read an announcement', async () => {
+    await assertSucceeds(getDoc(doc(ctx(F12_STUDENT), 'announcements', ann1)))
+  })
+
+  it('Sc8 regression: teacher can still create an announcement for their own class', async () => {
+    await assertSucceeds(
+      setDoc(doc(ctx(F12_TEACHER), 'announcements', 'ann-new-f12'), {
+        teacher_id: F12_TEACHER, class_id: 'class-f12', title: 'New', body: 'Announcement.',
+      })
+    )
+  })
+
+  it('Sc8 regression: teacher can still delete their own announcement', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(F12_TEACHER), 'announcements', ann1)))
+  })
+
+  it('Sc8 regression: same-school admin can still delete an announcement', async () => {
+    await assertSucceeds(deleteDoc(doc(ctx(F12_ADMIN), 'announcements', ann1)))
+  })
+
+  // Scenario 9 — notifications rule: guardians can read their own
+  // high_risk_alert notification (written by the Admin SDK, so bypasses
+  // the client create rule).
+  //
+  // FINDING-12 multi-guardian fix: doc id is now per-guardian
+  //   {student_id}_high_risk_{class_id}_{guardian_uid}
+  // so two guardians linked to the same student each get their own document.
+  describe('Sc9: guardian can read and mark-read their own high-risk notification', () => {
+    // Per-guardian doc id (fixed from the shared id in the first implementation)
+    const notifIdG1 = `${F12_STUDENT}_high_risk_class-f12_${F12_GUARDIAN}`
+    const notifIdG2 = `${F12_STUDENT}_high_risk_class-f12_${F12_GUARDIAN_MULTI}`
+
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        const adb = admin.firestore()
+        // Simulates what POST /api/notify-guardian-risk writes via Admin SDK
+        // for guardian 1.
+        await setDoc(doc(adb, 'notifications', notifIdG1), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'high_risk_alert',
+          message: 'Your child has been flagged as HIGH RISK in Math.',
+          risk_score: 0.72,
+          link: null,
+          read: false,
+          created_at: new Date(),
+        })
+        // Simulates a second guardian linked to the same student — their
+        // document is entirely separate (different id, different user_id).
+        await setDoc(doc(adb, 'notifications', notifIdG2), {
+          user_id: F12_GUARDIAN_MULTI,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'high_risk_alert',
+          message: 'Your child has been flagged as HIGH RISK in Math.',
+          risk_score: 0.72,
+          link: null,
+          read: false,
+          created_at: new Date(),
+        })
+      })
+    })
+
+    it('lets the addressed guardian (G1) read their high-risk notification', async () => {
+      await assertSucceeds(getDoc(doc(ctx(F12_GUARDIAN), 'notifications', notifIdG1)))
+    })
+
+    it('lets a second linked guardian (G2) read their own notification', async () => {
+      await assertSucceeds(getDoc(doc(ctx(F12_GUARDIAN_MULTI), 'notifications', notifIdG2)))
+    })
+
+    it('multi-guardian isolation: G1 cannot read G2\'s notification', async () => {
+      // The per-guardian doc id ensures each guardian's notification is
+      // only readable by that specific guardian.
+      await assertFails(getDoc(doc(ctx(F12_GUARDIAN), 'notifications', notifIdG2)))
+    })
+
+    it('multi-guardian isolation: G2 cannot read G1\'s notification', async () => {
+      await assertFails(getDoc(doc(ctx(F12_GUARDIAN_MULTI), 'notifications', notifIdG1)))
+    })
+
+    it('lets the guardian flip the read flag', async () => {
+      await assertSucceeds(
+        updateDoc(doc(ctx(F12_GUARDIAN), 'notifications', notifIdG1), { read: true })
+      )
+    })
+
+    it('refuses the guardian editing any field other than read', async () => {
+      await assertFails(
+        updateDoc(doc(ctx(F12_GUARDIAN), 'notifications', notifIdG1), { message: 'Tampered' })
+      )
+    })
+
+    it('refuses a guardian with no linked children reading any notification', async () => {
+      await assertFails(getDoc(doc(ctx(F12_GUARDIAN_NO_CHILD), 'notifications', notifIdG1)))
+    })
+
+    it('refuses an unauthenticated user reading a notification', async () => {
+      await assertFails(
+        getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'notifications', notifIdG1))
+      )
+    })
+
+    it('refuses a guardian creating their own notification (must come from server)', async () => {
+      await assertFails(
+        setDoc(doc(ctx(F12_GUARDIAN), 'notifications', 'self-written-notif'), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          created_by: F12_GUARDIAN,
+          type: 'high_risk_alert',
+          message: 'Self-written fake alert.',
+          read: false,
+        })
+      )
+    })
+  })
+
+  // Scenario 10 — risk_notification_state is a backend-internal collection;
+  // no client can read or write it.
+  describe('Sc10: risk_notification_state is inaccessible to all clients', () => {
+    const stateId = `${F12_STUDENT}_class-f12_${F12_GUARDIAN}`
+
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        await setDoc(doc(admin.firestore(), 'risk_notification_state', stateId), {
+          student_id: F12_STUDENT, class_id: 'class-f12', guardian_uid: F12_GUARDIAN,
+          last_notified_flag: 'high_risk', last_notified_at: new Date(),
+        })
+      })
+    })
+
+    it('refuses a teacher reading risk_notification_state', async () => {
+      await assertFails(getDoc(doc(ctx(F12_TEACHER), 'risk_notification_state', stateId)))
+    })
+
+    it('refuses a guardian reading risk_notification_state', async () => {
+      await assertFails(getDoc(doc(ctx(F12_GUARDIAN), 'risk_notification_state', stateId)))
+    })
+
+    it('refuses a teacher writing to risk_notification_state', async () => {
+      await assertFails(
+        setDoc(doc(ctx(F12_TEACHER), 'risk_notification_state', 'fake'), {
+          student_id: F12_STUDENT, class_id: 'class-f12', guardian_uid: F12_GUARDIAN,
+          last_notified_flag: 'on_track',
+        })
+      )
+    })
+
+    it('refuses an admin reading risk_notification_state', async () => {
+      await assertFails(getDoc(doc(ctx(F12_ADMIN), 'risk_notification_state', stateId)))
+    })
+
+    it('refuses unauthenticated access to risk_notification_state', async () => {
+      await assertFails(
+        getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'risk_notification_state', stateId))
+      )
+    })
+  })
+
+  // Scenario 11 — FINDING-12 Defect 2 (v3): a teacher client must NOT be able
+  // to create notifications directly.  The backend uses Admin SDK (bypasses
+  // rules), so denying all client creates is safe and closes the
+  // arbitrary-type notification path that the previous rule left open.
+  describe('Sc11 (Defect 2): no client may create a notification directly', () => {
+    const notifIdG1 = `${F12_STUDENT}_high_risk_class-f12_${F12_GUARDIAN}`
+
+    it('refuses a teacher creating a high_risk_alert notification (must come from server)', async () => {
+      await assertFails(
+        setDoc(doc(ctx(F12_TEACHER), 'notifications', notifIdG1), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'high_risk_alert',
+          message: 'Teacher-fabricated alert.',
+          risk_score: 0.99,
+          read: false,
+        })
+      )
+    })
+
+    it('refuses a teacher creating an arbitrary-type notification for a guardian', async () => {
+      await assertFails(
+        setDoc(doc(ctx(F12_TEACHER), 'notifications', 'arb-type-notif'), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'other_type',
+          message: 'Arbitrary notification type.',
+          read: false,
+        })
+      )
+    })
+
+    it('refuses an admin creating a notification via client SDK', async () => {
+      await assertFails(
+        setDoc(doc(ctx(F12_ADMIN), 'notifications', 'admin-created-notif'), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          created_by: F12_ADMIN,
+          type: 'high_risk_alert',
+          message: 'Admin-created.',
+          read: false,
+        })
+      )
+    })
+  })
+
+  // Scenario 12 — FINDING-12 Defect 3 (v3): a guardian must lose read access
+  // to their notifications once their guardian link is revoked (deleted).
+  // Previously the read rule checked only user_id == request.auth.uid, so the
+  // guardian could still read old notifications after the link was removed.
+  describe('Sc12 (Defect 3): revoked guardian loses read access to their notifications', () => {
+    const notifId = `${F12_STUDENT}_high_risk_class-f12_${F12_GUARDIAN_REVOKED}`
+
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        const adb = admin.firestore()
+        // Seed a notification addressed to F12_GUARDIAN_REVOKED. There is
+        // intentionally NO guardian_links document for this guardian (the link
+        // was revoked/deleted), matching the state at the time of the finding.
+        await setDoc(doc(adb, 'notifications', notifId), {
+          user_id: F12_GUARDIAN_REVOKED,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'high_risk_alert',
+          message: 'High-risk alert issued before revocation.',
+          risk_score: 0.81,
+          link: null,
+          read: false,
+          created_at: new Date(),
+        })
+      })
+    })
+
+    it('refuses a revoked guardian reading a notification about the removed child', async () => {
+      // F12_GUARDIAN_REVOKED has no guardian_links doc → hasApprovedGuardianLink
+      // returns false → read is denied even though user_id matches.
+      await assertFails(getDoc(doc(ctx(F12_GUARDIAN_REVOKED), 'notifications', notifId)))
+    })
+
+    it('still lets an approved guardian read their notification after fix', async () => {
+      // F12_GUARDIAN has an approved link; their notification must still be readable.
+      const approvedNotifId = `${F12_STUDENT}_high_risk_class-f12_${F12_GUARDIAN}`
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        await setDoc(doc(admin.firestore(), 'notifications', approvedNotifId), {
+          user_id: F12_GUARDIAN,
+          class_id: 'class-f12',
+          student_id: F12_STUDENT,
+          created_by: F12_TEACHER,
+          type: 'high_risk_alert',
+          message: 'Alert for approved guardian.',
+          read: false,
+          created_at: new Date(),
+        })
+      })
+      await assertSucceeds(getDoc(doc(ctx(F12_GUARDIAN), 'notifications', approvedNotifId)))
+    })
+
+    it('refuses a revoked guardian flipping the read flag', async () => {
+      await assertFails(
+        updateDoc(doc(ctx(F12_GUARDIAN_REVOKED), 'notifications', notifId), { read: true })
+      )
+    })
+  })
+
+  describe('Sc13 (FINDING-12): clients cannot forge risk indicator snapshots', () => {
+    it('refuses an owning teacher writing fabricated prediction inputs or outputs', async () => {
+      await assertFails(setDoc(doc(ctx(F12_TEACHER), 'student_performance', `class-f12_${F12_STUDENT}`), {
+        class_id: 'class-f12',
+        student_id: F12_STUDENT,
+        generated_by: F12_TEACHER,
+        indicators: { prior_average_grade: 0, attendance_rate: 0, quiz_average: 0,
+          attendance_trend: -1, quiz_trend: -100, missing_work_rate: 1 },
+        risk_flag: 'high_risk', prediction_status: 'scored', risk_score: 0.99,
+      }))
     })
   })
 })
