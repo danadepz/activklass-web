@@ -4,7 +4,6 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/useAuth'
 import ChangePassword from '@/components/ChangePassword'
-import SignOutButton from '@/components/SignOutButton'
 import Button from '@/components/ui/Button'
 import {
   changePlan, confirmSeatIncrease, describeSubscription, fetchPlans, fetchSubscription,
@@ -894,30 +893,8 @@ function SchoolInviteCard() {
 }
 
 
-function SignOutCard() {
-  return (
-    <div style={{ ...card, padding: '14px 18px', display: 'flex', alignItems: 'center',
-                  justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-      <div>
-        <h2 style={{ ...serif, fontSize: 18, color: ink, margin: 0 }}>Sign Out</h2>
-        <p style={{ fontSize: 13, color: muted, margin: '2px 0 0' }}>
-          End your session on this device. You will be asked to confirm first.
-        </p>
-      </div>
-      <SignOutButton
-        style={{
-          padding: '9px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans,
-          color: '#FAFAF6', background: red, border: 'none', borderRadius: 10, cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      />
-    </div>
-  )
-}
-
 /** Teacher account page: Update Profile, Update Password, any school invitation,
- *  the solo teacher's Subscription Management module, their teacher group, and
- *  signing out (moved here from the portal header). */
+ *  the solo teacher's Subscription Management module, and their teacher group. */
 export default function TeacherAccountPage() {
   return (
     <div style={{ display: 'grid', gap: 22, maxWidth: 860, margin: '0 auto', width: '100%' }}>
@@ -934,7 +911,6 @@ export default function TeacherAccountPage() {
       <SchoolInviteCard />
       <SubscriptionCard />
       <SchoolColleaguesCard />
-      <SignOutCard />
     </div>
   )
 }

@@ -42,8 +42,8 @@ describe('T-95 — no Sign out left in the student chrome, at any width', () => 
     expect(layoutSrc).not.toMatch(/logout\(\)/)
   })
 
-  it('every original site (desktop avatar, hamburger drawer) now links to the profile card instead', () => {
-    const profileLinks = layoutSrc.match(/to="\/student\/profile"/g) ?? []
+  it('the avatar menu and hamburger drawer both provide a route to Profile', () => {
+    const profileLinks = layoutSrc.match(/(?:profileTo|to)="\/student\/profile"/g) ?? []
     // desktop avatar (was :225) + the mobile drawer row (was :295); the third
     // site (:380) was the confirm modal itself, removed outright -- its job
     // moved to the shared SignOutButton the profile card now renders.
@@ -51,24 +51,26 @@ describe('T-95 — no Sign out left in the student chrome, at any width', () => 
   })
 })
 
-describe('T-95 — the student Profile page is where Sign out lives now', () => {
-  it('imports the same shared confirm-to-sign-out control the teacher account page uses', () => {
-    expect(profileSrc).toMatch(/import SignOutButton from '@\/components\/SignOutButton'/)
+describe('student profile actions', () => {
+  it('provides sign out through the shared header menu', () => {
+    expect(layoutSrc).toContain("import AccountMenu from '@/components/AccountMenu'")
+    expect(profileSrc).not.toContain('SignOutButton')
   })
 
-  it('renders it in a card at the bottom of the page', () => {
+  it('ends with Change Password without a separate sign-out card', () => {
     const bottom = profileSrc.slice(profileSrc.lastIndexOf('export default function StudentProfile'))
-    expect(bottom).toMatch(/<ChangePassword \/>\s*<SignOutCard \/>/)
+    expect(bottom).toContain('<ChangePassword />')
+    expect(bottom).not.toContain('SignOutCard')
   })
 })
 
-describe("T-95 — the teacher layout, the pattern being matched, is untouched", () => {
+describe('teacher account navigation', () => {
   it('still renders Sign out nowhere in its own chrome (it always lived on the account page)', () => {
     expect(teacherLayoutSrc).not.toMatch(/Sign out/)
   })
 
-  it('still links the desktop avatar card and the mobile drawer row to /teacher/account, unchanged', () => {
-    const accountLinks = teacherLayoutSrc.match(/to="\/teacher\/account"/g) ?? []
+  it('provides the account route in the avatar menu and mobile drawer', () => {
+    const accountLinks = teacherLayoutSrc.match(/(?:profileTo|to)="\/teacher\/account"/g) ?? []
     expect(accountLinks.length).toBeGreaterThanOrEqual(2)
   })
 })
@@ -76,7 +78,7 @@ describe("T-95 — the teacher layout, the pattern being matched, is untouched",
 describe('T-110 (triplecookiemonster-141 item 6) — the header card mirrors the teacher side: initials and account id, not the name', () => {
   /** The header's own profile card, not the mobile dropdown's separate row. */
   function headerCardSlice() {
-    const start = layoutSrc.indexOf('to="/student/profile"')
+    const start = layoutSrc.indexOf('profileTo="/student/profile"')
     const end = layoutSrc.indexOf('Hamburger', start)
     return layoutSrc.slice(start, end)
   }

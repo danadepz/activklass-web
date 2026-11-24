@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
+import AccountMenu from '@/components/AccountMenu'
 import { Bell } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
 import { useQuery } from '@tanstack/react-query'
@@ -410,14 +411,12 @@ export default function TeacherLayout() {
               )}
             </div>
 
-            {/* Avatar + account id only (T-110: the name and the plan pill
-                moved off this always-visible card). The card itself is the
-                Account button (there is no separate nav item for it). */}
-            <NavLink
-              to="/teacher/account"
-              aria-label="Account settings"
+            {/* The avatar opens Profile and Sign Out. */}
+            <AccountMenu
+              profile={profile}
+              profileTo="/teacher/account"
               className="group transition duration-200 hover:bg-white/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={({ isActive }) => ({
+              style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -425,8 +424,7 @@ export default function TeacherLayout() {
                 padding: '4px 10px 4px 4px',
                 borderRadius: 999,
                 textDecoration: 'none',
-                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-              })}
+              }}
             >
               <div
                 className="transition-transform duration-200 group-hover:scale-110"
@@ -451,7 +449,7 @@ export default function TeacherLayout() {
                   {profile.login_id ?? profile.email}
                 </div>
               </div>
-            </NavLink>
+            </AccountMenu>
 
             {/* Hamburger — mobile only */}
             <button
@@ -500,7 +498,7 @@ export default function TeacherLayout() {
               </NavLink>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-            {/* Profile row doubles as the Account link, same as the desktop card. */}
+            {/* Account shortcut in the navigation drawer. */}
             <NavLink
               to="/teacher/account"
               onClick={closeMenu}
