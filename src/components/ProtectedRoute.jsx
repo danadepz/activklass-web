@@ -1,11 +1,36 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { schoolApprovedUnpaid, schoolSuspended } from '../lib/schoolStatus'
+import RouteFallback from './RouteFallback'
 
-function FullScreenMessage({ children }) {
+function FullScreenError({ children }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500">
-      {children}
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-100 px-6 text-center">
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: 'rgba(14,42,92,0.08)',
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        {/* Warning icon drawn in brand navy, no external dep */}
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="10" stroke="#0E2A5C" strokeWidth="1.6" />
+          <line x1="11" y1="6.5" x2="11" y2="12.5" stroke="#0E2A5C" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="11" cy="15.5" r="1" fill="#0E2A5C" />
+        </svg>
+      </div>
+      <p className="max-w-sm text-sm font-medium text-slate-600">{children}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+        style={{ background: '#0E2A5C' }}
+      >
+        Try again
+      </button>
     </div>
   )
 }
@@ -34,14 +59,14 @@ export default function ProtectedRoute({
 }) {
   const { status, profile, school, errorDetail, isSuperAdmin } = useAuth()
 
-  if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
+  if (status === 'loading') return <RouteFallback full />
   if (status === 'signed_out') return <Navigate to="/login" replace />
   if (status === 'not_registered') return <Navigate to="/register" replace />
   if (status === 'error') {
     return (
-      <FullScreenMessage>
-        {errorDetail ?? 'Could not reach the ActivKlass server. Is the API running?'}
-      </FullScreenMessage>
+      <FullScreenError>
+        {errorDetail ?? 'Something went wrong while loading your account. Please try again.'}
+      </FullScreenError>
     )
   }
   /* An account an admin provisioned starts on a password an admin chose, and
@@ -86,9 +111,6 @@ export default function ProtectedRoute({
 
 function awaitingVerification(profile) {
   const v = profile?.verification_status
-  // An existing account verifying only to pay (teacher/account.jsx) keeps its
-  // classes open while it waits; the backend still refuses payment until approved.
-  if (profile?.verification_context === 'payment') return false
   return profile?.role === 'teacher' && Boolean(v) && v !== 'approved'
 }
 
@@ -96,14 +118,14 @@ function awaitingVerification(profile) {
 /** Sends "/" to the right home page per role. */
 export function RoleHomeRedirect() {
   const { status, profile, school, errorDetail, isSuperAdmin } = useAuth()
-  if (status === 'loading') return <FullScreenMessage>Loading…</FullScreenMessage>
+  if (status === 'loading') return <RouteFallback full />
   if (status === 'signed_out') return <Navigate to="/login" replace />
   if (status === 'not_registered') return <Navigate to="/register" replace />
   if (status === 'error') {
     return (
-      <FullScreenMessage>
-        {errorDetail ?? 'Could not reach the ActivKlass server. Is the API running?'}
-      </FullScreenMessage>
+      <FullScreenError>
+        {errorDetail ?? 'Something went wrong while loading your account. Please try again.'}
+      </FullScreenError>
     )
   }
   // Still on the password staff issued: finish that before anything else.

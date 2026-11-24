@@ -48,7 +48,6 @@ export default function AdminPage() {
   // ref for the tab panel so the active tabpanel is correctly associated
   const panelId = (key) => `admin-panel-${key}`
   const tabId = (key) => `admin-tab-${key}`
-
   // Keep the scrollbar track present on every tab. Tabs differ in height, so
   // without this the scrollbar appears and disappears as you switch and the
   // whole bar (title, account menu, tabs) jumps sideways by its width.

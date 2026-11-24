@@ -7,8 +7,10 @@ import { fetchUsersByIds, ageFromBirthdate, isDroppedFromClass } from '@/lib/ros
 import { loadStudentEntry, loadStudentAttendance, loadSyllabus } from '@/lib/studentData'
 import { TrendingUp, CalendarCheck, BookOpen, AlertCircle, ShieldCheck, ChevronRight } from '@/components/icons'
 import { navy, ink, gold, goldDeep, muted, faint, blueText, line, serif, mono } from '@/theme'
+import Button from '@/components/ui/Button'
 import { formatGrade, gradeAsPercent, gradeTone } from './gradeDisplay'
 import UpNextPanel from './deliverables/UpNextPanel'
+import ClassStandingForecast from '@/components/ClassStandingForecast'
 
 
 /* Animated circular gauge (SVG). `value` is 0–100; `null` shows a dash. */
@@ -17,9 +19,16 @@ function Gauge({ value, size = 132, stroke = 12, color = gold, label, sublabel }
   const circ = 2 * Math.PI * r
   const pct = value == null ? 0 : Math.max(0, Math.min(100, value))
   const offset = circ - (pct / 100) * circ
+  const accessibleLabel = value == null
+    ? `${sublabel}: not yet available`
+    : `${sublabel}: ${Math.round(value)}${label ?? ''}`
   return (
-    <div style={{ position: 'relative', width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+    <div
+      role="img"
+      aria-label={accessibleLabel}
+      style={{ position: 'relative', width: size, height: size }}
+    >
+      <svg width={size} height={size} aria-hidden="true" style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={stroke} />
         <circle
           cx={size / 2}
@@ -178,8 +187,24 @@ export default function StudentDashboard() {
 
   if (status === 'loading' || !profile?.id) {
     return (
-      <div style={{ color: faint, padding: 32 }}>
-        Loading student dashboard…
+      <div>
+        {/* Hero skeleton */}
+        <div
+          className="animate-pulse"
+          style={{ borderRadius: 22, background: 'rgba(14,42,92,0.08)', height: 160, marginBottom: 32 }}
+          role="status"
+          aria-label="Loading student dashboard…"
+        />
+        {/* Class card skeletons */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="animate-pulse"
+              style={{ height: 168, borderRadius: 16, background: '#FFFFFF', border: `1px solid ${line}` }}
+            />
+          ))}
+        </div>
       </div>
     )
   }
@@ -187,16 +212,13 @@ export default function StudentDashboard() {
   if (isError) {
     return (
       <div style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 16, padding: 36, textAlign: 'center' }}>
-        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could Not Load Dashboard</h3>
+        <h3 style={{ ...serif, fontSize: 22, color: ink, margin: '0 0 6px' }}>Could not load dashboard</h3>
         <p style={{ fontSize: 14, color: muted, margin: '0 0 16px' }}>
           {error?.message || 'We ran into a problem loading your classes. Please try again.'}
         </p>
-        <button
-          onClick={() => refetch()}
-          style={{ padding: '9px 18px', fontSize: 13.5, fontWeight: 700, color: navy, background: gold, border: 'none', borderRadius: 9, cursor: 'pointer' }}
-        >
+        <Button variant="primary" size="sm" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     )
   }
@@ -295,6 +317,17 @@ export default function StudentDashboard() {
               Your parent/guardian is requesting access to view your academic performance.
             </Banner>
           )}
+        </div>
+      )}
+
+      {/* Projected Academic Standing (Early-Warning Model) matching mobile dashboard */}
+      {profile?.id && (
+        <div className="mt-6">
+          <ClassStandingForecast
+            studentId={profile.id}
+            grade={mastery}
+            attendanceRate={attendanceRate}
+          />
         </div>
       )}
 

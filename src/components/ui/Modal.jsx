@@ -1,5 +1,4 @@
 import { useId } from 'react'
-import { createPortal } from 'react-dom'
 import { ink, muted, line, sansFamily, serifFamily } from '@/theme'
 import { IconButton } from '@/components/ui/Button'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -53,10 +52,7 @@ export default function Modal({
 
   if (!open) return null
 
-  // Portal to <body>: an ancestor with a transform (AuthLayout's ak-swap
-  // animation) would otherwise trap this position:fixed overlay inside its own
-  // box and push the footer below the screen. No document under SSR tests.
-  const dialog = (
+  return (
     <div
       {...overlayProps}
       style={{
@@ -96,6 +92,7 @@ export default function Modal({
               gap: 12,
               padding: '26px 28px 0',
               textAlign: align,
+              flexShrink: 0,
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -144,6 +141,7 @@ export default function Modal({
               padding: '22px 28px 26px',
               marginTop: 22,
               borderTop: `1px solid ${line}`,
+              flexShrink: 0,
             }}
           >
             {footer}
@@ -152,6 +150,4 @@ export default function Modal({
       </div>
     </div>
   )
-
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body)
 }

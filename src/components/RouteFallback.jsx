@@ -18,9 +18,9 @@ export default function RouteFallback({ full = false }) {
       role="status"
       aria-live="polite"
     >
-      <span className="flex items-center gap-3 text-slate-500">
+      <span className="flex items-center gap-3 text-slate-400">
         <span
-          className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-indigo-600 animate-spin"
+          className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-[#0E2A5C]"
           aria-hidden="true"
         />
         Loading…

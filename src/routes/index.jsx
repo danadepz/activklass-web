@@ -297,22 +297,22 @@ export default function Landing() {
             </div>
 
             {/* trust row */}
-            <div className="flex items-center gap-6" style={{ paddingTop: 24, borderTop: `1px solid ${line}` }}>
+            <dl className="flex items-center gap-6" style={{ paddingTop: 24, borderTop: `1px solid ${line}`, margin: 0 }}>
               {TRUST.map((t, i) => (
                 <div key={t.label} className="flex items-center gap-6">
-                  {i > 0 && <div style={{ width: 1, height: 36, background: 'rgba(14,42,92,0.1)' }} />}
+                  {i > 0 && <div aria-hidden="true" style={{ width: 1, height: 36, background: 'rgba(14,42,92,0.1)' }} />}
                   <div>
-                    <div style={{ ...serif, fontSize: 28, color: navy, lineHeight: 1 }}>
+                    <dd style={{ ...serif, fontSize: 28, color: navy, lineHeight: 1, margin: 0 }}>
                       {t.stat}
                       {t.suffix && <span style={{ color: gold }}>{t.suffix}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: muted, fontWeight: 500, marginTop: 4 }}>
+                    </dd>
+                    <dt style={{ fontSize: 12, color: muted, fontWeight: 500, marginTop: 4 }}>
                       {t.label}
-                    </div>
+                    </dt>
                   </div>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
 
           {/* Hero visual: stylized gradebook card stack */}
@@ -330,6 +330,7 @@ export default function Landing() {
 
             {/* Back card: skill mastery heatmap */}
             <div
+              aria-hidden="true"
               className="ak-hero-card"
               style={{
                 position: 'absolute',
@@ -373,6 +374,7 @@ export default function Landing() {
 
             {/* Front card: gradebook row */}
             <div
+              aria-hidden="true"
               className="ak-hero-card"
               style={{
                 position: 'absolute',

@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
-import AccountMenu from '@/components/AccountMenu'
 import StudentNotificationBell from '@/components/StudentNotificationBell'
 import { BrandMark } from '@/components/AuthLayout'
-import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
+import { navy, gold, cream, pageBg, serifAlt as serif, sansFamily as sans } from '@/theme'
 
 const NAV_ITEMS = [
   { to: '/student', label: 'Dashboard', end: true },
@@ -89,7 +88,7 @@ export default function StudentLayout() {
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
-        background: '#EEF1F6',
+        background: pageBg,
         color: '#0A1733',
         fontFamily: sans,
       }}
@@ -163,19 +162,23 @@ export default function StudentLayout() {
             {/* Notification bell */}
             <StudentNotificationBell dark />
 
-            {/* The avatar opens Profile and Sign Out. */}
-            <AccountMenu
-              profile={profile}
-              profileTo="/student/profile"
+            {/* Avatar + account id only (T-110) — click through to Profile,
+                where Sign out lives at the bottom of the page (T-95,
+                andecobs-121: matches the teacher's account-card pattern
+                instead of sitting in the chrome). */}
+            <NavLink
+              to="/student/profile"
+              aria-label="Profile & settings"
               className="group transition duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={{
+              style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
                 padding: '4px 10px 4px 4px',
                 borderRadius: 999,
                 textDecoration: 'none',
-              }}
+                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              })}
             >
               {profile.photo_url ? (
                 <img
@@ -213,7 +216,7 @@ export default function StudentLayout() {
                   {profile.login_id ?? profile.email}
                 </div>
               </div>
-            </AccountMenu>
+            </NavLink>
 
             {/* Hamburger */}
             <button
@@ -261,7 +264,8 @@ export default function StudentLayout() {
               </NavLink>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-            {/* Profile shortcut in the navigation drawer. */}
+            {/* Profile row doubles as the link to Profile & Settings, where
+                Sign out lives — same pattern as the desktop card above. */}
             <NavLink
               to="/student/profile"
               onClick={closeMenu}

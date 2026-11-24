@@ -125,6 +125,13 @@ export const serifAlt = heading
 /** Hairline border colour used for card and table edges throughout. */
 export const line = 'rgba(14,42,92,0.08)'
 
+/**
+ * Page canvas for the teacher and student portals — the blue-tinted slate
+ * that sits behind white cards. Named here so a single edit adjusts both
+ * layouts and their surrounding test fixtures.
+ */
+export const pageBg = '#EEF1F6'
+
 /** Everything at once, for spreading into a style object. */
 export const palette = {
   navy,

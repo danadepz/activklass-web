@@ -144,7 +144,10 @@ export default function SuperAdminLayout() {
             >
               {tab.label}
               {tab.waiting > 0 && (
-                <span className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                <span
+                  aria-label={`${tab.waiting} pending`}
+                  className="ml-1.5 rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] text-amber-300"
+                >
                   {tab.waiting}
                 </span>
               )}
@@ -167,7 +170,10 @@ export default function SuperAdminLayout() {
                 >
                   <span>{subTab.label}</span>
                   {subTab.waiting > 0 && (
-                    <span className="rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300">
+                    <span
+                      aria-label={`${subTab.waiting} pending`}
+                      className="rounded bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300"
+                    >
                       {subTab.waiting}
                     </span>
                   )}

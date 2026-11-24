@@ -18,6 +18,7 @@ export function MetricCard({ label, value, sub, Icon, tint, iconColor, valueColo
   return (
     <div
       className="transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
+      aria-busy={!!loading}
       style={{
         background: tint,
         borderRadius: 14,

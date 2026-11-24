@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
-import AccountMenu from '@/components/AccountMenu'
 import { Bell } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { navy, gold, cream, serifAlt as serif, sansFamily as sans } from '@/theme'
+import { navy, gold, cream, pageBg, serifAlt as serif, sansFamily as sans } from '@/theme'
 import { useTeacherClasses } from '@/hooks/useTeacherClasses'
 import { SubscriptionChip } from '@/components/SubscriptionBadge'
 import { useMySubscription } from '@/hooks/useMySubscription'
@@ -189,7 +188,7 @@ export default function TeacherLayout() {
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
-        background: '#EEF1F6',
+        background: pageBg,
         color: '#0A1733',
         fontFamily: sans,
       }}
@@ -277,8 +276,9 @@ export default function TeacherLayout() {
             {/* Notification bell + dropdown */}
             <div ref={notifRef} style={{ position: 'relative', flexShrink: 0 }}>
               <button
-                aria-label="Notifications"
+                aria-label={notifications.length > 0 ? `Notifications (${notifications.length})` : 'Notifications'}
                 aria-expanded={notifOpen}
+                aria-controls="notif-panel"
                 onClick={() => setNotifOpen((o) => !o)}
                 className="transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 style={{
@@ -299,6 +299,7 @@ export default function TeacherLayout() {
                 <Bell className="h-4 w-4" />
                 {notifications.length > 0 && (
                   <span
+                    aria-hidden="true"
                     style={{
                       position: 'absolute',
                       top: 4,
@@ -315,6 +316,9 @@ export default function TeacherLayout() {
               {/* Dropdown panel */}
               {notifOpen && (
                 <div
+                  id="notif-panel"
+                  role="region"
+                  aria-label="Notifications"
                   style={{
                     position: 'absolute',
                     top: 'calc(100% + 10px)',
@@ -365,31 +369,32 @@ export default function TeacherLayout() {
 
                   {/* List */}
                   {notifications.length > 0 ? (
-                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                    <ul role="list" style={{ maxHeight: 320, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 }}>
                       {notifications.map((n) => (
-                        <NavLink
-                          key={n.id}
-                          to={n.link}
-                          onClick={() => setNotifOpen(false)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'start',
-                            gap: 10,
-                            padding: '12px 16px',
-                            borderBottom: '1px solid rgba(14,42,92,0.06)',
-                            textDecoration: 'none',
-                            color: '#0A1733',
-                            transition: 'background-color 0.15s',
-                          }}
-                          className="hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]"
-                        >
-                          <div style={{ fontSize: 16, marginTop: 1 }}>{n.icon ?? '⚠️'}</div>
-                          <div style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>
-                            {n.message}
-                          </div>
-                        </NavLink>
+                        <li key={n.id} role="listitem">
+                          <NavLink
+                            to={n.link}
+                            onClick={() => setNotifOpen(false)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'start',
+                              gap: 10,
+                              padding: '12px 16px',
+                              borderBottom: '1px solid rgba(14,42,92,0.06)',
+                              textDecoration: 'none',
+                              color: '#0A1733',
+                              transition: 'background-color 0.15s',
+                            }}
+                            className="hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E6FB0]"
+                          >
+                            <div aria-hidden="true" style={{ fontSize: 16, marginTop: 1 }}>{n.icon ?? '⚠️'}</div>
+                            <div style={{ fontSize: 12.5, lineHeight: 1.45, flex: 1 }}>
+                              {n.message}
+                            </div>
+                          </NavLink>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   ) : (
                     /* Empty state */
                     <div
@@ -398,7 +403,7 @@ export default function TeacherLayout() {
                         textAlign: 'center',
                       }}
                     >
-                      <div style={{ fontSize: 28, marginBottom: 10 }}>🔔</div>
+                      <div aria-hidden="true" style={{ fontSize: 28, marginBottom: 10 }}>🔔</div>
                       <p style={{ fontSize: 13, fontWeight: 600, color: '#0A1733', marginBottom: 4 }}>
                         No notifications yet
                       </p>
@@ -411,12 +416,14 @@ export default function TeacherLayout() {
               )}
             </div>
 
-            {/* The avatar opens Profile and Sign Out. */}
-            <AccountMenu
-              profile={profile}
-              profileTo="/teacher/account"
+            {/* Avatar + account id only (T-110: the name and the plan pill
+                moved off this always-visible card). The card itself is the
+                Account button (there is no separate nav item for it). */}
+            <NavLink
+              to="/teacher/account"
+              aria-label="Account settings"
               className="group transition duration-200 hover:bg-white/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={{
+              style={({ isActive }) => ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -424,7 +431,8 @@ export default function TeacherLayout() {
                 padding: '4px 10px 4px 4px',
                 borderRadius: 999,
                 textDecoration: 'none',
-              }}
+                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              })}
             >
               <div
                 className="transition-transform duration-200 group-hover:scale-110"
@@ -449,7 +457,7 @@ export default function TeacherLayout() {
                   {profile.login_id ?? profile.email}
                 </div>
               </div>
-            </AccountMenu>
+            </NavLink>
 
             {/* Hamburger — mobile only */}
             <button
@@ -498,7 +506,7 @@ export default function TeacherLayout() {
               </NavLink>
             ))}
             <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
-            {/* Account shortcut in the navigation drawer. */}
+            {/* Profile row doubles as the Account link, same as the desktop card. */}
             <NavLink
               to="/teacher/account"
               onClick={closeMenu}
