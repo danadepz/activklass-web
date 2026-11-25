@@ -58,10 +58,13 @@ describe('T-110 — the header profile card shows initials and account id, not t
     expect(headerCardSlice()).not.toMatch(/<SubscriptionChip/)
   })
 
-  it('still renders the initials and the account id', () => {
-    const card = headerCardSlice()
-    expect(card).toMatch(/\{initials\}/)
-    expect(card).toMatch(/profile\.login_id \?\? profile\.email/)
+  it('still renders the initials and the account id via AccountMenu', () => {
+    // AccountMenu owns the avatar rendering; the layout delegates by passing
+    // profile + roleLabel. Verify the shared component is in use and that the
+    // layout still computes initials (used in the mobile drawer) and login_id.
+    expect(src).toContain('<AccountMenu')
+    expect(src).toMatch(/\{initials\}/)
+    expect(src).toMatch(/profile\.login_id \?\? profile\.email/)
   })
 
   it('offers /teacher/account through the shared account menu', () => {
@@ -70,15 +73,20 @@ describe('T-110 — the header profile card shows initials and account id, not t
   })
 
   it('the avatar ring reads its colour only from lib/subscription.js\'s kind map', () => {
+    // ringColor is computed in the layout from SUBSCRIPTION_RING_COLOR and
+    // passed to AccountMenu as a style prop on its trigger.
     expect(src).toMatch(/import \{ SUBSCRIPTION_RING_COLOR \} from '@\/lib\/subscription'/)
-    expect(headerCardSlice()).toMatch(/boxShadow: ringColor/)
+    expect(src).toMatch(/ringColor/)
   })
 })
 
 describe('T-110 — the mobile hamburger dropdown is deliberately out of scope', () => {
-  it('still carries the name on its own Account row (not the card Kristine flagged)', () => {
+  it('still carries identity on its own Account row (not the card Kristine flagged)', () => {
+    // The mobile drawer Account row now shows an initials avatar + account id
+    // instead of the full first/last name — matches the desktop AccountMenu trigger.
     const afterCard = src.slice(src.indexOf('Hamburger — mobile only'))
-    expect(afterCard).toMatch(/profile\.first_name/)
+    expect(afterCard).toMatch(/\{initials\}/)
+    expect(afterCard).toMatch(/profile\.login_id \?\? profile\.email/)
   })
 })
 

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import { Bell } from '@/components/icons'
 import { BrandMark } from '@/components/AuthLayout'
+import AccountMenu from '@/components/AccountMenu'
 import { useQuery } from '@tanstack/react-query'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -416,48 +417,14 @@ export default function TeacherLayout() {
               )}
             </div>
 
-            {/* Avatar + account id only (T-110: the name and the plan pill
-                moved off this always-visible card). The card itself is the
-                Account button (there is no separate nav item for it). */}
-            <NavLink
-              to="/teacher/account"
-              aria-label="Account settings"
-              className="group transition duration-200 hover:bg-white/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                minWidth: 0,
-                padding: '4px 10px 4px 4px',
-                borderRadius: 999,
-                textDecoration: 'none',
-                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-              })}
-            >
-              <div
-                className="transition-transform duration-200 group-hover:scale-110"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #F5C518, #3FA9F5)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: navy,
-                  fontWeight: 800,
-                  fontSize: 13,
-                  flexShrink: 0,
-                  boxShadow: ringColor ? `0 0 0 2px ${ringColor}` : 'none',
-                }}
-              >
-                {initials}
-              </div>
-              <div className="hidden xl:block" style={{ lineHeight: 1.2, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: cream, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.login_id ?? profile.email}
-                </div>
-              </div>
-            </NavLink>
+            {/* Account menu — avatar trigger opens dropdown with Profile and
+                Sign Out. T-110: name + plan pill are inside the dropdown header
+                rather than the always-visible card. */}
+            <AccountMenu
+              profile={profile}
+              roleLabel="Teacher"
+              profileTo="/teacher/account"
+            />
 
             {/* Hamburger — mobile only */}
             <button
@@ -512,12 +479,23 @@ export default function TeacherLayout() {
               onClick={closeMenu}
               style={({ isActive }) => mobileNavLinkStyle(isActive)}
             >
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                <span>Account</span>
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span aria-hidden="true" style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #F5C518, #3FA9F5)',
+                  display: 'grid', placeItems: 'center',
+                  color: navy, fontWeight: 800, fontSize: 12, flexShrink: 0,
+                  boxShadow: ringColor ? `0 0 0 2px ${ringColor}` : 'none',
+                }}>
+                  {initials}
                 </span>
-                <SubscriptionChip style={{ alignSelf: 'flex-start' }} />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span>Account</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {profile.login_id ?? profile.email}
+                  </span>
+                  <SubscriptionChip style={{ alignSelf: 'flex-start' }} />
+                </span>
               </span>
             </NavLink>
           </div>

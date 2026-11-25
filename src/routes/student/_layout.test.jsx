@@ -87,10 +87,13 @@ describe('T-110 (triplecookiemonster-141 item 6) — the header card mirrors the
     expect(headerCardSlice()).not.toMatch(/profile\.first_name/)
   })
 
-  it('still renders the initials and the account id', () => {
-    const card = headerCardSlice()
-    expect(card).toMatch(/\{initials\}/)
-    expect(card).toMatch(/profile\.login_id \?\? profile\.email/)
+  it('still renders the initials and the account id via AccountMenu', () => {
+    // AccountMenu owns the avatar rendering; the layout delegates by passing
+    // profile + roleLabel. Verify the shared component is in use and that the
+    // layout still computes initials (used in the mobile drawer) and login_id.
+    expect(layoutSrc).toContain('<AccountMenu')
+    expect(layoutSrc).toMatch(/\{initials\}/)
+    expect(layoutSrc).toMatch(/profile\.login_id \?\? profile\.email/)
   })
 
   it('carries no ring colour -- students have no subscription of their own to show one for', () => {

@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '@/context/useAuth'
 import StudentNotificationBell from '@/components/StudentNotificationBell'
 import { BrandMark } from '@/components/AuthLayout'
+import AccountMenu from '@/components/AccountMenu'
 import { navy, gold, cream, pageBg, serifAlt as serif, sansFamily as sans } from '@/theme'
 
 const NAV_ITEMS = [
@@ -162,61 +163,14 @@ export default function StudentLayout() {
             {/* Notification bell */}
             <StudentNotificationBell dark />
 
-            {/* Avatar + account id only (T-110) — click through to Profile,
-                where Sign out lives at the bottom of the page (T-95,
-                andecobs-121: matches the teacher's account-card pattern
-                instead of sitting in the chrome). */}
-            <NavLink
-              to="/student/profile"
-              aria-label="Profile & settings"
-              className="group transition duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '4px 10px 4px 4px',
-                borderRadius: 999,
-                textDecoration: 'none',
-                background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-              })}
-            >
-              {profile.photo_url ? (
-                <img
-                  src={profile.photo_url}
-                  alt=""
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    flexShrink: 0,
-                    border: '1px solid rgba(255,255,255,0.25)',
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #F5C518, #3FA9F5)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: navy,
-                    fontWeight: 800,
-                    fontSize: 13,
-                    flexShrink: 0,
-                  }}
-                >
-                  {initials}
-                </div>
-              )}
-              <div className="hidden md:block" style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: cream, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.login_id ?? profile.email}
-                </div>
-              </div>
-            </NavLink>
+            {/* Account menu — avatar trigger opens dropdown with Profile and
+                Sign Out. Replaces bare NavLink so Sign Out is reachable from
+                the header on all screen sizes. */}
+            <AccountMenu
+              profile={profile}
+              roleLabel="Student"
+              profileTo="/student/profile"
+            />
 
             {/* Hamburger */}
             <button
@@ -271,10 +225,20 @@ export default function StudentLayout() {
               onClick={closeMenu}
               style={({ isActive }) => mobileNavLinkStyle(isActive)}
             >
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                <span>Profile &amp; Settings</span>
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {profile.first_name} {profile.last_name} · {profile.login_id ?? profile.email}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span aria-hidden="true" style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #F5C518, #3FA9F5)',
+                  display: 'grid', placeItems: 'center',
+                  color: navy, fontWeight: 800, fontSize: 12, flexShrink: 0,
+                }}>
+                  {initials}
+                </span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                  <span>Profile &amp; Settings</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(250,250,246,0.55)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {profile.login_id ?? profile.email}
+                  </span>
                 </span>
               </span>
             </NavLink>
