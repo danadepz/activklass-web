@@ -17,7 +17,8 @@ import { ink, navy, muted } from '@/theme'
  * [square brackets] is a value the team has not confirmed yet.
  * ------------------------------------------------------------------ */
 
-// A string is a paragraph, an array is a bulleted list.
+// A string is a paragraph, an array is a bulleted list, { sub } is a numbered
+// subsection heading (e.g. "10.1 …") and { label } is a bold run-in label.
 export const PRIVACY_NOTICE = {
   title: 'Privacy Notice',
   version: 'Version 1.0',
@@ -146,7 +147,78 @@ export const TERMS = {
       ],
     ] },
     { h: 'Subscriptions', blocks: [
-      'During the pilot, access is free or provided under the arrangement agreed with your institution. If paid plans are introduced later, the price and conditions will be shown before you subscribe.',
+      { sub: '10.1 Subscription Plans and Pricing' },
+      'ActivKlass offers Individual Teacher and Institution subscription plans.',
+      { label: 'Individual Teacher Plan' },
+      [
+        'Includes one teacher.',
+        '₱1,200 per teacher seat for each 300-day subscription term.',
+        '₱60 per student seat for each 300-day subscription term.',
+        'The current registration policy allows a student capacity from 30 to 300, in increments of 5.',
+      ],
+      { label: 'Institution Plan' },
+      [
+        '₱1,200 per teacher seat for each 300-day subscription term.',
+        '₱60 per student seat for each 300-day subscription term.',
+        'The current registration policy allows 20 to 500 teacher seats and 30 to 300 student seats per teacher.',
+        'Teacher seats are selected in increments of 5; student capacity per teacher is selected in increments of 5.',
+      ],
+      'The total subscription cost is calculated based on the selected plan and seat quantities. The final amount is displayed before payment confirmation.',
+
+      { sub: '10.2 Subscription Validity' },
+      'Each subscription provides 300 days of access.',
+      'Subscription activation occurs after the first required payment has been successfully verified.',
+      'For renewals, the new subscription period is calculated from the later of the existing expiration date or the confirmed renewal payment date, preserving remaining subscription time.',
+      'Payment of an outstanding installment does not create an additional subscription period.',
+
+      { sub: '10.3 Payment Options' },
+      'Both Individual Teacher and Institution plans offer the following payment options:',
+      { label: 'Full Payment (100%)' },
+      ['The subscriber pays the complete subscription amount upfront.'],
+      { label: '50% Down Payment' },
+      [
+        'The subscriber pays 50% of the total subscription cost initially.',
+        'The remaining 50% must be paid within 30 calendar days after the first successful payment.',
+      ],
+      'The total payable amount, initial payment, remaining balance, and payment deadline are presented during checkout.',
+
+      { sub: '10.4 Subscription Activation' },
+      'Subscriptions become active immediately after the initial payment is successfully verified through the authorized payment system.',
+      'This applies to both full payments and 50% down payments.',
+      'Payment verification must be completed before subscription activation is recorded.',
+
+      { sub: '10.5 Remaining Balance and Due Date' },
+      'Subscribers selecting the 50% down-payment option are responsible for settling the outstanding balance within 30 calendar days following the first confirmed payment.',
+      'The subscription dashboard displays the remaining balance, payment deadline, and payment status.',
+      'The remaining installment must be processed through the available authorized payment method.',
+
+      { sub: '10.6 Overdue Payments' },
+      'If the remaining balance is not settled by its due date, the account will display an Overdue Balance status and a payment reminder.',
+      'The warning will state:',
+      '“Your remaining subscription balance is overdue. Please settle your payment to avoid possible limitations to your access.”',
+      'At present, overdue installment payments do not automatically suspend, deactivate, or restrict access to ActivKlass.',
+      'Any future access limitation policy will be established and communicated separately.',
+
+      { sub: '10.7 Subscription Benefits and Usage Allowances' },
+      'Subscription plans include teacher and student seat allocations, AI credits, storage capacity, and applicable AI usage limits.',
+      'The specific allowances included in the selected subscription are displayed in the subscription breakdown.',
+      'Usage is subject to the applicable plan limits and platform policies.',
+
+      { sub: '10.8 Payment Confirmation and Records' },
+      'Payments must be verified through the authorized payment provider before being recorded as completed.',
+      'Subscribers may review their subscription status, payments, outstanding balance, expiration date, and related details in their account.',
+      'Incomplete, unsuccessful, or cancelled payments do not count as successful payments.',
+
+      { sub: '10.9 Subscription Expiration and Renewal' },
+      'Subscription access is subject to the displayed expiration date and applicable renewal conditions.',
+      'Subscribers may renew their subscriptions according to the available renewal process.',
+      'Existing remaining subscription time is preserved during early renewal.',
+      'Outstanding installment settlement does not independently extend subscription validity.',
+
+      { sub: '10.10 Changes to Subscription Plans' },
+      'Subscription pricing, allowances, and payment options may be updated for future purchases or renewals.',
+      'Applicable changes must be disclosed before the subscriber accepts a new purchase or renewal.',
+      'Changes to an existing paid subscription remain subject to the terms applicable to that subscription and any agreed modifications.',
     ] },
     { h: 'Suspension and Ending Access', blocks: [
       'We may suspend or remove an account that violates these Terms or puts the system or other users at risk. You or your institution may stop using ActivKlass at any time. Data deletion requests follow the Privacy Notice.',
@@ -164,6 +236,10 @@ export const TERMS = {
   ],
 }
 
+// Not `b?.sub`: every string has a built-in .sub() method, so that test is true
+// for every paragraph and renders nothing.
+const isObj = (b) => typeof b === 'object' && b !== null && !Array.isArray(b)
+
 function DocumentBody({ doc }) {
   return (
     <div className="flex flex-col" style={{ gap: 18 }}>
@@ -175,7 +251,13 @@ function DocumentBody({ doc }) {
           </h4>
           <div className="flex flex-col" style={{ gap: 8 }}>
             {s.blocks.map((b, j) =>
-              Array.isArray(b) ? (
+              isObj(b) && b.sub ? (
+                <h5 key={j} style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 700, color: ink }}>
+                  {b.sub}
+                </h5>
+              ) : isObj(b) && b.label ? (
+                <p key={j} style={{ margin: 0, fontWeight: 600, color: ink }}>{b.label}</p>
+              ) : Array.isArray(b) ? (
                 <ul key={j} style={{ margin: 0, paddingLeft: 20, listStyle: 'disc' }}>
                   {b.map((item) => <li key={item}>{item}</li>)}
                 </ul>
