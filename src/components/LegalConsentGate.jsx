@@ -152,16 +152,16 @@ export const TERMS = {
       { label: 'Individual Teacher Plan' },
       [
         'Includes one teacher.',
-        '₱1,200 for every block of 40 unique student seats.',
-        'Minimum capacity of 40 students.',
-        'Additional student capacity is purchased in blocks of 40.',
+        '₱1,200 per teacher seat for each 300-day subscription term.',
+        '₱60 per student seat for each 300-day subscription term.',
+        'The current registration policy allows a student capacity from 30 to 300, in increments of 5.',
       ],
       { label: 'Institution Plan' },
       [
-        '₱1,500 per teacher seat.',
-        '₱1,200 per block of 40 unique student seats.',
-        'Minimum of three teachers and 40 student seats.',
-        'Student seats are counted across the institution according to the approved subscription allocation rules.',
+        '₱1,200 per teacher seat for each 300-day subscription term.',
+        '₱60 per student seat for each 300-day subscription term.',
+        'The current registration policy allows 20 to 500 teacher seats and 30 to 300 student seats per teacher.',
+        'Teacher seats are selected in increments of 5; student capacity per teacher is selected in increments of 5.',
       ],
       'The total subscription cost is calculated based on the selected plan and seat quantities. The final amount is displayed before payment confirmation.',
 
