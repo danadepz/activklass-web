@@ -109,7 +109,7 @@ export async function deleteBankedQuestion(id) {
  *
  * Returns the same counts `describeBankResult` formats.
  */
-export async function bankQuestions({ teacherId, questions, topicId, syllabusId, origin, sourceQuizId }) {
+export async function bankQuestions({ teacherId, questions, topicId, topicLabel, syllabusId, origin, sourceQuizId }) {
   const existing = await fetchBankedQuestions(teacherId)
   const { fresh, duplicates, unusable } = splitAgainstBank(questions, existing)
 
@@ -119,7 +119,7 @@ export async function bankQuestions({ teacherId, questions, topicId, syllabusId,
     const batch = writeBatch(db)
     for (const { question } of fresh.slice(i, i + 400)) {
       batch.set(doc(collection(db, COLLECTION)), {
-        ...toBankPayload(question, { topicId, syllabusId, origin, sourceQuizId }),
+        ...toBankPayload(question, { topicId, topicLabel, syllabusId, origin, sourceQuizId }),
         teacher_id: teacherId,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),

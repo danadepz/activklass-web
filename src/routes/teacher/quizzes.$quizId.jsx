@@ -192,6 +192,10 @@ function builderSnapshot(settings, classIds, questions) {
       text: q.text,
       points: q.points,
       ai_generated: q.ai_generated,
+      blooms_level: q.blooms_level,
+      topic_id: q.topic_id,
+      topic_label: q.topic_label,
+      objective: q.objective,
       // Clearing the objective flag is a decision worth saving on its own.
       off_objective: q.off_objective,
       options: (q.options ?? []).map((o) => ({ text: o.text, is_correct: o.is_correct })),
@@ -215,6 +219,9 @@ function toEditable(question) {
     text: question.text ?? '',
     points: String(question.points ?? 1),
     ai_generated: question.ai_generated ?? false,
+    blooms_level: question.blooms_level ?? '',
+    topic_id: question.topic_id ?? null,
+    topic_label: question.topic_label ?? null,
     objective: question.objective ?? '',
     off_objective: question.off_objective === true,
     options: (question.options ?? []).map((o) => ({
@@ -229,9 +236,10 @@ function toEditable(question) {
   }
 }
 
-function blankQuestion() {
+function blankQuestion(metadata = {}) {
   return toEditable({
     qtype: 'mcq', text: '', points: 1,
+    ...metadata,
     options: [
       { text: '', is_correct: true },
       { text: '', is_correct: false },
@@ -242,6 +250,10 @@ function blankQuestion() {
 
 function toPayload(q) {
   const base = { id: q.id || newId(), qtype: q.qtype, text: q.text, points: Number(q.points), ai_generated: q.ai_generated }
+  // Missing is meaningful for legacy/manual questions; never infer a tag.
+  if (q.blooms_level) base.blooms_level = q.blooms_level
+  if (q.topic_id) base.topic_id = q.topic_id
+  if (q.topic_label) base.topic_label = q.topic_label
   // Kept on the saved question so the flag survives a reload and a re-open;
   // only AI drafts ever carry them.
   if (q.objective) base.objective = q.objective
@@ -305,6 +317,16 @@ function QuestionCard({ q, index, update, remove, moveUp, moveDown, saveToBank }
           Assesses: {q.objective}
         </p>
       )}
+
+      <label style={{ display: 'block', marginTop: 8, fontSize: 12, color: muted }}>
+        Suggested thinking level
+        <select aria-label="Question Bloom level" value={q.blooms_level ?? ''} onChange={(e) => update({ blooms_level: e.target.value })} className="ak-input" style={{ ...fieldStyle, display: 'block', marginTop: 4 }}>
+          <option value="">Untagged</option>
+          <option value="remember">Remembering</option><option value="understand">Understanding</option>
+          <option value="apply">Applying</option><option value="analyze">Analyzing</option>
+          <option value="evaluate">Evaluating</option><option value="create">Creating</option>
+        </select>
+      </label>
 
       <textarea rows={2} placeholder="Question text" value={q.text} onChange={(e) => update({ text: e.target.value })} className="ak-input" style={{ ...fieldStyle, marginTop: 10, resize: 'vertical' }} />
 
@@ -1853,6 +1875,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         teacherId: profile.id,
         questions: [toPayload(q)],
         topicId: quiz.topic_id || null,
+        topicLabel: quiz.topic_label || quiz.topic || null,
         syllabusId: quiz.syllabus_id || null,
         origin: q.ai_generated ? 'ai_generated' : 'manual',
         sourceQuizId: quiz.id ?? null,
@@ -1874,6 +1897,7 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
         teacherId: profile.id,
         questions: questions.map(toPayload),
         topicId: quiz.topic_id || null,
+        topicLabel: quiz.topic_label || quiz.topic || null,
         syllabusId: quiz.syllabus_id || null,
         origin: quiz.origin || 'manual',
         sourceQuizId: quiz.id ?? null,
@@ -2319,7 +2343,13 @@ function BuilderForm({ quiz, classes, gradebooksMap, refetch, syllabi }) {
       <div className="mt-4 pb-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2.5">
-          <button onClick={() => setQuestions([...questions, blankQuestion()])} className="transition hover:brightness-105" style={btnGhost}>
+          <button onClick={() => {
+            const topic = topicChoices.find((item) => item.id === settings.topic_id)
+            setQuestions([...questions, blankQuestion({
+              topic_id: settings.topic_id || null,
+              topic_label: topic?.label ?? settings.topic_label ?? quiz.topic_label ?? null,
+            })])
+          }} className="transition hover:brightness-105" style={btnGhost}>
             <Plus className="h-3.5 w-3.5" style={{ color: gold }} strokeWidth={2.25} /> Add Question
           </button>
           <button onClick={() => setIsImportModalOpen(true)} className="transition hover:brightness-105" style={btnGhost}>
@@ -3129,6 +3159,7 @@ export default function QuizBuilderPage() {
         teacherId: profile?.id,
         questions: questionsToBank,
         topicId: quiz?.topic_id || null,
+        topicLabel: quiz?.topic_label || quiz?.topic || null,
         syllabusId: quiz?.syllabus_id || null,
         origin: quiz?.origin || (quiz?.ai_generated ? 'ai_generated' : 'manual'),
         sourceQuizId: quiz?.id ?? null,

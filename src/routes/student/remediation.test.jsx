@@ -56,6 +56,42 @@ describe('review guide → modules', () => {
     expect(unlinked).toContain('not linked to a module')
     expect(unlinked).not.toContain('Read more in Modules')
   })
+
+  it('shows the five ordered stages and only the current stage content for a staged plan', () => {
+    state.data = {
+      remediations: [{
+        ...assignment, progression_version: 1,
+        guided_practice_quiz_id: 'guided-q', independent_practice_quiz_id: 'independent-q',
+        recommended_quiz_id: 'reassessment-q',
+      }],
+      syllabusByClass: { 'demo-sci9-newton': syllabus },
+      quizzesByClass: { 'demo-sci9-newton': [
+        { id: 'guided-q', status: 'published', attempts_allowed: 1 },
+        { id: 'independent-q', status: 'published', attempts_allowed: 1 },
+        { id: 'reassessment-q', status: 'published', attempts_allowed: 1 },
+      ] },
+      attemptsByQuiz: {},
+      stageProgressByAssignment: { a1: {
+        current_stage: 'guided_practice', content: 'Practice the model with support.',
+        stages: [
+          { id: 'concept_review', status: 'complete' },
+          { id: 'worked_example', status: 'complete' },
+          { id: 'guided_practice', status: 'current' },
+          { id: 'independent_practice', status: 'locked' },
+          { id: 'reassessment', status: 'locked' },
+        ],
+      } },
+    }
+    const html = renderToStaticMarkup(<MemoryRouter><StudentRemediation /></MemoryRouter>)
+    expect(html).toContain('data-testid="progressive-remediation"')
+    expect(html).toContain('Concept Review')
+    expect(html).toContain('Worked Example')
+    expect(html).toContain('Guided Practice')
+    expect(html).toContain('Independent Practice')
+    expect(html).toContain('Reassessment')
+    expect(html).toContain('Practice the model with support.')
+    expect(html).toContain('href="/student/classes/demo-sci9-newton/quizzes/guided-q"')
+  })
 })
 
 describe('modules → review guide', () => {

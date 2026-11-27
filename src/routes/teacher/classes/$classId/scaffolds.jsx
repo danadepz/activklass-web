@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
-import { writeQuizWithKey } from '@/lib/quizAnswerKey'
+import { loadQuizWithKey, writeQuizWithKey } from '@/lib/quizAnswerKey'
 import { db } from '@/lib/firebase'
-import { draftToQuestions, generateQuiz } from '@/lib/ai'
+import { draftToQuestions, generateQuiz, generateScaffoldMaterials } from '@/lib/ai'
 import { fetchUsersByIds } from '@/lib/roster'
 import { finishedAttempts } from '@/lib/quizAttempts'
 import {
@@ -21,7 +21,14 @@ import {
   loadRecoveryTargets,
   previewRecovery,
 } from '@/features/classes/gradeRecovery'
-import { remediationEvidenceSummary } from '@/features/classes/remediationEvidence'
+import {
+  remediationEvidenceInstructions,
+  remediationPracticeConfig,
+  scaffoldMaterialsToGuidance,
+  scaffoldMaterialsToStageContent,
+  targetedEvidenceSummary,
+  targetedRemediationEvidence,
+} from '@/features/classes/remediationEvidence'
 import {
   PASSING,
   RECOVERY_POLICIES,
@@ -36,6 +43,7 @@ import { toast } from '@/components/ui/toast'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { MetricCard } from '@/components/ui/Card'
 import BloomsBreakdown from '@/components/BloomsBreakdown'
+import { aggregateBloomPerformance } from '@/lib/bloomsPerformance'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { resolveSyllabus } from './classSyllabus'
 import InfoTooltip from './InfoTooltip'
@@ -168,6 +176,21 @@ async function loadScaffolds(classId) {
 
   const linkedQuizzes = quizzes.filter((q) => q.topic_id).length
   const remediation = await loadClassRemediations(classId).catch(() => ({ plans: [], legacy: [] }))
+  const stageQuizIds = [...new Set(remediation.plans
+    .filter((plan) => plan.progression_version === 1)
+    .flatMap((plan) => [plan.guided_practice_quiz_id, plan.independent_practice_quiz_id, plan.recommended_quiz_id])
+    .filter((id) => typeof id === 'string' && id && !quizzes.some((quiz) => quiz.id === id)))]
+  const stageQuizzes = await Promise.all(stageQuizIds.map((id) => loadQuizWithKey(id).catch(() => null)))
+  for (const quiz of stageQuizzes) {
+    if (!quiz) continue
+    quizzes.push(quiz)
+    const attempts = await getDocs(query(
+      collection(db, 'quiz_attempts'),
+      where('quiz_id', '==', quiz.id),
+      where('class_id', '==', classId),
+    )).catch(() => ({ docs: [] }))
+    attemptsByQuiz[quiz.id] = attempts.docs.map((attempt) => ({ id: attempt.id, ...attempt.data() }))
+  }
   return {
     rows,
     // The syllabus topics themselves, for the practice-quiz fence: a plan
@@ -229,11 +252,69 @@ function SectionHead({ dot, title, note }) {
 /* T-248: an AI practice quiz is saved as a draft and only the quiz editor can
    publish it, so a plan whose quiz is still a draft would hand students a quiz
    they cannot open -- and invite publishing it unread. The plan waits for it. */
-function practiceQuizBlocker(plan, quizzes) {
+function practiceQuizBlocker(plan, quizzes, attemptsByQuiz = {}, targetStudentIds = []) {
+  if (plan.progression_version === 1) {
+    const stageContent = plan.stage_content ?? {}
+    for (const [field, label] of [
+      ['concept_review', 'Concept Review'],
+      ['worked_example', 'Worked Example'],
+      ['guided_practice', 'Guided Practice'],
+      ['independent_practice', 'Independent Practice'],
+    ]) {
+      if (typeof stageContent[field] !== 'string' || !stageContent[field].trim()) return `Add teacher-reviewed content for ${label} before publishing the staged plan.`
+    }
+    if (!/\bhint\s*:/i.test(stageContent.guided_practice) || !/\bfeedback\s*:/i.test(stageContent.guided_practice)) {
+      return 'Guided Practice needs both a Hint and Feedback for each exercise before publishing.'
+    }
+    if (/\b(hint|feedback)\s*:/i.test(stageContent.independent_practice)) {
+      return 'Remove hints and instructional feedback from Independent Practice before publishing.'
+    }
+    const stageQuizIds = [plan.guided_practice_quiz_id, plan.independent_practice_quiz_id, plan.recommended_quiz_id]
+    if (stageQuizIds.some((id) => !id) || new Set(stageQuizIds).size !== 3) {
+      return 'Each scored stage needs its own distinct assessment.'
+    }
+    const reassessment = (quizzes ?? []).find((q) => q.id === plan.recommended_quiz_id)
+    const hasPriorTargetAttempt = (attemptsByQuiz[plan.recommended_quiz_id] ?? []).some((attempt) => targetStudentIds.includes(attempt.student_id))
+    if (plan.recommended_quiz_id && (!reassessment?.title?.startsWith('Remediation ·') || reassessment?.class_mappings || hasPriorTargetAttempt)) {
+      return 'Generate a dedicated Reassessment quiz for this plan. The current linked quiz has prior use or class assessment settings, so it cannot safely serve as this stage.'
+    }
+    const required = [
+      ['guided_practice_quiz_id', 'Guided Practice'],
+      ['independent_practice_quiz_id', 'Independent Practice'],
+      ['recommended_quiz_id', 'Reassessment'],
+    ]
+    for (const [field, label] of required) {
+      const id = plan[field]
+      const quiz = (quizzes ?? []).find((q) => q.id === id)
+      if (!id || quiz?.status !== 'published') return `Review and publish the ${label} assessment in the quiz editor before publishing this remediation plan.`
+    }
+    return null
+  }
   if (!plan.recommended_quiz_id) return null
   const quiz = (quizzes ?? []).find((q) => q.id === plan.recommended_quiz_id)
   if (quiz?.status === 'published') return null
   return 'Review the practice quiz first: open it in the quiz editor, check every question, and publish it there. Then publish this plan.'
+}
+
+function stageQuizField(stage) {
+  if (stage === 'guided_practice') return 'guided_practice_quiz_id'
+  if (stage === 'independent_practice') return 'independent_practice_quiz_id'
+  return 'recommended_quiz_id'
+}
+
+function duplicateQuestionStem(candidate, existingStems) {
+  const normalize = (value) => String(value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  const stop = new Set(['a', 'an', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'is', 'are', 'what', 'which', 'how', 'for'])
+  const candidateText = normalize(candidate)
+  const candidateWords = new Set(candidateText.split(/\s+/).filter((word) => word && !stop.has(word)))
+  return existingStems.some((stem) => {
+    const existingText = normalize(stem)
+    if (candidateText === existingText) return true
+    const existingWords = new Set(existingText.split(/\s+/).filter((word) => word && !stop.has(word)))
+    if (!candidateWords.size || !existingWords.size) return false
+    const intersection = [...candidateWords].filter((word) => existingWords.has(word)).length
+    return intersection / Math.min(candidateWords.size, existingWords.size) >= 0.8
+  })
 }
 
 /**
@@ -577,24 +658,69 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
 }
 
 /** Edit a plan: its text, its linked practice quiz, and who receives it. */
-function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvidence, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz, onViewQuiz }) {
+function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz, onGenerateMaterials, onViewQuiz }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a remediation plan', closeOnBackdrop: false })
   const [title, setTitle] = useState(plan.title ?? '')
   const [guidance, setGuidance] = useState(plan.guidance ?? '')
   const [targets, setTargets] = useState(plan.target_student_ids ?? [])
+  const [progressive, setProgressive] = useState(plan.progression_version === 1)
+  const [stageContent, setStageContent] = useState(plan.stage_content ?? {
+    concept_review: plan.guidance ?? '', worked_example: '', guided_practice: '', independent_practice: '',
+  })
+  const [materialsError, setMaterialsError] = useState(null)
 
-  const working = busy === `save:${plan.id}` || busy === `publish:${plan.id}`
-  const generating = busy === `quiz:${plan.id}`
-  const quizBlock = practiceQuizBlocker(plan, quizzes)
+  const working = !!busy
+  const generatingMaterials = busy === `materials:${plan.id}`
+  const generatingLegacyQuiz = busy === `quiz:${plan.id}:legacy`
+  const activePlan = { ...plan, progression_version: progressive ? 1 : null, stage_content: stageContent }
+  const quizBlock = practiceQuizBlocker(activePlan, quizzes, attemptsByQuiz, targets)
   const quiz = (quizzes ?? []).find((q) => q.id === plan.recommended_quiz_id)
+  const targetedEvidence = useMemo(() => targetedRemediationEvidence({
+    topicId: plan.topic_id,
+    topicLabel: plan.topic,
+    targetStudentIds: targets,
+    nameById,
+    quizzes,
+    attemptsByQuiz,
+  }), [plan.topic_id, plan.topic, targets, nameById, quizzes, attemptsByQuiz])
   const patch = () => ({
     title: title.trim() || plan.title,
     guidance: guidance.trim(),
     target_student_ids: targets,
+    progression_version: progressive ? 1 : null,
+    ...(progressive ? {
+      stage_content: stageContent,
+      guided_practice_quiz_id: plan.guided_practice_quiz_id ?? null,
+      independent_practice_quiz_id: plan.independent_practice_quiz_id ?? null,
+    } : {}),
   })
 
   const toggle = (id) =>
     setTargets((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))
+
+  async function draftMaterials() {
+    setMaterialsError(null)
+    try {
+      const materials = await onGenerateMaterials(targetedEvidence)
+      const markdown = scaffoldMaterialsToGuidance(materials)
+      if (!markdown) throw new Error('The generated study guide was empty. Please try again or write the guidance yourself.')
+      setGuidance((current) => [current.trim(), markdown].filter(Boolean).join('\n\n'))
+      const generatedStages = scaffoldMaterialsToStageContent(materials)
+      if (generatedStages) {
+        setStageContent((current) => Object.fromEntries(Object.keys(generatedStages).map((key) => [key, [current?.[key], generatedStages[key]].filter(Boolean).join('\n\n')])))
+        setProgressive(true)
+      }
+    } catch (err) {
+      setMaterialsError(err.message)
+    }
+  }
+
+  const enableProgressive = () => {
+    if (!progressive && !stageContent.concept_review && guidance.trim()) {
+      setStageContent((current) => ({ ...current, concept_review: guidance.trim() }))
+    }
+    setProgressive(true)
+  }
 
   return (
     <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
@@ -636,7 +762,70 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvid
           />
         </div>
 
-        <div className="mt-4" style={{ background: 'rgba(63,169,245,0.05)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 11, padding: '12px 14px' }}>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={draftMaterials}
+            disabled={!!busy || !targetedEvidence.hasScoredEvidence}
+            title={!targetedEvidence.hasScoredEvidence ? 'No finalized scored evidence is available for the selected students.' : undefined}
+            className="transition hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ padding: '8px 13px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.25)`, borderRadius: 8, cursor: 'pointer' }}
+          >
+            {generatingMaterials ? 'Drafting materials…' : 'Draft targeted learning materials'}
+          </button>
+          <span style={{ fontSize: 11.5, color: muted }}>Generated content is appended here for your review and editing. Pending work is excluded.</span>
+        </div>
+        {materialsError && <p role="alert" style={{ fontSize: 12, color: red, margin: '6px 0 0' }}>{materialsError}</p>}
+
+        {!progressive && (
+          <button type="button" onClick={enableProgressive} disabled={!!busy} className="mt-3 rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50" style={{ color: navy, borderColor: 'rgba(14,42,92,0.2)', background: '#FFFFFF' }}>
+            Enable Five-Stage Scaffold
+          </button>
+        )}
+
+        {progressive && (
+          <div className="mt-4 grid gap-3" data-testid="teacher-stage-content">
+            <p style={{ fontSize: 12, color: muted, margin: 0 }}>Review and edit each stage. Students receive only the content for their currently unlocked stage.</p>
+            {[
+              ['concept_review', '1. Concept Review'],
+              ['worked_example', '2. Worked Example'],
+              ['guided_practice', '3. Guided Practice · hints and feedback'],
+              ['independent_practice', '4. Independent Practice · no hints'],
+            ].map(([key, label]) => (
+              <label key={key} style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.03em' }}>
+                {label}
+                <textarea className="ak-input" rows={key === 'concept_review' ? 4 : 3} value={stageContent[key] ?? ''}
+                  onChange={(event) => setStageContent((current) => ({ ...current, [key]: event.target.value }))}
+                  style={{ display: 'block', marginTop: 5, width: '100%', padding: '9px 11px', fontSize: 13, fontWeight: 400, letterSpacing: 0, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, resize: 'vertical' }} />
+              </label>
+            ))}
+            <div className="grid gap-2" data-testid="teacher-stage-assessments">
+              {[
+                ['guided_practice', 'guided_practice_quiz_id', 'Guided Practice Assessment'],
+                ['independent_practice', 'independent_practice_quiz_id', 'Independent Practice Assessment'],
+                ['reassessment', 'recommended_quiz_id', 'Reassessment'],
+              ].map(([stage, field, label]) => {
+                const quizId = plan[field]
+                const stageQuiz = (quizzes ?? []).find((item) => item.id === quizId)
+                const currentBusy = busy === `quiz:${plan.id}:${stage}`
+                return (
+                  <div key={stage} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'rgba(14,42,92,0.12)' }}>
+                    <div style={{ fontSize: 12, color: ink }}><strong>{label}</strong><span style={{ color: muted }}> · {stageQuiz?.status ?? (quizId ? 'unavailable' : 'not generated')}</span></div>
+                    <div className="flex gap-3">
+                      {quizId && <button type="button" onClick={() => onViewQuiz(stage, patch())} disabled={working} className="underline" style={{ color: blueText, fontSize: 12, fontWeight: 700, background: 'none', border: 0 }}>Open in editor</button>}
+                      <button type="button" onClick={() => onGenerateQuiz(stage, targetedEvidence)} disabled={!!busy} className="underline disabled:opacity-50" style={{ color: blueText, fontSize: 12, fontWeight: 700, background: 'none', border: 0 }}>
+                        {currentBusy ? 'Generating…' : quizId ? 'Regenerate' : 'Generate with AI'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {quizBlock && <p role="status" data-testid="quiz-review-block" style={{ fontSize: 12, color: goldDeep, fontWeight: 600, margin: 0 }}>{quizBlock}</p>}
+          </div>
+        )}
+
+        {!progressive && <div className="mt-4" style={{ background: 'rgba(63,169,245,0.05)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 11, padding: '12px 14px' }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div style={{ fontSize: 13, color: ink }}>
               <strong>Practice quiz:</strong>{' '}
@@ -655,12 +844,12 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvid
               )}
             </div>
             <button
-              onClick={onGenerateQuiz}
-              disabled={generating}
+              onClick={() => onGenerateQuiz('legacy', targetedEvidence)}
+              disabled={!!busy}
               className="transition hover:brightness-110 disabled:opacity-50"
               style={{ padding: '7px 13px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: blueText, background: '#FFFFFF', border: `1.5px solid rgba(63,169,245,0.45)`, borderRadius: 8, cursor: 'pointer' }}
             >
-              {generating ? 'Generating…' : plan.recommended_quiz_id ? 'Regenerate' : 'Generate with AI'}
+              {generatingLegacyQuiz ? 'Generating…' : plan.recommended_quiz_id ? 'Regenerate' : 'Generate with AI'}
             </button>
           </div>
           <p style={{ fontSize: 11.5, color: muted, margin: '8px 0 0', lineHeight: 1.45 }}>
@@ -673,16 +862,35 @@ function RemediationEditor({ plan, quizzes, nameById, rosterIds, performanceEvid
               {quizBlock}
             </p>
           )}
-        </div>
+        </div>}
 
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3" data-testid="remediation-performance-explanation">
           <p style={{ fontSize: 12.5, color: ink, margin: 0, lineHeight: 1.5 }}>
             <strong>Why this review is suggested</strong><br />
-            {remediationEvidenceSummary(performanceEvidence, targets)}
+            {targetedEvidenceSummary(targetedEvidence)}
           </p>
           <p style={{ fontSize: 12, color: muted, margin: '7px 0 0', lineHeight: 1.5 }}>
-            Suggested support: review this syllabus topic with worked examples, then use the practice quiz after teacher review. Question-level Bloom data is not recorded here, so this screen cannot identify a Bloom level or conclude that a student lacks a prerequisite skill.
+            Only finalized scored items inform question-level difficulties. Pending items are set aside; missing snapshot fields stay Unknown. These results guide teacher review and do not diagnose cognitive mastery or assign remediation automatically.
           </p>
+          <ul data-testid="targeted-remediation-evidence" style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'grid', gap: 9 }}>
+            {targetedEvidence.students.map((student) => (
+              <li key={student.studentId} style={{ paddingTop: 8, borderTop: '1px solid rgba(14,42,92,0.08)' }}>
+                <strong style={{ color: ink }}>{student.displayName}</strong>
+                <span style={{ color: muted }}> · {student.topicScore ? `${student.topicScore.percentage}% topic evidence (${student.topicScore.earnedPoints}/${student.topicScore.maximumPoints} pts)` : 'no eligible scored item results'}</span>
+                {student.items.length > 0 ? (
+                  <ul style={{ listStyle: 'disc', margin: '5px 0 0 18px', padding: 0, color: muted }}>
+                    {student.items.map((item, index) => (
+                      <li key={`${item.quizTitle}-${item.questionLabel}-${index}`}>
+                        {item.quizTitle}, {item.questionLabel}: {item.outcome === 'incorrect' ? 'incorrect' : 'partial credit'} ({item.earnedPoints}/{item.maximumPoints} pts); Bloom: {item.bloomsLevel ?? 'Unknown'}; topic: {item.topicLabel ?? plan.topic}; objective: {item.objective ?? 'not recorded'}.
+                      </li>
+                    ))}
+                  </ul>
+                ) : <div style={{ color: muted, marginTop: 3 }}>No scored incorrect or partial-credit question details are available for this student.</div>}
+                {student.pendingCount > 0 && <div style={{ color: muted, marginTop: 3 }}>{student.pendingCount} pending question{student.pendingCount === 1 ? '' : 's'} ({student.pendingPoints} pts) excluded from scored evidence.</div>}
+                {student.unitemizedAttempts > 0 && <div style={{ color: muted, marginTop: 3 }}>Item-level results unavailable for {student.unitemizedAttempts} attempt{student.unitemizedAttempts === 1 ? '' : 's'}.</div>}
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div className="mt-4">
@@ -754,6 +962,7 @@ export default function ScaffoldTopicsPage() {
     queryKey: ['fs-scaffolds', classId],
     queryFn: () => loadScaffolds(classId),
   })
+  const bloomPerformance = data ? aggregateBloomPerformance(data) : null
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['fs-scaffolds', classId] })
 
@@ -821,32 +1030,58 @@ export default function ScaffoldTopicsPage() {
    * made remediation feel like a quiz: the teacher lost the plan they were
    * building and landed in the quiz editor with no way back to it.
    */
-  async function buildPack(topic, plan = null) {
-    setBusy(plan ? `quiz:${plan.id}` : topic.id)
+  async function buildPack(topic, plan = null, targetedEvidence = null, stage = 'reassessment') {
+    setBusy(plan ? `quiz:${plan.id}:${stage}` : topic.id)
     setError(null)
     try {
       // A plan carries only the topic's id and title; the objectives live on
       // the syllabus topic this page already loaded.
       const objectives = topic.objectives ?? data?.topics?.find((t) => t.id === topic.id)?.objectives ?? []
+      const practiceConfig = remediationPracticeConfig(targetedEvidence, 10)
+      // Applying is the existing topic-only practice default. It does not
+      // assign a Bloom weakness when snapshots are absent; the request remains
+      // structured so the approved quotas and generated-tag checks still run.
+      const evidenceInstructions = remediationEvidenceInstructions(targetedEvidence)
+      const otherStageQuizIds = plan ? [
+        plan.guided_practice_quiz_id,
+        plan.independent_practice_quiz_id,
+        plan.recommended_quiz_id,
+      ].filter((id) => id && id !== plan[stageQuizField(stage)]) : []
+      const existingQuestionTexts = otherStageQuizIds.flatMap((id) =>
+        (data?.quizzes ?? []).find((item) => item.id === id)?.questions?.map((q) => String(q.text ?? '').trim()).filter(Boolean) ?? [],
+      )
+      const stageInstructions = !plan || stage === 'legacy' ? '' : `Create the ${stage === 'reassessment' ? 'Reassessment' : stage === 'guided_practice' ? 'Guided Practice' : 'Independent Practice'} assessment for a five-stage remediation. Use the same recorded learning objectives as the other stage assessments, but create distinct questions. Do not reuse or lightly reword these existing question stems: ${JSON.stringify(existingQuestionTexts)}.`
+      const stageLabel = stage === 'guided_practice' ? 'Guided Practice'
+        : stage === 'independent_practice' ? 'Independent Practice'
+          : stage === 'reassessment' ? 'Reassessment' : null
       const quiz = await generateQuiz({
         topic: topic.title,
         topicId: topic.id ?? null,
         objectives,
         numQuestions: 10,
+        types: practiceConfig.types,
+        bloomsLevels: practiceConfig.bloomsLevels,
+        bloomAllocation: practiceConfig.bloomAllocation,
         difficulty: 'medium',
-        hints: { subject: data?.clazz?.subject, targetLevel: 'apply' },
+        instructions: [evidenceInstructions, stageInstructions].filter(Boolean).join('\n\n'),
+        hints: { subject: data?.clazz?.subject, ...(!practiceConfig.usedRecordedBloomLevels ? { targetLevel: 'apply' } : {}) },
       })
+      const questions = draftToQuestions(quiz)
+      if (plan && existingQuestionTexts.length) {
+        if (questions.some((question) => duplicateQuestionStem(question.text, existingQuestionTexts))) {
+          throw new Error('The generated assessment repeated a question from another stage. The draft was not saved; try generation again after reviewing the existing questions.')
+        }
+      }
       // The id is minted here rather than by addDoc: the answer key lands in
       // `quiz_keys/{id}` (Group 7), so the quiz id has to be known before the
       // write, not handed back by it.
       const ref = doc(collection(db, 'quizzes'))
       const quizFields = {
-        // Canonical link. Writing the scalar class_id here is what made
-        // remediation quizzes invisible to the student class page, which
-        // queries class_ids with array-contains.
+        // The ordinary quiz document is only a stage shell; question text is
+        // stored separately and server-released after assignment checks.
         class_ids: [classId],
         teacher_id: profile.id,
-        title: `Remediation · ${topic.title}`,
+        title: `Remediation · ${topic.title}${stageLabel ? ` · ${stageLabel}` : ''}`,
         status: 'draft',
         instructions: '',
         time_limit_minutes: null,
@@ -859,15 +1094,20 @@ export default function ScaffoldTopicsPage() {
         topic_id: topic.id,
         ai_source: 'anthropic',
         created_at: serverTimestamp(),
+        ...(plan && ['guided_practice', 'independent_practice', 'reassessment'].includes(stage)
+          ? { remediation_plan_id: plan.id, remediation_stage: stage }
+          : {}),
       }
-      await writeQuizWithKey(ref.id, quizFields, draftToQuestions(quiz), {
+      await writeQuizWithKey(ref.id, quizFields, questions, {
         teacherId: profile.id,
         schoolId: profile.school_id ?? null,
       })
 
       if (plan) {
-        await updateRemediationPlan(plan.id, { recommended_quiz_id: ref.id })
-        setEditingPlan((p) => (p && p.id === plan.id ? { ...p, recommended_quiz_id: ref.id } : p))
+        const field = stageQuizField(stage)
+        const stagedUpdate = stage === 'legacy' ? { [field]: ref.id } : { [field]: ref.id, progression_version: 1 }
+        await updateRemediationPlan(plan.id, stagedUpdate)
+        setEditingPlan((p) => (p && p.id === plan.id ? { ...p, ...stagedUpdate } : p))
         await refresh()
         return ref.id
       }
@@ -878,6 +1118,26 @@ export default function ScaffoldTopicsPage() {
     } catch (err) {
       setError(err.message)
       return null
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function buildMaterials(plan, evidence) {
+    if (!evidence?.hasScoredEvidence) {
+      throw new Error('No finalized scored evidence is available for these students.')
+    }
+    setBusy(`materials:${plan.id}`)
+    setError(null)
+    try {
+      return await generateScaffoldMaterials({
+        topic: plan.topic,
+        difficultyLevel: 'Targeted from recorded results',
+        learningEvidence: evidence.aiEvidence,
+      })
+    } catch (err) {
+      setError(err.message)
+      throw err
     } finally {
       setBusy(null)
     }
@@ -1188,9 +1448,9 @@ export default function ScaffoldTopicsPage() {
         <RemediationEditor
           plan={activeEditingPlan}
           quizzes={data.quizzes ?? []}
+          attemptsByQuiz={data.attemptsByQuiz ?? {}}
           nameById={data.nameById ?? {}}
           rosterIds={data.rosterIds ?? []}
-          performanceEvidence={data.rows.find((row) => row.id === activeEditingPlan.topic_id)}
           busy={busy}
           onClose={closePlanEditor}
           onSave={async (patch) => {
@@ -1207,11 +1467,12 @@ export default function ScaffoldTopicsPage() {
             })
             if (ok) closePlanEditor()
           }}
-          onGenerateQuiz={() =>
-            buildPack({ id: activeEditingPlan.topic_id, title: activeEditingPlan.topic }, activeEditingPlan)
+          onGenerateQuiz={(stage, targetedEvidence) =>
+            buildPack({ id: activeEditingPlan.topic_id, title: activeEditingPlan.topic }, activeEditingPlan, targetedEvidence, stage)
           }
-          onViewQuiz={async (patch) => {
-            const quizId = activeEditingPlan.recommended_quiz_id
+          onGenerateMaterials={(targetedEvidence) => buildMaterials(activeEditingPlan, targetedEvidence)}
+          onViewQuiz={async (stage, patch) => {
+            const quizId = activeEditingPlan[stageQuizField(stage)]
             if (!quizId) return
             setBusy(`save:${activeEditingPlan.id}`)
             setError(null)
@@ -1260,15 +1521,8 @@ export default function ScaffoldTopicsPage() {
         </div>
       )}
 
-      {/* Feature 4: mastery by Bloom's level. Deliberately handed no data --
-          no question records a Bloom's level yet, so there is nothing true to
-          show, and the component says so ("Not connected yet") in a compact
-          card rather than inventing numbers. It sits last so the tab's real,
-          time-sensitive topic data comes first; once `levels` /
-          `recommendations` are wired here (see components/BloomsBreakdown.jsx
-          for the data contract), it can move up under the count strip. */}
       <div style={{ marginTop: 22 }}>
-        <BloomsBreakdown levels={null} recommendations={null} />
+        <BloomsBreakdown performance={bloomPerformance} />
       </div>
     </div>
   )

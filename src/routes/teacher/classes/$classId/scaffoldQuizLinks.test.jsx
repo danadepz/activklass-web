@@ -172,6 +172,24 @@ describe('T-83 — Scaffold Topics quiz links keep the teacher signed in', () =>
     expect(html).toContain('data-testid="remediation-performance-explanation"')
   })
 
+  it('shows selected students their frozen scored remediation evidence in the existing editor', () => {
+    const html = render({
+      ...base,
+      rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1,
+      quizzes: [{ id: 'Q1', title: 'Atomic check', topic_id: 't1' }],
+      attemptsByQuiz: { Q1: [{
+        student_id: 'S1', status: 'graded', attempt_number: 1, total_score: 0,
+        question_ids: ['q1'], per_question: [{ id: 'q1', earned: 0, possible: 2 }],
+        question_metadata: [{ question_id: 'q1', blooms_level: 'analyze', topic_id: 't1', topic_label: 'Atomic Structure', objective: 'Compare particle models' }],
+      }] },
+    }, plan)
+    expect(html).toContain('data-testid="targeted-remediation-evidence"')
+    expect(html).toContain('Atomic check, Question 1: incorrect (0/2 pts)')
+    expect(html).toContain('Bloom: analyze')
+    expect(html).toContain('Compare particle models')
+    expect(html).toContain('Draft targeted learning materials')
+  })
+
   it('clearly labels an existing AI-generated quiz', () => {
     const html = render({
       ...base, rows: [weakTopic], topics: [weakTopic], topicCount: 1, linkedQuizzes: 1,

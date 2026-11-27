@@ -12,6 +12,7 @@ import {
   questionFingerprint,
   splitAgainstBank,
   toBankPayload,
+  withQuestionTopic,
 } from './questionBank.js'
 
 const mcq = (text, points = 1) => ({
@@ -90,13 +91,14 @@ describe('toBankPayload', () => {
   it('drops the in-quiz id and editor key, and stamps provenance', () => {
     const payload = toBankPayload(
       { ...mcq('Define osmosis'), _key: 'k1' },
-      { topicId: 't1', syllabusId: 's1', origin: 'ai_generated', sourceQuizId: 'quiz1' },
+      { topicId: 't1', topicLabel: 'Module · Topic', syllabusId: 's1', origin: 'ai_generated', sourceQuizId: 'quiz1' },
     )
     expect(payload.id).toBeUndefined()
     expect(payload._key).toBeUndefined()
     expect(payload).toMatchObject({
       qtype: 'mcq',
       topic_id: 't1',
+      topic_label: 'Module · Topic',
       syllabus_id: 's1',
       origin: 'ai_generated',
       source_quiz_id: 'quiz1',
@@ -109,9 +111,33 @@ describe('toBankPayload', () => {
     // Firestore rejects undefined; a bare toBankPayload(q) must still write.
     const payload = toBankPayload(mcq('Define osmosis'))
     expect(payload.topic_id).toBeNull()
+    expect(payload.topic_label).toBeNull()
     expect(payload.syllabus_id).toBeNull()
     expect(payload.source_quiz_id).toBeNull()
     expect(payload.origin).toBe('manual')
+  })
+
+  it('keeps optional Bloom, topic label and objective metadata when banking a question', () => {
+    const payload = toBankPayload({
+      ...mcq('Analyze the chart'), blooms_level: 'analyze', topic_id: 'topic-7',
+      topic_label: 'Data · Trends', objective: 'Compare rates over time',
+    })
+    expect(payload).toMatchObject({
+      blooms_level: 'analyze', topic_id: 'topic-7', topic_label: 'Data · Trends',
+      objective: 'Compare rates over time',
+    })
+  })
+})
+
+describe('withQuestionTopic', () => {
+  it('attaches the selected stable id and label without touching Bloom or objective data', () => {
+    const [question] = withQuestionTopic([
+      { ...mcq('Compare sources'), blooms_level: 'analyze', objective: 'Compare evidence' },
+    ], { topicId: 'topic-4', topicLabel: 'Module · Sources' })
+    expect(question).toMatchObject({
+      topic_id: 'topic-4', topic_label: 'Module · Sources',
+      blooms_level: 'analyze', objective: 'Compare evidence',
+    })
   })
 })
 

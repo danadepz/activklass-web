@@ -23,6 +23,36 @@
  */
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { BLOOMS_ORDER } from './bloomsAllocation'
+
+/**
+ * Snapshot only descriptive metadata for the exact paper started by a student.
+ * A missing Bloom tag is stored as null (Unknown), never inferred from the quiz.
+ */
+export function questionMetadataSnapshot(questions = [], quiz = {}) {
+  return (questions ?? []).map((question) => {
+    const questionTopicId = question.topic_id || null
+    const topicId = questionTopicId || quiz.topic_id || null
+    const topicLabel = question.topic_label
+      || (topicId && topicId === quiz.topic_id ? (quiz.topic_label || quiz.topic || null) : null)
+    const objective = typeof question.objective === 'string' && question.objective.trim()
+      ? question.objective.trim()
+      : null
+    return {
+      question_id: String(question.id),
+      blooms_level: BLOOMS_ORDER.includes(question.blooms_level) ? question.blooms_level : null,
+      topic_id: topicId,
+      topic_label: typeof topicLabel === 'string' && topicLabel.trim() ? topicLabel.trim() : null,
+      objective,
+    }
+  })
+}
+
+/** Older attempts have no snapshot; both those and null Bloom tags are Unknown. */
+export function attemptBloomLevel(attempt, questionId) {
+  const metadata = (attempt?.question_metadata ?? []).find((item) => item.question_id === String(questionId))
+  return BLOOMS_ORDER.includes(metadata?.blooms_level) ? metadata.blooms_level : 'unknown'
+}
 
 /**
  * Split questions into the student-visible half and the protected half.
@@ -166,7 +196,24 @@ export async function loadQuizWithKey(quizId) {
   const snap = await getDoc(doc(db, 'quizzes', quizId))
   if (!snap.exists()) return null
   const quiz = { id: snap.id, ...snap.data() }
+  if (isProgressiveStageQuiz(quiz)) {
+    let content
+    try {
+      content = await getDoc(doc(db, 'quiz_stage_content', quizId))
+    } catch (err) {
+      throw new QuizKeyReadError(`Failed to load locked stage questions for quiz "${quizId}": ${err?.message || err}`, err)
+    }
+    if (!content.exists() || !Array.isArray(content.data()?.questions)) {
+      throw new QuizKeyReadError(`Locked stage questions for quiz "${quizId}" are unavailable.`)
+    }
+    quiz.questions = content.data().questions
+  }
   return attachKeyIfNeeded(quiz)
+}
+
+function isProgressiveStageQuiz(quiz) {
+  return ['guided_practice', 'independent_practice', 'reassessment'].includes(quiz?.remediation_stage)
+    && typeof quiz?.remediation_plan_id === 'string'
 }
 
 /** `loadQuizWithKey`'s second half, for callers that already have the document. */
@@ -227,9 +274,21 @@ export function writeQuizWithKey(
   const split = splitQuestions(questions)
   const batch = writeBatch(db)
   const quizRef = doc(db, 'quizzes', quizId)
-  const payload = { ...fields, questions: split.questions, updated_at: serverTimestamp() }
+  const stageQuiz = isProgressiveStageQuiz({ ...quiz, ...fields })
+  const payload = { ...fields, questions: stageQuiz ? [] : split.questions, updated_at: serverTimestamp() }
   if (merge) batch.update(quizRef, payload)
   else batch.set(quizRef, payload)
+  if (stageQuiz) {
+    batch.set(doc(db, 'quiz_stage_content', quizId), {
+      quiz_id: quizId,
+      teacher_id: teacherId ?? fields.teacher_id ?? null,
+      class_ids: fields.class_ids ?? quiz?.class_ids ?? [],
+      questions: split.questions,
+      updated_at: serverTimestamp(),
+    })
+  } else if (quiz?.remediation_stage) {
+    batch.delete(doc(db, 'quiz_stage_content', quizId))
+  }
   batch.set(doc(db, 'quiz_keys', quizId), {
     quiz_id: quizId,
     // The rules scope every read and write off this field, so it is not
@@ -254,5 +313,6 @@ export function deleteQuizWithKey(quizId) {
   const batch = writeBatch(db)
   batch.delete(doc(db, 'quizzes', quizId))
   batch.delete(doc(db, 'quiz_keys', quizId))
+  batch.delete(doc(db, 'quiz_stage_content', quizId))
   return batch.commit()
 }

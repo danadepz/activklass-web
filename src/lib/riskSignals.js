@@ -102,6 +102,9 @@ export function distinctQuizScores(attempts, quizDates = {}) {
   const byQuiz = new Map()
   let anon = 0
   for (const a of attempts ?? []) {
+    // The backend derives this marker from trusted staged-quiz metadata when
+    // finalizing the attempt. Staged practice is not regular quiz evidence.
+    if (['guided_practice', 'independent_practice', 'reassessment'].includes(a?.remediation_stage)) continue
     if (a?.total_score == null || !a?.total_possible) continue
     const pct = (a.total_score / a.total_possible) * 100
     const key = a.quiz_id ?? `__no_quiz_id_${anon++}`

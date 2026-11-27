@@ -280,6 +280,22 @@ describe('quiz indicators · one value per distinct quiz', () => {
     expect(distinctQuizScores(attempts).map((q) => q.quizId)).toEqual(['q1', 'q2'])
   })
 
+  it('excludes server-tagged progressive remediation stages from average and trend', () => {
+    const withStages = [
+      att('q1', 9, 10, '02'), att('q2', 8, 10, '05'), att('q3', 4, 10, '09'),
+      att('guided', 0, 10, '10', { remediation_stage: 'guided_practice' }),
+      att('independent', 0, 10, '11', { remediation_stage: 'independent_practice' }),
+      att('reassessment', 0, 10, '12', { remediation_stage: 'reassessment' }),
+    ]
+    const dates = {
+      q1: '2026-11-02', q2: '2026-11-05', q3: '2026-11-09',
+      guided: '2026-11-10', independent: '2026-11-11', reassessment: '2026-11-12',
+    }
+    expect(quizAverageFromAttempts(withStages)).toBe(70)
+    expect(quizTrendDistinct(withStages, dates)).toBe(-45)
+    expect(distinctQuizScores(withStages, dates).map((q) => q.quizId)).toEqual(['q1', 'q2', 'q3'])
+  })
+
   it('no longer reports the single best attempt across all quizzes', () => {
     // The old teacher figure here would have been 90.
     expect(quizAverageFromAttempts(attempts)).not.toBe(90)

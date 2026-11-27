@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -42,26 +42,41 @@ function isAnswered(q, a) {
   }
 }
 
-export async function loadPlayerData(classId, quizId, studentId) {
-  const [quizSnap, classSnap] = await Promise.all([
-    getDoc(doc(db, 'quizzes', quizId)),
-    getDoc(doc(db, 'classes', classId)),
-  ])
-  if (!quizSnap.exists()) throw new Error('not_found')
+export async function loadPlayerData(classId, quizId, studentId, remediationContext = null) {
+  const classSnap = await getDoc(doc(db, 'classes', classId))
   if (!classSnap.exists()) throw new Error('not_found')
-  const quiz = { id: quizSnap.id, ...quizSnap.data() }
   const clazz = classSnap.data()
   if (!(clazz.student_ids ?? []).includes(studentId)) throw new Error('not_enrolled')
   // T-70: a per-class Disable, not an account one -- still enrolled, but may
   // not START a quiz. Finished-attempt feedback lives on a different route
   // (student/quiz-feedback.jsx) and is untouched by this.
   if (isDroppedFromClass(clazz, studentId)) throw new Error('dropped')
+  let quiz
+  if (remediationContext) {
+    const response = await api('/api/remediations/assessment-content', {
+      method: 'POST',
+      body: {
+        assignment_id: remediationContext.assignment_id,
+        stage: remediationContext.stage,
+        quiz_id: quizId,
+        class_id: classId,
+      },
+    })
+    quiz = response.quiz
+    if (!quiz || quiz.id !== quizId || quiz.remediation_stage !== remediationContext.stage) throw new Error('not_found')
+  } else {
+    const quizSnap = await getDoc(doc(db, 'quizzes', quizId))
+    if (!quizSnap.exists()) throw new Error('not_found')
+    quiz = { id: quizSnap.id, ...quizSnap.data() }
+  }
   // T-261: the quiz must be assigned to THIS class, not just readable. Being
   // enrolled here proved nothing about a quiz another class was given, and the
   // attempt would have been filed under this class. Same rule as mobile
   // startAttempt: class_ids when present, the legacy scalar otherwise.
-  const assignedClasses = Array.isArray(quiz.class_ids) ? quiz.class_ids : quiz.class_id ? [quiz.class_id] : []
-  if (!assignedClasses.includes(classId)) throw new Error('wrong_class')
+  if (!quiz.remediation_stage) {
+    const assignedClasses = Array.isArray(quiz.class_ids) ? quiz.class_ids : quiz.class_id ? [quiz.class_id] : []
+    if (!assignedClasses.includes(classId)) throw new Error('wrong_class')
+  }
   // Respect targeted assignment ('all'/legacy = everyone; otherwise an id list).
   const assignedTo = quiz.assigned_to
   if (assignedTo && assignedTo !== 'all' && !(Array.isArray(assignedTo) && assignedTo.includes(studentId))) {
@@ -258,7 +273,7 @@ export async function unlockThenStart({ quiz, classId, password, start }) {
   return start()
 }
 
-export function StartCard({ quiz, attempts, classId, onStarted }) {
+export function StartCard({ quiz, attempts, classId, onStarted, remediationContext = null }) {
   const { profile } = useAuth()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState(null)
@@ -286,7 +301,7 @@ export function StartCard({ quiz, attempts, classId, onStarted }) {
       if (typeof document !== 'undefined' && document.documentElement?.requestFullscreen) {
         document.documentElement?.requestFullscreen().catch(() => {})
       }
-      await unlockThenStart({ quiz, classId, password, start: () => startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber }) })
+      await unlockThenStart({ quiz, classId, password, start: () => startAttempt({ quiz, classId, studentId: profile.id, questions, attemptNumber, remediationContext }) })
       onStarted()
     } catch (err) {
       setError(err.message)
@@ -915,6 +930,7 @@ export function Runner({ quiz, attempt, isResume }) {
 
 export default function QuizPlayer() {
   const { classId, quizId } = useParams()
+  const location = useLocation()
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   /* Set when this tab is the one that pressed Start, so the Runner does not
@@ -923,7 +939,7 @@ export default function QuizPlayer() {
   const [startedNow, setStartedNow] = useState(false)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['quiz-player', quizId, profile?.id],
-    queryFn: () => loadPlayerData(classId, quizId, profile?.id),
+    queryFn: () => loadPlayerData(classId, quizId, profile?.id, location.state?.remediationContext ?? null),
     enabled: !!quizId && !!profile?.id,
     retry: false,
     refetchOnWindowFocus: false,
@@ -988,11 +1004,15 @@ export default function QuizPlayer() {
 
   const open = openAttempt(attempts)
   if (!open) {
+    if (quiz.remediation_stage && (location.state?.remediationContext?.stage !== quiz.remediation_stage || !location.state?.remediationContext?.assignment_id)) {
+      return <Gate icon={<AlertCircle className="h-6 w-6" />} title="Open from Learning Stages" classId={classId}>Start this assessment from its current stage on the Scaffolded Learning page.</Gate>
+    }
     return (
       <StartCard
         quiz={quiz}
         attempts={attempts}
         classId={classId}
+        remediationContext={location.state?.remediationContext ?? null}
         onStarted={() => {
           // Remembered so the Runner does not log its own opening as a reopen.
           setStartedNow(true)

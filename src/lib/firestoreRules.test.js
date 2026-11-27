@@ -3786,3 +3786,89 @@ describe('academic policy 2026-11-22 · class dates and grading periods', () => 
     await assertSucceeds(updateDoc(doc(ctx(ADMIN), 'gradebooks', 'class-1'), { configured: true }))
   })
 })
+
+describe('progressive remediation assessment content and attempts', () => {
+  async function seedProgressiveAssessment() {
+    await testEnv.withSecurityRulesDisabled(async (admin) => {
+      const db = admin.firestore()
+      await setDoc(doc(db, 'remediations', 'stage-plan'), {
+        kind: 'plan', class_id: 'class-1', status: 'published', progression_version: 1,
+      })
+      await setDoc(doc(db, 'remediations', 'stage-assignment'), {
+        kind: 'assignment', plan_id: 'stage-plan', class_id: 'class-1',
+        student_id: STUDENT, status: 'published', progression_version: 1,
+        guided_practice_quiz_id: 'guided-q', independent_practice_quiz_id: 'independent-q',
+        recommended_quiz_id: 'reassessment-q',
+        stage_progress: {
+          concept_review_complete: true, worked_example_complete: true,
+          guided_attempt_ids: [], independent_attempt_ids: [], reassessment_attempt_ids: [],
+        },
+      })
+      await setDoc(doc(db, 'quizzes', 'regular-q'), {
+        teacher_id: TEACHER, status: 'published', class_ids: ['class-1'],
+        questions: [{ id: 'regular-question', text: 'Regular question' }],
+      })
+      for (const [quizId, stage] of [
+        ['guided-q', 'guided_practice'],
+        ['independent-q', 'independent_practice'],
+        ['reassessment-q', 'reassessment'],
+      ]) {
+        await setDoc(doc(db, 'quizzes', quizId), {
+          teacher_id: TEACHER, status: 'published', class_ids: ['class-1'], questions: [],
+          remediation_plan_id: 'stage-plan', remediation_stage: stage,
+        })
+        await setDoc(doc(db, 'quiz_stage_content', quizId), {
+          quiz_id: quizId, teacher_id: TEACHER, class_ids: ['class-1'],
+          questions: [{ id: `${quizId}-question`, text: 'Private stage question' }],
+        })
+      }
+    })
+  }
+
+  const stageAttempt = (quizId, uid = STUDENT, stage = 'guided_practice') => setDoc(
+    doc(ctx(uid), 'quiz_attempts', `attempt-${quizId}-${uid}-${stage}`), {
+      quiz_id: quizId, class_id: 'class-1', student_id: uid, status: 'in_progress',
+      remediation_context_request: { assignment_id: 'stage-assignment', stage },
+    },
+  )
+
+  it('keeps stage questions private while regular class quiz queries continue to work', async () => {
+    await seedProgressiveAssessment()
+    await assertFails(getDoc(doc(ctx(STUDENT), 'quiz_stage_content', 'guided-q')))
+    const shell = await assertSucceeds(getDoc(doc(ctx(STUDENT), 'quizzes', 'guided-q')))
+    expect(shell.data().questions).toEqual([])
+    const classQuizzes = await assertSucceeds(getDocs(query(
+      collection(ctx(STUDENT), 'quizzes'), where('class_ids', 'array-contains', 'class-1'),
+    )))
+    expect(classQuizzes.docs.some((item) => item.id === 'regular-q')).toBe(true)
+    expect(classQuizzes.docs.find((item) => item.id === 'guided-q').data().questions).toEqual([])
+    await assertSucceeds(getDoc(doc(ctx(TEACHER), 'quiz_stage_content', 'guided-q')))
+  })
+
+  it('allows only the assigned student to start the currently unlocked stage with matching context', async () => {
+    await seedProgressiveAssessment()
+    await assertSucceeds(stageAttempt('guided-q'))
+    await assertFails(stageAttempt('guided-q', OTHER_STUDENT))
+    await assertFails(stageAttempt('guided-q', STUDENT, 'reassessment'))
+    await assertFails(stageAttempt('independent-q', STUDENT, 'independent_practice'))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'markerless-stage-attempt'), {
+      quiz_id: 'guided-q', class_id: 'class-1', student_id: STUDENT, status: 'in_progress',
+    }))
+    await assertFails(setDoc(doc(ctx(STUDENT), 'quiz_attempts', 'forged-stage-marker'), {
+      quiz_id: 'regular-q', class_id: 'class-1', student_id: STUDENT, status: 'in_progress',
+      remediation_context_request: { assignment_id: 'stage-assignment', stage: 'guided_practice' },
+    }))
+  })
+
+  it('does not let clients write server-authoritative stage progress', async () => {
+    await seedProgressiveAssessment()
+    await assertFails(updateDoc(doc(ctx(TEACHER), 'remediations', 'stage-assignment'), {
+      'stage_progress.guided_practice_passed': true,
+    }))
+    await assertFails(setDoc(doc(ctx(TEACHER), 'remediations', 'forged-assignment'), {
+      kind: 'assignment', plan_id: 'stage-plan', class_id: 'class-1', student_id: STUDENT,
+      status: 'published', progression_version: 1,
+      stage_progress: { concept_review_complete: true, worked_example_complete: true, guided_practice_passed: true },
+    }))
+  })
+})

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, getDocs, query, where, documentId } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { loadSyllabus } from '@/lib/studentData'
@@ -23,6 +23,7 @@ import {
 } from './scaffolding'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
+import { api } from '@/lib/api'
 
 /**
  * Scaffolded Learning, student side.
@@ -94,11 +95,21 @@ async function loadScaffolding(studentId) {
     list.sort((a, b) => (b.submitted_at?.seconds ?? 0) - (a.submitted_at?.seconds ?? 0))
   }
 
+  const stageProgressByAssignment = {}
+  await Promise.all(remediations.filter((row) => row.progression_version === 1).map(async (row) => {
+    try {
+      stageProgressByAssignment[row.id] = await api(`/api/remediations/${encodeURIComponent(row.id)}/progress`, { method: 'POST', body: {} })
+    } catch {
+      stageProgressByAssignment[row.id] = { error: true }
+    }
+  }))
+
   return {
     remediations: remediations.map((r) => ({ ...r, class_label: labels[r.class_id] ?? null })),
     syllabusByClass,
     quizzesByClass,
     attemptsByQuiz,
+    stageProgressByAssignment,
   }
 }
 
@@ -391,9 +402,107 @@ function WhereThisFits({ r, syllabus }) {
   )
 }
 
+const PROGRESSIVE_STAGE_LABELS = {
+  concept_review: 'Concept Review',
+  worked_example: 'Worked Example',
+  guided_practice: 'Guided Practice',
+  independent_practice: 'Independent Practice',
+  reassessment: 'Reassessment',
+}
+
+function ProgressiveStages({ assignment, progress, quizzes, attemptsByQuiz, studentId, onProgressChanged }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  if (!progress || progress.error) {
+    return <p role="status" style={{ fontSize: 13, color: muted }}>Your stage progress could not be loaded. Refresh this page or ask your teacher for help.</p>
+  }
+
+  const current = progress.current_stage
+  const currentIsAssessment = ['guided_practice', 'independent_practice', 'reassessment'].includes(current)
+  const quizField = current === 'guided_practice'
+    ? 'guided_practice_quiz_id'
+    : current === 'independent_practice'
+      ? 'independent_practice_quiz_id'
+      : current === 'reassessment' ? 'recommended_quiz_id' : null
+  const quizId = quizField ? assignment[quizField] : null
+  const quiz = quizzes.find((row) => row.id === quizId)
+  const attempts = quizId ? (attemptsByQuiz[quizId] ?? []).filter((attempt) =>
+    attempt.remediation_context?.assignment_id === assignment.id
+      && attempt.remediation_context?.stage === current,
+  ) : []
+  const finalized = attempts.filter((attempt) => attempt.status === 'graded' && !attempt.has_essays_pending && Number(attempt.total_possible) > 0)
+  const latest = [...attempts].sort((a, b) => (b.submitted_at?.seconds ?? 0) - (a.submitted_at?.seconds ?? 0))[0]
+  const latestPercent = latest?.status === 'graded' && !latest.has_essays_pending && Number(latest.total_possible) > 0
+    ? Math.round((Number(latest.total_score) / Number(latest.total_possible)) * 100)
+    : null
+  const live = openAttempt(attempts)
+  const allowed = quiz ? attemptsAllowedFor(quiz, studentId) : 0
+  const used = quiz ? finishedAttempts(attempts).length : 0
+  const canTake = quiz?.status === 'published' && (live || used < allowed)
+
+  async function acknowledge() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/api/remediations/${encodeURIComponent(assignment.id)}/acknowledge`, {
+        method: 'POST', body: { stage: current },
+      })
+      await onProgressChanged()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section data-testid="progressive-remediation" aria-label="Learning stage progress">
+      <div className="grid gap-2 sm:grid-cols-5" style={{ marginBottom: 18 }}>
+        {progress.stages.map((stage, index) => (
+          <div key={stage.id} data-stage-status={stage.status} style={{ border: `1px solid ${stage.status === 'current' ? 'rgba(63,169,245,0.55)' : line}`, background: stage.status === 'current' ? 'rgba(63,169,245,0.08)' : '#FFFFFF', borderRadius: 10, padding: '9px 10px' }}>
+            <div style={{ fontSize: 10, color: faint, fontWeight: 700 }}>STAGE {index + 1}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: stage.status === 'locked' ? faint : ink, marginTop: 2 }}>{PROGRESSIVE_STAGE_LABELS[stage.id]}</div>
+            <div style={{ fontSize: 10.5, color: stage.status === 'complete' ? green : stage.status === 'current' ? navy : faint, marginTop: 2 }}>{stage.status === 'complete' ? 'Complete' : stage.status === 'current' ? 'Current' : 'Locked'}</div>
+          </div>
+        ))}
+      </div>
+
+      {current === 'complete' ? (
+        <p role="status" style={{ fontSize: 13, color: green, margin: 0 }}>You completed all five learning stages. Your official grades were not changed by this work.</p>
+      ) : (
+        <div style={{ border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px', background: '#FFFFFF' }}>
+          <SectionLabel>{PROGRESSIVE_STAGE_LABELS[current]}</SectionLabel>
+          {progress.content?.trim()
+            ? <div style={{ marginBottom: 12 }}><Markdown text={progress.content} /></div>
+            : <p style={{ fontSize: 13, color: muted }}>Your teacher is preparing this stage. Check back later.</p>}
+
+          {current === 'concept_review' || current === 'worked_example' ? (
+            <button type="button" onClick={acknowledge} disabled={busy || !progress.content?.trim()} className="rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-50" style={{ background: navy }}>
+              {busy ? 'Saving…' : 'Mark Stage Complete'}
+            </button>
+          ) : currentIsAssessment ? (
+            <>
+              {latest?.status === 'submitted' && <p role="status" style={{ fontSize: 12, color: muted }}>Your work is waiting for teacher grading. It will not count as a pass until finalized.</p>}
+              {latestPercent != null && latestPercent < 75 && <p role="status" style={{ fontSize: 12, color: goldDeep }}>Your latest score is {latestPercent}%. A score of at least 75% is needed to continue. Continue this stage and ask your teacher for more attempts when the allowance is used.</p>}
+              {quiz?.status !== 'published' && <p role="status" style={{ fontSize: 12, color: muted }}>The assessment is not available yet. Your teacher must review and publish it.</p>}
+              {quiz?.status === 'published' && !canTake && <p role="status" style={{ fontSize: 12, color: muted }}>You have used the available attempts for this stage. Ask your teacher for further support or another attempt.</p>}
+              {canTake && (
+                <Link to={`/student/classes/${assignment.class_id}/quizzes/${quiz.id}`} state={{ remediationContext: { assignment_id: assignment.id, stage: current } }} className="inline-flex rounded-lg px-4 py-2 text-sm font-bold text-white" style={{ background: navy, textDecoration: 'none' }}>
+                  {live ? 'Resume Assessment' : finalized.length ? 'Try Again' : 'Start Assessment'}
+                </Link>
+              )}
+            </>
+          ) : null}
+          {error && <p role="alert" style={{ color: '#A12B20', fontSize: 12, marginBottom: 0 }}>{error}</p>}
+        </div>
+      )}
+    </section>
+  )
+}
+
 /* ─────────────────────────── card ─────────────────────────── */
 
-function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOpenNote }) {
+function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, stageProgress, studentId, onOpenNote, onProgressChanged }) {
   return (
     <article style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 'clamp(18px, 3vw, 26px)' }}>
       <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 10 }}>
@@ -416,6 +525,16 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOp
         <WhereThisFits r={r} syllabus={syllabus} />
       </section>
 
+      {r.progression_version === 1 ? (
+        <ProgressiveStages
+          assignment={r}
+          progress={stageProgress}
+          quizzes={quizzes}
+          attemptsByQuiz={attemptsByQuiz}
+          studentId={studentId}
+          onProgressChanged={onProgressChanged}
+        />
+      ) : <>
       {/* What the teacher wrote when they published this — the one field on
           the assignment that is theirs, and the reason the card exists. */}
       {r.guidance?.trim() && (
@@ -438,12 +557,14 @@ function RemediationCard({ r, syllabus, quizzes, attemptsByQuiz, studentId, onOp
         <SectionLabel>Take Test Mastery</SectionLabel>
         <TakeTestMastery r={r} quizzes={quizzes} attemptsByQuiz={attemptsByQuiz} studentId={studentId} />
       </section>
+      </>}
     </article>
   )
 }
 
 export default function StudentRemediation() {
   const { profile } = useAuth()
+  const queryClient = useQueryClient()
   const [activeNote, setActiveNote] = useState(null)
   const { panelProps: notePanel } =
     useDialogBehavior(() => setActiveNote(null), { open: !!activeNote, label: 'Practice note' })
@@ -455,6 +576,7 @@ export default function StudentRemediation() {
   })
 
   const list = data?.remediations ?? []
+  const refreshProgress = () => queryClient.invalidateQueries({ queryKey: ['student-scaffolding', profile?.id] })
 
   return (
     <div style={{ maxWidth: 1040, margin: '0 auto' }}>
@@ -503,8 +625,10 @@ export default function StudentRemediation() {
               syllabus={data.syllabusByClass[r.class_id] ?? null}
               quizzes={data.quizzesByClass[r.class_id] ?? []}
               attemptsByQuiz={data.attemptsByQuiz}
+              stageProgress={data.stageProgressByAssignment?.[r.id]}
               studentId={profile.id}
               onOpenNote={setActiveNote}
+              onProgressChanged={refreshProgress}
             />
           ))}
         </div>
