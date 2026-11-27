@@ -13,14 +13,16 @@ import { describe, expect, it, vi } from 'vitest'
 const apiMock = vi.fn(async () => ({ total_score: 7, status: 'graded' }))
 vi.mock('@/lib/api', () => ({ api: (...args) => apiMock(...args) }))
 const updateDocMock = vi.fn()
+const addDocMock = vi.fn(async () => ({ id: 'attempt-1' }))
+const getDocMock = vi.fn(async () => ({ data: () => ({ started_at: { toMillis: () => 1_000 } }) }))
 const deleteFieldSentinel = { sentinel: 'deleteField' }
 vi.mock('firebase/firestore', () => ({
-  addDoc: vi.fn(),
+  addDoc: (...args) => addDocMock(...args),
   arrayUnion: vi.fn((v) => v),
   collection: vi.fn(),
   deleteField: vi.fn(() => deleteFieldSentinel),
   doc: vi.fn((_, col, id) => `${col}/${id}`),
-  getDoc: vi.fn(),
+  getDoc: (...args) => getDocMock(...args),
   increment: vi.fn((n) => n),
   serverTimestamp: vi.fn(() => 'server-timestamp'),
   updateDoc: (...args) => updateDocMock(...args),
@@ -33,8 +35,29 @@ const {
   reportViolation,
   saveDraftAnswers,
   setStudentQuizAccess,
+  startAttempt,
   unlockAttempt,
 } = await import('./useAttemptSession')
+
+describe('startAttempt metadata snapshot', () => {
+  it('captures the presented questions and preserves missing Bloom as Unknown', async () => {
+    addDocMock.mockClear()
+    await startAttempt({
+      quiz: { id: 'quiz-1', topic_id: 'topic-1', topic_label: 'Module · Topic' },
+      classId: 'class-1', studentId: 'student-1', attemptNumber: 1,
+      questions: [
+        { id: 'q1', blooms_level: 'analyze', topic_id: 'topic-1', topic_label: 'Module · Topic', objective: 'Compare' },
+        { id: 'q2' },
+      ],
+    })
+    const [, payload] = addDocMock.mock.calls[0]
+    expect(payload.question_ids).toEqual(['q1', 'q2'])
+    expect(payload.question_metadata).toEqual([
+      { question_id: 'q1', blooms_level: 'analyze', topic_id: 'topic-1', topic_label: 'Module · Topic', objective: 'Compare' },
+      { question_id: 'q2', blooms_level: null, topic_id: 'topic-1', topic_label: 'Module · Topic', objective: null },
+    ])
+  })
+})
 
 describe('finishAttempt', () => {
   it('posts the raw answers to the server-grading endpoint, never a client-computed score', async () => {

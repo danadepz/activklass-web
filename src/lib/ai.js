@@ -14,6 +14,7 @@
  */
 import { api, ApiError } from './api'
 import { validateModuleStructure, validateSyllabusStructure } from './aiDrafts'
+import { BLOOMS_ORDER, BLOOM_TYPE_GUIDANCE, validateBloomAllocation } from './bloomsAllocation'
 
 /**
  * Teacher-readable text for the failures these endpoints actually return.
@@ -152,10 +153,12 @@ function buildQuizNotes({ instructions, bloomsLevel, subject, subjectCode, targe
  * id/title/class_ids to /api/quizzes and write the questions straight to
  * Firestore, so the backend's parse_questions validation never sees them.
  */
-function questionProblem(q, allowedTypes) {
+function questionProblem(q, allowedTypes, structuredBlooms = true) {
   if (!(q?.text ?? '').trim()) return 'empty question text'
   // Fixed wording: q.type is model output and these reasons reach the teacher's banner.
   if (!allowedTypes.includes(q.type)) return 'question type not requested'
+  if (structuredBlooms && !BLOOMS_ORDER.includes(q.blooms_level)) return 'missing or invalid Bloom level tag'
+  if (structuredBlooms && !BLOOM_TYPE_GUIDANCE[q.blooms_level].compatible.includes(q.type)) return 'question type incompatible with Bloom level'
 
   switch (q.type) {
     case 'mcq': {
@@ -202,15 +205,16 @@ function questionProblem(q, allowedTypes) {
  * `draftToQuestions` below now maps all five faithfully -- a page only needs to
  * ask for them via `types`.
  */
-function validateQuizDraft(draft, allowedTypes, requestedCount, objectives = []) {
+export function validateQuizDraft(draft, allowedTypes, requestedCount, objectives = [], bloomAllocation) {
   if (!Array.isArray(draft?.questions)) {
     throw new Error('The AI returned a draft with no questions. Try generating again.')
   }
 
   const kept = []
   const dropped = []
+  const structuredBlooms = bloomAllocation !== undefined
   draft.questions.forEach((q, i) => {
-    const problem = questionProblem(q, allowedTypes)
+    const problem = questionProblem(q, allowedTypes, structuredBlooms)
     if (problem) dropped.push(`Q${i + 1} (${problem})`)
     else kept.push(q)
   })
@@ -231,7 +235,21 @@ function validateQuizDraft(draft, allowedTypes, requestedCount, objectives = [])
     )
   }
 
-  const tagged = tagObjectives(kept, objectives)
+  const bloomSafeQuestions = structuredBlooms
+    ? kept
+    : kept.map((question) => Object.fromEntries(
+      Object.entries(question).filter(([key]) => key !== 'blooms_level'),
+    ))
+  const tagged = tagObjectives(bloomSafeQuestions, objectives)
+
+  if (structuredBlooms) {
+    const actualAllocation = Object.fromEntries(BLOOMS_ORDER.map((level) => [
+      level, tagged.filter((q) => q.blooms_level === level).length,
+    ]))
+    if (BLOOMS_ORDER.some((level) => actualAllocation[level] !== Number(bloomAllocation[level] ?? 0))) {
+      throw new Error('The AI draft did not match the requested Bloom question distribution. Nothing was saved. Try generating again.')
+    }
+  }
 
   const warnings = []
   const off = tagged.map((q, i) => (q.off_objective ? `Q${i + 1}` : null)).filter(Boolean)
@@ -310,21 +328,31 @@ export async function generateQuiz({
   instructions,
   objectives = [],
   hints,
+  bloomAllocation,
+  bloomsLevels,
 }) {
   const badTypes = types.filter((t) => !QUIZ_TYPES.includes(t))
   if (badTypes.length) {
     throw new Error(`Unknown question type(s): ${badTypes.join(', ')}`)
   }
   if (!types.length) throw new Error('Pick at least one question type')
+  // Keep the request count aligned with the endpoint's established clamp.
+  const { min, max } = QUIZ_QUESTION_LIMITS
+  const count = Math.min(Math.max(Math.round(Number(numQuestions)) || min, min), max)
+  const hasLevels = bloomsLevels !== undefined
+  const hasAllocation = bloomAllocation !== undefined
+  const structuredBlooms = hasLevels || hasAllocation
+  if (hasLevels !== hasAllocation) throw new Error('Provide both selected Bloom levels and a complete allocation.')
+  if (structuredBlooms) {
+    const allocationError = validateBloomAllocation({ count, selectedLevels: bloomsLevels, allocation: bloomAllocation })
+    if (allocationError) throw new Error(allocationError)
+  }
   if (!QUIZ_DIFFICULTIES.includes(difficulty)) {
     throw new Error(`Unknown difficulty: ${difficulty}`)
   }
 
   // The endpoint clamps to this range silently. Clamping here too means the
   // shortfall warning below compares against what was actually asked for.
-  const { min, max } = QUIZ_QUESTION_LIMITS
-  const count = Math.min(Math.max(Math.round(Number(numQuestions)) || min, min), max)
-
   const cleanObjectives = objectives
     .filter((o) => typeof o === 'string')
     .map((o) => o.trim())
@@ -341,10 +369,28 @@ export async function generateQuiz({
         types,
         difficulty,
         notes: buildQuizNotes({ ...hints, instructions }),
+        ...(structuredBlooms ? {
+          blooms_levels: BLOOMS_ORDER.filter((level) => bloomsLevels.includes(level)),
+          bloom_allocation: Object.fromEntries(BLOOMS_ORDER.map((level) => [level, Number(bloomAllocation[level] ?? 0)])),
+        } : {}),
       },
     }),
   )
-  return validateQuizDraft(draft, types, count, cleanObjectives)
+  return validateQuizDraft(draft, types, count, cleanObjectives, structuredBlooms ? bloomAllocation : undefined)
+}
+
+/** Draft teacher-reviewable targeted learning materials; never saves them. */
+export async function generateScaffoldMaterials({ topic, difficultyLevel = 'Targeted', learningEvidence }) {
+  return withAIErrors('generating targeted learning materials', () =>
+    api('/api/generate_scaffold', {
+      method: 'POST',
+      body: {
+        topic,
+        difficulty_level: difficultyLevel,
+        learning_evidence: learningEvidence,
+      },
+    }),
+  )
 }
 
 const newQuestionId = () =>
@@ -380,6 +426,7 @@ export function draftToQuestions(draft) {
       objective: String(q.objective ?? '').trim(),
       off_objective: q.off_objective === true,
     }
+    if (BLOOMS_ORDER.includes(q.blooms_level)) base.blooms_level = q.blooms_level
     switch (q.type) {
       case 'mcq':
         return {

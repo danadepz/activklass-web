@@ -132,4 +132,33 @@ describe('T-248 — a remediation plan cannot go out until its AI quiz has been 
     const noQuiz = { ...plan, recommended_quiz_id: null }
     expect(isDisabled(buttonTag(render(data(null), noQuiz), 'Save &amp; publish'))).toBe(false)
   })
+
+  it('requires reviewed, distinct assessments and stage-specific content before publishing a staged plan', () => {
+    const staged = {
+      ...plan,
+      progression_version: 1,
+      guided_practice_quiz_id: 'Q9',
+      independent_practice_quiz_id: 'Q9',
+      stage_content: {
+        concept_review: 'Concept notes',
+        worked_example: 'Worked example',
+        guided_practice: 'Try it. Hint: start with the model. Feedback: check the units.',
+        independent_practice: 'Try a new question without a hint.',
+      },
+    }
+    const quizzes = [
+      { id: 'Q9', title: 'Remediation · Atomic Structure · Guided Practice', status: 'published' },
+      { id: 'Q10', title: 'Remediation · Atomic Structure · Independent Practice', status: 'published' },
+      { id: 'Q11', title: 'Remediation · Atomic Structure · Reassessment', status: 'published' },
+    ]
+    let html = render({ ...data(null), quizzes }, staged)
+    expect(isDisabled(buttonTag(html, 'Save &amp; publish'))).toBe(true)
+    expect(html).toContain('Each scored stage needs its own distinct assessment')
+
+    const complete = { ...staged, independent_practice_quiz_id: 'Q10', recommended_quiz_id: 'Q11' }
+    html = render({ ...data(null), quizzes }, complete)
+    expect(html).toContain('data-testid="teacher-stage-content"')
+    expect(html).toContain('data-testid="teacher-stage-assessments"')
+    expect(isDisabled(buttonTag(html, 'Save &amp; publish'))).toBe(false)
+  })
 })

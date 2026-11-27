@@ -145,6 +145,7 @@ export async function loadClassDetail(classId, profile) {
   // Students see only published/closed quizzes (never drafts).
   const quizzes = (quizzesSnap?.docs ?? [])
     .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((q) => !['guided_practice', 'independent_practice', 'reassessment'].includes(q.remediation_stage))
     .filter((q) => (q.status === 'published' || q.status === 'closed') && assignedToStudent(q, studentUid))
     .sort((a, b) => (b.created_at?.seconds ?? 0) - (a.created_at?.seconds ?? 0))
   const attemptsByQuiz = {}

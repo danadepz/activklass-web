@@ -208,7 +208,7 @@ describe('Generate Quiz with AI — the guide a first-time teacher opens on to (
     const html = openGenerate()
     expect(html).toContain('Thinking level (Bloom&#x27;s)')
     expect(html).not.toMatch(/>Bloom&#x27;s level</)
-    expect(html).toContain('Remember recalls facts, Apply uses them, Create makes something new.')
+    expect(html).toContain('Remembering recalls facts, Applying uses them, Creating makes something new.')
   })
 
   /* The other two pieces of help were to stay as they were: the no-syllabus

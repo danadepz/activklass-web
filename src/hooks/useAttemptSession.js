@@ -33,6 +33,7 @@ import {
 import { db } from '@/lib/firebase'
 import { api } from '@/lib/api'
 import { FOCUS_EVENT_CAP, expiryFrom } from '@/lib/quizAttempts'
+import { questionMetadataSnapshot } from '@/lib/quizAnswerKey'
 
 /**
  * Open an attempt and return it.
@@ -47,20 +48,23 @@ import { FOCUS_EVENT_CAP, expiryFrom } from '@/lib/quizAttempts'
  * The drawn paper is stored now rather than at submit, so that a teacher
  * editing the quiz mid-sitting cannot change the questions under the student.
  */
-export async function startAttempt({ quiz, classId, studentId, questions, attemptNumber }) {
-  const ref = await addDoc(collection(db, 'quiz_attempts'), {
+export async function startAttempt({ quiz, classId, studentId, questions, attemptNumber, remediationContext = null }) {
+  const attemptData = {
     quiz_id: quiz.id,
     class_id: classId,
     student_id: studentId,
     module_id: quiz.module_id ?? null,
     attempt_number: attemptNumber,
     question_ids: questions.map((q) => q.id),
+    question_metadata: questionMetadataSnapshot(questions, quiz),
     status: 'in_progress',
     started_at: serverTimestamp(),
     reopen_count: 0,
     focus_events: [],
     focus_events_dropped: 0,
-  })
+  }
+  if (remediationContext) attemptData.remediation_context_request = remediationContext
+  const ref = await addDoc(collection(db, 'quiz_attempts'), attemptData)
 
   const snap = await getDoc(ref)
   const startedAtMs = snap.data()?.started_at?.toMillis?.() ?? Date.now()

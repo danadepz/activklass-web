@@ -53,6 +53,15 @@ describe('quiz editor centring (T-35)', () => {
   })
 })
 
+describe('question Bloom tags remain optional and teacher-editable', () => {
+  it('loads a stored level, exposes an untagged legacy option, and serializes only an explicit tag', () => {
+    expect(src).toContain("blooms_level: question.blooms_level ?? ''")
+    expect(src).toContain('<option value="">Untagged</option>')
+    expect(src).toContain('aria-label="Question Bloom level"')
+    expect(src).toContain('if (q.blooms_level) base.blooms_level = q.blooms_level')
+  })
+})
+
 /**
  * A score reads as one figure (2026-11-15, owner request). In the results
  * table the Best Score column was squeezed until "6 / 14" broke at its spaces

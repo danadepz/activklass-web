@@ -58,14 +58,15 @@ export function topicOptions(classIds, classes, syllabusByClass) {
  * unticked -- is kept as it was rather than silently dropped.
  */
 export function topicPatch(topicId, options, current = {}) {
-  if (!topicId) return { topic_id: null, module_id: null, syllabus_id: null }
+  if (!topicId) return { topic_id: null, topic_label: null, module_id: null, syllabus_id: null }
   const picked = options.find((o) => o.id === topicId)
   if (!picked) {
     return {
       topic_id: current.topic_id ?? null,
+      topic_label: current.topic_label ?? null,
       module_id: current.module_id ?? null,
       syllabus_id: current.syllabus_id ?? null,
     }
   }
-  return { topic_id: picked.id, module_id: picked.module_id, syllabus_id: picked.syllabus_id }
+  return { topic_id: picked.id, topic_label: picked.label, module_id: picked.module_id, syllabus_id: picked.syllabus_id }
 }

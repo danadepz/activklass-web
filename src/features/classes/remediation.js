@@ -100,6 +100,15 @@ export function createRemediationPlan({
     title: `Remediation · ${topicTitle}`,
     guidance,
     recommended_quiz_id: quizId,
+    progression_version: 1,
+    stage_content: {
+      concept_review: '',
+      worked_example: '',
+      guided_practice: '',
+      independent_practice: '',
+    },
+    guided_practice_quiz_id: null,
+    independent_practice_quiz_id: null,
     target_student_ids: targetStudentIds,
     mastery_at_creation: mastery,
     status: REMEDIATION_DRAFT,
@@ -109,7 +118,10 @@ export function createRemediationPlan({
 }
 
 /** Editable fields. Anything not listed here is not the teacher's to change. */
-const EDITABLE = ['title', 'guidance', 'recommended_quiz_id', 'target_student_ids', 'topic']
+const EDITABLE = [
+  'title', 'guidance', 'recommended_quiz_id', 'target_student_ids', 'topic',
+  'progression_version', 'stage_content', 'guided_practice_quiz_id', 'independent_practice_quiz_id',
+]
 
 export async function updateRemediationPlan(planId, patch) {
   const clean = {}
@@ -139,13 +151,21 @@ function assignmentFrom(plan, studentId, { fresh = true } = {}) {
     topic_id: plan.topic_id ?? null,
     topic: plan.topic ?? null,
     title: plan.title ?? null,
-    guidance: plan.guidance ?? '',
+    // Progressive-stage materials stay on the teacher-only parent plan and
+    // are released one stage at a time by the authenticated progress API.
+    guidance: plan.progression_version === 1 ? '' : (plan.guidance ?? ''),
     recommended_quiz_id: plan.recommended_quiz_id ?? null,
+    progression_version: plan.progression_version ?? null,
+    guided_practice_quiz_id: plan.guided_practice_quiz_id ?? null,
+    independent_practice_quiz_id: plan.independent_practice_quiz_id ?? null,
     created_by: plan.created_by ?? null,
     status: REMEDIATION_PUBLISHED,
     updated_at: serverTimestamp(),
   }
-  if (fresh) base.created_at = serverTimestamp()
+  if (fresh) {
+    base.created_at = serverTimestamp()
+    if (plan.progression_version === 1) base.stage_progress = {}
+  }
   return base
 }
 
@@ -173,6 +193,18 @@ export async function publishRemediation(plan) {
   })
 
   const batch = writeBatch(db)
+  if (plan.progression_version === 1) {
+    for (const [stage, quizId] of [
+      ['guided_practice', plan.guided_practice_quiz_id],
+      ['independent_practice', plan.independent_practice_quiz_id],
+      ['reassessment', plan.recommended_quiz_id],
+    ]) {
+      if (quizId) batch.update(doc(db, 'quizzes', quizId), {
+        remediation_plan_id: plan.id,
+        remediation_stage: stage,
+      })
+    }
+  }
   for (const studentId of targets) {
     const existingId = byStudent[studentId]
     if (existingId) {

@@ -120,7 +120,9 @@ function openDialogWith(extraContext) {
   captured.onSubmit = null
   stateCallCount = 0
   seedForm = {
-    topic_id: '', topic: 'Cell structure', count: 10, blooms_level: 'apply',
+    topic_id: '', topic: 'Cell structure', count: 10,
+    blooms_levels: ['apply'], allocation_mode: 'automatic',
+    bloom_allocation: { remember: 0, understand: 0, apply: 10, analyze: 0, evaluate: 0, create: 0 },
     types: ['mcq'], save_to_bank: false, extra_context: extraContext,
   }
   const html = renderToStaticMarkup(

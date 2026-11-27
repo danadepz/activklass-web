@@ -47,6 +47,15 @@ export function questionFingerprint(question) {
   return `${question?.qtype ?? 'mcq'}::${text}`
 }
 
+/** Attach an explicit topic reference to newly created questions. */
+export function withQuestionTopic(questions, { topicId = null, topicLabel = null } = {}) {
+  return (questions ?? []).map((question) => ({
+    ...question,
+    topic_id: question?.topic_id || topicId || null,
+    topic_label: question?.topic_label || topicLabel || null,
+  }))
+}
+
 /**
  * Split incoming questions into what should be written and what already exists.
  *
@@ -100,13 +109,18 @@ export function splitAgainstBank(questions, existing = []) {
  * Chapter 3 quiz" instead of presenting hand-written and generated items as
  * the same thing.
  */
-export function toBankPayload(question, { topicId = null, syllabusId = null, origin = 'manual', sourceQuizId = null } = {}) {
+export function toBankPayload(question, { topicId = null, topicLabel = null, syllabusId = null, origin = 'manual', sourceQuizId = null } = {}) {
   const rest = { ...(question ?? {}) }
+  const questionTopicId = question?.topic_id || null
+  const resolvedTopicId = questionTopicId || topicId || null
+  const resolvedTopicLabel = question?.topic_label
+    || (!questionTopicId || questionTopicId === topicId ? topicLabel : null)
   delete rest.id
   delete rest._key
   return {
     ...rest,
-    topic_id: topicId || null,
+    topic_id: resolvedTopicId,
+    topic_label: resolvedTopicLabel || null,
     syllabus_id: syllabusId || null,
     origin,
     source_quiz_id: sourceQuizId || null,

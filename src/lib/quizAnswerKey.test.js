@@ -39,11 +39,13 @@ const {
   QuizKeyNotFoundError,
   QuizKeyMalformedError,
   attachKeyIfNeeded,
+  attemptBloomLevel,
   deleteQuizWithKey,
   hasInlineKeys,
   loadAnswerKey,
   loadQuizWithKey,
   mergeQuestions,
+  questionMetadataSnapshot,
   splitQuestions,
   writeQuizWithKey,
 } = await import('./quizAnswerKey.js')
@@ -77,6 +79,18 @@ beforeEach(() => {
 })
 
 describe('splitQuestions — nothing an answer could be read from survives', () => {
+  it('preserves Bloom metadata in the public question record and protected-key round trip', () => {
+    const tagged = [{ ...questions()[0], blooms_level: 'analyze', topic_id: 'topic-1', topic_label: 'Module · Topic', objective: 'Compare two sources' }]
+    const { questions: pub, keys } = splitQuestions(tagged)
+    expect(pub[0].blooms_level).toBe('analyze')
+    expect(pub[0].topic_id).toBe('topic-1')
+    expect(pub[0].topic_label).toBe('Module · Topic')
+    expect(pub[0].objective).toBe('Compare two sources')
+    expect(mergeQuestions(pub, keys)[0].blooms_level).toBe('analyze')
+    expect(mergeQuestions(pub, keys)[0].topic_id).toBe('topic-1')
+    expect(keys.q1.correct_option_ids).toEqual(['o1'])
+  })
+
   it('strips is_correct and answer_key from every question', () => {
     const { questions: pub } = splitQuestions(questions())
     const serialised = JSON.stringify(pub)
@@ -130,6 +144,32 @@ describe('splitQuestions — nothing an answer could be read from survives', () 
     const { keys } = splitQuestions(remaining)
     expect(keys.q1).toBeUndefined()
     expect(keys.q2).toBeDefined()
+  })
+})
+
+describe('attempt metadata snapshot', () => {
+  it('captures Bloom, stable topic, display label and objective without answer-key fields', () => {
+    const snapshot = questionMetadataSnapshot([{
+      id: 'q-meta', qtype: 'essay', blooms_level: 'evaluate', topic_id: 'topic-1',
+      topic_label: 'Module · Topic', objective: 'Justify a conclusion', rubric: 'Evidence',
+      answer_key: { text: 'protected' },
+    }])
+    expect(snapshot).toEqual([{
+      question_id: 'q-meta', blooms_level: 'evaluate', topic_id: 'topic-1',
+      topic_label: 'Module · Topic', objective: 'Justify a conclusion',
+    }])
+    expect(snapshot[0]).not.toHaveProperty('answer_key')
+    expect(snapshot[0]).not.toHaveProperty('rubric')
+  })
+
+  it('uses null / Unknown for legacy Bloom tags and only uses an explicit quiz topic fallback', () => {
+    expect(questionMetadataSnapshot([{ id: 'legacy-q' }], { topic_id: 'topic-2', topic_label: 'Known topic' })).toEqual([{
+      question_id: 'legacy-q', blooms_level: null, topic_id: 'topic-2',
+      topic_label: 'Known topic', objective: null,
+    }])
+    expect(questionMetadataSnapshot([{ id: 'legacy-q' }])[0].blooms_level).toBeNull()
+    expect(attemptBloomLevel({}, 'legacy-q')).toBe('unknown')
+    expect(attemptBloomLevel({ question_metadata: [{ question_id: 'legacy-q', blooms_level: null }] }, 'legacy-q')).toBe('unknown')
   })
 })
 
@@ -194,6 +234,26 @@ describe('the student player still works without the key', () => {
 })
 
 describe('writeQuizWithKey — two documents, one batch', () => {
+  it('writes question metadata with public quiz data and keeps answer material protected', async () => {
+    const tagged = [{
+      id: 'q-meta', qtype: 'mcq', text: 'Compare these cases', points: 1,
+      blooms_level: 'analyze', topic_id: 'topic-1', topic_label: 'Module · Topic',
+      objective: 'Compare evidence',
+      options: [
+        { id: 'o1', text: 'A', is_correct: true }, { id: 'o2', text: 'B', is_correct: false },
+      ],
+    }]
+    await writeQuizWithKey('qz-meta', { title: 'Metadata' }, tagged, { teacherId: 't1' })
+    const quizWrite = fs.writes.find((write) => write.coll === 'quizzes')
+    const keyWrite = fs.writes.find((write) => write.coll === 'quiz_keys')
+    expect(quizWrite.data.questions[0]).toMatchObject({
+      blooms_level: 'analyze', topic_id: 'topic-1', topic_label: 'Module · Topic', objective: 'Compare evidence',
+    })
+    expect(quizWrite.data.questions[0].options[0]).not.toHaveProperty('is_correct')
+    expect(keyWrite.data.keys['q-meta'].correct_option_ids).toEqual(['o1'])
+    expect(keyWrite.data.keys['q-meta']).not.toHaveProperty('blooms_level')
+  })
+
   it('puts no answer into the quiz document', () => {
     writeQuizWithKey('qz', { title: 'T', class_ids: ['c1'] }, questions(), { teacherId: 't1' })
     const quizWrite = fs.writes.find((w) => w.coll === 'quizzes')
@@ -255,9 +315,11 @@ describe('writeQuizWithKey — two documents, one batch', () => {
 })
 
 describe('deleteQuizWithKey', () => {
-  it('deletes both documents in one batch', async () => {
+  it('deletes the quiz, answer key, and private stage content in one batch', async () => {
     await deleteQuizWithKey('qz')
-    expect(fs.writes.map((w) => `${w.op}:${w.coll}`)).toEqual(['delete:quizzes', 'delete:quiz_keys'])
+    expect(fs.writes.map((w) => `${w.op}:${w.coll}`)).toEqual([
+      'delete:quizzes', 'delete:quiz_keys', 'delete:quiz_stage_content',
+    ])
     expect(fs.committed).toBe(1)
   })
 })

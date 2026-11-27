@@ -1,129 +1,81 @@
-/**
- * Feature 4: the Bloom's Taxonomy breakdown on Scaffold Topics.
- *
- * The component computes nothing. These pin that (a) with no data -- which is
- * every real class today, since no question records a Bloom's level -- it
- * shows no numbers, no gaps and no recommendations, only the not-connected
- * notice and the static taxonomy order, labelled as a reference; and (b) when
- * handed data, it draws exactly that data. The numbers below are test inputs
- * passed to the component, never rendered on a real screen.
- */
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import BloomsBreakdown, { BLOOMS_LEVELS, bandOf, prerequisiteOf, levelName } from './BloomsBreakdown.jsx'
+import BloomsBreakdown, { BLOOMS_LEVELS } from './BloomsBreakdown.jsx'
 
-const render = (props) => renderToStaticMarkup(<BloomsBreakdown {...props} />)
-const rows = (html) => [...html.matchAll(/data-level="(\w+)" data-band="(\w+)"/g)].map((m) => [m[1], m[2]])
-
-describe('levels and helpers', () => {
-  it('lists the six levels, lowest first, as "Level n – Name"', () => {
-    expect(BLOOMS_LEVELS.map(levelName)).toEqual([
-      'Level 1 – Remember', 'Level 2 – Understand', 'Level 3 – Apply',
-      'Level 4 – Analyze', 'Level 5 – Evaluate', 'Level 6 – Create',
-    ])
-  })
-
-  it('bands match Scaffold Topics: <60 needs, 60–80 developing, ≥80 mastered', () => {
-    expect(bandOf(59.9)).toBe('needs')
-    expect(bandOf(60)).toBe('developing')
-    expect(bandOf(79)).toBe('developing')
-    expect(bandOf(80)).toBe('mastered')
-    expect(bandOf(null)).toBeNull()
-    expect(bandOf(undefined)).toBeNull()
-  })
-
-  it('each level builds on the one below; Remember has none', () => {
-    expect(prerequisiteOf('remember')).toBeNull()
-    expect(prerequisiteOf('apply').key).toBe('understand')
-    expect(prerequisiteOf('create').key).toBe('evaluate')
-  })
+const render = (performance) => renderToStaticMarkup(<BloomsBreakdown performance={performance} />)
+const emptyMetric = () => ({ questionCount: 0, earnedPoints: 0, maximumPoints: 0, pendingCount: 0, pendingPoints: 0, percentage: null })
+const performance = (overrides = {}) => ({
+  levels: Object.fromEntries(BLOOMS_LEVELS.map(({ key }) => [key, emptyMetric()])),
+  unknown: { ...emptyMetric(), attemptsWithoutMetadata: 0, unitemizedAttempts: 0, unitemizedQuestions: 0 },
+  pending: { questionCount: 0, maximumPoints: 0 },
+  selectedAttemptCount: 0,
+  ...overrides,
 })
 
-describe('not connected (every class today)', () => {
-  const html = render({ levels: null, recommendations: null })
-
-  it('says plainly that results by level are not recorded yet', () => {
-    expect(html).toContain('data-state="not-connected"')
-    expect(html).toContain('Not connected yet')
-    expect(html).toContain('not tagged with a Bloom’s level yet')
-  })
-
-  it('is one compact card: no bars, no level rows, no percentages', () => {
-    expect(rows(html)).toEqual([])
-    expect(html).not.toContain('role="img"')
-    expect(html).not.toMatch(/\d+%/)
-    expect(html).not.toContain('No data yet')
-  })
-
-  it('shows no gaps and no recommendations', () => {
-    expect(html).not.toContain('data-gap=')
-    expect(html).not.toContain('data-rec=')
-    expect(html).not.toContain('Learning Gaps')
-  })
-
-  it('lists the six levels in order, labelled as reference, not student results', () => {
-    expect(html).toContain('data-reference="blooms-order"')
-    for (const b of BLOOMS_LEVELS) expect(html).toContain(b.label)
-    expect(html).toContain('Reference only, not student results.')
-  })
-
-  it('uses no monospace face and nothing under 11px', () => {
-    const all = html + render({ levels: { remember: 50 } })
-    expect(all).not.toMatch(/JetBrains|monospace/)
-    for (const [, px] of all.matchAll(/font-size:\s*([\d.]+)px/g)) expect(Number(px)).toBeGreaterThanOrEqual(11)
-  })
-})
-
-describe('with data handed in', () => {
-  const levels = { remember: 88, understand: 52, apply: 41, analyze: 70 } // evaluate/create absent
-  const html = render({
-    levels,
-    recommendations: [
-      { id: 'r2', level: 'apply', title: 'Worked examples' },
-      { id: 'r1', level: 'understand', title: 'Explain-it-back cards', detail: 'Pairs explain each term.' },
-    ],
-  })
-
-  it('bands each level from its own value, and leaves missing levels as no data', () => {
+describe('Bloom assessment performance', () => {
+  it('renders all six levels with counts, point totals, and N/A when there are no scored questions', () => {
+    const html = render(performance())
     expect(html).toContain('data-state="connected"')
-    expect(rows(html)).toEqual([
-      ['remember', 'mastered'], ['understand', 'needs'], ['apply', 'needs'],
-      ['analyze', 'developing'], ['evaluate', 'none'], ['create', 'none'],
-    ])
-    expect(html).not.toContain('Not connected yet')
+    for (const { key, label } of BLOOMS_LEVELS) {
+      expect(html).toContain(`data-level="${key}" data-percentage="na"`)
+      expect(html).toContain(`${label}</div>`)
+    }
+    expect((html.match(/N\/A/g) ?? []).length).toBeGreaterThanOrEqual(7)
+    expect(html).toContain('0 scored question results')
   })
 
-  it('lists only the weak levels as gaps, and flags a weak prerequisite', () => {
-    expect([...html.matchAll(/data-gap="(\w+)"/g)].map((m) => m[1])).toEqual(['understand', 'apply'])
-    expect(html).toContain('Builds on Level 2 – Understand — also below 60%, so review it first.')
-    expect(html).toContain('Builds on Level 1 – Remember.')
+  it('shows earned/max points and preserves zero percent as a scored result', () => {
+    const data = performance({
+      levels: {
+        ...performance().levels,
+        remember: { questionCount: 1, earnedPoints: 0, maximumPoints: 5, pendingCount: 0, pendingPoints: 0, percentage: 0 },
+      },
+    })
+    const html = render(data)
+    expect(html).toContain('data-level="remember" data-percentage="0"')
+    expect(html).toContain('0 / 5 pts')
+    expect(html).toContain('0%')
+    expect(html).toContain('Remembering is below 75%')
   })
 
-  it('orders recommendations foundations-first and names each prerequisite', () => {
-    expect([...html.matchAll(/data-rec="(\w+)"/g)].map((m) => m[1])).toEqual(['understand', 'apply'])
-    expect(html).toContain('Prerequisite: Level 1 – Remember')
-    expect(html).toContain('Prerequisite: Level 2 – Understand')
+  it('identifies pending manual grading separately and explicitly excludes it from percentages', () => {
+    const base = performance()
+    base.levels.evaluate = { questionCount: 1, earnedPoints: 3, maximumPoints: 3, percentage: 100, pendingCount: 1, pendingPoints: 7 }
+    base.pending = { questionCount: 1, maximumPoints: 7 }
+    const html = render(base)
+    expect(html).toContain('1 pending · 7 pts')
+    expect(html).toContain('Pending grading:</strong> 1 question · 7 pts')
+    expect(html).toContain('Pending items are excluded from percentages.')
   })
 
-  it('says nothing needs improvement when no level is below 60%', () => {
-    expect(render({ levels: { remember: 90, understand: 81 } })).toContain('Nothing needs improvement right now.')
+  it('reports untagged results and attempts lacking snapshots as Unknown, without mastery or remediation claims', () => {
+    const base = performance()
+    base.unknown = { questionCount: 2, earnedPoints: 1, maximumPoints: 4, percentage: 25, pendingCount: 0, pendingPoints: 0, attemptsWithoutMetadata: 3, unitemizedAttempts: 1, unitemizedQuestions: 4 }
+    const html = render(base)
+    expect(html).toContain('Unknown · untagged')
+    expect(html).toContain('1 / 4 pts')
+    expect(html).toContain('3 selected attempts without a metadata snapshot')
+    expect(html).toContain('Item-level results are unavailable for 1 attempt (4 questions)')
+    expect(html).toContain('Possible areas for review')
+    expect(html).not.toContain('mastered')
+    expect(html).not.toContain('Remediation Recommendations')
+  })
+
+  it('renders a loading state before assessment data arrives', () => {
+    const html = render(null)
+    expect(html).toContain('data-state="loading"')
+    expect(html).toContain('Assessment results are loading.')
   })
 })
 
 describe('Scaffold Topics wiring', () => {
   const src = readFileSync(fileURLToPath(new URL('../routes/teacher/classes/$classId/scaffolds.jsx', import.meta.url)), 'utf8')
 
-  it('renders the breakdown with no data -- nothing invented for the demo', () => {
-    expect(src).toContain('<BloomsBreakdown levels={null} recommendations={null} />')
-  })
-
-  it('sits after the topic groups, so the real topic data comes first', () => {
-    const at = src.indexOf('<BloomsBreakdown')
-    for (const marker of ['{/* needs scaffolding */}', '<RemediationPanel', '{/* mastered */}']) {
-      expect(src.indexOf(marker), marker).toBeGreaterThan(-1)
-      expect(src.indexOf(marker), marker).toBeLessThan(at)
-    }
+  it('aggregates the existing class quiz attempts and passes results to the breakdown', () => {
+    expect(src).toContain('aggregateBloomPerformance(data)')
+    expect(src).toContain('<BloomsBreakdown performance={bloomPerformance} />')
+    expect(src).toContain("where('class_id', '==', classId)")
   })
 })

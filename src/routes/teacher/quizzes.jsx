@@ -13,7 +13,7 @@ import {
   saveBankedQuestion,
   useBankedQuestions,
 } from '@/hooks/useBankedQuestions'
-import { describeBankResult } from '@/lib/questionBank'
+import { describeBankResult, withQuestionTopic } from '@/lib/questionBank'
 import { LIFECYCLE_TABS, lifecycleOf } from '@/lib/quizAttempts'
 import { describeWindow, fromQuiz } from '@/lib/deliverables'
 import { useAuth } from '@/context/useAuth'
@@ -31,6 +31,10 @@ import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
 import { useMySubscription } from '@/hooks/useMySubscription'
 import { PaidPlanHint } from '@/components/SubscriptionBadge'
 import { BLOOMS_LEVELS } from '@/components/BloomsBreakdown'
+import {
+  BALANCED_BLOOM_WEIGHTS, automaticBloomAllocation, BLOOMS_ORDER,
+  questionTypeCompatibility, validateBloomAllocation,
+} from '@/lib/bloomsAllocation'
 
 const STATUS_PILL = {
   draft: { label: 'Draft', color: muted, bg: 'rgba(14,42,92,0.06)', border: 'rgba(14,42,92,0.15)' },
@@ -67,15 +71,12 @@ export const FILTER_EMPTY_STATES = {
   past: 'No closed or completed quizzes yet.',
 }
 
-/* Bloom's Taxonomy, in level order -- one list shared with the Scaffold
-   Topics breakdown (components/BloomsBreakdown.jsx). `key` is the word the
-   generator's prompt has always received (lowercase, as the old <select>
-   sent it). Nothing stores the pick -- it only shapes the AI draft, through
-   the existing hints.bloomsLevel text (lib/ai.js buildQuizNotes), so several
-   levels travel as one comma-separated line. */
+/* Bloom's Taxonomy, in canonical order. The teacher selects levels and the
+   allocation is sent as structured counts; generated question tags remain
+   editable in the quiz editor. */
 export { BLOOMS_LEVELS }
 
-/** "Level 1 – Remember, Level 3 – Apply" in level order, or '' for none
+/** "Level 1 – Remembering, Level 3 – Applying" in level order, or '' for none
  *  (an empty hint is dropped by buildQuizNotes, so the AI picks the level). */
 export function bloomsHint(keys = []) {
   return BLOOMS_LEVELS.filter((b) => keys.includes(b.key))
@@ -158,10 +159,11 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
     topic_id: initialTopicId,
     topic: '',
     count: 10,
-    // Multi-select (Feature 2). Apply alone is the old single default, so a
-    // teacher who never touches the checklist generates exactly as before.
-    blooms_levels: ['apply'],
-    types: ['mcq'],
+    // Balanced weights are positive at all six levels, so all remain selected.
+    blooms_levels: [...BLOOMS_ORDER],
+    allocation_mode: 'automatic',
+    bloom_allocation: { ...BALANCED_BLOOM_WEIGHTS },
+    types: ['mcq', 'short_answer', 'essay'],
     // On by default: the bank exists to be reused, and a teacher who has to
     // opt in every time ends up with the empty bank we started with. It is
     // still a checkbox rather than automatic, because banking writes to a
@@ -195,7 +197,18 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
   function toggleBloom(key) {
     setForm((f) => {
       const cur = f.blooms_levels ?? []
-      return { ...f, blooms_levels: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] }
+      const blooms_levels = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]
+      const manualAllocation = { ...f.bloom_allocation, [key]: cur.includes(key) ? 0 : Math.max(1, Number(f.bloom_allocation?.[key]) || 0) }
+      return {
+        ...f,
+        blooms_levels,
+        ...(f.allocation_mode === 'manual' ? { bloom_allocation: manualAllocation } : {}),
+        ...(f.allocation_mode === 'automatic' ? {
+          bloom_allocation: blooms_levels.length > 0 && blooms_levels.length <= Number(f.count)
+            ? automaticBloomAllocation(Number(f.count), blooms_levels)
+            : Object.fromEntries(BLOOMS_ORDER.map((level) => [level, 0])),
+        } : {}),
+      }
     })
   }
   const COUNT_OPTIONS = [5, 10, 15, 20]
@@ -214,6 +227,11 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
       // backend silently fall back to ['mcq', 'true_false'] anyway.
       return next.length ? { ...f, types: next } : f
     })
+  const allocationError = validateBloomAllocation({
+    count: Number(form.count), selectedLevels: form.blooms_levels,
+    allocation: form.bloom_allocation,
+  })
+  const typeGuidance = questionTypeCompatibility(form.bloom_allocation, form.types)
 
   const { data: selectedClassMeta } = useQuery({
     queryKey: ['fs-class-meta-gen', selectedClassId],
@@ -274,6 +292,10 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
       setError('Pick a class first')
       return
     }
+    if (allocationError || typeGuidance.some((issue) => issue.blocked)) {
+      setError(allocationError || typeGuidance.find((issue) => issue.blocked)?.message)
+      return
+    }
     const picked = pickedTopic
     const topicText = (picked?.title || form.topic).trim()
     if (!topicText) {
@@ -295,10 +317,15 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           subject: selectedClassMeta?.subject,
           subjectCode: selectedClassMeta?.subject_code,
         },
+        bloomAllocation: form.bloom_allocation,
+        bloomsLevels: form.blooms_levels,
       })
 
       const quizId = newId()
-      const questions = draftToQuestions(quiz)
+      const questions = withQuestionTopic(draftToQuestions(quiz), {
+        topicId: picked?.id ?? null,
+        topicLabel: picked?.label ?? topicText,
+      })
       const payload = blankQuiz({
         classIds: selectedClassId ? [selectedClassId] : [],
         teacherId: profile.id,
@@ -307,6 +334,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
         questions,
         extra: {
           topic_id: picked?.id ?? null,
+          topic_label: picked?.label ?? topicText,
           module_id: picked?.module_id || null,
           // Carried so the quiz editor can file its own 💾 saves under the
           // right syllabus folder; only this dialog knows which syllabus the
@@ -335,6 +363,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             teacherId: profile.id,
             questions,
             topicId: picked?.id ?? null,
+            topicLabel: picked?.label ?? topicText,
             syllabusId: selectedClassMeta?.syllabus_id || null,
             origin: 'ai_generated',
             sourceQuizId: quizId,
@@ -441,7 +470,10 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           <div className="grid grid-cols-2 gap-3.5">
             <div>
               <label style={labelStyle}># Questions</label>
-              <select className="ak-input" value={form.count} onChange={(e) => setForm((f) => ({ ...f, count: e.target.value }))} style={selectStyle}>
+              <select className="ak-input" value={form.count} onChange={(e) => setForm((f) => {
+                const count = e.target.value
+              return { ...f, count, ...(f.allocation_mode === 'automatic' ? { bloom_allocation: f.blooms_levels.length > 0 && f.blooms_levels.length <= Number(count) ? automaticBloomAllocation(Number(count), f.blooms_levels) : Object.fromEntries(BLOOMS_ORDER.map((level) => [level, 0])) } : {}) }
+              })} style={selectStyle}>
                 {COUNT_OPTIONS.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -501,8 +533,31 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
               )}
             </p>
           </fieldset>
+          <div className="grid grid-cols-1 gap-3.5">
+            <label style={labelStyle}>Allocation mode
+              <select className="ak-input" value={form.allocation_mode} onChange={(e) => setForm((f) => ({ ...f, allocation_mode: e.target.value, ...(e.target.value === 'automatic' ? { bloom_allocation: f.blooms_levels.length > 0 && f.blooms_levels.length <= Number(f.count) ? automaticBloomAllocation(Number(f.count), f.blooms_levels) : Object.fromEntries(BLOOMS_ORDER.map((level) => [level, 0])) } : {}) }))} style={{ ...selectStyle, marginTop: 7 }}>
+                <option value="automatic">Automatic</option><option value="manual">Manual</option>
+              </select>
+            </label>
+          </div>
+          <section aria-label="Bloom question allocation preview" style={{ border: '1px solid rgba(14,42,92,0.12)', borderRadius: 10, padding: 12 }}>
+            <strong style={{ display: 'block', fontSize: 13, color: navy, marginBottom: 8 }}>Question allocation preview</strong>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {BLOOMS_LEVELS.map((level) => {
+                const selected = form.blooms_levels.includes(level.key)
+                const value = Number(form.bloom_allocation[level.key] ?? 0)
+                return <label key={level.key} style={{ fontSize: 12, color: selected ? ink : faint }}>
+                  {level.label}
+                  {form.allocation_mode === 'manual' && selected ? <input aria-label={`${level.label} question count`} type="number" min="1" max={form.count} step="1" value={value} onChange={(e) => setForm((f) => ({ ...f, bloom_allocation: { ...f.bloom_allocation, [level.key]: e.target.value === '' ? '' : Number(e.target.value) } }))} style={{ ...fieldStyle, padding: '6px 8px', marginTop: 3 }} /> : <span style={{ float: 'right', fontWeight: 700 }}>{value}</span>}
+                </label>
+              })}
+            </div>
+            <p role="status" style={{ margin: '9px 0 0', fontSize: 12, color: allocationError ? red : navy }}>
+              {allocationError ?? `${BLOOMS_ORDER.reduce((sum, level) => sum + Number(form.bloom_allocation[level] || 0), 0)} of ${form.count} questions allocated.`}
+            </p>
+          </section>
           <p style={{ fontSize: 11.5, color: faint, margin: '-6px 0 0', lineHeight: 1.45 }}>
-            Thinking level is how hard students must think: Remember recalls facts, Apply uses them, Create makes something new.
+            Thinking level is how hard students must think: Remembering recalls facts, Applying uses them, Creating makes something new.
           </p>
 
           <div>
@@ -536,6 +591,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
             <p style={{ fontSize: 11.5, color: faint, margin: '8px 0 0' }}>
               Essays are graded by you, not auto-marked.
             </p>
+            {typeGuidance.map((issue) => <p key={issue.level} role="status" style={{ fontSize: 11.5, color: issue.blocked ? red : muted, margin: '6px 0 0' }}>{issue.message}</p>)}
           </div>
 
           <div>
@@ -587,7 +643,7 @@ export function GenerateQuizModal({ classes, onClose, initialClassId = '', initi
           <button type="button" onClick={onClose} disabled={generating} className="transition hover:brightness-105 disabled:opacity-50" style={btnModalGhost}>
             Cancel
           </button>
-          <button type="submit" disabled={generating || needsClass} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
+          <button type="submit" disabled={generating || needsClass || !!allocationError || typeGuidance.some((issue) => issue.blocked)} className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed" style={btnModalPrimary}>
             {generating ? 'Generating…' : 'Generate draft'}
             <GoldArrow />
           </button>
@@ -876,6 +932,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
   const [text, setText] = useState(question.text || '')
   const [points, setPoints] = useState(String(question.points ?? 1))
   const [tags, setTags] = useState(question.tags || '')
+  const [objective, setObjective] = useState(question.objective || '')
   const [options, setOptions] = useState(question.options || [
     { text: '', is_correct: true },
     { text: '', is_correct: false }
@@ -889,6 +946,7 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
   const [rubric, setRubric] = useState(question.rubric || '')
   const [syllabusId, setSyllabusId] = useState(question.syllabus_id || '')
   const [topicId, setTopicId] = useState(question.topic_id || '')
+  const [bloomsLevel, setBloomsLevel] = useState(question.blooms_level || '')
   /* Validation used to fire five alert()s. An OS box takes the reader out of
      the form to dismiss news about a field they can no longer see; this keeps
      the message in the footer, beside the Save button they just pressed, and
@@ -922,7 +980,11 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
       tags: tags.trim() || null,
       syllabus_id: syllabusId || null,
       topic_id: topicId || null,
+      topic_label: topicsList.find((topic) => topic.id === topicId)?.label
+        || (topicId === question.topic_id ? question.topic_label || null : null),
+      objective: objective.trim() || null,
     }
+    payload.blooms_level = bloomsLevel || null
 
     if (qtype === 'mcq') {
       const cleanedOptions = options.map(o => ({ ...o, text: o.text.trim() })).filter(o => o.text)
@@ -971,6 +1033,13 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
         <div style={{ padding: '24px 28px', overflowY: 'auto' }} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label style={labelStyle}>Bloom Level (Optional)</label>
+              <select value={bloomsLevel} onChange={(e) => setBloomsLevel(e.target.value)} className="ak-input" style={fieldStyle}>
+                <option value="">Unknown / untagged</option>
+                {BLOOMS_LEVELS.map((level) => <option key={level.key} value={level.key}>{level.label}</option>)}
+              </select>
+            </div>
+            <div>
               <label style={labelStyle}>Question Type</label>
               <select value={qtype} onChange={(e) => setQtype(e.target.value)} className="ak-input" style={fieldStyle}>
                 {Object.entries(TYPE_LABELS).map(([k, label]) => (
@@ -978,6 +1047,8 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label style={labelStyle}>Points</label>
               <input type="number" min="0.5" step="0.5" value={points} onChange={(e) => setPoints(e.target.value)} className="ak-input" style={fieldStyle} />
@@ -987,6 +1058,11 @@ function BankedQuestionModal({ question, syllabi, onClose, onSave }) {
           <div>
             <label style={labelStyle}>Question Text</label>
             <textarea rows={2} required placeholder="Question text" value={text} onChange={(e) => setText(e.target.value)} className="ak-input" style={{ ...fieldStyle, resize: 'vertical' }} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Learning Objective (Optional)</label>
+            <input value={objective} onChange={(e) => setObjective(e.target.value)} className="ak-input" style={fieldStyle} />
           </div>
 
           {/* Type-specific inputs */}
