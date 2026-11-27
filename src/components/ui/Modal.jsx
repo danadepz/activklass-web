@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { createPortal } from 'react-dom'
 import { ink, muted, line, sansFamily, serifFamily } from '@/theme'
 import { IconButton } from '@/components/ui/Button'
 import { useDialogBehavior } from '@/components/ui/useDialogBehavior'
@@ -52,7 +53,7 @@ export default function Modal({
 
   if (!open) return null
 
-  return (
+  const dialog = (
     <div
       {...overlayProps}
       style={{
@@ -65,18 +66,22 @@ export default function Modal({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: 24,
+        boxSizing: 'border-box',
+        minHeight: '100dvh',
+        padding: 'clamp(12px, 3vh, 24px)',
         overflowY: 'auto',
       }}
     >
       <div
         {...panelProps}
         style={{
+          boxSizing: 'border-box',
           width: '100%',
           maxWidth: SIZES[size] ?? SIZES.md,
-          maxHeight: 'calc(100vh - 48px)',
+          maxHeight: 'calc(100dvh - 48px)',
           display: 'flex',
           flexDirection: 'column',
+          overflowY: 'auto',
           background: '#FFFFFF',
           borderRadius: 20,
           boxShadow: '0 40px 80px -20px rgba(14,42,92,0.45)',
@@ -122,6 +127,8 @@ export default function Modal({
         <div
           style={{
             padding: `${title ? 18 : 28}px 28px ${footer ? 0 : 28}px`,
+            minHeight: 0,
+            flex: '1 1 auto',
             overflowY: 'auto',
             fontFamily: sansFamily,
             fontSize: 14,
@@ -150,4 +157,9 @@ export default function Modal({
       </div>
     </div>
   )
+
+  // A transformed ancestor (for example AuthLayout's animated content) changes
+  // the containing block for position: fixed. Keep every shared dialog on the
+  // browser viewport by rendering it directly under <body>.
+  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body)
 }
