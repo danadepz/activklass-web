@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, where } from 'firebase/firestore'
@@ -26,7 +26,6 @@ import {
   remediationPracticeConfig,
   scaffoldMaterialsToGuidance,
   scaffoldMaterialsToStageContent,
-  targetedEvidenceSummary,
   targetedRemediationEvidence,
 } from '@/features/classes/remediationEvidence'
 import {
@@ -37,6 +36,7 @@ import {
 } from '@/lib/remediationRecovery'
 import { useAuth } from '@/context/useAuth'
 import { Sparkles } from '@/components/icons'
+import Markdown from '@/components/Markdown'
 import { navy, navyDeep, ink, gold, goldDeep, muted, faint, green, blueText, red, line, serif, mono, sansFamily as sans } from '@/theme'
 import { confirmDialog } from '@/components/ui/dialogs'
 import { toast } from '@/components/ui/toast'
@@ -658,6 +658,103 @@ function RecoverMarksModal({ plan, classId, nameById, teacherId, onClose, onAppl
 }
 
 /** Edit a plan: its text, its linked practice quiz, and who receives it. */
+/* ── Remediation editor ─────────────────────────────────────────────────────
+   Presentation only. Every value it reads and every handler it calls is the
+   same one the single-column dialog used (patch(), onSave, onSaveAndPublish,
+   onGenerateMaterials, onGenerateQuiz, onViewQuiz); only the layout changed:
+   a step list on the left, one focused panel on the right, and a footer that
+   stays put, so a teacher sees one job at a time instead of one long scroll. */
+
+const EDITOR_TONE = {
+  ok: { color: green, bg: 'rgba(46,160,110,0.14)' },
+  warn: { color: goldDeep, bg: 'rgba(230,170,40,0.20)' },
+  bad: { color: red, bg: 'rgba(192,57,43,0.10)' },
+}
+
+/** Where a stage's quiz stands, in the words the step list and its panel share. */
+function quizState(quizId, quizzes) {
+  if (!quizId) return { label: 'Not generated', tone: 'bad', step: 1 }
+  const q = (quizzes ?? []).find((item) => item.id === quizId)
+  if (!q) return { label: 'Unavailable', tone: 'bad', step: 1 }
+  if (q.status === 'published') return { label: 'Published', tone: 'ok', step: 3 }
+  return { label: 'Draft', tone: 'warn', step: 2 }
+}
+
+const EDITOR_STAGES = [
+  { key: 'concept_review', n: 1, label: 'Concept Review', sub: '', hint: 'The idea in plain words. Students read this first.' },
+  { key: 'worked_example', n: 2, label: 'Worked Example', sub: '', hint: 'One problem solved step by step.' },
+  { key: 'guided_practice', n: 3, label: 'Guided Practice', sub: 'Hints and feedback', hint: 'Give each exercise a "Hint:" line and a "Feedback:" line.' },
+  { key: 'independent_practice', n: 4, label: 'Independent Practice', sub: 'No hints', hint: 'No hints or feedback in this stage.' },
+]
+
+const EDITOR_STAGE_QUIZZES = [
+  { stage: 'guided_practice', field: 'guided_practice_quiz_id', label: 'Guided Practice Assessment', n: 3, after: 'guided_practice' },
+  { stage: 'independent_practice', field: 'independent_practice_quiz_id', label: 'Independent Practice Assessment', n: 4, after: 'independent_practice' },
+  { stage: 'reassessment', field: 'recommended_quiz_id', label: 'Reassessment', n: 5, after: null },
+]
+
+function EditorNavItem({ active, onClick, marker, label, sub, subTone, indent }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'step' : undefined}
+      className="flex items-start gap-2.5 text-left transition hover:brightness-95"
+      style={{
+        width: indent ? 'calc(100% - 16px)' : '100%',
+        marginLeft: indent ? 16 : 0,
+        padding: '8px 10px',
+        borderRadius: 10,
+        border: `1.5px solid ${active ? navy : 'transparent'}`,
+        background: active ? 'rgba(63,169,245,0.15)' : 'transparent',
+        cursor: 'pointer',
+        fontFamily: sans,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          flex: 'none', width: 24, height: 24, borderRadius: indent ? 7 : 999, display: 'grid', placeItems: 'center',
+          fontSize: 12, fontWeight: 700, color: active ? '#FAFAF6' : ink, background: active ? navy : '#FFFFFF',
+          border: `1.5px solid ${active ? navy : 'rgba(14,42,92,0.25)'}`,
+        }}
+      >
+        {marker}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: ink, lineHeight: 1.3 }}>{label}</span>
+        {sub && <span style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: subTone ? EDITOR_TONE[subTone].color : muted, marginTop: 1 }}>{sub}</span>}
+      </span>
+    </button>
+  )
+}
+
+function EditorNavGroup({ children }) {
+  return <div style={{ fontSize: 10.5, fontWeight: 700, color: muted, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '14px 4px 6px' }}>{children}</div>
+}
+
+function EditorStepHead({ title, sub }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <h4 style={{ ...serif, fontSize: 20, color: ink, margin: 0 }}>{title}</h4>
+      {sub && <p style={{ fontSize: 13, color: muted, margin: '4px 0 0' }}>{sub}</p>}
+    </div>
+  )
+}
+
+function EditorBadge({ tone, children }) {
+  return (
+    <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 999, color: EDITOR_TONE[tone].color, background: EDITOR_TONE[tone].bg, whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  )
+}
+
+const editorFieldLabel = { fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }
+const editorInput = { marginTop: 6, width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }
+const editorGhostBtn = { padding: '8px 14px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: '1.5px solid rgba(14,42,92,0.25)', borderRadius: 8, cursor: 'pointer' }
+const editorPrimaryBtn = { padding: '9px 16px', fontSize: 13, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 9, cursor: 'pointer', boxShadow: `0 2px 0 ${navyDeep}` }
+
 function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds, busy, onClose, onSave, onSaveAndPublish, onGenerateQuiz, onGenerateMaterials, onViewQuiz }) {
   const { overlayProps, panelProps } = useDialogBehavior(onClose, { label: 'Edit a remediation plan', closeOnBackdrop: false })
   const [title, setTitle] = useState(plan.title ?? '')
@@ -668,6 +765,8 @@ function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds,
     concept_review: plan.guidance ?? '', worked_example: '', guided_practice: '', independent_practice: '',
   })
   const [materialsError, setMaterialsError] = useState(null)
+  const [step, setStep] = useState('guidance')
+  const [focusId, setFocusId] = useState(null)
 
   const working = !!busy
   const generatingMaterials = busy === `materials:${plan.id}`
@@ -683,6 +782,17 @@ function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds,
     quizzes,
     attemptsByQuiz,
   }), [plan.topic_id, plan.topic, targets, nameById, quizzes, attemptsByQuiz])
+  // The whole roster, so the recipient list can say why each student is (or is
+  // not) flagged without that depending on who is ticked right now.
+  const rosterEvidence = useMemo(() => targetedRemediationEvidence({
+    topicId: plan.topic_id,
+    topicLabel: plan.topic,
+    targetStudentIds: rosterIds,
+    nameById,
+    quizzes,
+    attemptsByQuiz,
+  }), [plan.topic_id, plan.topic, rosterIds, nameById, quizzes, attemptsByQuiz])
+  const flagged = useMemo(() => new Set(plan.target_student_ids ?? []), [plan.target_student_ids])
   const patch = () => ({
     title: title.trim() || plan.title,
     guidance: guidance.trim(),
@@ -722,112 +832,187 @@ function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds,
     setProgressive(true)
   }
 
-  return (
-    <div {...overlayProps} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto" style={{ background: 'rgba(10,20,40,0.55)', padding: 24 }}>
-      <div {...panelProps} style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, padding: 26, width: '100%', maxWidth: 620 }}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit Remediation</h3>
-            <p style={{ fontSize: 12.5, color: muted, margin: '4px 0 0' }}>
-              {plan.topic ?? 'Topic'} ·{' '}
-              {plan.status === REMEDIATION_PUBLISHED
-                ? 'published — changes reach students when you re-publish'
-                : 'draft — students cannot see this yet'}
-            </p>
-          </div>
-          <button onClick={onClose} style={{ fontSize: 13, fontWeight: 600, color: muted, background: 'none', border: 'none', cursor: 'pointer' }}>
-            Close
-          </button>
-        </div>
+  // Turning it off keeps what was typed in each stage in this dialog (turn it
+  // back on and it is all still there); the saved plan simply stops being a
+  // staged one. A published staged plan has students on it, so ask first.
+  const toggleProgressive = async () => {
+    if (!progressive) { enableProgressive(); return }
+    if (plan.status === REMEDIATION_PUBLISHED && plan.progression_version === 1) {
+      const ok = await confirmDialog({
+        title: 'Turn off the Five-Stage Scaffold?',
+        message: 'When you re-publish, students get the single guidance and practice quiz instead of the five stages. Anything they have already unlocked is not carried over. Your stage text stays here until you close this window.',
+        confirmLabel: 'Turn off',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
+    setProgressive(false)
+  }
 
-        <div className="mt-5">
-          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Title</label>
-          <input
-            className="ak-input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={{ marginTop: 6, width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9 }}
-          />
-        </div>
+  // A step that only exists in one mode falls back to the first panel when the
+  // mode changes underneath it (Draft with AI can switch the staged plan on).
+  const stepGone = (progressive && step === 'practice_quiz')
+    || (!progressive && (step.startsWith('quiz:') || EDITOR_STAGES.some((s) => s.key === step)))
+  const activeStep = stepGone ? 'guidance' : step
 
-        <div className="mt-4">
-          <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Guidance for the Student</label>
+  const evidenceStudents = useMemo(() => [...targetedEvidence.students].sort((a, b) =>
+    (b.items.length - a.items.length) || String(a.displayName).localeCompare(String(b.displayName))), [targetedEvidence])
+  const flaggedItemCount = evidenceStudents.reduce((sum, s) => sum + s.items.length, 0)
+  const focus = evidenceStudents.find((s) => s.studentId === focusId) ?? evidenceStudents[0] ?? null
+
+  const rosterRows = useMemo(() => {
+    const byId = new Map(rosterEvidence.students.map((s) => [s.studentId, s]))
+    return [...rosterIds]
+      .map((id) => ({ id, name: nameById[id] ?? id, evidence: byId.get(id) ?? null, isFlagged: flagged.has(id) }))
+      .sort((a, b) => (Number(b.isFlagged) - Number(a.isFlagged)) || String(a.name).localeCompare(String(b.name)))
+  }, [rosterIds, rosterEvidence, nameById, flagged])
+
+  const aiDraftBar = (
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={draftMaterials}
+          disabled={!!busy || !targetedEvidence.hasScoredEvidence}
+          title={!targetedEvidence.hasScoredEvidence ? 'No finalized scored evidence is available for the selected students.' : undefined}
+          className="transition hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={editorGhostBtn}
+        >
+          {generatingMaterials ? 'Drafting materials…' : 'Draft targeted learning materials'}
+        </button>
+        <span style={{ fontSize: 11.5, color: muted, flex: 1, minWidth: 200 }}>
+          Generated content is appended for your review and editing{progressive ? ' (the guidance and every stage)' : ''}. Pending work is excluded.
+        </span>
+      </div>
+      {materialsError && <p role="alert" style={{ fontSize: 12, color: red, margin: '6px 0 0' }}>{materialsError}</p>}
+    </div>
+  )
+
+  const previewBox = (children) => (
+    <div style={{ background: '#F7F9FC', border: `1px solid ${line}`, borderRadius: 12, padding: '14px 16px', minHeight: 160 }}>
+      <div style={{ ...editorFieldLabel, marginBottom: 8 }}>What students see</div>
+      {children}
+    </div>
+  )
+
+  const renderGuidance = () => (
+    <div>
+      <EditorStepHead title="Title and guidance" sub="What should they review, and how? This is the part a quiz cannot carry." />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <label style={editorFieldLabel}>Title</label>
+          <input className="ak-input" value={title} onChange={(e) => setTitle(e.target.value)} style={editorInput} />
+          <label style={{ ...editorFieldLabel, display: 'block', marginTop: 14 }}>Guidance for the student</label>
           <textarea
             className="ak-input"
-            rows={4}
+            rows={12}
             value={guidance}
             onChange={(e) => setGuidance(e.target.value)}
             placeholder="What should they review, and how? This is the part a quiz cannot carry."
-            style={{ marginTop: 6, width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, resize: 'vertical' }}
+            style={{ ...editorInput, resize: 'vertical' }}
           />
+          <p style={{ fontSize: 11.5, color: muted, margin: '6px 0 0' }}>You can use ## headings, **bold** and lists.</p>
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={draftMaterials}
-            disabled={!!busy || !targetedEvidence.hasScoredEvidence}
-            title={!targetedEvidence.hasScoredEvidence ? 'No finalized scored evidence is available for the selected students.' : undefined}
-            className="transition hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ padding: '8px 13px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.25)`, borderRadius: 8, cursor: 'pointer' }}
-          >
-            {generatingMaterials ? 'Drafting materials…' : 'Draft targeted learning materials'}
-          </button>
-          <span style={{ fontSize: 11.5, color: muted }}>Generated content is appended here for your review and editing. Pending work is excluded.</span>
-        </div>
-        {materialsError && <p role="alert" style={{ fontSize: 12, color: red, margin: '6px 0 0' }}>{materialsError}</p>}
-
-        {!progressive && (
-          <button type="button" onClick={enableProgressive} disabled={!!busy} className="mt-3 rounded-lg border px-3 py-2 text-xs font-bold disabled:opacity-50" style={{ color: navy, borderColor: 'rgba(14,42,92,0.2)', background: '#FFFFFF' }}>
-            Enable Five-Stage Scaffold
-          </button>
+        {previewBox(
+          <>
+            <div style={{ ...serif, fontSize: 18, color: ink, marginBottom: 8 }}>{title.trim() || plan.title}</div>
+            {guidance.trim() ? <Markdown text={guidance} /> : <p style={{ fontSize: 13, color: faint, margin: 0 }}>Nothing written yet.</p>}
+          </>,
         )}
+      </div>
+      {aiDraftBar}
+    </div>
+  )
 
-        {progressive && (
-          <div className="mt-4 grid gap-3" data-testid="teacher-stage-content">
-            <p style={{ fontSize: 12, color: muted, margin: 0 }}>Review and edit each stage. Students receive only the content for their currently unlocked stage.</p>
-            {[
-              ['concept_review', '1. Concept Review'],
-              ['worked_example', '2. Worked Example'],
-              ['guided_practice', '3. Guided Practice · hints and feedback'],
-              ['independent_practice', '4. Independent Practice · no hints'],
-            ].map(([key, label]) => (
-              <label key={key} style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.03em' }}>
-                {label}
-                <textarea className="ak-input" rows={key === 'concept_review' ? 4 : 3} value={stageContent[key] ?? ''}
-                  onChange={(event) => setStageContent((current) => ({ ...current, [key]: event.target.value }))}
-                  style={{ display: 'block', marginTop: 5, width: '100%', padding: '9px 11px', fontSize: 13, fontWeight: 400, letterSpacing: 0, fontFamily: sans, color: ink, border: '1.5px solid rgba(14,42,92,0.14)', borderRadius: 9, resize: 'vertical' }} />
-              </label>
-            ))}
-            <div className="grid gap-2" data-testid="teacher-stage-assessments">
-              {[
-                ['guided_practice', 'guided_practice_quiz_id', 'Guided Practice Assessment'],
-                ['independent_practice', 'independent_practice_quiz_id', 'Independent Practice Assessment'],
-                ['reassessment', 'recommended_quiz_id', 'Reassessment'],
-              ].map(([stage, field, label]) => {
-                const quizId = plan[field]
-                const stageQuiz = (quizzes ?? []).find((item) => item.id === quizId)
-                const currentBusy = busy === `quiz:${plan.id}:${stage}`
-                return (
-                  <div key={stage} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'rgba(14,42,92,0.12)' }}>
-                    <div style={{ fontSize: 12, color: ink }}><strong>{label}</strong><span style={{ color: muted }}> · {stageQuiz?.status ?? (quizId ? 'unavailable' : 'not generated')}</span></div>
-                    <div className="flex gap-3">
-                      {quizId && <button type="button" onClick={() => onViewQuiz(stage, patch())} disabled={working} className="underline" style={{ color: blueText, fontSize: 12, fontWeight: 700, background: 'none', border: 0 }}>Open in editor</button>}
-                      <button type="button" onClick={() => onGenerateQuiz(stage, targetedEvidence)} disabled={!!busy} className="underline disabled:opacity-50" style={{ color: blueText, fontSize: 12, fontWeight: 700, background: 'none', border: 0 }}>
-                        {currentBusy ? 'Generating…' : quizId ? 'Regenerate' : 'Generate with AI'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {quizBlock && <p role="status" data-testid="quiz-review-block" style={{ fontSize: 12, color: goldDeep, fontWeight: 600, margin: 0 }}>{quizBlock}</p>}
+  const renderStageContent = (stage) => (
+    <div data-testid="teacher-stage-content">
+      <EditorStepHead title={stage.label} sub={`Stage ${stage.n}${stage.sub ? ` · ${stage.sub}` : ''} — students receive only the content for their currently unlocked stage.`} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <label style={editorFieldLabel}>{stage.label} content</label>
+          <textarea
+            className="ak-input"
+            rows={14}
+            value={stageContent[stage.key] ?? ''}
+            onChange={(event) => setStageContent((current) => ({ ...current, [stage.key]: event.target.value }))}
+            style={{ ...editorInput, resize: 'vertical' }}
+          />
+          <p style={{ fontSize: 11.5, color: muted, margin: '6px 0 0' }}>{stage.hint}</p>
+        </div>
+        {previewBox(
+          (stageContent[stage.key] ?? '').trim()
+            ? <Markdown text={stageContent[stage.key]} />
+            : <p style={{ fontSize: 13, color: faint, margin: 0 }}>Nothing written yet.</p>,
+        )}
+      </div>
+      {aiDraftBar}
+    </div>
+  )
+
+  const quizSteps = (current) => (
+    <ol style={{ listStyle: 'none', margin: '12px 0 0', padding: 0, display: 'grid', gap: 8 }}>
+      {['Generate the quiz with AI', 'Open it in the quiz editor, review and edit every question, then publish the quiz there', 'Come back here and publish this plan'].map((text, index) => {
+        const n = index + 1
+        const isCurrent = n === current
+        const done = n < current
+        return (
+          <li key={text} className="flex items-start gap-2.5" style={{ fontSize: 13, color: isCurrent ? ink : muted, fontWeight: isCurrent ? 700 : 400 }}>
+            <span aria-hidden="true" style={{
+              flex: 'none', width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center', fontSize: 11.5, fontWeight: 700,
+              color: isCurrent || done ? '#FAFAF6' : muted, background: done ? green : isCurrent ? navy : '#FFFFFF',
+              border: `1.5px solid ${done ? green : isCurrent ? navy : 'rgba(14,42,92,0.25)'}`,
+            }}>{done ? '✓' : n}</span>
+            <span style={{ paddingTop: 1 }}>{text}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+
+  const renderStageQuiz = ({ stage, field, label, n }) => {
+    const quizId = plan[field]
+    const state = quizState(quizId, quizzes)
+    const currentBusy = busy === `quiz:${plan.id}:${stage}`
+    return (
+      <div data-testid="teacher-stage-assessments">
+        <EditorStepHead title={label} sub={n === 5 ? 'Stage 5 · Scored quiz' : `Scored quiz for stage ${n}`} />
+        <div style={{ border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px' }}>
+          <div className="flex items-center justify-between gap-3">
+            <span style={editorFieldLabel}>Status</span>
+            <EditorBadge tone={state.tone}>{state.label}</EditorBadge>
           </div>
-        )}
+          <p style={{ fontSize: 13, color: muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+            This quiz is built in the Quiz editor, which opens as a separate page. Review and edit every question there, then publish the quiz and come back here.
+          </p>
+          {quizSteps(state.step)}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {quizId ? (
+              <>
+                <button type="button" onClick={() => onViewQuiz(stage, patch())} disabled={working} className="disabled:opacity-50" style={editorPrimaryBtn}>Open in editor</button>
+                <button type="button" onClick={() => onGenerateQuiz(stage, targetedEvidence)} disabled={!!busy} className="disabled:opacity-50" style={editorGhostBtn}>
+                  {currentBusy ? 'Generating…' : 'Regenerate'}
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => onGenerateQuiz(stage, targetedEvidence)} disabled={!!busy} className="disabled:opacity-50" style={editorPrimaryBtn}>
+                {currentBusy ? 'Generating…' : 'Generate with AI'}
+              </button>
+            )}
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: goldDeep, fontWeight: 600, margin: '10px 2px 0' }}>Each scored stage needs its own distinct assessment.</p>
+      </div>
+    )
+  }
 
-        {!progressive && <div className="mt-4" style={{ background: 'rgba(63,169,245,0.05)', border: '1px solid rgba(63,169,245,0.25)', borderRadius: 11, padding: '12px 14px' }}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div style={{ fontSize: 13, color: ink }}>
+  const renderPracticeQuiz = () => {
+    const state = quizState(plan.recommended_quiz_id, quizzes)
+    return (
+      <div>
+        <EditorStepHead title="Practice quiz" sub="An optional quiz students take with this review." />
+        <div style={{ border: `1px solid ${line}`, borderRadius: 14, padding: '16px 18px', background: 'rgba(63,169,245,0.05)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div style={{ fontSize: 13.5, color: ink }}>
               <strong>Practice quiz:</strong>{' '}
               {plan.recommended_quiz_id ? (
                 <button
@@ -843,104 +1028,288 @@ function RemediationEditor({ plan, quizzes, attemptsByQuiz, nameById, rosterIds,
                 <span style={{ color: muted }}>none attached</span>
               )}
             </div>
+            {plan.recommended_quiz_id && <EditorBadge tone={state.tone}>{state.label}</EditorBadge>}
+          </div>
+          <p style={{ fontSize: 12.5, color: muted, margin: '8px 0 0', lineHeight: 1.5 }}>
+            Saving a draft is always allowed. To publish this plan with a quiz, the quiz has to be reviewed and published first.
+          </p>
+          {quizSteps(plan.recommended_quiz_id ? state.step : 1)}
+          <div className="mt-4">
             <button
+              type="button"
               onClick={() => onGenerateQuiz('legacy', targetedEvidence)}
               disabled={!!busy}
               className="transition hover:brightness-110 disabled:opacity-50"
-              style={{ padding: '7px 13px', fontSize: 12, fontWeight: 700, fontFamily: sans, color: blueText, background: '#FFFFFF', border: `1.5px solid rgba(63,169,245,0.45)`, borderRadius: 8, cursor: 'pointer' }}
+              style={{ padding: '8px 14px', fontSize: 12.5, fontWeight: 700, fontFamily: sans, color: blueText, background: '#FFFFFF', border: '1.5px solid rgba(63,169,245,0.45)', borderRadius: 8, cursor: 'pointer' }}
             >
               {generatingLegacyQuiz ? 'Generating…' : plan.recommended_quiz_id ? 'Regenerate' : 'Generate with AI'}
             </button>
           </div>
-          <p style={{ fontSize: 11.5, color: muted, margin: '8px 0 0', lineHeight: 1.45 }}>
-            Steps: 1. Generate with AI. 2. Open it in the quiz editor, review and edit every
-            question, then publish the quiz there. 3. Come back here and publish this plan.
-            Saving a draft is always allowed.
-          </p>
-          {quizBlock && (
-            <p role="status" data-testid="quiz-review-block" style={{ fontSize: 12, color: goldDeep, fontWeight: 600, margin: '8px 0 0', lineHeight: 1.45 }}>
-              {quizBlock}
-            </p>
-          )}
-        </div>}
+        </div>
+      </div>
+    )
+  }
 
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3" data-testid="remediation-performance-explanation">
-          <p style={{ fontSize: 12.5, color: ink, margin: 0, lineHeight: 1.5 }}>
-            <strong>Why this review is suggested</strong><br />
-            {targetedEvidenceSummary(targetedEvidence)}
-          </p>
-          <p style={{ fontSize: 12, color: muted, margin: '7px 0 0', lineHeight: 1.5 }}>
-            Only finalized scored items inform question-level difficulties. Pending items are set aside; missing snapshot fields stay Unknown. These results guide teacher review and do not diagnose cognitive mastery or assign remediation automatically.
-          </p>
-          <ul data-testid="targeted-remediation-evidence" style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'grid', gap: 9 }}>
-            {targetedEvidence.students.map((student) => (
-              <li key={student.studentId} style={{ paddingTop: 8, borderTop: '1px solid rgba(14,42,92,0.08)' }}>
-                <strong style={{ color: ink }}>{student.displayName}</strong>
-                <span style={{ color: muted }}> · {student.topicScore ? `${student.topicScore.percentage}% topic evidence (${student.topicScore.earnedPoints}/${student.topicScore.maximumPoints} pts)` : 'no eligible scored item results'}</span>
-                {student.items.length > 0 ? (
-                  <ul style={{ listStyle: 'disc', margin: '5px 0 0 18px', padding: 0, color: muted }}>
-                    {student.items.map((item, index) => (
-                      <li key={`${item.quizTitle}-${item.questionLabel}-${index}`}>
-                        {item.quizTitle}, {item.questionLabel}: {item.outcome === 'incorrect' ? 'incorrect' : 'partial credit'} ({item.earnedPoints}/{item.maximumPoints} pts); Bloom: {item.bloomsLevel ?? 'Unknown'}; topic: {item.topicLabel ?? plan.topic}; objective: {item.objective ?? 'not recorded'}.
-                      </li>
-                    ))}
-                  </ul>
-                ) : <div style={{ color: muted, marginTop: 3 }}>No scored incorrect or partial-credit question details are available for this student.</div>}
-                {student.pendingCount > 0 && <div style={{ color: muted, marginTop: 3 }}>{student.pendingCount} pending question{student.pendingCount === 1 ? '' : 's'} ({student.pendingPoints} pts) excluded from scored evidence.</div>}
-                {student.unitemizedAttempts > 0 && <div style={{ color: muted, marginTop: 3 }}>Item-level results unavailable for {student.unitemizedAttempts} attempt{student.unitemizedAttempts === 1 ? '' : 's'}.</div>}
-              </li>
-            ))}
-          </ul>
+  const renderWhy = () => {
+    const scored = evidenceStudents.filter((s) => s.topicScore).length
+    const showQuiz = new Set(focus?.items.map((item) => item.quizTitle)).size > 1
+    const showBloom = focus?.items.some((item) => item.bloomsLevel)
+    const showObjective = focus?.items.some((item) => item.objective)
+    const th = { textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: muted, letterSpacing: '0.06em', textTransform: 'uppercase' }
+    const td = { padding: '9px 12px', fontSize: 13, color: ink, borderTop: `1px solid ${line}`, verticalAlign: 'top' }
+    return (
+      <div data-testid="remediation-performance-explanation">
+        <EditorStepHead
+          title="Why this review is suggested"
+          sub={evidenceStudents.length
+            ? `Graded quiz evidence for each selected student (${scored} of ${evidenceStudents.length} have graded results for this topic). Select a student to see their items.`
+            : 'No students are selected.'}
+        />
+        {evidenceStudents.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
+            <ul data-testid="targeted-remediation-evidence" aria-label="Students" style={{ listStyle: 'none', margin: 0, padding: 2, display: 'grid', gap: 8, alignContent: 'start', maxHeight: 'min(48vh, 440px)', overflowY: 'auto' }}>
+              {evidenceStudents.map((student) => {
+                const active = focus?.studentId === student.studentId
+                const pct = student.topicScore ? Math.max(0, Math.min(100, Number(student.topicScore.percentage))) : null
+                return (
+                  <li key={student.studentId}>
+                    <button
+                      type="button"
+                      onClick={() => setFocusId(student.studentId)}
+                      aria-pressed={active}
+                      className="w-full text-left"
+                      style={{ padding: '10px 12px', borderRadius: 11, cursor: 'pointer', fontFamily: sans, background: active ? 'rgba(63,169,245,0.12)' : '#FFFFFF', border: `1.5px solid ${active ? navy : line}` }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 700, color: ink }}>{student.displayName}</div>
+                      {pct != null ? (
+                        <>
+                          <div style={{ fontSize: 11.5, color: muted, marginTop: 2 }}>{student.topicScore.percentage}% · {student.topicScore.earnedPoints}/{student.topicScore.maximumPoints} pts</div>
+                          <div style={{ height: 5, background: 'rgba(14,42,92,0.08)', borderRadius: 999, overflow: 'hidden', marginTop: 6 }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: pct < 60 ? red : pct < 75 ? goldDeep : green }} />
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 11.5, color: muted, marginTop: 2 }}>No eligible scored item results</div>
+                      )}
+                      <div style={{ fontSize: 11.5, color: muted, marginTop: 4 }}>{student.items.length} incorrect or partial-credit item{student.items.length === 1 ? '' : 's'}</div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+            <div style={{ minWidth: 0 }}>
+              {focus && (
+                <>
+                  <div style={{ fontSize: 14, color: ink }}>
+                    <strong>{focus.displayName}</strong>
+                    <span style={{ color: muted }}> · {focus.topicScore ? `${focus.topicScore.percentage}% topic evidence (${focus.topicScore.earnedPoints}/${focus.topicScore.maximumPoints} pts)` : 'no eligible scored item results'}</span>
+                  </div>
+                  {focus.items.length > 0 ? (
+                    <div style={{ marginTop: 10, border: `1px solid ${line}`, borderRadius: 12, overflow: 'auto', maxHeight: 'min(42vh, 380px)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#F7F9FC', position: 'sticky', top: 0 }}>
+                            {showQuiz && <th style={th}>Quiz</th>}
+                            <th style={th}>Question</th>
+                            <th style={th}>Result</th>
+                            <th style={th}>Points</th>
+                            {showBloom && <th style={th}>Bloom</th>}
+                            {showObjective && <th style={th}>Objective</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {focus.items.map((item, index) => (
+                            <tr key={`${item.quizTitle}-${item.questionLabel}-${index}`}>
+                              {showQuiz && <td style={td}>{item.quizTitle}</td>}
+                              <td style={td}>{item.questionLabel}</td>
+                              <td style={td}><EditorBadge tone={item.outcome === 'incorrect' ? 'bad' : 'warn'}>{item.outcome === 'incorrect' ? 'Incorrect' : 'Partial credit'}</EditorBadge></td>
+                              <td style={{ ...td, fontFamily: mono, whiteSpace: 'nowrap' }}>{item.earnedPoints} / {item.maximumPoints}</td>
+                              {showBloom && <td style={td}>{item.bloomsLevel ?? 'Unknown'}</td>}
+                              {showObjective && <td style={td}>{item.objective ?? 'Not recorded'}</td>}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 13, color: muted, margin: '10px 0 0' }}>No scored incorrect or partial-credit question details are available for this student.</p>
+                  )}
+                  {focus.pendingCount > 0 && <p style={{ fontSize: 12, color: muted, margin: '8px 0 0' }}>{focus.pendingCount} pending question{focus.pendingCount === 1 ? '' : 's'} ({focus.pendingPoints} pts) excluded from scored evidence.</p>}
+                  {focus.unitemizedAttempts > 0 && <p style={{ fontSize: 12, color: muted, margin: '8px 0 0' }}>Item-level results unavailable for {focus.unitemizedAttempts} attempt{focus.unitemizedAttempts === 1 ? '' : 's'}.</p>}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        {flaggedItemCount === 0 && evidenceStudents.length > 0 && (
+          <p style={{ fontSize: 12.5, color: muted, margin: '12px 0 0' }}>None of the selected students has an incorrect or partial-credit item on this topic yet.</p>
+        )}
+        <div style={{ marginTop: 14, background: '#FFFBEB', border: '1px solid rgba(230,170,40,0.45)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: muted, lineHeight: 1.5 }}>
+          Only finalized scored items inform question-level difficulties. Pending items are set aside; missing snapshot fields stay Unknown. These results guide teacher review and do not diagnose cognitive mastery or assign remediation automatically.
+        </div>
+      </div>
+    )
+  }
+
+  const renderWho = () => (
+    <div>
+      <EditorStepHead title="Who receives it" sub="Choose the students who get this remediation." />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span style={{ fontSize: 12.5, color: muted }}>Flagged students are marked. {targets.length} of {rosterIds.length} selected.</span>
+        <button
+          type="button"
+          onClick={() => setTargets(targets.length === rosterIds.length ? [] : [...rosterIds])}
+          style={{ fontSize: 12, fontWeight: 700, color: blueText, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          {targets.length === rosterIds.length ? 'Clear all' : 'Select whole class'}
+        </button>
+      </div>
+      <div className="mt-2" style={{ maxHeight: 'min(52vh, 480px)', overflowY: 'auto', display: 'grid', gap: 8, alignContent: 'start', padding: 2 }}>
+        {rosterRows.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: faint, padding: '12px 14px', margin: 0 }}>No students on this roster.</p>
+        ) : rosterRows.map((row) => {
+          const checked = targets.includes(row.id)
+          const items = row.evidence?.items.length ?? 0
+          const sub = row.isFlagged
+            ? (row.evidence?.topicScore ? `${items} incorrect or partial-credit item${items === 1 ? '' : 's'}` : 'No eligible scored item results')
+            : 'Not flagged for this topic'
+          return (
+            <label key={row.id} className="flex items-center gap-3" style={{ padding: '10px 14px', borderRadius: 11, cursor: 'pointer', background: checked ? 'rgba(63,169,245,0.10)' : '#FFFFFF', border: `1.5px solid ${checked ? navy : line}` }}>
+              <input type="checkbox" checked={checked} onChange={() => toggle(row.id)} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: ink }}>{row.name}</span>
+                <span style={{ display: 'block', fontSize: 11.5, color: muted }}>{sub}</span>
+              </span>
+              {row.isFlagged && <EditorBadge tone="warn">Flagged</EditorBadge>}
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  let panel
+  if (activeStep === 'guidance') panel = renderGuidance()
+  else if (activeStep === 'practice_quiz') panel = renderPracticeQuiz()
+  else if (activeStep === 'why') panel = renderWhy()
+  else if (activeStep === 'who') panel = renderWho()
+  else if (activeStep.startsWith('quiz:')) panel = renderStageQuiz(EDITOR_STAGE_QUIZZES.find((q) => `quiz:${q.stage}` === activeStep))
+  else panel = renderStageContent(EDITOR_STAGES.find((s) => s.key === activeStep))
+
+  const go = (key) => () => setStep(key)
+
+  return (
+    <div {...overlayProps} className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(10,20,40,0.55)', padding: 20 }}>
+      <div {...panelProps} className="flex flex-col" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 18, width: '100%', maxWidth: 1080, height: 'min(92vh, 860px)', overflow: 'hidden' }}>
+        <div className="flex items-start justify-between gap-4" style={{ padding: '18px 24px', borderBottom: `1px solid ${line}` }}>
+          <div>
+            <h3 style={{ ...serif, fontSize: 21, color: ink, margin: 0 }}>Edit Remediation</h3>
+            <p style={{ fontSize: 12.5, color: muted, margin: '4px 0 0' }}>
+              {plan.topic ?? 'Topic'} ·{' '}
+              {plan.status === REMEDIATION_PUBLISHED
+                ? 'published — changes reach students when you re-publish'
+                : 'draft — students cannot see this yet'}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} style={{ ...editorGhostBtn, padding: '8px 16px', fontSize: 13 }}>
+            Close
+          </button>
         </div>
 
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <label style={{ fontSize: 11.5, fontWeight: 700, color: muted, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              Who receives it ({targets.length})
-            </label>
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <nav aria-label="Remediation steps" className="max-h-[34%] shrink-0 overflow-y-auto md:max-h-none md:w-72 md:border-r" style={{ padding: '6px 12px 14px', background: '#F7F9FC', borderColor: line }}>
+            <EditorNavGroup>How to build</EditorNavGroup>
+            <div className="flex items-center justify-between gap-3" style={{ background: '#FFFFFF', border: `1px solid ${line}`, borderRadius: 11, padding: '9px 12px' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: ink }}>Enable Five-Stage Scaffold</div>
+                <div style={{ fontSize: 11.5, color: muted }}>{progressive ? 'On — students see only their unlocked stage.' : 'Off — students get one guidance and one practice quiz.'}</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={progressive}
+                aria-label="Enable Five-Stage Scaffold"
+                onClick={toggleProgressive}
+                disabled={!!busy}
+                className="disabled:opacity-50"
+                style={{ flex: 'none', width: 42, height: 24, borderRadius: 999, border: 0, padding: 2, background: progressive ? navy : 'rgba(14,42,92,0.25)', cursor: 'pointer', textAlign: progressive ? 'right' : 'left' }}
+              >
+                <span style={{ display: 'inline-block', width: 20, height: 20, borderRadius: 999, background: '#FFFFFF' }} />
+              </button>
+            </div>
+
+            <EditorNavGroup>What students get</EditorNavGroup>
+            <div className="grid gap-1">
+              <EditorNavItem active={activeStep === 'guidance'} onClick={go('guidance')} marker="✎" label="Title and guidance" sub={guidance.trim() ? undefined : 'Not written yet'} subTone="warn" />
+              {progressive && EDITOR_STAGES.map((stage) => {
+                const empty = !(stageContent[stage.key] ?? '').trim()
+                const quizzesAfter = EDITOR_STAGE_QUIZZES.filter((q) => q.after === stage.key)
+                return (
+                  <Fragment key={stage.key}>
+                    <EditorNavItem active={activeStep === stage.key} onClick={go(stage.key)} marker={stage.n} label={stage.label} sub={empty ? 'Needs content' : stage.sub || undefined} subTone={empty ? 'warn' : undefined} />
+                    {quizzesAfter.map((q) => {
+                      const state = quizState(plan[q.field], quizzes)
+                      return <EditorNavItem key={q.stage} indent active={activeStep === `quiz:${q.stage}`} onClick={go(`quiz:${q.stage}`)} marker="✓" label={q.label} sub={state.label} subTone={state.tone} />
+                    })}
+                  </Fragment>
+                )
+              })}
+              {progressive && (() => {
+                const q = EDITOR_STAGE_QUIZZES[2]
+                const state = quizState(plan[q.field], quizzes)
+                return <EditorNavItem active={activeStep === `quiz:${q.stage}`} onClick={go(`quiz:${q.stage}`)} marker={5} label={q.label} sub={state.label} subTone={state.tone} />
+              })()}
+              {!progressive && (() => {
+                const state = quizState(plan.recommended_quiz_id, quizzes)
+                return <EditorNavItem active={activeStep === 'practice_quiz'} onClick={go('practice_quiz')} marker="✓" label="Practice quiz" sub={plan.recommended_quiz_id ? state.label : 'None attached'} subTone={plan.recommended_quiz_id ? state.tone : undefined} />
+              })()}
+            </div>
+
+            <EditorNavGroup>Why and who</EditorNavGroup>
+            <div className="grid gap-1">
+              <EditorNavItem active={activeStep === 'why'} onClick={go('why')} marker="?" label="Why this review is suggested" sub={`${flaggedItemCount} flagged item${flaggedItemCount === 1 ? '' : 's'} · ${evidenceStudents.length} student${evidenceStudents.length === 1 ? '' : 's'}`} />
+              <EditorNavItem active={activeStep === 'who'} onClick={go('who')} marker={targets.length} label={`Who receives it (${targets.length})`} sub={targets.length === 0 ? 'Choose at least one student' : undefined} subTone="warn" />
+            </div>
+          </nav>
+
+          <div className="min-w-0 flex-1 overflow-y-auto" style={{ padding: '20px 24px' }}>
+            {panel}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '12px 24px', borderTop: `1px solid ${line}`, background: '#FFFFFF' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            {quizBlock ? (
+              <p role="status" data-testid="quiz-review-block" style={{ fontSize: 12.5, color: goldDeep, fontWeight: 600, margin: 0, lineHeight: 1.45 }}>{quizBlock}</p>
+            ) : targets.length === 0 ? (
+              <p role="status" style={{ fontSize: 12.5, color: goldDeep, fontWeight: 600, margin: 0 }}>Choose at least one student under Who receives it before publishing.</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => setTargets(targets.length === rosterIds.length ? [] : [...rosterIds])}
-              style={{ fontSize: 11.5, fontWeight: 600, color: blueText, background: 'none', border: 'none', cursor: 'pointer' }}
+              type="button"
+              onClick={() => onSave(patch())}
+              disabled={working}
+              className="transition hover:brightness-95 disabled:opacity-50"
+              style={{ ...editorGhostBtn, padding: '10px 18px', fontSize: 13.5, borderRadius: 10 }}
             >
-              {targets.length === rosterIds.length ? 'Clear all' : 'Select whole class'}
+              {busy === `save:${plan.id}` ? 'Saving…' : 'Save draft'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSaveAndPublish(patch())}
+              disabled={working || targets.length === 0 || !!quizBlock}
+              title={quizBlock ?? undefined}
+              className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ ...editorPrimaryBtn, padding: '10px 20px', fontSize: 13.5, borderRadius: 10, boxShadow: `0 3px 0 ${navyDeep}` }}
+            >
+              {busy === `publish:${plan.id}`
+                ? 'Publishing…'
+                : plan.status === REMEDIATION_PUBLISHED
+                  ? 'Save & re-publish'
+                  : 'Save & publish'}
             </button>
           </div>
-          <div className="mt-2" style={{ maxHeight: 190, overflowY: 'auto', border: '1px solid rgba(14,42,92,0.12)', borderRadius: 9 }}>
-            {rosterIds.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: faint, padding: '12px 14px', margin: 0 }}>No students on this roster.</p>
-            ) : (
-              rosterIds.map((id) => (
-                <label key={id} className="flex items-center gap-2.5" style={{ padding: '8px 14px', borderBottom: '1px solid rgba(14,42,92,0.05)', fontSize: 13, color: ink, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={targets.includes(id)} onChange={() => toggle(id)} />
-                  {nameById[id] ?? id}
-                </label>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button
-            onClick={() => onSaveAndPublish(patch())}
-            disabled={working || targets.length === 0 || !!quizBlock}
-            title={quizBlock ?? undefined}
-            className="transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ flex: 1, minWidth: 170, padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: '#FAFAF6', background: navy, border: 'none', borderRadius: 10, cursor: 'pointer', boxShadow: `0 3px 0 ${navyDeep}` }}
-          >
-            {busy === `publish:${plan.id}`
-              ? 'Publishing…'
-              : plan.status === REMEDIATION_PUBLISHED
-                ? 'Save & re-publish'
-                : 'Save & publish'}
-          </button>
-          <button
-            onClick={() => onSave(patch())}
-            disabled={working}
-            className="transition hover:brightness-95 disabled:opacity-50"
-            style={{ flex: 1, minWidth: 140, padding: '11px 18px', fontSize: 13.5, fontWeight: 700, fontFamily: sans, color: navy, background: '#FFFFFF', border: `1.5px solid rgba(14,42,92,0.25)`, borderRadius: 10, cursor: 'pointer' }}
-          >
-            {busy === `save:${plan.id}` ? 'Saving…' : 'Save draft'}
-          </button>
         </div>
       </div>
     </div>
